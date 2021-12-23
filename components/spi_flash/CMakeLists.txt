@@ -35,6 +35,7 @@ else()
         "spi_flash_chip_winbond.c"
         "spi_flash_chip_boya.c"
         "spi_flash_chip_mxic_opi.c"
+        "spi_flash_chip_th.c"
         "memspi_host_driver.c")
 
     list(APPEND cache_srcs
@@ -44,7 +45,7 @@ else()
         "spi_flash_os_func_noos.c")
 
     list(APPEND srcs ${cache_srcs})
-    set(priv_requires bootloader_support app_update soc esp_ipc driver)
+    set(priv_requires bootloader_support app_update soc driver)
 endif()
 
 idf_component_register(SRCS "${srcs}"

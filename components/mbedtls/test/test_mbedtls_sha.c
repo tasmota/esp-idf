@@ -1,4 +1,11 @@
-/* mbedTLS SHA unit tests
+/*
+ * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * mbedTLS SHA unit tests
  */
 
 #include <string.h>
@@ -14,7 +21,6 @@
 #include "unity.h"
 #include "sdkconfig.h"
 #include "test_apb_dport_access.h"
-#include "sodium/utils.h"
 #include "soc/soc_caps.h"
 
 TEST_CASE("mbedtls SHA self-tests", "[mbedtls]")
@@ -478,6 +484,7 @@ TEST_CASE("mbedtls SHA512/t", "[mbedtls]")
 #endif //CONFIG_MBEDTLS_HARDWARE_SHA
 
 #ifdef CONFIG_SPIRAM_USE_MALLOC
+#include "test_mbedtls_utils.h"
 TEST_CASE("mbedtls SHA256 PSRAM DMA", "[mbedtls]")
 {
     const unsigned CALLS = 256;
@@ -505,9 +512,31 @@ TEST_CASE("mbedtls SHA256 PSRAM DMA", "[mbedtls]")
      */
     const char *expected_hash = "8d031167bd706ac337e07aa9129c34ae4ae792d0a79a2c70e7f012102e8adc3d";
     char hash_str[sizeof(sha256) * 2 + 1];
-    sodium_bin2hex(hash_str, sizeof(hash_str), sha256, sizeof(sha256));
+    utils_bin2hex(hash_str, sizeof(hash_str), sha256, sizeof(sha256));
 
     TEST_ASSERT_EQUAL_STRING(expected_hash, hash_str);
 
 }
 #endif //CONFIG_SPIRAM_USE_MALLOC
+
+#if CONFIG_ESP_SYSTEM_RTC_FAST_MEM_AS_HEAP_DEPCHECK
+
+extern RTC_FAST_ATTR uint8_t rtc_stack[4096];
+
+static xSemaphoreHandle done_sem;
+
+TEST_CASE("mbedtls SHA stack in RTC RAM", "[mbedtls]")
+{
+    done_sem = xSemaphoreCreateBinary();
+    static StaticTask_t rtc_task;
+    memset(rtc_stack, 0, sizeof(rtc_stack));
+
+    TEST_ASSERT(esp_ptr_in_rtc_dram_fast(rtc_stack));
+
+    TEST_ASSERT_NOT_NULL(xTaskCreateStatic(tskRunSHA256Test, "tskRunSHA256Test_task", sizeof(rtc_stack), NULL,
+                                            3, rtc_stack, &rtc_task));
+    TEST_ASSERT_TRUE(xSemaphoreTake(done_sem, 10000 / portTICK_PERIOD_MS));
+    vSemaphoreDelete(done_sem);
+}
+
+#endif //CONFIG_ESP_SYSTEM_RTC_FAST_MEM_AS_HEAP_DEPCHECK

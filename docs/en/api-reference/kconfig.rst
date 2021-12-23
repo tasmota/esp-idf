@@ -20,12 +20,12 @@ Application developers can open a terminal-based project configuration menu with
 
 After being updated, this configuration is saved inside ``sdkconfig`` file in the project root directory. Based on ``sdkconfig``, application build targets will generate ``sdkconfig.h`` file in the build directory, and will make sdkconfig options available to the project build system and source files.
 
-(For the legacy GNU Make build system, the project configuration menu is opened with ``make menuconfig``.)
-
 Using sdkconfig.defaults
 ========================
 
-In some cases, such as when ``sdkconfig`` file is under revision control, the fact that ``sdkconfig`` file gets changed by the build system may be inconvenient. The build system offers a way to avoid this, in the form of ``sdkconfig.defaults`` file. This file is never touched by the build system, and must be created manually. It can contain all the options which matter for the given application. The format is the same as that of the ``sdkconfig`` file. Once ``sdkconfig.defaults`` is created, ``sdkconfig`` can be deleted and added to the ignore list of the revision control system (e.g. ``.gitignore`` file for git). Project build targets will automatically create ``sdkconfig`` file, populated with the settings from ``sdkconfig.defaults`` file, and the rest of the settings will be set to their default values. Note that the build process will not override settings that are already in ``sdkconfig`` by ones from ``sdkconfig.defaults``. For more information, see :ref:`custom-sdkconfig-defaults`.
+In some cases, such as when ``sdkconfig`` file is under revision control, the fact that ``sdkconfig`` file gets changed by the build system may be inconvenient. The build system offers a way to avoid this, in the form of ``sdkconfig.defaults`` file. This file is never touched by the build system, and can be created manually or automatically. It can contain all the options which matter for the given application and are different from the default ones. The format is the same as that of the ``sdkconfig`` file. ``sdkconfig.defaults`` can be created manually when one remembers all the changed configurations. Otherwise, the file can be generated automatically by running the ``idf.py save-defconfig`` command.
+
+Once ``sdkconfig.defaults`` is created, ``sdkconfig`` can be deleted and added to the ignore list of the revision control system (e.g. ``.gitignore`` file for ``git``). Project build targets will automatically create ``sdkconfig`` file, populated with the settings from ``sdkconfig.defaults`` file, and the rest of the settings will be set to their default values. Note that the build process will not override settings that are already in ``sdkconfig`` by ones from ``sdkconfig.defaults``. For more information, see :ref:`custom-sdkconfig-defaults`.
 
 Kconfig Formatting Rules
 ========================
@@ -40,8 +40,6 @@ The following attributes of ``Kconfig`` files are standardized:
 - No trailing spaces are allowed at the end of the lines.
 - The maximum length of options is set to 40 characters.
 - The maximum length of lines is set to 120 characters.
-- Lines cannot be wrapped by backslash (because there is a bug in earlier versions of ``conf-idf`` which causes that
-  Windows line endings are not recognized after a backslash).
 
 Format checker
 --------------
@@ -88,15 +86,6 @@ By convention, all option names are upper case with underscores. When Kconfig ge
 
 
 .. include-build-file:: inc/kconfig.inc
-
-Customisations
-==============
-
-Because IDF builds by default with :ref:`warn-undefined-variables`, when the Kconfig tool generates Makefiles (the ``auto.conf`` file) its behaviour has been customised. In normal Kconfig, a variable which is set to "no" is undefined. In IDF's version of Kconfig, this variable is defined in the Makefile but has an empty value.
-
-(Note that ``ifdef`` and ``ifndef`` can still be used in Makefiles, because they test if a variable is defined *and has a non-empty value*.)
-
-When generating header files for C & C++, the behaviour is not customised - so ``#ifdef`` can be used to test if a boolean config item is set or not.
 
 .. _Kconfig: https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
 .. _kconfiglib: https://github.com/ulfalizer/Kconfiglib

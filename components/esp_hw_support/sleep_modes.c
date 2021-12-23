@@ -42,37 +42,37 @@
 #include "sdkconfig.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
-#include "brownout.h"
+#include "esp_private/brownout.h"
 #include "esp_private/sleep_retention.h"
+#include "esp_private/esp_clk.h"
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/cache.h"
 #include "esp32/rom/rtc.h"
-#include "esp32/clk.h"
 #include "esp_private/gpio.h"
 #include "esp_private/sleep_gpio.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/clk.h"
 #include "esp32s2/rom/cache.h"
 #include "esp32s2/rom/rtc.h"
 #include "soc/extmem_reg.h"
 #include "esp_private/gpio.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/clk.h"
 #include "esp32s3/rom/cache.h"
 #include "esp32s3/rom/rtc.h"
 #include "soc/extmem_reg.h"
 #include "esp_private/sleep_mac_bb.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/clk.h"
 #include "esp32c3/rom/cache.h"
 #include "esp32c3/rom/rtc.h"
 #include "soc/extmem_reg.h"
 #include "esp_private/sleep_mac_bb.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/clk.h"
 #include "esp32h2/rom/cache.h"
 #include "esp32h2/rom/rtc.h"
+#include "soc/extmem_reg.h"
+#elif CONFIG_IDF_TARGET_ESP8684
+#include "esp8684/rom/cache.h"
+#include "esp8684/rom/rtc.h"
 #include "soc/extmem_reg.h"
 #endif
 
@@ -103,6 +103,10 @@
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (37)
 #elif CONFIG_IDF_TARGET_ESP32H2
 #define DEFAULT_CPU_FREQ_MHZ                CONFIG_ESP32H2_DEFAULT_CPU_FREQ_MHZ
+#define DEFAULT_SLEEP_OUT_OVERHEAD_US       (105)
+#define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (37)
+#elif CONFIG_IDF_TARGET_ESP8684
+#define DEFAULT_CPU_FREQ_MHZ                CONFIG_ESP8684_DEFAULT_CPU_FREQ_MHZ
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (105)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (37)
 #endif
@@ -188,7 +192,7 @@ static void touch_wakeup_prepare(void);
 static void esp_deep_sleep_wakeup_prepare(void);
 #endif
 
-#if SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#if SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
 static RTC_FAST_ATTR esp_deep_sleep_wake_stub_fn_t wake_stub_fn_handler = NULL;
 
 static void RTC_IRAM_ATTR __attribute__((used, noinline)) esp_wake_stub_start(void)
@@ -211,14 +215,14 @@ static void __attribute__((section(".rtc.entry.text"))) esp_wake_stub_entry(void
     // which is sufficient for instruction addressing in RTC fast memory.
     __asm__ __volatile__ ("call4 " SYM2STR(esp_wake_stub_start) "\n");
 }
-#endif // SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#endif // SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
 
 /* Wake from deep sleep stub
    See esp_deepsleep.h esp_wake_deep_sleep() comments for details.
 */
 esp_deep_sleep_wake_stub_fn_t esp_get_deep_sleep_wake_stub(void)
 {
-#if SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#if SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
     esp_deep_sleep_wake_stub_fn_t stub_ptr = wake_stub_fn_handler;
 #else
     esp_deep_sleep_wake_stub_fn_t stub_ptr = (esp_deep_sleep_wake_stub_fn_t) REG_READ(RTC_ENTRY_ADDR_REG);
@@ -231,7 +235,7 @@ esp_deep_sleep_wake_stub_fn_t esp_get_deep_sleep_wake_stub(void)
 
 void esp_set_deep_sleep_wake_stub(esp_deep_sleep_wake_stub_fn_t new_stub)
 {
-#if SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#if SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
     wake_stub_fn_handler = new_stub;
 #else
     REG_WRITE(RTC_ENTRY_ADDR_REG, (uint32_t)new_stub);
@@ -382,7 +386,9 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     }
 #endif
 
-    misc_modules_sleep_prepare();
+    if (!deep_sleep) {
+        misc_modules_sleep_prepare();
+    }
 
 #if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
     if (deep_sleep) {
@@ -440,7 +446,7 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
          */
         portENTER_CRITICAL(&spinlock_rtc_deep_sleep);
 
-#if SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#if SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
         extern char _rtc_text_start[];
 #if CONFIG_ESP32S3_RTCDATA_IN_FAST_MEM
         extern char _rtc_noinit_end[];
@@ -454,13 +460,16 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 #else
 #if !CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP
         /* If not possible stack is in RTC FAST memory, use the ROM function to calculate the CRC and save ~140 bytes IRAM */
+#if !CONFIG_IDF_TARGET_ESP8684
+        // RTC has no rtc memory, IDF-3901
         set_rtc_memory_crc();
+#endif
         result = call_rtc_sleep_start(reject_triggers, config.lslp_mem_inf_fpu);
 #else
         /* Otherwise, need to call the dedicated soc function for this */
         result = rtc_deep_sleep_start(s_config.wakeup_triggers, reject_triggers);
 #endif
-#endif // SOC_PM_SUPPORT_DEEPSLEEP_VERIFY_STUB_ONLY
+#endif // SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
 
         portEXIT_CRITICAL(&spinlock_rtc_deep_sleep);
     } else {
@@ -472,9 +481,8 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 
     if (!deep_sleep) {
         s_config.ccount_ticks_record = cpu_ll_get_cycle_count();
+        misc_modules_wake_prepare();
     }
-
-    misc_modules_wake_prepare();
 
     // re-enable UART output
     resume_uarts();
@@ -1213,11 +1221,12 @@ static uint32_t get_power_down_flags(void)
 #endif
 
     const char *option_str[] = {"OFF", "ON", "AUTO(OFF)" /* Auto works as OFF */};
-    ESP_LOGD(TAG, "RTC_PERIPH: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_PERIPH]]);
+    /* This function is called from a critical section, log with ESP_EARLY_LOGD. */
+    ESP_EARLY_LOGD(TAG, "RTC_PERIPH: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_PERIPH]]);
 #if SOC_RTC_SLOW_MEM_SUPPORTED
-    ESP_LOGD(TAG, "RTC_SLOW_MEM: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_SLOW_MEM]]);
+    ESP_EARLY_LOGD(TAG, "RTC_SLOW_MEM: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_SLOW_MEM]]);
 #endif
-    ESP_LOGD(TAG, "RTC_FAST_MEM: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_FAST_MEM]]);
+    ESP_EARLY_LOGD(TAG, "RTC_FAST_MEM: %s", option_str[s_config.pd_options[ESP_PD_DOMAIN_RTC_FAST_MEM]]);
 
     // Prepare flags based on the selected options
     uint32_t pd_flags = 0;

@@ -46,7 +46,7 @@ menu "OpenThread"
         config OPENTHREAD_RADIO
             bool "Radio Only Device"
             help
-                Select this to enable Radio Only Device which cannot can only forward 15.4 packets to the host.
+                Select this to enable Radio Only Device which can only forward 15.4 packets to the host.
                 The OpenThread stack will be run on the host and OpenThread will have minimal footprint on the
                 radio only device.
     endchoice
@@ -91,6 +91,13 @@ menu "OpenThread"
         default n
         help
             Select this option to enable border router features in OpenThread.
+
+    config OPENTHREAD_TREL
+        bool "Enable Thread Radio Encapsulation Link"
+        depends on OPENTHREAD_BORDER_ROUTER
+        default n
+        help
+            Select this option to enable sending 15.4 frames through the backbone interface.
 
     config OPENTHREAD_ESP_LIB_FROM_INTERNAL_SRC
         bool "Build esp_openthread libraries from source"

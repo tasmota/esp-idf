@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: CC0-1.0
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
@@ -11,17 +11,19 @@
  * Please do not connect GPIO32(ESP32) any pull-up resistors externally, it will be used to test i2s adc function.
  */
 
+
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "driver/i2s.h"
 #include "driver/gpio.h"
 #include "hal/gpio_hal.h"
 #include "unity.h"
 #include "math.h"
 #include "esp_rom_gpio.h"
+#if SOC_I2S_SUPPORTED
+#include "driver/i2s.h"
 
 #define SAMPLE_RATE     (36000)
 #define SAMPLE_BITS     (16)
@@ -143,8 +145,8 @@ TEST_CASE("I2S basic driver install, uninstall, set pin test", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 60,
+        .dma_desc_num = 6,
+        .dma_frame_num = 60,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -174,9 +176,9 @@ TEST_CASE("I2S basic driver install, uninstall, set pin test", "[i2s]")
     //error param test
     TEST_ASSERT(i2s_driver_install(I2S_NUM_MAX, &i2s_config, 0, NULL) == ESP_ERR_INVALID_ARG);
     TEST_ASSERT(i2s_driver_install(I2S_NUM_0, NULL, 0, NULL) == ESP_ERR_INVALID_ARG);
-    i2s_config.dma_buf_count = 1;
+    i2s_config.dma_desc_num = 1;
     TEST_ASSERT(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) == ESP_ERR_INVALID_ARG);
-    i2s_config.dma_buf_count = 129;
+    i2s_config.dma_desc_num = 129;
     TEST_ASSERT(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) == ESP_ERR_INVALID_ARG);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, i2s_driver_uninstall(I2S_NUM_0));
 }
@@ -190,8 +192,8 @@ TEST_CASE("I2S Loopback test(master tx and rx)", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -265,8 +267,8 @@ TEST_CASE("I2S TDM Loopback test(master tx and rx)", "[i2s]")
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .total_chan = 4,
         .chan_mask = I2S_TDM_ACTIVE_CH0 | I2S_TDM_ACTIVE_CH1 | I2S_TDM_ACTIVE_CH2 | I2S_TDM_ACTIVE_CH3,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
     };
@@ -332,8 +334,8 @@ TEST_CASE("I2S write and read test(master tx and slave rx)", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -363,8 +365,8 @@ TEST_CASE("I2S write and read test(master tx and slave rx)", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -436,8 +438,8 @@ TEST_CASE("I2S write and read test(master rx and slave tx)", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 1,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -467,8 +469,8 @@ TEST_CASE("I2S write and read test(master rx and slave tx)", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,                           //2-channels
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 1,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -541,8 +543,8 @@ TEST_CASE("I2S memory leaking test", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 100,
+        .dma_desc_num = 6,
+        .dma_frame_num = 100,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
 #if SOC_I2S_SUPPORTS_TDM
@@ -599,8 +601,8 @@ TEST_CASE("I2S APLL clock variation test", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 60,
+        .dma_desc_num = 6,
+        .dma_frame_num = 60,
         .use_apll = true,
         .intr_alloc_flags = 0,
 #if SOC_I2S_SUPPORTS_TDM
@@ -650,8 +652,8 @@ TEST_CASE("I2S adc test", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .intr_alloc_flags = 0,
-        .dma_buf_count = 2,
-        .dma_buf_len = 1024,
+        .dma_desc_num = 2,
+        .dma_frame_num = 1024,
         .use_apll = 0,
     };
     // install and start I2S driver
@@ -717,8 +719,8 @@ TEST_CASE("I2S dac test", "[i2s]")
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .dma_buf_count = 6,
-        .dma_buf_len = 60,
+        .dma_desc_num = 6,
+        .dma_frame_num = 60,
         .use_apll = 0,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
     };
@@ -731,3 +733,5 @@ TEST_CASE("I2S dac test", "[i2s]")
     TEST_ESP_OK(i2s_driver_uninstall(I2S_NUM_0));
 }
 #endif
+
+#endif //SOC_I2S_SUPPORTED

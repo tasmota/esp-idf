@@ -71,6 +71,7 @@ repos:
         name: Validate Codeowner File
         entry: tools/ci/check_codeowners.py ci-check
         language: python
+        always_run: true
         files: '\.gitlab/CODEOWNERS'
         pass_filenames: false
       - id: check-rules-yml
@@ -105,6 +106,8 @@ repos:
           - 'thefuzz == 0.19.0'
           - 'thefuzz[speedup] == 0.19.0; sys_platform != "win32"'
           # don't depend on python-Levenshtein on Windows, as it requires Microsoft C++ Build Tools to install
+          - 'pyyaml == 5.4.1'
+          - 'pathspec == 0.9.0'
         language: python
         files: \.(py|c|h|cpp|hpp|ld)$
         require_serial: true
@@ -116,8 +119,16 @@ repos:
         additional_dependencies:
           - PyYAML == 5.3.1
         pass_filenames: false
+      - id: check-generated-soc-caps-kconfig
+        name: Check soc caps kconfig files are generated (based on components/soc/IDF_TARGET/include/soc/soc_caps.h)
+        entry: tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py -d 'components/soc/*/include/soc/' 'components/esp_rom/*/'
+        language: python
+        files: 'components/soc/.+/include/soc/.+_caps\.h|components/esp_rom/.+/.+_caps\.h|kconfig\.soc_caps.in'
+        pass_filenames: false
+        additional_dependencies:
+          - pyparsing
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1
     hooks:
       - id: file-contents-sorter
-        files: 'tools\/ci\/(executable-list\.txt|mypy_ignore_list\.txt|check_copyright_ignore\.txt|check_copyright_permanent_ignore\.txt)'
+        files: 'tools\/ci\/(executable-list\.txt|mypy_ignore_list\.txt|check_copyright_ignore\.txt)'

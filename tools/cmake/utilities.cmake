@@ -22,8 +22,8 @@ endfunction()
 # Take a variable whose value was space-delimited values, convert to a cmake
 # list (semicolon-delimited)
 #
-# Note: if using this for directories, keeps the issue in place that
-# directories can't contain spaces...
+# Note: do not use this for directories or full paths, as they may contain
+# spaces.
 #
 # TODO: look at cmake separate_arguments, which is quote-aware
 function(spaces2list variable_name)
@@ -280,6 +280,17 @@ function(add_c_compile_options)
     foreach(option ${ARGV})
         # note: the Visual Studio Generator doesn't support this...
         add_compile_options($<$<COMPILE_LANGUAGE:C>:${option}>)
+    endforeach()
+endfunction()
+
+# add_compile_options variant for ASM code only
+#
+# This adds global options, set target properties for
+# component-specific flags
+function(add_asm_compile_options)
+    foreach(option ${ARGV})
+        # note: the Visual Studio Generator doesn't support this...
+        add_compile_options($<$<COMPILE_LANGUAGE:ASM>:${option}>)
     endforeach()
 endfunction()
 

@@ -7,7 +7,6 @@
  Tests for the adc2 device driver
 */
 #include "esp_system.h"
-#include "driver/adc.h"
 #include "unity.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -15,14 +14,13 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "test_utils.h"
-#include "driver/i2s.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
 
-
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3, ESP32S3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3, ESP32S3, ESP8684)
 
 static const char* TAG = "test_adc2";
 
@@ -216,6 +214,8 @@ TEST_CASE("adc2 work with wifi","[adc]")
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 
+#include "driver/i2s.h"
+
 #define ADC1_CHANNEL_4_IO      (32)
 #define SAMPLE_RATE            (36000)
 #define SAMPLE_BITS            (16)
@@ -228,8 +228,8 @@ static void i2s_adc_init(void)
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .intr_alloc_flags = 0,
-        .dma_buf_count = 2,
-        .dma_buf_len = 1024,
+        .dma_desc_num = 2,
+        .dma_frame_num = 1024,
         .use_apll = 0,
     };
     // install and start I2S driver

@@ -24,11 +24,22 @@
  * ECO & exceptions:
  * For ECO-ed booleans, `#define x "Not determined"` for them. This will cause error when used by
  * `#if x` and `#if !x`, making these missing definitions more obvious.
+ *
+ * These defines are parsed and imported as kconfig variables via the script
+ * `tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py`
+ *
+ * If this file is changed the script will automatically run the script
+ * and generate the kconfig variables as part of the pre-commit hooks.
+ *
+ * It can also be ran manually with `./tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py 'components/soc/esp32s2/include/soc/'`
+ *
+ * For more information see `tools/gen_soc_caps_kconfig/README.md`
  */
 
 #pragma once
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
+#define SOC_ADC_SUPPORTED               1
 #define SOC_DAC_SUPPORTED               1
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_CP_DMA_SUPPORTED            1
@@ -38,24 +49,33 @@
 #define SOC_RISCV_COPROC_SUPPORTED      1
 #define SOC_USB_OTG_SUPPORTED           1
 #define SOC_PCNT_SUPPORTED              1
+#define SOC_WIFI_SUPPORTED              1
 #define SOC_ULP_SUPPORTED               1
-#define SOC_RTC_SLOW_MEM_SUPPORTED      1
 #define SOC_CCOMP_TIMER_SUPPORTED       1
 #define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_HMAC_SUPPORTED              1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
-#define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS 3
-#define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS 1
-#define SOC_TEMP_SENSOR_SUPPORTED       1
-#define SOC_CACHE_SUPPORT_WRAP          1
-#define SOC_FLASH_ENCRYPTION_XTS_AES      1
-#define SOC_FLASH_ENCRYPTION_XTS_AES_256 1
-#define SOC_PSRAM_DMA_CAPABLE           1
-#define SOC_XT_WDT_SUPPORTED            1
+#define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
+#define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1
+#define SOC_ICACHE_ACCESS_RODATA_SUPPORTED  1
+#define SOC_TEMP_SENSOR_SUPPORTED           1
+#define SOC_CACHE_SUPPORT_WRAP              1
+#define SOC_FLASH_ENCRYPTION_XTS_AES        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_256    1
+#define SOC_RTC_FAST_MEM_SUPPORTED      1
+#define SOC_RTC_SLOW_MEM_SUPPORTED      1
+#define SOC_PSRAM_DMA_CAPABLE               1
+#define SOC_XT_WDT_SUPPORTED                1
+#define SOC_SUPPORT_SECURE_BOOT_REVOKE_KEY             1
+#define SOC_I2S_SUPPORTED               1
+#define SOC_RMT_SUPPORTED               1
+#define SOC_SIGMADELTA_SUPPORTED        1
+
 
 /*-------------------------- ADC CAPS ----------------------------------------*/
 /*!< SAR ADC Module*/
 #define SOC_ADC_RTC_CTRL_SUPPORTED              1
+#define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_ARBITER_SUPPORTED               1
 #define SOC_ADC_FILTER_SUPPORTED                1
 #define SOC_ADC_MONITOR_SUPPORTED               1
@@ -77,7 +97,6 @@
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
 
-
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 #define SOC_BROWNOUT_RESET_SUPPORTED 1
 
@@ -96,7 +115,7 @@
 
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-S2 has 1 GPIO peripheral
-#define SOC_GPIO_PORT           (1)
+#define SOC_GPIO_PORT           (1U)
 #define SOC_GPIO_PIN_COUNT      (48)
 
 // On ESP32 those PADs which have RTC functions must set pullup/down/capability via RTC register.
@@ -136,7 +155,7 @@
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 // ESP32-S2 have 1 I2S
-#define SOC_I2S_NUM                (1)
+#define SOC_I2S_NUM                (1U)
 #define SOC_I2S_SUPPORTS_APLL      (1)// ESP32-S2 support APLL
 #define SOC_I2S_SUPPORTS_DMA_EQUAL (1)
 #define SOC_I2S_APLL_MIN_FREQ      (250000000)
@@ -151,6 +170,8 @@
 #define SOC_LCD_I80_BUS_WIDTH      (24) /*!< Intel 8080 bus width */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
+#define SOC_LEDC_HAS_TIMER_SPECIFIC_MUX  (1)
+#define SOC_LEDC_SUPPORT_REF_TICK    (1)
 #define SOC_LEDC_SUPPORT_XTAL_CLOCK  (1)
 #define SOC_LEDC_CHANNEL_NUM         (8)
 #define SOC_LEDC_TIMER_BIT_WIDE_NUM  (14)
@@ -164,13 +185,13 @@
 #define SOC_MPU_REGION_WO_SUPPORTED               0
 
 /*-------------------------- PCNT CAPS ---------------------------------------*/
-#define SOC_PCNT_GROUPS               (1)
+#define SOC_PCNT_GROUPS               (1U)
 #define SOC_PCNT_UNITS_PER_GROUP      (4)
 #define SOC_PCNT_CHANNELS_PER_UNIT    (2)
 #define SOC_PCNT_THRES_POINT_PER_UNIT (2)
 
 /*-------------------------- RMT CAPS ----------------------------------------*/
-#define SOC_RMT_GROUPS                  (1)  /*!< One RMT group */
+#define SOC_RMT_GROUPS                  (1U) /*!< One RMT group */
 #define SOC_RMT_TX_CANDIDATES_PER_GROUP (4)  /*!< Number of channels that capable of Transmit in each group */
 #define SOC_RMT_RX_CANDIDATES_PER_GROUP (4)  /*!< Number of channels that capable of Receive in each group */
 #define SOC_RMT_CHANNELS_PER_GROUP      (4)  /*!< Total 4 channels */
@@ -190,7 +211,7 @@
 
 
 /*-------------------------- SIGMA DELTA CAPS --------------------------------*/
-#define SOC_SIGMADELTA_NUM            1
+#define SOC_SIGMADELTA_NUM            1U
 #define SOC_SIGMADELTA_CHANNEL_NUM (8) // 8 channels
 
 /*-------------------------- SPI CAPS ----------------------------------------*/
@@ -215,7 +236,7 @@
 
 // Peripheral supports output given level during its "dummy phase"
 // Only SPI1 supports this feature
-#define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUTPUT             1
+#define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT             1
 
 #define SOC_MEMSPI_IS_INDEPENDENT 1
 #define SOC_SPI_SUPPORT_OCT 1
@@ -284,12 +305,6 @@
 #define SOC_SHA_SUPPORT_SHA512_224      (1)
 #define SOC_SHA_SUPPORT_SHA512_256      (1)
 #define SOC_SHA_SUPPORT_SHA512_T        (1)
-
-/* Supported HW algorithms */
-#define SOC_SHA_SUPPORT_SHA1            (1)
-#define SOC_SHA_SUPPORT_SHA256          (1)
-#define SOC_SHA_SUPPORT_SHA384          (1)
-#define SOC_SHA_SUPPORT_SHA512          (1)
 
 
 /*--------------------------- RSA CAPS ---------------------------------------*/

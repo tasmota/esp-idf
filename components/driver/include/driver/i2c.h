@@ -18,7 +18,6 @@ extern "C" {
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "freertos/ringbuf.h"
 #include "driver/gpio.h"
 #include "soc/soc_caps.h"
 #include "hal/i2c_types.h"
@@ -299,7 +298,7 @@ i2c_cmd_handle_t i2c_cmd_link_create_static(uint8_t* buffer, uint32_t size);
  *        to release and return the resources.
  *        The required bytes will be dynamically allocated.
  *
- * @return Handle to the I2C command link
+ * @return Handle to the I2C command link or NULL in case of insufficient dynamic memory.
  */
 i2c_cmd_handle_t i2c_cmd_link_create(void);
 

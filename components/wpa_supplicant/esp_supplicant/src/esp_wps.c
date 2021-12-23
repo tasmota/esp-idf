@@ -1,16 +1,8 @@
-// Copyright 2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2019-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <string.h>
 
@@ -524,15 +516,17 @@ wps_build_ic_appie_wps_pr(void)
                  0, NULL);
     }
 
-    if (wps_ie) {
-        if (wpabuf_resize(&extra_ie, wpabuf_len(wps_ie)) == 0) {
-            wpabuf_put_buf(extra_ie, wps_ie);
-        } else {
-            wpabuf_free(wps_ie);
-            return;
-        }
-        wpabuf_free(wps_ie);
+    if (!wps_ie) {
+        return;
     }
+
+    if (wpabuf_resize(&extra_ie, wpabuf_len(wps_ie)) == 0) {
+        wpabuf_put_buf(extra_ie, wps_ie);
+    } else {
+        wpabuf_free(wps_ie);
+        return;
+    }
+    wpabuf_free(wps_ie);
 
     esp_wifi_set_appie_internal(WIFI_APPIE_WPS_PR, (uint8_t *)wpabuf_head(extra_ie), extra_ie->used, 0);
     wpabuf_free(extra_ie);
@@ -572,7 +566,11 @@ wps_parse_scan_result(struct wps_scan_ie *scan)
     }
 
     esp_wifi_get_mode(&op_mode);
-    if ((op_mode == WIFI_MODE_STA || op_mode == WIFI_MODE_APSTA) && scan->wps) {
+    if ((op_mode == WIFI_MODE_STA
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
+    || op_mode == WIFI_MODE_APSTA
+#endif
+    ) && scan->wps) {
         struct wpabuf *buf = wpabuf_alloc_copy(scan->wps + 6, scan->wps[1] - 4);
 
         if (wps_is_selected_pbc_registrar(buf, scan->bssid)
@@ -633,7 +631,8 @@ int wps_send_eap_identity_rsp(u8 id)
     ret = esp_wifi_get_assoc_bssid_internal(bssid);
     if (ret != 0) {
         wpa_printf(MSG_ERROR, "bssid is empty!");
-        return ESP_FAIL;
+        ret = ESP_FAIL;
+        goto _err;
     }
 
     wpabuf_put_data(eap_buf, sm->identity, sm->identity_len);
@@ -968,13 +967,6 @@ int wps_finish(void)
     }
 
     if (sm->wps->state == WPS_FINISHED) {
-        wifi_config_t *config = (wifi_config_t *)os_zalloc(sizeof(wifi_config_t));
-
-        if (config == NULL) {
-            wifi_event_sta_wps_fail_reason_t reason_code = WPS_FAIL_REASON_NORMAL;
-            esp_event_send_internal(WIFI_EVENT, WIFI_EVENT_STA_WPS_ER_FAILED, &reason_code, sizeof(reason_code), portMAX_DELAY);
-            return ESP_FAIL;
-        }
 
         wpa_printf(MSG_DEBUG, "wps finished------>");
         wps_set_status(WPS_STATUS_SUCCESS);
@@ -983,6 +975,14 @@ int wps_finish(void)
         ets_timer_disarm(&sm->wps_msg_timeout_timer);
 
         if (sm->ap_cred_cnt == 1) {
+            wifi_config_t *config = (wifi_config_t *)os_zalloc(sizeof(wifi_config_t));
+
+            if (config == NULL) {
+                wifi_event_sta_wps_fail_reason_t reason_code = WPS_FAIL_REASON_NORMAL;
+                esp_event_send_internal(WIFI_EVENT, WIFI_EVENT_STA_WPS_ER_FAILED, &reason_code, sizeof(reason_code), portMAX_DELAY);
+                return ESP_FAIL;
+            }
+
             memset(config, 0x00, sizeof(wifi_sta_config_t));
             memcpy(config->sta.ssid, sm->ssid[0], sm->ssid_len[0]);
             memcpy(config->sta.password, sm->key[0], sm->key_len[0]);
@@ -1381,6 +1381,9 @@ int wps_dev_init(void)
     return ESP_OK;
 
 _out:
+    if (!dev) {
+        return ret;
+    }
     if (dev->manufacturer) {
         os_free(dev->manufacturer);
     }
@@ -1559,7 +1562,7 @@ wifi_station_wps_init(void)
 
     gWpsSm = (struct wps_sm *)os_zalloc(sizeof(struct wps_sm));   /* alloc Wps_sm */
     if (!gWpsSm) {
-        goto _err;
+        goto _out;
     }
 
     sm = gWpsSm;
@@ -1644,10 +1647,8 @@ _err:
         wps_deinit();
         sm->wps = NULL;
     }
-    if (sm) {
-        os_free(gWpsSm);
-        gWpsSm = NULL;
-    }
+    os_free(gWpsSm);
+    gWpsSm = NULL;
     return ESP_FAIL;
 _out:
     return ESP_FAIL;
@@ -1700,10 +1701,8 @@ wifi_station_wps_deinit(void)
         wps_deinit();
         sm->wps = NULL;
     }
-    if (sm) {
-        os_free(gWpsSm);
-        gWpsSm = NULL;
-    }
+    os_free(gWpsSm);
+    gWpsSm = NULL;
 
     return ESP_OK;
 }
@@ -1941,7 +1940,7 @@ int wps_task_init(void)
     }
 
     os_bzero(s_wps_sig_cnt, SIG_WPS_NUM);
-    s_wps_queue = xQueueCreate(SIG_WPS_NUM, sizeof( void * ) );
+    s_wps_queue = xQueueCreate(SIG_WPS_NUM, sizeof(s_wps_queue));
     if (!s_wps_queue) {
         wpa_printf(MSG_ERROR, "wps task init: failed to alloc queue");
         goto _wps_no_mem;
@@ -2003,7 +2002,11 @@ int wps_check_wifi_mode(void)
         return ESP_FAIL;
     }
 
-    if (mode == WIFI_MODE_AP || mode == WIFI_MODE_NULL || sniffer == true) {
+    if (
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
+        mode == WIFI_MODE_AP ||
+#endif
+        mode == WIFI_MODE_NULL || sniffer == true) {
         wpa_printf(MSG_ERROR, "wps check wifi mode: wrong wifi mode=%d sniffer=%d", mode, sniffer);
         return ESP_ERR_WIFI_MODE;
     }
@@ -2180,7 +2183,11 @@ wifi_set_wps_cb(wps_st_cb_t cb)
     wifi_mode_t mode;
 
     esp_wifi_get_mode(&mode);
-    if (mode == WIFI_MODE_AP || mode == WIFI_MODE_NULL) {
+    if (
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
+        mode == WIFI_MODE_AP ||
+#endif
+        mode == WIFI_MODE_NULL) {
         return false;
     }
 

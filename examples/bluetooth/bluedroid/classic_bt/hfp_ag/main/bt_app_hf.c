@@ -1,10 +1,8 @@
 /*
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
+ * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ */
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -105,7 +103,8 @@ const char *c_codec_mode_str[] = {
 };
 
 #if CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI
-#define TABLE_SIZE   100
+#define TABLE_SIZE         100
+#define TABLE_SIZE_BYTE    200
 // Produce a sine audio
 static const int16_t sine_int16[TABLE_SIZE] = {
      0,    2057,    4107,    6140,    8149,   10126,   12062,   13952,   15786,   17557,
@@ -179,14 +178,13 @@ static void bt_app_hf_incoming_cb(const uint8_t *buf, uint32_t sz)
 
 static uint32_t bt_app_hf_create_audio_data(uint8_t *p_buf, uint32_t sz)
 {
-    static int sine_phase = 0;
+    static int index = 0;
+    uint8_t *data = (uint8_t *)sine_int16;
 
-    for (int i = 0; i * 2 + 1 < sz; i++) {
-        p_buf[i * 2]     = sine_int16[sine_phase];
-        p_buf[i * 2 + 1] = sine_int16[sine_phase];
-        ++sine_phase;
-        if (sine_phase >= TABLE_SIZE) {
-            sine_phase -= TABLE_SIZE;
+    for (uint32_t i = 0; i < sz; i++) {
+        p_buf[i] = data[index++];
+        if (index >= TABLE_SIZE_BYTE) {
+            index -= TABLE_SIZE_BYTE;
         }
     }
     return sz;

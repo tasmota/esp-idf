@@ -17,6 +17,9 @@
 #include "driver/spi_master.h"
 #include "esp_serial_slave_link/essl_spi.h"
 
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP8684)
+// TODO: SPI SUPPORT IDF-4024
+
 #if !DISABLED_FOR_TARGETS(ESP32C3)
 //There is only one GPSPI controller on ESP32C3, so single-board test is disabled.
 
@@ -142,7 +145,7 @@ static void init_slave_hd(int mode, bool append_mode, const spi_slave_hd_callbac
 static void test_hd_init(void** arg)
 {
     TEST_ASSERT(*arg==NULL);
-    *arg = malloc(sizeof(testhd_context_t));
+    *arg = heap_caps_malloc(sizeof(testhd_context_t), MALLOC_CAP_DMA);
     assert(((int)arg%4)==0);
     testhd_context_t* context = (testhd_context_t*)*arg;
     TEST_ASSERT(context!=NULL);
@@ -750,3 +753,5 @@ TEST_CASE_MULTIPLE_DEVICES("SPI Slave HD: segment mode, master sends too long", 
 #endif  //#if SOC_SPI_SUPPORT_SLAVE_HD_VER2
 
 #endif  //#if !DISABLED_FOR_TARGETS(ESP32, ESP32S2, ESP32S3)
+
+#endif // #if !TEMPORARY_DISABLED_FOR_TARGETS(ESP8684)

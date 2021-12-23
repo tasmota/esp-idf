@@ -61,7 +61,7 @@ There are a number of core dump related configuration options which user can cho
    The value is in ms.
 
 **Handling of UART core dumps in IDF Monitor (Components -> Core dump -> Delay before print to UART)**
-   
+
    The value is base64 encoded.
 
    * Decode and show summary (info_corefile)
@@ -200,7 +200,7 @@ Generic command syntax: ``espcoredump.py [options] command [args]``
    --core-format {b64,elf,raw}, -t {b64,elf,raw}
                      File specified with "-c" is an ELF ("elf"), raw (raw) or base64-encoded (b64) binary
 
-   --off OFF, -o OFF     Offset of coredump partition in flash (type "make partition_table" to see).
+   --off OFF, -o OFF     Offset of coredump partition in flash (type "idf.py partition-table" to see).
 
    --save-core SAVE_CORE, -s SAVE_CORE
                      Save core to file. Otherwise temporary core file will be deleted. Does not work with "-c"
@@ -211,3 +211,11 @@ Generic command syntax: ``espcoredump.py [options] command [args]``
    --print-mem, -m       Print memory dump. Only valid when info_corefile.
 
    **<prog>**            Path to program ELF file.
+
+Related Documents
+^^^^^^^^^^^^^^^^^
+
+.. toctree::
+    :maxdepth: 1
+
+    core_dump_internals

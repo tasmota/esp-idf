@@ -1,10 +1,8 @@
 /*
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
+ * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +69,7 @@ static int32_t bt_app_a2d_data_cb(uint8_t *data, int32_t len);
 /// callback function for AVRCP controller
 static void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
 
-static void a2d_app_heart_beat(void *arg);
+static void a2d_app_heart_beat(TimerHandle_t arg);
 
 /// A2DP application state machine
 static void bt_app_av_sm_hdlr(uint16_t event, void *param);
@@ -394,7 +392,7 @@ static int32_t bt_app_a2d_data_cb(uint8_t *data, int32_t len)
     return len;
 }
 
-static void a2d_app_heart_beat(void *arg)
+static void a2d_app_heart_beat(TimerHandle_t arg)
 {
     bt_app_work_dispatch(bt_app_av_sm_hdlr, BT_APP_HEART_BEAT_EVT, NULL, 0, NULL);
 }

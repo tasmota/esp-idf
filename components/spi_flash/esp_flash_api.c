@@ -1,16 +1,8 @@
-// Copyright 2015-2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -37,6 +29,8 @@
 #include "esp32c3/rom/spi_flash.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
 #include "esp32h2/rom/spi_flash.h"
+#elif CONFIG_IDF_TARGET_ESP8684
+#include "esp8684/rom/spi_flash.h"
 #endif
 
 static const char TAG[] = "spi_flash";
@@ -271,12 +265,14 @@ esp_err_t IRAM_ATTR esp_flash_init_main(esp_flash_t *chip)
     // 3. Get basic parameters of the chip (size, dummy count, etc.)
     // 4. Init chip into desired mode (without breaking the cache!)
     esp_err_t err = ESP_OK;
-    bool octal_mode = (chip->read_mode >= SPI_FLASH_OPI_FLAG);
+    bool octal_mode;
+
     if (chip == NULL || chip->host == NULL || chip->host->driver == NULL ||
         ((memspi_host_inst_t*)chip->host)->spi == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
+    octal_mode = (chip->read_mode >= SPI_FLASH_OPI_FLAG);
     //read chip id
     // This can indicate the MSPI support OPI, if the flash works on MSPI in OPI mode, we directly bypass read id.
     uint32_t flash_id = 0;

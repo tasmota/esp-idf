@@ -88,6 +88,7 @@ Type 字段可以指定为 app (0x00) 或者 data (0x01)，也可以直接使用
 
 SubType 字段
 ~~~~~~~~~~~~
+{IDF_TARGET_ESP_PHY_REF:default = ":ref:`CONFIG_ESP_PHY_INIT_DATA_IN_PARTITION`", esp8684 = "(not updated yet)"}
 
 SubType 字段长度为 8 bit，内容与具体分区 Type 有关。目前，esp-idf 仅仅规定了 “app” 和 “data” 两种分区类型的子类型含义。
 
@@ -109,7 +110,7 @@ SubType 字段长度为 8 bit，内容与具体分区 Type 有关。目前，esp
    -  ``phy`` (1) 分区用于存放 PHY 初始化数据，从而保证可以为每个设备单独配置 PHY，而非必须采用固件中的统一 PHY 初始化数据。
 
       -  默认配置下，phy 分区并不启用，而是直接将 phy 初始化数据编译至应用程序中，从而节省分区表空间（直接将此分区删掉）。
-      -  如果需要从此分区加载 phy 初始化数据，请打开项目配置菜单（``idf.py menuconfig``），并且使能 :ref:`CONFIG_ESP_PHY_INIT_DATA_IN_PARTITION` 选项。此时，您还需要手动将 phy 初始化数据烧至设备 flash（esp-idf 编译系统并不会自动完成该操作）。
+      -  如果需要从此分区加载 phy 初始化数据，请打开项目配置菜单（``idf.py menuconfig``），并且使能 {IDF_TARGET_ESP_PHY_REF} 选项。此时，您还需要手动将 phy 初始化数据烧至设备 flash（esp-idf 编译系统并不会自动完成该操作）。
    -  ``nvs`` (2) 是专门给 :doc:`非易失性存储 (NVS) API <../api-reference/storage/nvs_flash>` 使用的分区。
 
       -  用于存储每台设备的 PHY 校准数据（注意，并不是 PHY 初始化数据）。
@@ -182,10 +183,6 @@ ESP-IDF 构建系统将自动检查生成的二进制文件大小与可用的分
 .. note::
 
    即使分区大小检查返回错误并导致构建失败，仍然会生成可以烧录的二进制文件（它们对于可用空间来说过大，因此无法正常工作）。
-
-.. note::
-
-   只有在使用 CMake 构建系统时才会对构建系统二进制文件大小进行检查。如果使用传统的 GNU Make 构建系统时，则可以手动检查文件大小，或在启动时会产生错误记录。
 
 MD5 校验和
 ~~~~~~~~~~

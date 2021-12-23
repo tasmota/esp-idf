@@ -1,5 +1,6 @@
+
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,6 +25,16 @@
  * ECO & exceptions:
  * For ECO-ed booleans, `#define x "Not determined"` for them. This will cause error when used by
  * `#if x` and `#if !x`, making these missing definitions more obvious.
+ *
+ * These defines are parsed and imported as kconfig variables via the script
+ * `tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py`
+ *
+ * If this file is changed the script will automatically run the script
+ * and generate the kconfig variables as part of the pre-commit hooks.
+ *
+ * It can also be ran manually with `./tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py 'components/soc/esp32/include/soc/'`
+ *
+ * For more information see `tools/gen_soc_caps_kconfig/README.md`
  */
 
 #pragma once
@@ -52,23 +63,31 @@
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_CAPS_ECO_VER_MAX        3
 
+#define SOC_ADC_SUPPORTED           1
 #define SOC_DAC_SUPPORTED           1
 #define SOC_MCPWM_SUPPORTED         1
 #define SOC_SDMMC_HOST_SUPPORTED    1
 #define SOC_BT_SUPPORTED            1
+#define SOC_CLASSIC_BT_SUPPORTED    1
 #define SOC_PCNT_SUPPORTED          1
+#define SOC_WIFI_SUPPORTED          1
 #define SOC_SDIO_SLAVE_SUPPORTED    1
 #define SOC_TWAI_SUPPORTED          1
 #define SOC_EMAC_SUPPORTED          1
 #define SOC_CPU_CORES_NUM           2
 #define SOC_ULP_SUPPORTED           1
-#define SOC_RTC_SLOW_MEM_SUPPORTED  1
 #define SOC_CCOMP_TIMER_SUPPORTED   1
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS 1
+#define SOC_RTC_FAST_MEM_SUPPORTED        1
+#define SOC_RTC_SLOW_MEM_SUPPORTED        1
+#define SOC_I2S_SUPPORTED           1
+#define SOC_RMT_SUPPORTED           1
+#define SOC_SIGMADELTA_SUPPORTED    1
+
 
 /*-------------------------- ADC CAPS ----------------------------------------*/
 /**
- * TO BE REMOVED in !14278
+ * TO BE REMOVED
  * Check if adc support digital controller (DMA) mode.
  * @value
  *      - 1 : support;
@@ -78,6 +97,7 @@
 
 /*!< SAR ADC Module*/
 #define SOC_ADC_RTC_CTRL_SUPPORTED              1
+#define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_PERIPH_NUM                      (2)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         ((PERIPH_NUM==0)? 8: 10)
 #define SOC_ADC_MAX_CHANNEL_NUM                 (10)
@@ -88,8 +108,8 @@
 #define SOC_ADC_DIGI_MIN_BITWIDTH               (9)
 #define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 /*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interva <= 4095 */
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
+#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          (2*1000*1000)
+#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           (2000)
 
 /*!< RTC */
 #define SOC_ADC_MAX_BITWIDTH                    (12)
@@ -114,7 +134,7 @@
 
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32 has 1 GPIO peripheral
-#define SOC_GPIO_PORT                   (1)
+#define SOC_GPIO_PORT                   (1U)
 #define SOC_GPIO_PIN_COUNT              40
 
 // SOC_GPIO_SUPPORT_RTC_INDEPENDENT not defined. On ESP32 those PADs which have RTC functions must
@@ -159,7 +179,8 @@
 #define SOC_LCD_I80_BUS_WIDTH      (24) /*!< Intel 8080 bus width */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
-#define SOC_LEDC_SUPPORT_HS_MODE  (1)
+#define SOC_LEDC_HAS_TIMER_SPECIFIC_MUX  (1)
+#define SOC_LEDC_SUPPORT_REF_TICK    (1)
 #define SOC_LEDC_SUPPORT_HS_MODE     (1)
 #define SOC_LEDC_CHANNEL_NUM         (8)
 #define SOC_LEDC_TIMER_BIT_WIDE_NUM  (20)
@@ -186,13 +207,13 @@
 #define SOC_MPU_REGION_WO_SUPPORTED               0
 
 /*-------------------------- PCNT CAPS ---------------------------------------*/
-#define SOC_PCNT_GROUPS                  (1)
+#define SOC_PCNT_GROUPS                  (1U)
 #define SOC_PCNT_UNITS_PER_GROUP         (8)
 #define SOC_PCNT_CHANNELS_PER_UNIT       (2)
 #define SOC_PCNT_THRES_POINT_PER_UNIT    (2)
 
 /*-------------------------- RMT CAPS ----------------------------------------*/
-#define SOC_RMT_GROUPS                  (1)  /*!< One RMT group */
+#define SOC_RMT_GROUPS                  (1U)  /*!< One RMT group */
 #define SOC_RMT_TX_CANDIDATES_PER_GROUP (8)  /*!< Number of channels that capable of Transmit in each group */
 #define SOC_RMT_RX_CANDIDATES_PER_GROUP (8)  /*!< Number of channels that capable of Receive in each group */
 #define SOC_RMT_CHANNELS_PER_GROUP      (8)  /*!< Total 8 channels */
@@ -207,7 +228,7 @@
 #define SOC_RTCIO_WAKE_SUPPORTED 1
 
 /*-------------------------- SIGMA DELTA CAPS --------------------------------*/
-#define SOC_SIGMADELTA_NUM            1
+#define SOC_SIGMADELTA_NUM            1U
 #define SOC_SIGMADELTA_CHANNEL_NUM (8) // 8 channels
 
 /*-------------------------- SPI CAPS ----------------------------------------*/

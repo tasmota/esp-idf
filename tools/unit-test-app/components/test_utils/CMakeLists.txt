@@ -1,4 +1,5 @@
 set(srcs "ccomp_timer.c"
+         "memory_checks.c"
          "test_runner.c"
          "test_utils.c")
 
@@ -20,4 +21,4 @@ idf_component_register(SRCS ${srcs}
                     INCLUDE_DIRS include
                     PRIV_INCLUDE_DIRS private_include
                     REQUIRES spi_flash idf_test cmock
-                    PRIV_REQUIRES perfmon esp_ipc driver)
+                    PRIV_REQUIRES perfmon driver)

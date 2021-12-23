@@ -1,4 +1,3 @@
-
 /*
  * WPA Supplicant - WPA state machine and EAPOL-Key processing
  * Copyright (c) 2003-2010, Jouni Malinen <j@w1.fi>
@@ -12,6 +11,7 @@
  *
  * See README and COPYING for more details.
  */
+
 #include "utils/includes.h"
 
 #include "utils/common.h"
@@ -1948,7 +1948,7 @@ int wpa_sm_rx_eapol(u8 *src_addr, u8 *buf, u32 len)
     if (key_data_len > plen - keyhdrlen) {
 #ifdef DEBUG_PRINT
         wpa_printf(MSG_DEBUG, "WPA: Invalid EAPOL-Key "
-                              "frame - key_data overflow (%d > %lu)",
+                              "frame - key_data overflow (%d > %u)",
                               (unsigned int) key_data_len,
                               (unsigned int) (plen - keyhdrlen));
 #endif
@@ -2258,10 +2258,12 @@ wpa_set_passphrase(char * passphrase, u8 *ssid, size_t ssid_len)
     if (esp_wifi_sta_get_reset_param_internal() != 0) {
         // check it's psk
         if (strlen((char *)esp_wifi_sta_get_prof_password_internal()) == 64) {
-            hexstr2bin((char *)esp_wifi_sta_get_prof_password_internal(), esp_wifi_sta_get_ap_info_prof_pmk_internal(), PMK_LEN);
+            if (hexstr2bin((char *)esp_wifi_sta_get_prof_password_internal(),
+                           esp_wifi_sta_get_ap_info_prof_pmk_internal(), PMK_LEN) != 0)
+                return;
         } else {
-        pbkdf2_sha1((char *)esp_wifi_sta_get_prof_password_internal(), sta_ssid->ssid, (size_t)sta_ssid->len,
-            4096, esp_wifi_sta_get_ap_info_prof_pmk_internal(), PMK_LEN);
+            pbkdf2_sha1((char *)esp_wifi_sta_get_prof_password_internal(), sta_ssid->ssid, (size_t)sta_ssid->len,
+                        4096, esp_wifi_sta_get_ap_info_prof_pmk_internal(), PMK_LEN);
         }
         esp_wifi_sta_update_ap_info_internal();
         esp_wifi_sta_set_reset_param_internal(0);

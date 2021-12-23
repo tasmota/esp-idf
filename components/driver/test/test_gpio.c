@@ -20,6 +20,7 @@
 #include "sdkconfig.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
+#include "test_utils.h"
 
 
 #define WAKE_UP_IGNORE 1  // gpio_wakeup function development is not completed yet, set it deprecated.
@@ -62,6 +63,13 @@
 #define TEST_GPIO_USB_DP_IO             19  // USB D+ GPIO
 #define TEST_GPIO_INPUT_LEVEL_HIGH_PIN  10
 #define TEST_GPIO_INPUT_LEVEL_LOW_PIN   1
+#elif CONFIG_IDF_TARGET_ESP8684
+#define TEST_GPIO_EXT_OUT_IO            2  // default output GPIO
+#define TEST_GPIO_EXT_IN_IO             3  // default input GPIO
+#define TEST_GPIO_OUTPUT_PIN            1
+#define TEST_GPIO_OUTPUT_MAX            GPIO_NUM_21
+#define TEST_GPIO_INPUT_LEVEL_HIGH_PIN  10
+#define TEST_GPIO_INPUT_LEVEL_LOW_PIN   1
 #endif
 
 // If there is any input-only pin, enable input-only pin part of some tests.
@@ -100,11 +108,11 @@ static gpio_config_t init_io(gpio_num_t num)
 __attribute__((unused)) static void gpio_isr_edge_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
-    esp_rom_printf("GPIO[%d] intr, val: %d\n", gpio_num, gpio_get_level(gpio_num));
+    esp_rom_printf("GPIO[%d] intr on core %d, val: %d\n", gpio_num, cpu_hal_get_core_id(), gpio_get_level(gpio_num));
     edge_intr_times++;
 }
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3, ESP8684)
 //No runners
 // level interrupt event with "gpio_intr_disable"
 static void gpio_isr_level_handler(void *arg)
@@ -214,7 +222,7 @@ TEST_CASE("GPIO config parameters test", "[gpio]")
 #endif // SOC_HAS_INPUT_ONLY_PIN
 }
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3, ESP8684)
 //No runners
 TEST_CASE("GPIO rising edge interrupt test", "[gpio][test_env=UT_T1_GPIO]")
 {
@@ -408,6 +416,42 @@ TEST_CASE("GPIO enable and disable interrupt test", "[gpio][test_env=UT_T1_GPIO]
 }
 #endif //DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3)
 
+#if !CONFIG_FREERTOS_UNICORE
+static void install_isr_service_task(void *arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    //rising edge intr
+    TEST_ESP_OK(gpio_set_intr_type(gpio_num, GPIO_INTR_POSEDGE));
+    TEST_ESP_OK(gpio_install_isr_service(0));
+    gpio_isr_handler_add(gpio_num, gpio_isr_edge_handler, (void *) gpio_num);
+    vTaskSuspend(NULL);
+}
+
+TEST_CASE("GPIO interrupt on other CPUs test", "[gpio]")
+{
+    TaskHandle_t gpio_task_handle;
+    gpio_config_t input_output_io = init_io(TEST_GPIO_EXT_OUT_IO);
+    input_output_io.mode = GPIO_MODE_INPUT_OUTPUT;
+    input_output_io.pull_up_en = 1;
+    TEST_ESP_OK(gpio_config(&input_output_io));
+
+    for (int cpu_num = 1; cpu_num < portNUM_PROCESSORS; ++cpu_num) {
+        // We assume unit-test task is running on core 0, so we install gpio interrupt on other cores
+        edge_intr_times = 0;
+        TEST_ESP_OK(gpio_set_level(TEST_GPIO_EXT_OUT_IO, 0));
+        xTaskCreatePinnedToCore(install_isr_service_task, "install_isr_service_task", 2048, (void *) TEST_GPIO_EXT_OUT_IO, 1, &gpio_task_handle, cpu_num);
+
+        vTaskDelay(200 / portTICK_RATE_MS);
+        TEST_ESP_OK(gpio_set_level(TEST_GPIO_EXT_OUT_IO, 1));
+        vTaskDelay(100 / portTICK_RATE_MS);
+        TEST_ASSERT_EQUAL_INT(edge_intr_times, 1);
+        gpio_isr_handler_remove(TEST_GPIO_EXT_OUT_IO);
+        gpio_uninstall_isr_service();
+        test_utils_task_delete(gpio_task_handle);
+    }
+}
+#endif //!CONFIG_FREERTOS_UNICORE
+
 // ESP32 Connect GPIO18 with GPIO19, ESP32-S2 Connect GPIO17 with GPIO21,
 // ESP32-S3 Connect GPIO17 with GPIO21, ESP32C3 Connect GPIO2 with GPIO3
 // use multimeter to test the voltage, so it is ignored in CI
@@ -482,7 +526,7 @@ TEST_CASE("GPIO io pull up/down function", "[gpio]")
     TEST_ASSERT_EQUAL_INT_MESSAGE(gpio_get_level(TEST_GPIO_EXT_IN_IO), 0, "gpio_pullup_dis error, it can pull up");
 }
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3, ESP32C3, ESP8684)
 //No runners
 TEST_CASE("GPIO output and input mode test", "[gpio][test_env=UT_T1_GPIO]")
 {

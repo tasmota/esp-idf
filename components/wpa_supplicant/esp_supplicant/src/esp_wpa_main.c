@@ -226,10 +226,12 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
 }
 
 #ifndef ROAMING_SUPPORT
-static inline void esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
+static inline int esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 {
 	wpa_cb->wpa_sta_rx_mgmt = NULL;
 	wpa_cb->wpa_sta_profile_match = NULL;
+
+	return 0;
 }
 static inline void esp_supplicant_common_deinit(void)
 {
@@ -241,7 +243,7 @@ int esp_supplicant_init(void)
     int ret = ESP_OK;
     struct wpa_funcs *wpa_cb;
 
-    wpa_cb = (struct wpa_funcs *)os_malloc(sizeof(struct wpa_funcs));
+    wpa_cb = (struct wpa_funcs *)os_zalloc(sizeof(struct wpa_funcs));
     if (!wpa_cb) {
         return ESP_ERR_NO_MEM;
     }
@@ -253,6 +255,7 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_sta_disconnected_cb = wpa_sta_disconnected_cb;
     wpa_cb->wpa_sta_in_4way_handshake = wpa_sta_in_4way_handshake;
 
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
     wpa_cb->wpa_ap_join       = wpa_ap_join;
     wpa_cb->wpa_ap_remove     = wpa_ap_remove;
     wpa_cb->wpa_ap_get_wpa_ie = wpa_ap_get_wpa_ie;
@@ -260,6 +263,7 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_ap_get_peer_spp_msg  = wpa_ap_get_peer_spp_msg;
     wpa_cb->wpa_ap_init       = hostap_init;
     wpa_cb->wpa_ap_deinit     = hostap_deinit;
+#endif
 
     wpa_cb->wpa_config_parse_string  = wpa_config_parse_string;
     wpa_cb->wpa_parse_wpa_ie  = wpa_parse_wpa_ie_wrapper;
@@ -268,7 +272,11 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_config_done = wpa_config_done;
 
     esp_wifi_register_wpa3_cb(wpa_cb);
-    esp_supplicant_common_init(wpa_cb);
+    ret = esp_supplicant_common_init(wpa_cb);
+
+    if (ret != 0) {
+        return ret;
+    }
 
     esp_wifi_register_wpa_cb_internal(wpa_cb);
 

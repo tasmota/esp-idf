@@ -156,20 +156,6 @@ menu "Driver configurations"
 
     endmenu # UART Configuration
 
-    menu "RTCIO configuration"
-        visible if IDF_TARGET_ESP32
-
-        config RTCIO_SUPPORT_RTC_GPIO_DESC
-            bool "Support array `rtc_gpio_desc` for ESP32"
-            depends on IDF_TARGET_ESP32
-            default n
-            help
-                The the array `rtc_gpio_desc` will don't compile by default.
-                If this option is selected, the array `rtc_gpio_desc` can be compile.
-                If user use this array, please enable this configuration.
-
-    endmenu # RTCIO Configuration
-
     menu "GPIO Configuration"
         visible if IDF_TARGET_ESP32
 
@@ -201,5 +187,31 @@ menu "Driver configurations"
                 cache misses, and also be able to run whilst the cache is disabled.
                 (e.g. SPI Flash write).
     endmenu # GDMA Configuration
+
+    menu "GPTimer Configuration"
+        config GPTIMER_CTRL_FUNC_IN_IRAM
+            bool "Place GPTimer control functions into IRAM"
+            default n
+            help
+                Place GPTimer control functions (like start/stop) into IRAM,
+                so that these functions can be IRAM-safe and able to be called in the other IRAM interrupt context.
+                Enabling this option can improve driver performance as well.
+
+        config GPTIMER_ISR_IRAM_SAFE
+            bool "GPTimer ISR IRAM-Safe"
+            default n
+            help
+                This will ensure the GPTimer interrupt handle is IRAM-Safe, allow to avoid flash
+                cache misses, and also be able to run whilst the cache is disabled.
+                (e.g. SPI Flash write)
+
+        config GPTIMER_SUPPRESS_DEPRECATE_WARN
+            bool "Suppress leagcy driver deprecated warning"
+            default n
+            help
+                Wether to suppress the deprecation warnings when using legacy timer group driver (driver/timer.h).
+                If you want to continue using the legacy driver, and don't want to see related deprecation warnings,
+                you can enable this option.
+    endmenu # GPTimer Configuration
 
 endmenu  # Driver configurations

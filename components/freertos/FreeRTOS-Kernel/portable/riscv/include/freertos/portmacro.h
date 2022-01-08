@@ -37,7 +37,6 @@
 #include <stdio.h>
 #include "soc/spinlock.h"
 #include "soc/interrupt_core0_reg.h"
-#include "soc/cpu.h"
 #include "esp_attr.h"
 #include "esp_rom_sys.h"
 #include "esp_timer.h"              /* required for FreeRTOS run time stats */
@@ -48,9 +47,6 @@
 
 /* [refactor-todo] These includes are not directly used in this file. They are kept into to prevent a breaking change. Remove these. */
 #include <limits.h>
-#ifdef CONFIG_LEGACY_INCLUDE_COMMON_HEADERS
-#include "soc/soc_memory_layout.h"
-#endif
 
 #ifdef __cplusplus
 extern "C" {

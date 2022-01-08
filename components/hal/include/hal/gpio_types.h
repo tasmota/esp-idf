@@ -1,13 +1,14 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #pragma once
 
-#include "soc/gpio_periph.h"
+#include "sdkconfig.h"
 #include "soc/soc_caps.h"
+#include "esp_bit_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -294,7 +295,6 @@ typedef enum {
     GPIO_NUM_19 = 19,   /*!< GPIO19, input and output */
     GPIO_NUM_20 = 20,   /*!< GPIO20, input and output */
     GPIO_NUM_21 = 21,   /*!< GPIO21, input and output */
-    GPIO_NUM_22 = 22,   /*!< GPIO22, input and output */
     GPIO_NUM_MAX,
 /** @endcond */
 } gpio_num_t;
@@ -366,23 +366,6 @@ typedef enum {
     GPIO_NUM_18 = 18,   /*!< GPIO18, input and output */
     GPIO_NUM_19 = 19,   /*!< GPIO19, input and output */
     GPIO_NUM_20 = 20,   /*!< GPIO20, input and output */
-    GPIO_NUM_21 = 21,   /*!< GPIO21, input and output */
-    GPIO_NUM_22 = 22,   /*!< GPIO22, input and output */
-    GPIO_NUM_26 = 26,   /*!< GPIO26, input and output */
-    GPIO_NUM_27 = 27,   /*!< GPIO27, input and output */
-    GPIO_NUM_28 = 28,   /*!< GPIO28, input and output */
-    GPIO_NUM_29 = 29,   /*!< GPIO29, input and output */
-    GPIO_NUM_30 = 30,   /*!< GPIO30, input and output */
-    GPIO_NUM_31 = 31,   /*!< GPIO31, input and output */
-    GPIO_NUM_32 = 32,   /*!< GPIO32, input and output */
-    GPIO_NUM_33 = 33,   /*!< GPIO33, input and output */
-    GPIO_NUM_34 = 34,   /*!< GPIO34, input and output */
-    GPIO_NUM_35 = 35,   /*!< GPIO35, input and output */
-    GPIO_NUM_36 = 36,   /*!< GPIO36, input and output */
-    GPIO_NUM_37 = 37,   /*!< GPIO37, input and output */
-    GPIO_NUM_38 = 38,   /*!< GPIO38, input and output */
-    GPIO_NUM_39 = 39,   /*!< GPIO39, input and output */
-    GPIO_NUM_40 = 40,   /*!< GPIO40, input and output */
     GPIO_NUM_MAX,
 /** @endcond */
 } gpio_num_t;

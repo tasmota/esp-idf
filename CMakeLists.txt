@@ -194,7 +194,7 @@ if(CONFIG_ESP_SYSTEM_USE_EH_FRAME)
   list(APPEND link_options "-Wl,--eh-frame-hdr")
 endif()
 
-list(APPEND link_options "-fno-lto")
+list(APPEND link_options "-flto")
 
 # Placing jump tables in flash would cause issues with code that required
 # to be placed in IRAM

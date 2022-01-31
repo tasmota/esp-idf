@@ -30,15 +30,15 @@
 #include "esp_common_i.h"
 
 void  wpa_install_key(enum wpa_alg alg, u8 *addr, int key_idx, int set_tx,
-                      u8 *seq, size_t seq_len, u8 *key, size_t key_len, int key_entry_valid)
+                      u8 *seq, size_t seq_len, u8 *key, size_t key_len, enum key_flag key_flag)
 {
-    esp_wifi_set_sta_key_internal(alg, addr, key_idx, set_tx, seq, seq_len, key, key_len, key_entry_valid);
+    esp_wifi_set_sta_key_internal(alg, addr, key_idx, set_tx, seq, seq_len, key, key_len, key_flag);
 }
 
 int  wpa_get_key(uint8_t *ifx, int *alg, u8 *addr, int *key_idx,
-                 u8 *key, size_t key_len, int key_entry_valid)
+                 u8 *key, size_t key_len, enum key_flag key_flag)
 {
-    return esp_wifi_get_sta_key_internal(ifx, alg, addr, key_idx, key, key_len, key_entry_valid);
+    return esp_wifi_get_sta_key_internal(ifx, alg, addr, key_idx, key, key_len, key_flag);
 }
 
 /**
@@ -226,10 +226,12 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
 }
 
 #ifndef ROAMING_SUPPORT
-static inline void esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
+static inline int esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 {
 	wpa_cb->wpa_sta_rx_mgmt = NULL;
 	wpa_cb->wpa_sta_profile_match = NULL;
+
+	return 0;
 }
 static inline void esp_supplicant_common_deinit(void)
 {
@@ -270,7 +272,11 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_config_done = wpa_config_done;
 
     esp_wifi_register_wpa3_cb(wpa_cb);
-    esp_supplicant_common_init(wpa_cb);
+    ret = esp_supplicant_common_init(wpa_cb);
+
+    if (ret != 0) {
+        return ret;
+    }
 
     esp_wifi_register_wpa_cb_internal(wpa_cb);
 

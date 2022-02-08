@@ -1067,6 +1067,7 @@ r_lld_con_tx_prog = 0x40001140;
 r_lld_conn_dynamic_pti_process = 0x40001144;
 r_lld_continue_scan_rx_isr_end_process = 0x40001148;
 r_lld_ext_scan_dynamic_pti_process = 0x4000114c;
+r_lld_ext_adv_dynamic_aux_pti_process = 0x40001b44;
 r_lld_hw_cca_end_isr = 0x40001150;
 r_lld_hw_cca_evt_handler = 0x40001154;
 r_lld_hw_cca_isr = 0x40001158;

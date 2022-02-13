@@ -511,6 +511,11 @@ def action_extensions(base_actions, project_path):
                         'help': 'Chip target.'
                     }
                 ]
+            },
+            'save-defconfig': {
+                'callback': build_target,
+                'help': 'Generate a sdkconfig.defaults with options different from the default ones',
+                'options': global_options
             }
         }
     }

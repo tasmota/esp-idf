@@ -539,8 +539,8 @@ static esp_err_t esp_emac_config_data_interface(const eth_mac_config_t *config, 
 #elif CONFIG_ETH_RMII_CLK_OUT_GPIO
             emac->clock_config.rmii.clock_gpio = CONFIG_ETH_RMII_CLK_OUT_GPIO;
 #endif // CONFIG_ETH_RMII_CLK_OUTPUT_GPIO0
-//#else
-//#error "Unsupported RMII clock mode"
+#else
+#error "Unsupported RMII clock mode"
 #endif
         } else {
             emac->clock_config = config->clock_config;

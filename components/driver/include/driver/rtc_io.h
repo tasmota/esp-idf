@@ -1,15 +1,16 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#pragma once
+#ifndef _DRIVER_RTC_GPIO_H_
+#define _DRIVER_RTC_GPIO_H_
 
 #include <stdint.h>
-#include <stdbool.h>
 #include "esp_err.h"
 #include "soc/soc_caps.h"
+#include "soc/rtc_io_periph.h"
 #include "hal/rtc_io_types.h"
 #include "driver/gpio.h"
 
@@ -24,7 +25,14 @@ extern "C" {
  * @param gpio_num GPIO number
  * @return true if GPIO is valid for RTC GPIO use. false otherwise.
  */
-bool rtc_gpio_is_valid_gpio(gpio_num_t gpio_num);
+static inline bool rtc_gpio_is_valid_gpio(gpio_num_t gpio_num)
+{
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+    return (gpio_num < GPIO_PIN_COUNT && rtc_io_num_map[gpio_num] >= 0);
+#else
+    return false;
+#endif
+}
 
 #define RTC_GPIO_IS_VALID_GPIO(gpio_num) rtc_gpio_is_valid_gpio(gpio_num) // Deprecated, use rtc_gpio_is_valid_gpio()
 
@@ -37,7 +45,10 @@ bool rtc_gpio_is_valid_gpio(gpio_num_t gpio_num);
  *        >=0: Index of rtcio.
  *        -1 : The gpio is not rtcio.
  */
-int rtc_io_number_get(gpio_num_t gpio_num);
+static inline int rtc_io_number_get(gpio_num_t gpio_num)
+{
+    return rtc_io_num_map[gpio_num];
+}
 
 /**
  * @brief Init a GPIO as RTC GPIO
@@ -294,4 +305,6 @@ esp_err_t rtc_gpio_wakeup_disable(gpio_num_t gpio_num);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

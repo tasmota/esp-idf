@@ -110,6 +110,3 @@
 [submodule "components/ieee802154/lib"]
 	path = components/ieee802154/lib
 	url = ../../espressif/esp-ieee802154-lib.git
-[submodule "components/esptool_py/components/esptool_py/esptool"]
-	path = components/esptool_py/components/esptool_py/esptool
-	url = https://github.com/tasmota/esptool.git

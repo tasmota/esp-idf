@@ -19,10 +19,6 @@
 	path = components/esp_dsp
 	url = ../../espressif/esp-dsp.git
 
-[submodule "components/arduino_tinyusb/tinyusb"]
-	path = components/arduino_tinyusb/tinyusb
-	url = https://github.com/hathach/tinyusb.git
-
 #
 # Standard IDF components
 #

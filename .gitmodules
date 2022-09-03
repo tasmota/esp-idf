@@ -11,10 +11,6 @@
 	path = components/esp32-camera
 	url = ../../espressif/esp32-camera.git
 
-[submodule "components/arduino_tinyusb"]
-	path = components/arduino_tinyusb
-	url = ../../hathach/tinyusb.git
-
 [submodule "components/esp_littlefs"]
 	path = components/esp_littlefs
 	url = ../../joltwallet/esp_littlefs.git

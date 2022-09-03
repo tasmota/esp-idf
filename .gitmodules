@@ -9,19 +9,19 @@
 
 [submodule "components/esp32-camera"]
 	path = components/esp32-camera
-	url = https://github.com/espressif/esp32-camera.git
+	url = ../../espressif/esp32-camera.git
 
 [submodule "components/arduino_tinyusb"]
 	path = components/arduino_tinyusb
-	url = https://github.com/hathach/tinyusb.git
+	url = ../../hathach/tinyusb.git
 
 [submodule "components/esp_littlefs"]
 	path = components/esp_littlefs
-	url = https://github.com/joltwallet/esp_littlefs.git
+	url = ../../joltwallet/esp_littlefs.git
 
 [submodule "components/esp_dsp"]
 	path = components/esp_dsp
-	url = https://github.com/espressif/esp-dsp.git
+	url = ../../espressif/esp-dsp.git
 
 #
 # Standard IDF components

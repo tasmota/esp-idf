@@ -3,6 +3,30 @@
 # For Espressif's public projects please use '../../espressif/proj', not a '../proj'
 #
 
+#
+# Arduino IDF components
+#
+
+[submodule "components/esp32-camera"]
+	path = components/esp32-camera
+	url = https://github.com/espressif/esp32-camera.git
+
+[submodule "components/arduino_tinyusb"]
+	path = components/arduino_tinyusb
+	url = https://github.com/hathach/tinyusb.git
+
+[submodule "components/esp_littlefs"]
+	path = components/esp_littlefs
+	url = https://github.com/joltwallet/esp_littlefs.git
+
+[submodule "components/esp_dsp"]
+	path = components/esp_dsp
+	url = https://github.com/espressif/esp-dsp.git
+
+#
+# Standard IDF components
+#
+
 [submodule "components/esptool_py/esptool"]
 	path = components/esptool_py/esptool
 	url = ../../tasmota/esptool.git

@@ -39,9 +39,9 @@ else()
 endif()
 
 
-# Disable the component manager for regular projects if not explicitly enabled.
-if(NOT "$ENV{IDF_COMPONENT_MANAGER}" EQUAL "1")
-    idf_build_set_property(IDF_COMPONENT_MANAGER 0)
+# Enable the component manager for regular projects if not explicitly disabled.
+if(NOT "$ENV{IDF_COMPONENT_MANAGER}" EQUAL "0")
+    idf_build_set_property(IDF_COMPONENT_MANAGER 1)
 endif()
 
 #

@@ -491,4 +491,3 @@ macro(project project_name)
 
     __project_info("${test_components}")
 endmacro()
-

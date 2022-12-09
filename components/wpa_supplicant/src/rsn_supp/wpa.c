@@ -1264,8 +1264,9 @@ static void wpa_supplicant_process_3_of_4(struct wpa_sm *sm,
         goto failed;
     }
 
-    if (ie.transition_disable)
-        esp_wifi_sta_disable_wpa2_authmode_internal();
+    if (ie.transition_disable) {
+        wpa_supplicant_transition_disable(sm, ie.transition_disable[0]);
+    }
 
     if (sm->key_install && sm->key_info & WPA_KEY_INFO_INSTALL && sm->use_ext_key_id) {
         wpa_supplicant_install_ptk(sm, KEY_FLAG_RX);
@@ -2275,8 +2276,15 @@ int wpa_set_bss(char *macddr, char * bssid, u8 pairwise_cipher, u8 group_cipher,
     if (sm->key_mgmt == WPA_KEY_MGMT_SAE ||
         is_wpa2_enterprise_connection()) {
         if (!esp_wifi_skip_supp_pmkcaching() && use_pmk_cache) {
-            pmksa_cache_set_current(sm, NULL, (const u8*) bssid, 0, 0);
-            wpa_sm_set_pmk_from_pmksa(sm);
+            if (pmksa_cache_set_current(sm, NULL, (const u8*) bssid, 0, 0) == 0) {
+                struct rsn_pmksa_cache_entry *pmksa = pmksa_cache_get_current(sm);
+                if (pmksa && (pmksa->akmp != sm->key_mgmt)) {
+                    pmksa_cache_clear_current(sm);
+                    pmksa_cache_flush(sm->pmksa, NULL, pmksa->pmk, pmksa->pmk_len);
+                }
+            } else {
+                wpa_sm_set_pmk_from_pmksa(sm);
+            }
         } else {
             struct rsn_pmksa_cache_entry *entry = NULL;
 

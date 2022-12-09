@@ -62,9 +62,12 @@
 #include "esp_log.h"
 #include "esp_int_wdt.h"
 #include "esp_app_trace.h"    /* Required for esp_apptrace_init. [refactor-todo] */
+#include "esp_chip_info.h"
 #include "FreeRTOS.h"        /* This pulls in portmacro.h */
 #include "task.h"            /* Required for TaskHandle_t, tskNO_AFFINITY, and vTaskStartScheduler */
 #include "port_systick.h"
+
+_Static_assert(portBYTE_ALIGNMENT == 16, "portBYTE_ALIGNMENT must be set to 16");
 
 _Static_assert(tskNO_AFFINITY == CONFIG_FREERTOS_NO_AFFINITY, "incorrect tskNO_AFFINITY value");
 
@@ -240,6 +243,8 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
     p[1] = 0;
     p[2] = (((uint32_t) p) + 12 + XCHAL_TOTAL_SA_ALIGN - 1) & -XCHAL_TOTAL_SA_ALIGN;
 #endif /* XCHAL_CP_NUM */
+
+    configASSERT(((uint32_t) sp & portBYTE_ALIGNMENT_MASK) == 0);
 
     return sp;
 }

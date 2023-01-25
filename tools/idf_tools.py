@@ -1291,7 +1291,6 @@ def get_idf_version() -> str:
     if os.path.exists(version_file_path):
         with open(version_file_path, 'r') as version_file:
             idf_version_str = version_file.read()
-        warn("IDF version from version.txt: ", idf_version_str)
     else:
         idf_version_str = ''
         try:

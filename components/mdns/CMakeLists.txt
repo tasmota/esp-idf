@@ -10,7 +10,7 @@ if(${target} STREQUAL "linux")
     set(srcs "mdns.c" ${MDNS_NETWORKING})
 else()
     set(dependencies lwip console esp_netif)
-    set(private_dependencies esp_timer esp_wifi)
+    set(private_dependencies esp_timer)
     set(srcs "mdns.c" ${MDNS_NETWORKING} "mdns_console.c")
 endif()
 
@@ -20,8 +20,3 @@ idf_component_register(
         PRIV_INCLUDE_DIRS "private_include"
         REQUIRES ${dependencies}
         PRIV_REQUIRES ${private_dependencies})
-target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
-
-if(CONFIG_ETH_ENABLED)
-    idf_component_optional_requires(PRIVATE esp_eth)
-endif()

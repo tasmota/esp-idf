@@ -63,7 +63,7 @@ static int rsn_selector_to_bitfield(const u8 *s)
 		return WPA_CIPHER_CCMP;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_WEP104)
 		return WPA_CIPHER_WEP104;
-#ifdef COFIG_GCMP
+#ifdef CONFIG_GCMP
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_GCMP)
 		return WPA_CIPHER_GCMP;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_GCMP_256)
@@ -72,7 +72,7 @@ static int rsn_selector_to_bitfield(const u8 *s)
 #ifdef CONFIG_IEEE80211W
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_AES_128_CMAC)
 		return WPA_CIPHER_AES_128_CMAC;
-#ifdef COFIG_GMAC
+#ifdef CONFIG_GMAC
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_BIP_GMAC_128)
 		return WPA_CIPHER_BIP_GMAC_128;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_BIP_GMAC_256)
@@ -827,6 +827,14 @@ int wpa_cipher_to_alg(int cipher)
 		return WIFI_WPA_ALG_WEP40;
 	}
 	return WIFI_WPA_ALG_NONE;
+}
+
+int wpa_cipher_valid_pairwise(int cipher)
+{
+    return cipher == WPA_CIPHER_GCMP_256 ||
+        cipher == WPA_CIPHER_CCMP ||
+        cipher == WPA_CIPHER_GCMP ||
+        cipher == WPA_CIPHER_TKIP;
 }
 
 u32 wpa_cipher_to_suite(int proto, int cipher)

@@ -1180,6 +1180,7 @@ r_lld_sync_sched = 0x400012fc;
 r_lld_sync_start = 0x40001300;
 r_lld_sync_stop = 0x40001304;
 r_lld_sync_trunc_ind = 0x40001308;
+r_lld_sync_insert = 0x40001b88;
 r_lld_test_cleanup = 0x4000130c;
 r_lld_test_evt_canceled_cbk = 0x40001310;
 r_lld_test_evt_start_cbk = 0x40001314;

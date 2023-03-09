@@ -16,10 +16,10 @@ else
   TARGETS=$1
 fi
 echo "Installing ESP-IDF tools"
-"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" install --targets=${TARGETS}
+"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" --non-interactive install --targets=${TARGETS}
 
 echo "Installing Python environment and packages"
-"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" install-python-env
+"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" --non-interactive install-python-env
 
 echo "All done! You can now run:"
 echo ""

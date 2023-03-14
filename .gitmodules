@@ -5,7 +5,7 @@
 
 [submodule "components/esptool_py/esptool"]
 	path = components/esptool_py/esptool
-	url = ../../espressif/esptool.git
+	url = ../../tasmota/esptool.git
 
 [submodule "components/bt/controller/lib_esp32"]
 	path = components/bt/controller/lib_esp32

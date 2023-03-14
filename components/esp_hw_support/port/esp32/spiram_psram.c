@@ -24,8 +24,10 @@
 #include "soc/dport_reg.h"
 #include "soc/efuse_periph.h"
 #include "soc/soc_caps.h"
+#include "soc/chip_revision.h"
 #include "driver/gpio.h"
 #include "hal/efuse_hal.h"
+#include "hal/efuse_ll.h"
 #include "hal/gpio_hal.h"
 #include "driver/spi_common_internal.h"
 #include "driver/periph_ctrl.h"
@@ -822,7 +824,7 @@ bool psram_is_32mbit_ver0(void)
 esp_err_t IRAM_ATTR psram_enable(psram_cache_mode_t mode, psram_vaddr_mode_t vaddrmode)   //psram init
 {
     psram_io_t psram_io={0};
-    uint32_t pkg_ver = esp_efuse_get_pkg_ver();
+    uint32_t pkg_ver = efuse_ll_get_chip_ver_pkg();
     if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32D2WDQ5) {
         ESP_EARLY_LOGI(TAG, "This chip is ESP32-D2WD");
         rtc_vddsdio_config_t cfg = rtc_vddsdio_get_config();
@@ -832,7 +834,7 @@ esp_err_t IRAM_ATTR psram_enable(psram_cache_mode_t mode, psram_vaddr_mode_t vad
         }
         psram_io.psram_clk_io = D2WD_PSRAM_CLK_IO;
         psram_io.psram_cs_io  = D2WD_PSRAM_CS_IO;
-    } else if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4 && efuse_hal_get_major_chip_version() >= 3) {
+    } else if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4 && ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 300)) {
         ESP_EARLY_LOGE(TAG, "This chip is ESP32-PICO-V3. It does not support PSRAM (disable it in Kconfig)");
         return ESP_FAIL;
     } else if ((pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD2) || (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4)) {

@@ -360,11 +360,6 @@
 #define TCP_MSL                         CONFIG_LWIP_TCP_MSL
 
 /**
- * TCP_FIN_WAIT_TIMEOUT: The maximum FIN segment lifetime in milliseconds
- */
-#define TCP_FIN_WAIT_TIMEOUT            CONFIG_LWIP_TCP_FIN_WAIT_TIMEOUT
-
-/**
  * TCP_MAXRTX: Maximum number of retransmissions of data segments.
  */
 #define TCP_MAXRTX                      CONFIG_LWIP_TCP_MAXRTX
@@ -1026,25 +1021,9 @@
 #ifdef CONFIG_LWIP_TIMERS_ONDEMAND
 #define ESP_LWIP_IGMP_TIMERS_ONDEMAND            1
 #define ESP_LWIP_MLD6_TIMERS_ONDEMAND            1
-#define ESP_LWIP_DHCP_FINE_TIMERS_ONDEMAND       1
-#define ESP_LWIP_DNS_TIMERS_ONDEMAND             1
-#if IP_REASSEMBLY
-#define ESP_LWIP_IP4_REASSEMBLY_TIMERS_ONDEMAND  1
-#endif /* IP_REASSEMBLY */
-#if LWIP_IPV6_REASS
-#define ESP_LWIP_IP6_REASSEMBLY_TIMERS_ONDEMAND  1
-#endif /* LWIP_IPV6_REASS */
 #else
 #define ESP_LWIP_IGMP_TIMERS_ONDEMAND            0
 #define ESP_LWIP_MLD6_TIMERS_ONDEMAND            0
-#define ESP_LWIP_DHCP_FINE_TIMERS_ONDEMAND       0
-#define ESP_LWIP_DNS_TIMERS_ONDEMAND             0
-#if IP_REASSEMBLY
-#define ESP_LWIP_IP4_REASSEMBLY_TIMERS_ONDEMAND  0
-#endif /* IP_REASSEMBLY */
-#if LWIP_IPV6_REASS
-#define ESP_LWIP_IP6_REASSEMBLY_TIMERS_ONDEMAND  0
-#endif /* LWIP_IPV6_REASS */
 #endif
 
 #define TCP_SND_BUF                     CONFIG_LWIP_TCP_SND_BUF_DEFAULT

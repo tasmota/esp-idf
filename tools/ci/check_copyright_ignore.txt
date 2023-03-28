@@ -664,7 +664,6 @@ components/hal/include/hal/rtc_io_types.h
 components/hal/include/hal/sdio_slave_ll.h
 components/hal/include/hal/sha_hal.h
 components/hal/include/hal/spi_flash_encrypt_hal.h
-components/hal/include/hal/spi_slave_hd_hal.h
 components/hal/include/hal/uhci_types.h
 components/hal/include/hal/usb_hal.h
 components/hal/include/hal/usb_types_private.h
@@ -674,7 +673,6 @@ components/hal/spi_flash_encrypt_hal_iram.c
 components/hal/spi_flash_hal_gpspi.c
 components/hal/spi_slave_hal.c
 components/hal/spi_slave_hal_iram.c
-components/hal/spi_slave_hd_hal.c
 components/hal/test/test_mpu.c
 components/hal/touch_sensor_hal.c
 components/hal/uart_hal_iram.c
@@ -922,7 +920,6 @@ components/soc/esp32s2/include/soc/touch_sensor_pins.h
 components/soc/esp32s2/include/soc/uart_pins.h
 components/soc/esp32s2/include/soc/uart_reg.h
 components/soc/esp32s2/include/soc/uhci_reg.h
-components/soc/esp32s2/include/soc/usb_reg.h
 components/soc/esp32s2/include/soc/usb_struct.h
 components/soc/esp32s2/include/soc/usb_types.h
 components/soc/esp32s2/include/soc/usb_wrap_reg.h
@@ -994,7 +991,6 @@ components/soc/esp32s3/include/soc/uart_reg.h
 components/soc/esp32s3/include/soc/uart_struct.h
 components/soc/esp32s3/include/soc/uhci_reg.h
 components/soc/esp32s3/include/soc/uhci_struct.h
-components/soc/esp32s3/include/soc/usb_reg.h
 components/soc/esp32s3/include/soc/usb_serial_jtag_struct.h
 components/soc/esp32s3/include/soc/usb_struct.h
 components/soc/esp32s3/include/soc/usb_types.h

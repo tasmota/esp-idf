@@ -1622,7 +1622,8 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
             wpa_printf( MSG_DEBUG, "mic verify fail, pmk=%p", pmk);
         }
 
-        if (!wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt)){
+        if (!wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt) ||
+            wpa_key_mgmt_sae(sm->wpa_key_mgmt)) {
             wpa_printf( MSG_DEBUG, "wpa_key_mgmt=%x", sm->wpa_key_mgmt);
             break;
         }
@@ -2578,19 +2579,21 @@ static void ap_free_sta_timeout(void *ctx, void *data)
 }
 #endif
 
-bool wpa_ap_remove(void* sta_info)
+bool wpa_ap_remove(u8* bssid)
 {
     struct hostapd_data *hapd = hostapd_get_hapd_data();
 
-    if (!sta_info || !hapd) {
+    if (!hapd) {
         return false;
     }
-    struct sta_info *sta = NULL;
-    sta = (struct sta_info*)sta_info;
+    struct sta_info *sta = ap_get_sta(hapd, bssid);
+    if (!sta) {
+        return false;
+    }
 
 #ifdef CONFIG_SAE
     if (sta->lock) {
-        if (os_mutex_lock(sta->lock)) {
+        if (os_semphr_take(sta->lock, 0)) {
             ap_free_sta(hapd, sta);
         } else {
             sta->remove_pending = true;

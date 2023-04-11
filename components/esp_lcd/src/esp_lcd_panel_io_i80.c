@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -36,15 +36,13 @@
 #include "soc/lcd_periph.h"
 #include "hal/lcd_ll.h"
 #include "hal/lcd_hal.h"
+#include "esp_cache.h"
 
 static const char *TAG = "lcd_panel.io.i80";
 
 typedef struct esp_lcd_i80_bus_t esp_lcd_i80_bus_t;
 typedef struct lcd_panel_io_i80_t lcd_panel_io_i80_t;
 typedef struct lcd_i80_trans_descriptor_t lcd_i80_trans_descriptor_t;
-
-// This function is located in ROM (also see esp_rom/${target}/ld/${target}.rom.ld)
-extern int Cache_WriteBack_Addr(uint32_t addr, uint32_t size);
 
 static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, const void *param, size_t param_size);
 static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, const void *color, size_t color_size);
@@ -471,8 +469,9 @@ static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     trans_desc->user_ctx = i80_device->user_ctx;
 
     if (esp_ptr_external_ram(color)) {
-        // flush framebuffer from cache to the physical PSRAM
-        Cache_WriteBack_Addr((uint32_t)color, color_size);
+        // flush frame buffer from cache to the physical PSRAM
+        // note the esp_cache_msync function will check the alignment of the address and size, and error out if either of them is not matched
+        ESP_RETURN_ON_ERROR(esp_cache_msync((void *)color, color_size, 0), TAG, "flush cache buffer failed");
     }
 
     // send transaction to trans_queue
@@ -579,9 +578,16 @@ static void lcd_periph_trigger_quick_trans_done_event(esp_lcd_i80_bus_handle_t b
 static void lcd_start_transaction(esp_lcd_i80_bus_t *bus, lcd_i80_trans_descriptor_t *trans_desc)
 {
     // by default, the dummy phase is disabled because it's not common for most LCDs
+    uint32_t dummy_cycles = 0;
+    uint32_t cmd_cycles = trans_desc->cmd_value >= 0 ? trans_desc->cmd_cycles : 0;
     // Number of data phase cycles are controlled by DMA buffer length, we only need to enable/disable the phase here
-    lcd_ll_set_phase_cycles(bus->hal.dev, trans_desc->cmd_cycles, 0, trans_desc->data ? 1 : 0);
-    lcd_ll_set_command(bus->hal.dev, bus->bus_width, trans_desc->cmd_value);
+    uint32_t data_cycles = trans_desc->data ? 1 : 0;
+    if (trans_desc->cmd_value >= 0) {
+        lcd_ll_set_command(bus->hal.dev, bus->bus_width, trans_desc->cmd_value);
+    }
+    lcd_ll_set_phase_cycles(bus->hal.dev, cmd_cycles, dummy_cycles, data_cycles);
+    lcd_ll_set_blank_cycles(bus->hal.dev, 1, 1);
+
     if (trans_desc->data) { // some specific LCD commands can have no parameters
         gdma_start(bus->dma_chan, (intptr_t)(bus->dma_nodes));
         // delay 1us is sufficient for DMA to pass data to LCD FIFO

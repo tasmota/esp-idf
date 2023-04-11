@@ -231,10 +231,6 @@ config SOC_APB_BACKUP_DMA
     bool
     default y
 
-config SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH
-    int
-    default 12
-
 config SOC_BROWNOUT_RESET_SUPPORTED
     bool
     default y
@@ -744,6 +740,10 @@ config SOC_EFUSE_SOFT_DIS_JTAG
     default y
 
 config SOC_EFUSE_DIS_ICACHE
+    bool
+    default y
+
+config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
     bool
     default y
 

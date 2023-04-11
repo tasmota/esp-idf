@@ -118,13 +118,14 @@ struct wpa_funcs {
     bool (*wpa_sta_init)(void);
     bool (*wpa_sta_deinit)(void);
     int (*wpa_sta_connect)(uint8_t *bssid);
+    void (*wpa_sta_connected_cb)(uint8_t *bssid);
     void (*wpa_sta_disconnected_cb)(uint8_t reason_code);
     int (*wpa_sta_rx_eapol)(u8 *src_addr, u8 *buf, u32 len);
     bool (*wpa_sta_in_4way_handshake)(void);
     void *(*wpa_ap_init)(void);
     bool (*wpa_ap_deinit)(void *data);
     bool (*wpa_ap_join)(void **sm, u8 *bssid, u8 *wpa_ie, u8 wpa_ie_len, u8* rsnxe, u8 rsnxe_len, bool *pmf_enable, int subtype);
-    bool (*wpa_ap_remove)(void *sta_info);
+    bool (*wpa_ap_remove)(u8 *bssid);
     uint8_t *(*wpa_ap_get_wpa_ie)(uint8_t *len);
     bool (*wpa_ap_rx_eapol)(void *hapd_data, void *sm, u8 *data, size_t data_len);
     void (*wpa_ap_get_peer_spp_msg)(void *sm, bool *spp_cap, bool *spp_req);

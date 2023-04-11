@@ -19,8 +19,8 @@ Feature Supported by ESP-IDF but not in Chip-ROM
     - :ref:`CONFIG_SPI_FLASH_VERIFY_WRITE`, enabling this option helps you detect bad writing.
     - :ref:`CONFIG_SPI_FLASH_LOG_FAILED_WRITE`, enabling this option will print the bad writing.
     - :ref:`CONFIG_SPI_FLASH_WARN_SETTING_ZERO_TO_ONE`, enabling this option will check if you're writing zero to one.
-    :esp32h2 or esp32c6: - Flash MMAP driver isn't ready in Chip-ROM.
-
+    - :ref:`CONFIG_SPI_FLASH_DANGEROUS_WRITE`, enabling this option will check for flash programming to certain protected regions like bootloader, partition table or application itself.
+    - :ref:`CONFIG_SPI_FLASH_ENABLE_COUNTERS`, enabling this option to collect performance data for ESP-IDF SPI Flash driver APIs.
 
 Bugfixes Introduced in ESP-IDF but not in Chip-ROM
 --------------------------------------------------

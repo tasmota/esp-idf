@@ -574,6 +574,7 @@ void IRAM_ATTR esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t 
         s_ack_frame.mPsdu = (uint8_t *)(ack + 1);
         s_ack_frame.mChannel = ack_frame_info->channel;
         s_ack_frame.mInfo.mRxInfo.mRssi = ack_frame_info->rssi;
+        s_ack_frame.mInfo.mRxInfo.mLqi = ack_frame_info->lqi;
         s_ack_frame.mInfo.mRxInfo.mTimestamp = ack_frame_info->timestamp;
     }
 
@@ -587,6 +588,7 @@ static void IRAM_ATTR convert_to_ot_frame(uint8_t *data, esp_ieee802154_frame_in
     radio_frame->mLength = *data;
     radio_frame->mChannel = frame_info->channel;
     radio_frame->mInfo.mRxInfo.mRssi = frame_info->rssi;
+    radio_frame->mInfo.mRxInfo.mLqi = frame_info->lqi;
     radio_frame->mInfo.mRxInfo.mAckedWithFramePending = frame_info->pending;
     radio_frame->mInfo.mRxInfo.mTimestamp = esp_timer_get_time();
 
@@ -731,6 +733,15 @@ void IRAM_ATTR esp_ieee802154_cca_done(bool channel_free)
 otError otPlatEntropyGet(uint8_t *aOutput, uint16_t aOutputLength)
 {
     esp_fill_random(aOutput, aOutputLength);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioSetChannelMaxTransmitPower(otInstance *aInstance, uint8_t aChannel, int8_t aMaxPower)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aChannel);
+    OT_UNUSED_VARIABLE(aMaxPower);
 
     return OT_ERROR_NONE;
 }

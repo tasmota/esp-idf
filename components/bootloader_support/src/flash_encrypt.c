@@ -11,6 +11,7 @@
 #include "esp_efuse_table.h"
 #include "esp_flash_encrypt.h"
 #include "esp_secure_boot.h"
+#include "hal/efuse_hal.h"
 
 #if CONFIG_IDF_TARGET_ESP32
 #define CRYPT_CNT ESP_EFUSE_FLASH_CRYPT_CNT
@@ -81,15 +82,14 @@ void esp_flash_encryption_init_checks()
  */
 bool IRAM_ATTR esp_flash_encryption_enabled(void)
 {
-    uint32_t flash_crypt_cnt = 0;
 #ifndef CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH
-    flash_crypt_cnt = efuse_ll_get_flash_crypt_cnt();
+    return efuse_hal_flash_encryption_enabled();
 #else
+    uint32_t flash_crypt_cnt = 0;
 #if CONFIG_IDF_TARGET_ESP32
     esp_efuse_read_field_blob(ESP_EFUSE_FLASH_CRYPT_CNT, &flash_crypt_cnt, ESP_EFUSE_FLASH_CRYPT_CNT[0]->bit_count);
 #else
     esp_efuse_read_field_blob(ESP_EFUSE_SPI_BOOT_CRYPT_CNT, &flash_crypt_cnt, ESP_EFUSE_SPI_BOOT_CRYPT_CNT[0]->bit_count);
-#endif
 #endif
     /* __builtin_parity is in flash, so we calculate parity inline */
     bool enabled = false;
@@ -100,6 +100,7 @@ bool IRAM_ATTR esp_flash_encryption_enabled(void)
         flash_crypt_cnt >>= 1;
     }
     return enabled;
+#endif // CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH
 }
 
 void esp_flash_write_protect_crypt_cnt(void)
@@ -200,6 +201,14 @@ void esp_flash_encryption_set_release_mode(void)
 #endif // CONFIG_SOC_FLASH_ENCRYPTION_XTS_AES_128_DERIVED
 #endif // !CONFIG_IDF_TARGET_ESP32
 
+#ifdef CONFIG_IDF_TARGET_ESP32
+    esp_efuse_write_field_bit(ESP_EFUSE_WR_DIS_DIS_CACHE);
+#else
+#if SOC_EFUSE_DIS_ICACHE
+    esp_efuse_write_field_bit(ESP_EFUSE_WR_DIS_DIS_ICACHE);
+#endif
+#endif // !CONFIG_IDF_TARGET_ESP32
+
 #if CONFIG_SOC_SUPPORTS_SECURE_DL_MODE
     esp_efuse_enable_rom_secure_download_mode();
 #else
@@ -270,6 +279,12 @@ bool esp_flash_encryption_cfg_verify_release_mode(void)
     result &= secure;
     if (!secure) {
         ESP_LOGW(TAG, "Not disabled ROM BASIC interpreter fallback (set CONSOLE_DEBUG_DISABLE->1)");
+    }
+
+    secure = esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_DIS_CACHE);
+    result &= secure;
+    if (!secure) {
+        ESP_LOGW(TAG, "Not write-protected DIS_CACHE (set WR_DIS_DIS_CACHE->1)");
     }
 
     secure = esp_efuse_read_field_bit(ESP_EFUSE_RD_DIS_BLK1);
@@ -373,6 +388,14 @@ bool esp_flash_encryption_cfg_verify_release_mode(void)
     result &= secure;
     if (!secure) {
         ESP_LOGW(TAG, "Not disabled Legcy SPI boot (set DIS_LEGACY_SPI_BOOT->1)");
+    }
+#endif
+
+#if SOC_EFUSE_DIS_ICACHE
+    secure = esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_DIS_ICACHE);
+    result &= secure;
+    if (!secure) {
+        ESP_LOGW(TAG, "Not write-protected DIS_ICACHE (set WR_DIS_DIS_ICACHE->1)");
     }
 #endif
 

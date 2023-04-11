@@ -9,7 +9,7 @@ async function runChecks() {
     // Checks for merge request description
     require("./mrDescriptionLongEnough.js")();
     require("./mrDescriptionHasReleaseNotes.js")();
-    await require('./mrDescriptionJiraLinks.js')();
+    await require("./mrDescriptionJiraLinks.js")();
 
     // Checks for documentation
     require("./mrDocsTranslation.js")();
@@ -17,9 +17,13 @@ async function runChecks() {
     // Checks for MR commits
     require("./mrCommitsTooManyCommits.js")();
     require("./mrCommitsCommitMessage.js")();
+    require("./mrCommitsEmail.js")();
 
     // Checks for MR code
     require("./mrSizeTooLarge.js")();
+
+    // Checks for MR area labels
+    await require("./mrAreaLabels.js")();
 
     // Add success log if no issues
     if (

@@ -35,13 +35,13 @@ menu "SPI Flash driver"
 
     config SPI_FLASH_ENABLE_COUNTERS
         bool "Enable operation counters"
-        default 0
+        default n
         help
             This option enables the following APIs:
 
-            - spi_flash_reset_counters
-            - spi_flash_dump_counters
-            - spi_flash_get_counters
+            - esp_flash_reset_counters
+            - esp_flash_dump_counters
+            - esp_flash_get_counters
 
             These APIs may be used to collect performance data for spi_flash APIs
             and to help understand behaviour of libraries which use SPI flash.
@@ -74,6 +74,7 @@ menu "SPI Flash driver"
 
     choice SPI_FLASH_DANGEROUS_WRITE
         bool  "Writing to dangerous flash regions"
+        default SPI_FLASH_DANGEROUS_WRITE_ALLOWED if APP_BUILD_TYPE_RAM
         default SPI_FLASH_DANGEROUS_WRITE_ABORTS
         help
             SPI flash APIs can optionally abort or return a failure code
@@ -309,5 +310,4 @@ menu "SPI Flash driver"
         help
             This option is invisible, and will be selected automatically
             when ``ESPTOOLPY_FLASHFREQ_120M`` is selected.
-
 endmenu

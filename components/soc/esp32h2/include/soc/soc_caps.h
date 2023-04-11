@@ -61,6 +61,7 @@
 #define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
+#define SOC_ECDSA_SUPPORTED             1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
 #define SOC_BOD_SUPPORTED               1
@@ -408,6 +409,8 @@
 #define SOC_EFUSE_DIS_USB_JTAG 1
 #define SOC_EFUSE_DIS_DIRECT_BOOT 1
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
+#define SOC_EFUSE_DIS_ICACHE 1
+#define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // AES-XTS and ECDSA key purposes not supported for this block
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
 #define SOC_SECURE_BOOT_V2_RSA              1
@@ -442,16 +445,14 @@
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
 
-// TODO: IDF-5679 (Copy from esp32c6, need check)
-/*--------------- WIFI LIGHT SLEEP CLOCK WIDTH CAPS --------------------------*/
-#define SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH  (12)
-
 // TODO: IDF-6270 (Copy from esp32c6, need check)
 /*-------------------------- Power Management CAPS ----------------------------*/
 #define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
 #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 #define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_BT_PD            (1)
+#define SOC_PM_SUPPORT_XTAL32K_PD       (1)
+#define SOC_PM_SUPPORT_RC32K_PD         (1)
 #define SOC_PM_SUPPORT_RC_FAST_PD       (1)
 #define SOC_PM_SUPPORT_VDDSDIO_PD       (1)
 #define SOC_PM_CPU_RETENTION_BY_RTCCNTL  (1)
@@ -464,7 +465,8 @@
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
 
-#define SOC_CLK_LP_FAST_SUPPORT_LP_PLL           (1)      /*!< Support LP_PLL clock as the LP_FAST clock source */
+#define SOC_CLK_LP_FAST_SUPPORT_LP_PLL            (1)      /*!< Support LP_PLL clock as the LP_FAST clock source */
+#define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 // #define SOC_PM_MODEM_RETENTION_BY_REGDMA    (1) // TODO: IDF-6267
 
@@ -478,3 +480,5 @@
 #define SOC_BLE_MESH_SUPPORTED          (1)    /*!< Support BLE MESH */
 #define SOC_ESP_NIMBLE_CONTROLLER       (1)    /*!< Support BLE EMBEDDED controller V1 */
 #define SOC_BLE_50_SUPPORTED            (1)    /*!< Support Bluetooth 5.0 */
+#define SOC_BLE_DEVICE_PRIVACY_SUPPORTED (1)   /*!< Support BLE device privacy mode */
+#define SOC_BLE_POWER_CONTROL_SUPPORTED (1)    /*!< Support Bluetooth Power Control */

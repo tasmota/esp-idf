@@ -398,7 +398,6 @@ components/bt/host/bluedroid/stack/smp/smp_main.c
 components/bt/host/bluedroid/stack/smp/smp_utils.c
 components/console/linenoise/linenoise.c
 components/console/linenoise/linenoise.h
-components/esp_eth/src/dm9051.h
 components/esp_eth/src/ksz8851.h
 components/esp_eth/test_apps/component_ut_test.py
 components/esp_eth/test_apps/main/esp_eth_test.c
@@ -501,7 +500,6 @@ components/esp_rom/include/esp32s2/rom/libc_stubs.h
 components/esp_rom/include/esp32s2/rom/opi_flash.h
 components/esp_rom/include/esp32s2/rom/rsa_pss.h
 components/esp_rom/include/esp32s2/rom/sha.h
-components/esp_rom/include/esp32s2/rom/uart.h
 components/esp_rom/include/esp32s2/rom/usb/cdc_acm.h
 components/esp_rom/include/esp32s2/rom/usb/chip_usb_dw_wrapper.h
 components/esp_rom/include/esp32s2/rom/usb/cpio.h
@@ -666,7 +664,6 @@ components/hal/include/hal/rtc_io_types.h
 components/hal/include/hal/sdio_slave_ll.h
 components/hal/include/hal/sha_hal.h
 components/hal/include/hal/spi_flash_encrypt_hal.h
-components/hal/include/hal/spi_slave_hd_hal.h
 components/hal/include/hal/uhci_types.h
 components/hal/include/hal/usb_hal.h
 components/hal/include/hal/usb_types_private.h
@@ -676,7 +673,6 @@ components/hal/spi_flash_encrypt_hal_iram.c
 components/hal/spi_flash_hal_gpspi.c
 components/hal/spi_slave_hal.c
 components/hal/spi_slave_hal_iram.c
-components/hal/spi_slave_hd_hal.c
 components/hal/test/test_mpu.c
 components/hal/touch_sensor_hal.c
 components/hal/uart_hal_iram.c
@@ -924,7 +920,6 @@ components/soc/esp32s2/include/soc/touch_sensor_pins.h
 components/soc/esp32s2/include/soc/uart_pins.h
 components/soc/esp32s2/include/soc/uart_reg.h
 components/soc/esp32s2/include/soc/uhci_reg.h
-components/soc/esp32s2/include/soc/usb_reg.h
 components/soc/esp32s2/include/soc/usb_struct.h
 components/soc/esp32s2/include/soc/usb_types.h
 components/soc/esp32s2/include/soc/usb_wrap_reg.h
@@ -996,7 +991,6 @@ components/soc/esp32s3/include/soc/uart_reg.h
 components/soc/esp32s3/include/soc/uart_struct.h
 components/soc/esp32s3/include/soc/uhci_reg.h
 components/soc/esp32s3/include/soc/uhci_struct.h
-components/soc/esp32s3/include/soc/usb_reg.h
 components/soc/esp32s3/include/soc/usb_serial_jtag_struct.h
 components/soc/esp32s3/include/soc/usb_struct.h
 components/soc/esp32s3/include/soc/usb_types.h
@@ -1023,7 +1017,6 @@ components/soc/include/soc/uhci_periph.h
 components/soc/lldesc.c
 components/soc/soc_include_legacy_warn.c
 components/spi_flash/cache_utils.h
-components/spi_flash/include/esp_spi_flash_counters.h
 components/spi_flash/include/spi_flash_chip_boya.h
 components/spi_flash/include/spi_flash_chip_driver.h
 components/spi_flash/include/spi_flash_chip_gd.h

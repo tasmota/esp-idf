@@ -33,10 +33,13 @@ set(srcs
 
 set(include_dirs
     "${kernel_dir}/include" # FreeRTOS headers via #include "freertos/xxx.h"
-    "${kernel_dir}/portable/${arch}/include" # For arch-specific FreeRTOSConfig_arch.h in portable/<arch>/include
+    "${kernel_dir}/portable/${arch}/include" # For arch-specific #include "freertos/portmacro.h"
     "esp_additions/include/freertos"         # For files with #include "FreeRTOSConfig.h"
-    "esp_additions/include")                 # For files with #include "freertos/FreeRTOSConfig.h"
+    "esp_additions/include"                  # For files with #include "freertos/FreeRTOSConfig.h"
                                              #      or #include "freertos/task_snapshot.h"
+                                             #      or #include "freertos/idf_additions.h"
+                                             #      or #include "esp_private/freertos_idf_additions_priv.h"
+    "esp_additions/arch/${arch}/include")    # For #include "freertos/FreeRTOSConfig_arch.h"
 
 set(private_include_dirs
     "${kernel_dir}/portable/${arch}/include/freertos"
@@ -58,7 +61,7 @@ else()
         "${kernel_dir}/portable/${arch}/portasm.S")
 
     list(APPEND private_include_dirs
-        "esp_additions/private_include")    # For include "freertos_tasks_c_additions.h"
+        "esp_additions")    # For #include "freertos_tasks_c_additions.h"
 
     if(CONFIG_FREERTOS_SMP)
         set(ldfragments linker_smp.lf linker_common.lf)

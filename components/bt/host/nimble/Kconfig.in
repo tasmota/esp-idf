@@ -591,7 +591,7 @@ config BT_NIMBLE_MAX_PERIODIC_ADVERTISER_LIST
 
 config BT_NIMBLE_BLE_POWER_CONTROL
     bool "Enable support for BLE Power Control"
-    depends on BT_NIMBLE_50_FEATURE_SUPPORT && (IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32H2)
+    depends on BT_NIMBLE_50_FEATURE_SUPPORT && SOC_BLE_POWER_CONTROL_SUPPORTED
     default n
     help
         Set this option to enable the Power Control feature
@@ -655,3 +655,9 @@ config BT_NIMBLE_LEGACY_VHCI_ENABLE
     default n
     help
         This option is used to distinguish whether a previous version of VHCI is being used
+
+config BT_NIMBLE_BLE_GATT_BLOB_TRANSFER
+    bool "Blob transfer"
+    help
+        This option is used when data to be sent is more than 512 bytes. For peripheral role,
+        BT_NIMBLE_MSYS_1_BLOCK_COUNT needs to be increased according to the need.

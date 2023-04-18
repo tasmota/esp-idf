@@ -7,7 +7,6 @@ from pytest_embedded import Dut
 
 @pytest.mark.generic
 @pytest.mark.supported_targets
-@pytest.mark.temp_skip_ci(targets=['esp32h2'], reason='test failed, IDF-6880')
 @pytest.mark.parametrize(
     'config',
     [
@@ -17,6 +16,19 @@ from pytest_embedded import Dut
     ]
 )
 def test_heap_poisoning(dut: Dut) -> None:
+    dut.run_all_single_board_cases()
+
+
+@pytest.mark.generic
+@pytest.mark.esp32
+@pytest.mark.esp32c6
+@pytest.mark.parametrize(
+    'config',
+    [
+        'in_flash'
+    ]
+)
+def test_heap_in_flash(dut: Dut) -> None:
     dut.run_all_single_board_cases()
 
 

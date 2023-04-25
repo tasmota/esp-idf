@@ -20,7 +20,7 @@
 #include "esp_timer.h"
 #include "driver/ledc.h"
 #include "soc/ledc_struct.h"
-#include "clk_tree.h"
+#include "esp_clk_tree.h"
 
 #define PULSE_IO      5
 
@@ -467,7 +467,7 @@ TEST_CASE("LEDC multi fade test", "[ledc]")
 }
 #endif // SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED
 
-#if SOC_PCNT_SUPPORTED // Note. C3, C2, H4 do not have PCNT peripheral, the following test cases cannot be tested
+#if SOC_PCNT_SUPPORTED // Note. C3, C2 do not have PCNT peripheral, the following test cases cannot be tested
 
 #include "driver/pulse_cnt.h"
 
@@ -546,18 +546,23 @@ static void timer_frequency_test(ledc_channel_t channel, ledc_timer_bit_t timer_
     };
     TEST_ESP_OK(ledc_channel_config(&ledc_ch_config));
     TEST_ESP_OK(ledc_timer_config(&ledc_time_config));
-    frequency_set_get(ledc_ch_config.speed_mode, ledc_ch_config.timer_sel, 100, 100, 20);
-    frequency_set_get(ledc_ch_config.speed_mode, ledc_ch_config.timer_sel, 5000, 5000, 50);
+    frequency_set_get(speed_mode, timer, 100, 100, 20);
+    frequency_set_get(speed_mode, timer, 5000, 5000, 50);
     // Try a frequency that couldn't be exactly achieved, requires rounding
     uint32_t theoretical_freq = 9000;
     uint32_t clk_src_freq = 0;
-    clk_tree_src_get_freq_hz((soc_module_clk_t)TEST_DEFAULT_CLK_CFG, CLK_TREE_SRC_FREQ_PRECISION_EXACT, &clk_src_freq);
+    esp_clk_tree_src_get_freq_hz((soc_module_clk_t)TEST_DEFAULT_CLK_CFG, ESP_CLK_TREE_SRC_FREQ_PRECISION_EXACT, &clk_src_freq);
     if (clk_src_freq == 80 * 1000 * 1000) {
         theoretical_freq = 8992;
     } else if (clk_src_freq == 96 * 1000 * 1000) {
         theoretical_freq = 9009;
     }
-    frequency_set_get(ledc_ch_config.speed_mode, ledc_ch_config.timer_sel, 9000, theoretical_freq, 50);
+    frequency_set_get(speed_mode, timer, 9000, theoretical_freq, 50);
+
+    // Pause and de-configure the timer so that it won't affect the following test cases
+    TEST_ESP_OK(ledc_timer_pause(speed_mode, timer));
+    ledc_time_config.deconfigure = 1;
+    TEST_ESP_OK(ledc_timer_config(&ledc_time_config));
 }
 
 TEST_CASE("LEDC set and get frequency", "[ledc][timeout=60]")

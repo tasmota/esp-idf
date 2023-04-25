@@ -1,3 +1,4 @@
+
 idf_build_get_property(target IDF_TARGET)
 
 # On Linux, there is currently no HAL, hence this simple component registration
@@ -23,14 +24,6 @@ endif()
 
 if(NOT ${target} STREQUAL "esp32" AND NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
     list(APPEND srcs "cache_hal.c")
-endif()
-
-if(${target} STREQUAL "esp32h4")
-    if(CONFIG_IDF_TARGET_ESP32H4_BETA_VERSION_1)
-        list(APPEND includes "${target}/include/rev1")
-    elseif(CONFIG_IDF_TARGET_ESP32H4_BETA_VERSION_2)
-        list(APPEND includes "${target}/include/rev2")
-    endif()
 endif()
 
 if(NOT BOOTLOADER_BUILD)
@@ -123,6 +116,10 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_ECDSA_SUPPORTED)
         list(APPEND srcs "ecdsa_hal.c")
+    endif()
+
+    if(CONFIG_SOC_MPI_SUPPORTED)
+        list(APPEND srcs "mpi_hal.c")
     endif()
 
     if(CONFIG_SOC_SHA_SUPPORTED)
@@ -219,13 +216,6 @@ if(NOT BOOTLOADER_BUILD)
               "spi_flash_hal_gpspi.c"
               "xt_wdt_hal.c"
               "esp32c3/rtc_cntl_hal.c")
-    endif()
-
-    if(${target} STREQUAL "esp32h4")
-        list(APPEND srcs
-            "spi_flash_hal_gpspi.c"
-            "aes_hal.c"
-            "esp32h4/rtc_cntl_hal.c")
     endif()
 
     if(${target} STREQUAL "esp32c2")

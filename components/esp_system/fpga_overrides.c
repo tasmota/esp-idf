@@ -17,8 +17,6 @@
 #include "esp32s3/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32H4
-#include "esp32h4/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C2
 #include "esp32c2/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C6
@@ -34,8 +32,6 @@
 
 static const char *TAG = "fpga";
 
-extern void ets_update_cpu_frequency(uint32_t ticks_per_us);
-
 static void s_warn(void)
 {
     ESP_EARLY_LOGW(TAG, "Project configuration is for internal FPGA use, not all functions will work");
@@ -49,12 +45,10 @@ void bootloader_clock_configure(void)
     uint32_t xtal_freq_mhz = 40;
 #ifdef CONFIG_IDF_TARGET_ESP32S2
     uint32_t apb_freq_hz = 20000000;
-#elif CONFIG_IDF_TARGET_ESP32H4
-    uint32_t apb_freq_hz = 32000000;
 #else
     uint32_t apb_freq_hz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000;
 #endif // CONFIG_IDF_TARGET_ESP32S2
-    ets_update_cpu_frequency(apb_freq_hz / 1000000);
+    esp_rom_set_cpu_ticks_per_us(apb_freq_hz / 1000000);
 #ifdef RTC_APB_FREQ_REG
     REG_WRITE(RTC_APB_FREQ_REG, (apb_freq_hz >> 12) | ((apb_freq_hz >> 12) << 16));
 #endif

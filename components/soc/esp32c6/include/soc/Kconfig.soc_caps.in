@@ -455,6 +455,10 @@ config SOC_I2C_FIFO_LEN
     int
     default 32
 
+config SOC_I2C_CMD_REG_NUM
+    int
+    default 8
+
 config SOC_I2C_SUPPORT_SLAVE
     bool
     default y
@@ -726,6 +730,14 @@ config SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH
 config SOC_PARLIO_TX_RX_SHARE_INTERRUPT
     bool
     default y
+
+config SOC_MPI_MEM_BLOCKS_NUM
+    int
+    default 4
+
+config SOC_MPI_OPERATIONS_NUM
+    int
+    default 3
 
 config SOC_RSA_MAX_BIT_LEN
     int

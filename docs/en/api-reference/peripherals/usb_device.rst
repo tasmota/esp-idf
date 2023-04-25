@@ -24,6 +24,7 @@ Features
 - USB Serial Device (CDC-ACM)
 - Input and output streams through USB Serial Device
 - Other USB classes (MIDI, MSC, HID...) support directly via TinyUSB
+- USB Composite Device (MSC + CDC)
 - VBUS monitoring for self-powered devices
 
 Hardware USB Connection
@@ -53,6 +54,7 @@ On top of it the driver implements:
 - Customization of USB descriptors
 - Serial device support
 - Redirecting of standard streams through the Serial device
+- Storage Media (SPI-Flash and SD-Card) for USB Device MSC Class.
 - Encapsulated driver's task servicing the TinyUSB
 
 Configuration
@@ -60,8 +62,8 @@ Configuration
 
 Via Menuconfig options you can specify:
 
-- Several of descriptor's parameters (see: Descriptors Configuration bellow)
-- USB Serial low-level Configuration
+- Several descriptor's parameters (see Descriptors Configuration below)
+- USB Serial low-level configuration
 - The verbosity of the TinyUSB's log
 - Disable the TinyUSB main task (for the custom implementation)
 
@@ -103,9 +105,9 @@ To initialize the driver, users should call :cpp:func:`tinyusb_driver_install`. 
 Self-Powered Device
 -------------------
 
-USB specification mandates self-powered devices to monitor voltage level on USB's VBUS signal. As opposed to bus-powered devices, a self-powered device can be fully functional even without USB connection. The self-powered device detects connection and disconnection events by monitoring the VBUS voltage level. VBUS is considered valid if it rises above 4.75V and invalid if it falls below 4.35V.
+USB specification mandates self-powered devices to monitor voltage level on USB's VBUS signal. As opposed to bus-powered devices, a self-powered device can be fully functional even without USB connection. The self-powered device detects connection and disconnection events by monitoring the VBUS voltage level. VBUS is considered valid if it rises above 4.75 V and invalid if it falls below 4.35 V.
 
-No {IDF_TARGET_NAME} pin is 5V tolerant, so you must connect the VBUS to {IDF_TARGET_NAME} via a comparator with voltage thresholds as described above, or use a simple resistor voltage divider that will output (0.75 x Vdd) if VBUS is 4.4V (see figure below). In both cases, voltage on the sensing pin must be logic low within 3ms after the device is unplugged from USB host.
+No {IDF_TARGET_NAME} pin is 5 V tolerant, so you must connect the VBUS to {IDF_TARGET_NAME} via a comparator with voltage thresholds as described above, or use a simple resistor voltage divider that will output (0.75 x Vdd) if VBUS is 4.4 V (see figure below). In both cases, voltage on the sensing pin must be logic low within 3 ms after the device is unplugged from USB host.
 
 .. figure:: ../../../_static/diagrams/usb/usb_vbus_voltage_monitor.png
     :align: center
@@ -221,3 +223,5 @@ The table below describes the code examples available in the directory :example:
      - How to set up {IDF_TARGET_NAME} chip to work as a USB Human Interface Device
    * - :example:`peripherals/usb/device/tusb_msc`
      - How to set up {IDF_TARGET_NAME} chip to work as a USB Mass Storage Device
+   * - :example:`peripherals/usb/device/tusb_composite_msc_serialdevice`
+     - How to set up {IDF_TARGET_NAME} chip to work as a Composite USB Device (MSC + CDC)

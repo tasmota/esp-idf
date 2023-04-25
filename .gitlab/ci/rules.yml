@@ -199,6 +199,9 @@
   - "components/bt/controller/lib_esp32c6/esp32c6-bt-lib"
   - ".gitmodules"
 
+.patterns-danger-npm: &patterns-danger-npm
+  - ".gitlab/dangerjs/package-lock.json"
+
 # for jobs: example_test*flash_encryption_wifi_high_traffic
 .patterns-example_test-ota-nightly_run: &patterns-example_test-ota-nightly_run
   - "examples/system/ota/**/*"
@@ -387,6 +390,13 @@
     - <<: *if-dev-push
       changes: *patterns-submodule
 
+.rules:patterns:dangerjs:
+  rules:
+    - <<: *if-label-upload_cache
+      when: manual
+    - <<: *if-dev-push
+      changes: *patterns-danger-npm
+
 .rules:dev:
   rules:
     - <<: *if-trigger
@@ -460,9 +470,6 @@
 .if-label-component_ut_esp32h2: &if-label-component_ut_esp32h2
   if: '$BOT_LABEL_COMPONENT_UT_ESP32H2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*component_ut_esp32h2(?:,[^,\n\r]+)*$/i'
 
-.if-label-component_ut_esp32h4: &if-label-component_ut_esp32h4
-  if: '$BOT_LABEL_COMPONENT_UT_ESP32H4 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*component_ut_esp32h4(?:,[^,\n\r]+)*$/i'
-
 .if-label-component_ut_esp32s2: &if-label-component_ut_esp32s2
   if: '$BOT_LABEL_COMPONENT_UT_ESP32S2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*component_ut_esp32s2(?:,[^,\n\r]+)*$/i'
 
@@ -486,9 +493,6 @@
 
 .if-label-custom_test_esp32h2: &if-label-custom_test_esp32h2
   if: '$BOT_LABEL_CUSTOM_TEST_ESP32H2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*custom_test_esp32h2(?:,[^,\n\r]+)*$/i'
-
-.if-label-custom_test_esp32h4: &if-label-custom_test_esp32h4
-  if: '$BOT_LABEL_CUSTOM_TEST_ESP32H4 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*custom_test_esp32h4(?:,[^,\n\r]+)*$/i'
 
 .if-label-custom_test_esp32s2: &if-label-custom_test_esp32s2
   if: '$BOT_LABEL_CUSTOM_TEST_ESP32S2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*custom_test_esp32s2(?:,[^,\n\r]+)*$/i'
@@ -516,9 +520,6 @@
 
 .if-label-example_test_esp32h2: &if-label-example_test_esp32h2
   if: '$BOT_LABEL_EXAMPLE_TEST_ESP32H2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*example_test_esp32h2(?:,[^,\n\r]+)*$/i'
-
-.if-label-example_test_esp32h4: &if-label-example_test_esp32h4
-  if: '$BOT_LABEL_EXAMPLE_TEST_ESP32H4 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*example_test_esp32h4(?:,[^,\n\r]+)*$/i'
 
 .if-label-example_test_esp32s2: &if-label-example_test_esp32s2
   if: '$BOT_LABEL_EXAMPLE_TEST_ESP32S2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*example_test_esp32s2(?:,[^,\n\r]+)*$/i'
@@ -574,9 +575,6 @@
 .if-label-unit_test_esp32h2: &if-label-unit_test_esp32h2
   if: '$BOT_LABEL_UNIT_TEST_ESP32H2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*unit_test_esp32h2(?:,[^,\n\r]+)*$/i'
 
-.if-label-unit_test_esp32h4: &if-label-unit_test_esp32h4
-  if: '$BOT_LABEL_UNIT_TEST_ESP32H4 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*unit_test_esp32h4(?:,[^,\n\r]+)*$/i'
-
 .if-label-unit_test_esp32s2: &if-label-unit_test_esp32s2
   if: '$BOT_LABEL_UNIT_TEST_ESP32S2 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*unit_test_esp32s2(?:,[^,\n\r]+)*$/i'
 
@@ -611,7 +609,6 @@
     - <<: *if-label-component_ut_esp32c3
     - <<: *if-label-component_ut_esp32c6
     - <<: *if-label-component_ut_esp32h2
-    - <<: *if-label-component_ut_esp32h4
     - <<: *if-label-component_ut_esp32s2
     - <<: *if-label-component_ut_esp32s3
     - <<: *if-label-lan8720
@@ -622,7 +619,6 @@
     - <<: *if-label-unit_test_esp32c3
     - <<: *if-label-unit_test_esp32c6
     - <<: *if-label-unit_test_esp32h2
-    - <<: *if-label-unit_test_esp32h4
     - <<: *if-label-unit_test_esp32s2
     - <<: *if-label-unit_test_esp32s3
     - <<: *if-dev-push
@@ -899,7 +895,6 @@
     - <<: *if-label-custom_test_esp32c3
     - <<: *if-label-custom_test_esp32c6
     - <<: *if-label-custom_test_esp32h2
-    - <<: *if-label-custom_test_esp32h4
     - <<: *if-label-custom_test_esp32s2
     - <<: *if-label-custom_test_esp32s3
     - <<: *if-label-target_test
@@ -1050,32 +1045,6 @@
     - <<: *if-dev-push
       changes: *patterns-target_test-wifi
 
-.rules:build:custom_test-esp32h4:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build
-    - <<: *if-label-custom_test
-    - <<: *if-label-custom_test_esp32h4
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-build_components
-    - <<: *if-dev-push
-      changes: *patterns-build_system
-    - <<: *if-dev-push
-      changes: *patterns-custom_test
-    - <<: *if-dev-push
-      changes: *patterns-downloadable-tools
-    - <<: *if-dev-push
-      changes: *patterns-target_test-adc
-    - <<: *if-dev-push
-      changes: *patterns-target_test-ecdsa
-    - <<: *if-dev-push
-      changes: *patterns-target_test-i154
-    - <<: *if-dev-push
-      changes: *patterns-target_test-wifi
-
 .rules:build:custom_test-esp32s2:
   rules:
     - <<: *if-revert-branch
@@ -1157,7 +1126,6 @@
     - <<: *if-label-example_test_esp32c3
     - <<: *if-label-example_test_esp32c6
     - <<: *if-label-example_test_esp32h2
-    - <<: *if-label-example_test_esp32h4
     - <<: *if-label-example_test_esp32s2
     - <<: *if-label-example_test_esp32s3
     - <<: *if-label-target_test
@@ -1406,48 +1374,6 @@
     - <<: *if-dev-push
       changes: *patterns-target_test-wifi
 
-.rules:build:example_test-esp32h4:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build
-    - <<: *if-label-example_test
-    - <<: *if-label-example_test_esp32h4
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-build-example_test
-    - <<: *if-dev-push
-      changes: *patterns-build_components
-    - <<: *if-dev-push
-      changes: *patterns-build_system
-    - <<: *if-dev-push
-      changes: *patterns-downloadable-tools
-    - <<: *if-dev-push
-      changes: *patterns-example_test
-    - <<: *if-dev-push
-      changes: *patterns-example_test-bt
-    - <<: *if-dev-push
-      changes: *patterns-example_test-ccs811
-    - <<: *if-dev-push
-      changes: *patterns-example_test-ethernet
-    - <<: *if-dev-push
-      changes: *patterns-example_test-i154
-    - <<: *if-dev-push
-      changes: *patterns-example_test-sdio
-    - <<: *if-dev-push
-      changes: *patterns-example_test-usb
-    - <<: *if-dev-push
-      changes: *patterns-example_test-wifi
-    - <<: *if-dev-push
-      changes: *patterns-target_test-adc
-    - <<: *if-dev-push
-      changes: *patterns-target_test-ecdsa
-    - <<: *if-dev-push
-      changes: *patterns-target_test-i154
-    - <<: *if-dev-push
-      changes: *patterns-target_test-wifi
-
 .rules:build:example_test-esp32s2:
   rules:
     - <<: *if-revert-branch
@@ -1579,7 +1505,6 @@
     - <<: *if-label-component_ut_esp32c3
     - <<: *if-label-component_ut_esp32c6
     - <<: *if-label-component_ut_esp32h2
-    - <<: *if-label-component_ut_esp32h4
     - <<: *if-label-component_ut_esp32s2
     - <<: *if-label-component_ut_esp32s3
     - <<: *if-label-custom_test
@@ -1588,7 +1513,6 @@
     - <<: *if-label-custom_test_esp32c3
     - <<: *if-label-custom_test_esp32c6
     - <<: *if-label-custom_test_esp32h2
-    - <<: *if-label-custom_test_esp32h4
     - <<: *if-label-custom_test_esp32s2
     - <<: *if-label-custom_test_esp32s3
     - <<: *if-label-example_test
@@ -1597,7 +1521,6 @@
     - <<: *if-label-example_test_esp32c3
     - <<: *if-label-example_test_esp32c6
     - <<: *if-label-example_test_esp32h2
-    - <<: *if-label-example_test_esp32h4
     - <<: *if-label-example_test_esp32s2
     - <<: *if-label-example_test_esp32s3
     - <<: *if-label-integration_test
@@ -1611,7 +1534,6 @@
     - <<: *if-label-unit_test_esp32c3
     - <<: *if-label-unit_test_esp32c6
     - <<: *if-label-unit_test_esp32h2
-    - <<: *if-label-unit_test_esp32h4
     - <<: *if-label-unit_test_esp32s2
     - <<: *if-label-unit_test_esp32s3
     - <<: *if-dev-push
@@ -1681,7 +1603,6 @@
     - <<: *if-label-unit_test_esp32c3
     - <<: *if-label-unit_test_esp32c6
     - <<: *if-label-unit_test_esp32h2
-    - <<: *if-label-unit_test_esp32h4
     - <<: *if-label-unit_test_esp32s2
     - <<: *if-label-unit_test_esp32s3
     - <<: *if-dev-push

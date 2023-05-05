@@ -25,10 +25,11 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_rom_gpio.h"
 #include "soc/soc_caps.h"
-#include "clk_tree.h"
+#include "esp_clk_tree.h"
 #include "esp_memory_utils.h"
 #include "hal/dma_types.h"
 #include "hal/gpio_hal.h"
+#include "hal/cache_hal.h"
 #include "esp_private/gdma.h"
 #include "driver/gpio.h"
 #include "esp_private/periph_ctrl.h"
@@ -37,6 +38,9 @@
 #include "hal/lcd_ll.h"
 #include "hal/lcd_hal.h"
 #include "esp_cache.h"
+
+#define ALIGN_UP(size, align)    (((size) + (align) - 1) & ~((align) - 1))
+#define ALIGN_DOWN(size, align)  ((size) & ~((align) - 1))
 
 static const char *TAG = "lcd_panel.io.i80";
 
@@ -469,9 +473,10 @@ static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     trans_desc->user_ctx = i80_device->user_ctx;
 
     if (esp_ptr_external_ram(color)) {
+        uint32_t dcache_line_size = cache_hal_get_cache_line_size(CACHE_TYPE_DATA);
         // flush frame buffer from cache to the physical PSRAM
-        // note the esp_cache_msync function will check the alignment of the address and size, and error out if either of them is not matched
-        ESP_RETURN_ON_ERROR(esp_cache_msync((void *)color, color_size, 0), TAG, "flush cache buffer failed");
+        // note the esp_cache_msync function will check the alignment of the address and size, make sure they're aligned to current cache line size
+        esp_cache_msync((void *)ALIGN_DOWN((intptr_t)color, dcache_line_size), ALIGN_UP(color_size, dcache_line_size), 0);
     }
 
     // send transaction to trans_queue
@@ -487,7 +492,7 @@ static esp_err_t lcd_i80_select_periph_clock(esp_lcd_i80_bus_handle_t bus, lcd_c
 {
     // get clock source frequency
     uint32_t src_clk_hz = 0;
-    ESP_RETURN_ON_ERROR(clk_tree_src_get_freq_hz((soc_module_clk_t)clk_src, CLK_TREE_SRC_FREQ_PRECISION_CACHED, &src_clk_hz),
+    ESP_RETURN_ON_ERROR(esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &src_clk_hz),
                         TAG, "get clock source frequency failed");
 
     // force to use integer division, as fractional division might lead to clock jitter

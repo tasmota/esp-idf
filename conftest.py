@@ -50,7 +50,7 @@ except ImportError:
     import common_test_methods  # noqa: F401
 
 SUPPORTED_TARGETS = ['esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c2', 'esp32c6', 'esp32h2']
-PREVIEW_TARGETS = ['esp32h4']  # this PREVIEW_TARGETS excludes 'linux' target
+PREVIEW_TARGETS: List[str] = []  # this PREVIEW_TARGETS excludes 'linux' target
 DEFAULT_SDKCONFIG = 'default'
 
 TARGET_MARKERS = {
@@ -60,14 +60,13 @@ TARGET_MARKERS = {
     'esp32c3': 'support esp32c3 target',
     'esp32c2': 'support esp32c2 target',
     'esp32c6': 'support esp32c6 target',
-    'esp32h4': 'support esp32h4 target',
     'esp32h2': 'support esp32h2 target',
     'linux': 'support linux target',
 }
 
 SPECIAL_MARKERS = {
     'supported_targets': "support all officially announced supported targets ('esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c2', 'esp32c6')",
-    'preview_targets': "support all preview targets ('esp32h4')",
+    'preview_targets': "support all preview targets ('none')",
     'all_targets': 'support all targets, including supported ones and preview ones',
     'temp_skip_ci': 'temp skip tests for specified targets only in ci',
     'temp_skip': 'temp skip tests for specified targets both in ci and locally',
@@ -110,6 +109,7 @@ ENV_MARKERS = {
     'external_flash': 'external flash memory connected via VSPI (FSPI)',
     'sdcard_sdmode': 'sdcard running in SD mode',
     'sdcard_spimode': 'sdcard running in SPI mode',
+    'emmc': 'eMMC card',
     'MSPI_F8R8': 'runner with Octal Flash and Octal PSRAM',
     'MSPI_F4R8': 'runner with Quad Flash and Octal PSRAM',
     'MSPI_F4R4': 'runner with Quad Flash and Quad PSRAM',
@@ -121,6 +121,7 @@ ENV_MARKERS = {
     'multi_dut_modbus_rs485': 'a pair of runners connected by RS485 bus',
     'psramv0': 'Runner with PSRAM version 0',
     'esp32eco3': 'Runner with esp32 eco3 connected',
+    'ecdsa_efuse': 'Runner with test ECDSA private keys programmed in efuse',
     # multi-dut markers
     'ieee802154': 'ieee802154 related tests should run on ieee802154 runners.',
     'openthread_br': 'tests should be used for openthread border router.',

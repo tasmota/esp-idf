@@ -31,8 +31,6 @@
 #include "esp32s3/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32H4
-#include "esp32h4/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C2
 #include "esp32c2/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C6
@@ -146,7 +144,13 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t* args,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us)
+/*
+ * We have placed this function in IRAM to ensure consistency with the esp_timer API.
+ * esp_timer_start_once, esp_timer_start_periodic and esp_timer_stop are in IRAM.
+ * But actually in IDF esp_timer_restart is used only in one place, which requires keeping
+ * in IRAM when PM_SLP_IRAM_OPT = y and ESP_TASK_WDT USE ESP_TIMER = y.
+*/
+esp_err_t IRAM_ATTR esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us)
 {
     esp_err_t ret = ESP_OK;
 
@@ -728,7 +732,10 @@ esp_err_t IRAM_ATTR esp_timer_get_expiry_time(esp_timer_handle_t timer, uint64_t
     return ESP_OK;
 }
 
-bool esp_timer_is_active(esp_timer_handle_t timer)
+bool IRAM_ATTR esp_timer_is_active(esp_timer_handle_t timer)
 {
+    if (timer == NULL) {
+        return false;
+    }
     return timer_armed(timer);
 }

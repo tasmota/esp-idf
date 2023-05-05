@@ -419,8 +419,8 @@ Then we can construct the NEC :cpp:member:`rmt_encoder_t::encode` function in th
     static size_t rmt_encode_ir_nec(rmt_encoder_t *encoder, rmt_channel_handle_t channel, const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state)
     {
         rmt_ir_nec_encoder_t *nec_encoder = __containerof(encoder, rmt_ir_nec_encoder_t, base);
-        rmt_encode_state_t session_state = 0;
-        rmt_encode_state_t state = 0;
+        rmt_encode_state_t session_state = RMT_ENCODING_RESET;
+        rmt_encode_state_t state = RMT_ENCODING_RESET;
         size_t encoded_symbols = 0;
         ir_nec_scan_code_t *scan_code = (ir_nec_scan_code_t *)primary_data;
         rmt_encoder_handle_t copy_encoder = nec_encoder->copy_encoder;
@@ -461,7 +461,7 @@ Then we can construct the NEC :cpp:member:`rmt_encoder_t::encode` function in th
             encoded_symbols += copy_encoder->encode(copy_encoder, channel, &nec_encoder->nec_ending_symbol,
                                                     sizeof(rmt_symbol_word_t), &session_state);
             if (session_state & RMT_ENCODING_COMPLETE) {
-                nec_encoder->state = 0; // back to the initial encoding session
+                nec_encoder->state = RMT_ENCODING_RESET; // back to the initial encoding session
                 state |= RMT_ENCODING_COMPLETE; // telling the caller the NEC encoding has finished
             }
             if (session_state & RMT_ENCODING_MEM_FULL) {
@@ -518,7 +518,7 @@ Application Examples
 * RMT transactions in queue: :example:`peripherals/rmt/musical_buzzer`
 * RMT based stepper motor with S-curve algorithm: : :example:`peripherals/rmt/stepper_motor`
 * RMT infinite loop for driving DShot ESC: :example:`peripherals/rmt/dshot_esc`
-* RMT simulate 1-wire protocol (take DS18B20 as example): :example:`peripherals/rmt/onewire_ds18b20`
+* RMT simulate 1-wire protocol (take DS18B20 as example): :example:`peripherals/rmt/onewire`
 
 API Reference
 -------------

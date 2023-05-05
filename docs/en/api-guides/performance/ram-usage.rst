@@ -83,7 +83,7 @@ The default stack sizes for these tasks are usually set conservatively high, to 
    - The Ethernet driver creates a task for the MAC to receive Ethernet frames. If using the default config ``ETH_MAC_DEFAULT_CONFIG`` then the task stack size is 4 KB. This setting can be changed by passing a custom :cpp:class:`eth_mac_config_t` struct when initializing the Ethernet MAC.
    - FreeRTOS idle task stack size is configured by :ref:`CONFIG_FREERTOS_IDLE_TASK_STACKSIZE`.
    - If using the :doc:`MQTT </api-reference/protocols/mqtt>` component, it creates a task with stack size configured by :ref:`CONFIG_MQTT_TASK_STACK_SIZE`. MQTT stack size can also be configured using ``task_stack`` field of :cpp:class:`esp_mqtt_client_config_t`.
-   - To see how to optimize RAM usage when using ``mDNS``, please check `Performance Optimization <https://espressif.github.io/esp-protocols/mdns/en/index.html#minimizing-ram-usage>`__.
+   - To see how to optimize RAM usage when using ``mDNS``, please check `Performance Optimization <https://docs.espressif.com/projects/esp-protocols/mdns/docs/latest/en/index.html#minimizing-ram-usage>`__.
 
 .. note::
 
@@ -139,9 +139,30 @@ The following options will reduce IRAM usage of some ESP-IDF features:
     :esp32: - If the application uses PSRAM and is based on ESP32 rev. 3 (ECO3), setting :ref:`CONFIG_ESP32_REV_MIN` to ``3`` will disable PSRAM bug workarounds, saving ~10kB or more of IRAM.
     - Disabling :ref:`CONFIG_ESP_EVENT_POST_FROM_IRAM_ISR` prevents posting ``esp_event`` events from :ref:`iram-safe-interrupt-handlers` but will save some IRAM.
     - Disabling :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` prevents spi_master interrupts from being serviced while writing to flash, and may otherwise reduce spi_master performance, but will save some IRAM.
+    - Disabling :ref:`CONFIG_SPI_SLAVE_ISR_IN_IRAM` prevents spi_slave interrupts from being serviced while writing to flash, will save some IRAM.
     - Setting :ref:`CONFIG_HAL_DEFAULT_ASSERTION_LEVEL` to disable assertion for HAL component will save some IRAM especially for HAL code who calls `HAL_ASSERT` a lot and resides in IRAM.
     - Refer to sdkconfig menu ``Auto-detect flash chips`` and you can disable flash drivers which you don't need to save some IRAM.
 
+.. only:: esp32
+
+   Using SRAM1 for IRAM
+   ^^^^^^^^^^^^^^^^^^^^
+
+   The SRAM1 memory area is normally used for DRAM, but it is possible to use parts of it for IRAM with :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM`. This memory would previously be reserved for DRAM data usage (e.g. bss) by the software bootloader and later added to the heap. After this option was introduced, the bootloader DRAM size was reduced to a value closer to what it normally actually needs.
+
+   This option depends on IDF being able to recognize that the new SRAM1 area is also a valid load address for an image segment. If the software bootloader was compiled before this option existed, then the bootloader will not be able to load an app which has code placed in this new extended IRAM area. This would typically happen if you are doing an OTA update, where only the app would be updated.
+
+   If the IRAM section were to be placed in an invalid area then this would be detected during the bootup process and result in a failed boot:
+
+   .. code-block:: text
+
+      E (204) esp_image: Segment 5 0x400845f8-0x400a126c invalid: bad load address range
+
+   .. warning::
+
+      Apps compiled with :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM`, may fail to boot if used together with a software bootloader compiled before this config option was introduced. If you are using an older bootloader and updating over OTA, please test carefully before pushing any update.
+
+   Any memory which ends up not being used for static IRAM will be added to the heap.
 
 .. only:: esp32c3
 

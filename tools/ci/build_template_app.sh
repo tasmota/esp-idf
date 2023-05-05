@@ -23,6 +23,8 @@ gen_configs() {
     # CONFIG_COMPILER_OPTIMIZATION_PERF with flag -O2
     echo "CONFIG_COMPILER_OPTIMIZATION_PERF=y" > esp-idf-template/sdkconfig.ci.O2
     echo "CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_PERF=y" >> esp-idf-template/sdkconfig.ci.O2
+    # -O2 makes the bootloader too large to fit in the default space, otherwise(!)
+    echo "CONFIG_PARTITION_TABLE_OFFSET=0x10000" >> esp-idf-template/sdkconfig.ci.O2
 
     # This part will be built in earlier stage (pre_build job) with only cmake. Built with make in later stage
     # CONFIG_COMPILER_OPTIMIZATION_DEFAULT with flag -Og
@@ -62,7 +64,7 @@ build_stage2() {
         --build-log ${BUILD_LOG_CMAKE} \
         --size-file size.json \
         --collect-size-info size_info.txt \
-        --default-build-targets esp32,esp32s2,esp32s3,esp32c2,esp32c3,esp32c6,esp32h2 # add esp32h4 back after IDF-5541
+        --default-build-targets esp32,esp32s2,esp32s3,esp32c2,esp32c3,esp32c6,esp32h2
 }
 
 build_stage1() {
@@ -76,7 +78,7 @@ build_stage1() {
         --build-log ${BUILD_LOG_CMAKE} \
         --size-file size.json \
         --collect-size-info size_info.txt \
-        --default-build-targets esp32,esp32s2,esp32s3,esp32c2,esp32c3,esp32h4,esp32c6,esp32h2
+        --default-build-targets esp32,esp32s2,esp32s3,esp32c2,esp32c3,esp32c6,esp32h2
 }
 
 # Default arguments

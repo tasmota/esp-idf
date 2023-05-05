@@ -6,6 +6,8 @@
 
 #include "esp_openthread_radio.h"
 
+#include "error.h"
+#include "esp_err.h"
 #include "sdkconfig.h"
 #include "esp_check.h"
 #include "esp_ieee802154.h"
@@ -25,6 +27,7 @@
 #include "openthread/link.h"
 #include "openthread/platform/diag.h"
 #include "openthread/platform/radio.h"
+#include "openthread/platform/time.h"
 #include "utils/link_metrics.h"
 #include "utils/mac_frame.h"
 
@@ -188,13 +191,11 @@ esp_err_t esp_openthread_radio_process(otInstance *aInstance, const esp_openthre
             case ESP_IEEE802154_TX_ERR_CCA_BUSY:
             case ESP_IEEE802154_TX_ERR_ABORT:
             case ESP_IEEE802154_TX_ERR_COEXIST:
-            case ESP_IEEE802154_TX_ERR_COEXIST_REJ:
                 err = OT_ERROR_CHANNEL_ACCESS_FAILURE;
                 break;
 
             case ESP_IEEE802154_TX_ERR_NO_ACK:
             case ESP_IEEE802154_TX_ERR_INVALID_ACK:
-            case ESP_IEEE802154_TX_ERR_COEXIST_ACK:
                 err = OT_ERROR_NO_ACK;
                 break;
 
@@ -298,9 +299,6 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
 
     aFrame->mPsdu[-1] = aFrame->mLength; // lenth locates one byte before the psdu (esp_openthread_radio_tx_psdu);
 
-// TODO: remove this macro check when esp32h4 unsupported.
-#if !CONFIG_IDF_TARGET_ESP32H4
-    // esp32h4 do not support tx security
     if (otMacFrameIsSecurityEnabled(aFrame) && !aFrame->mInfo.mTxInfo.mIsSecurityProcessed) {
         otMacFrameSetFrameCounter(aFrame, s_mac_frame_counter++);
         if (otMacFrameIsKeyIdMode1(aFrame)) {
@@ -314,12 +312,10 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         esp_ieee802154_set_transmit_security(&aFrame->mPsdu[-1], s_security_key, s_security_addr);
     }
 
-    // esp32h4 do not support transmit at
     if (aFrame->mInfo.mTxInfo.mTxDelay != 0) {
         esp_ieee802154_transmit_at(&aFrame->mPsdu[-1], aFrame->mInfo.mTxInfo.mCsmaCaEnabled,
                                    (aFrame->mInfo.mTxInfo.mTxDelayBaseTime + aFrame->mInfo.mTxInfo.mTxDelay));
     } else
-#endif
     {
         esp_ieee802154_transmit(&aFrame->mPsdu[-1], aFrame->mInfo.mTxInfo.mCsmaCaEnabled);
     }
@@ -342,22 +338,15 @@ int8_t otPlatRadioGetRssi(otInstance *aInstance)
 otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 {
     return (otRadioCaps)(OT_RADIO_CAPS_ENERGY_SCAN |
-// TODO: remove this macro check when esp32h4 unsupported.
-#if !CONFIG_IDF_TARGET_ESP32H4
                         OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_RECEIVE_TIMING | OT_RADIO_CAPS_TRANSMIT_TIMING |
-#endif
                         OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_SLEEP_TO_TX);
 }
 
-// TODO: remove this macro check when esp32h4 unsupported.
-#if !CONFIG_IDF_TARGET_ESP32H4
-// esp32h4 do not support receive at
 otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
 {
     esp_ieee802154_receive_at((aStart + aDuration));
     return OT_ERROR_NONE;
 }
-#endif
 
 bool otPlatRadioGetPromiscuous(otInstance *aInstance)
 {
@@ -505,7 +494,7 @@ void otPlatRadioSetMacFrameCounter(otInstance *aInstance, uint32_t aMacFrameCoun
 uint64_t otPlatRadioGetNow(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
-    return esp_timer_get_time();
+    return otPlatTimeGet();
 }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -517,7 +506,7 @@ void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTi
 
 static IRAM_ATTR uint16_t get_csl_phase()
 {
-    uint32_t cur_time = esp_timer_get_time();
+    uint32_t cur_time = otPlatTimeGet();
     uint32_t csl_period_us = s_csl_period * OT_US_PER_TEN_SYMBOLS;
     uint32_t diff = (csl_period_us - (cur_time % csl_period_us) + (s_csl_sample_time % csl_period_us)) % csl_period_us;
 
@@ -590,7 +579,7 @@ static void IRAM_ATTR convert_to_ot_frame(uint8_t *data, esp_ieee802154_frame_in
     radio_frame->mInfo.mRxInfo.mRssi = frame_info->rssi;
     radio_frame->mInfo.mRxInfo.mLqi = frame_info->lqi;
     radio_frame->mInfo.mRxInfo.mAckedWithFramePending = frame_info->pending;
-    radio_frame->mInfo.mRxInfo.mTimestamp = esp_timer_get_time();
+    radio_frame->mInfo.mRxInfo.mTimestamp = otPlatTimeGet();
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     radio_frame->mInfo.mRxInfo.mTimestamp = frame_info->timestamp;
@@ -626,7 +615,7 @@ static void IRAM_ATTR enh_ack_set_security_addr_and_key(otRadioFrame *ack_frame)
     esp_ieee802154_set_transmit_security(&ack_frame->mPsdu[-1], s_security_key, s_security_addr);
 }
 
-void IRAM_ATTR esp_ieee802154_enh_ack_generator(uint8_t *frame, esp_ieee802154_frame_info_t *frame_info,
+esp_err_t IRAM_ATTR esp_ieee802154_enh_ack_generator(uint8_t *frame, esp_ieee802154_frame_info_t *frame_info,
                                                 uint8_t *enhack_frame)
 {
     otRadioFrame ack_frame;
@@ -638,6 +627,7 @@ void IRAM_ATTR esp_ieee802154_enh_ack_generator(uint8_t *frame, esp_ieee802154_f
     uint8_t link_metrics_data[OT_ENH_PROBING_IE_DATA_MAX_SIZE];
     otMacAddress mac_addr;
 #endif
+    otError err;
     ack_frame.mPsdu = enhack_frame + 1;
     convert_to_ot_frame(frame, frame_info, &ot_frame);
 
@@ -655,8 +645,11 @@ void IRAM_ATTR esp_ieee802154_enh_ack_generator(uint8_t *frame, esp_ieee802154_f
         offset += otMacFrameGenerateEnhAckProbingIe(ack_ie_data, link_metrics_data, link_metrics_data_len);
     }
 #endif
+    err = otMacFrameGenerateEnhAck(&ot_frame, frame_info->pending, ack_ie_data, offset, &ack_frame);
 
-    ETS_ASSERT(otMacFrameGenerateEnhAck(&ot_frame, frame_info->pending, ack_ie_data, offset, &ack_frame) == OT_ERROR_NONE);
+    if (err != OT_ERROR_NONE) {
+        return ESP_FAIL;
+    }
     enhack_frame[0] = ack_frame.mLength;
 
     s_enhack = enhack_frame;
@@ -665,6 +658,7 @@ void IRAM_ATTR esp_ieee802154_enh_ack_generator(uint8_t *frame, esp_ieee802154_f
         otMacFrameSetFrameCounter(&ack_frame, s_mac_frame_counter++);
         enh_ack_set_security_addr_and_key(&ack_frame);
     }
+    return ESP_OK;
 }
 
 void IRAM_ATTR esp_ieee802154_receive_done(uint8_t *data, esp_ieee802154_frame_info_t *frame_info)
@@ -684,6 +678,8 @@ void IRAM_ATTR esp_ieee802154_receive_done(uint8_t *data, esp_ieee802154_frame_i
         s_receive_frame[s_recv_queue.tail].mInfo.mRxInfo.mAckedWithSecEnhAck = s_with_security_enh_ack;
         s_receive_frame[s_recv_queue.tail].mInfo.mRxInfo.mAckFrameCounter = s_ack_frame_counter;
         s_receive_frame[s_recv_queue.tail].mInfo.mRxInfo.mAckKeyId = s_ack_key_id;
+    } else {
+        s_receive_frame[s_recv_queue.tail].mInfo.mRxInfo.mAckedWithSecEnhAck = false;
     }
     s_with_security_enh_ack = false;
 #endif // OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2

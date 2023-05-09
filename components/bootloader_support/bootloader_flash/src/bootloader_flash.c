@@ -120,6 +120,7 @@ esp_err_t bootloader_flash_erase_range(uint32_t start_addr, uint32_t size)
 #include "esp32/rom/cache.h"
 #endif
 #include "esp_rom_spiflash.h"
+#include "esp_rom_sys.h"
 #include "hal/mmu_hal.h"
 #include "hal/mmu_ll.h"
 #include "hal/cache_hal.h"
@@ -552,6 +553,7 @@ IRAM_ATTR uint32_t bootloader_flash_execute_command_common(
     uint32_t old_ctrl_reg = SPIFLASH.ctrl.val;
     uint32_t old_user_reg = SPIFLASH.user.val;
     uint32_t old_user1_reg = SPIFLASH.user1.val;
+    uint32_t old_user2_reg = SPIFLASH.user2.val;
 #if CONFIG_IDF_TARGET_ESP32
     SPIFLASH.ctrl.val = SPI_WP_REG_M; // keep WP high while idle, otherwise leave DIO mode
 #else
@@ -598,6 +600,7 @@ IRAM_ATTR uint32_t bootloader_flash_execute_command_common(
     SPIFLASH.ctrl.val = old_ctrl_reg;
     SPIFLASH.user.val = old_user_reg;
     SPIFLASH.user1.val = old_user1_reg;
+    SPIFLASH.user2.val = old_user2_reg;
 
     uint32_t ret = SPIFLASH.data_buf[0];
     if (miso_len < 32) {

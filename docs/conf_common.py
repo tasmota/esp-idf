@@ -130,6 +130,8 @@ ADC_DMA_DOCS = ['api-reference/peripherals/adc_continuous.rst']
 
 ANA_CMPR_DOCS = ['api-reference/peripherals/ana_cmpr.rst']
 
+SPI_SLAVE_HD_DOCS = ['api-reference/peripherals/spi_slave_hd.rst']
+
 ESP32_DOCS = ['api-reference/system/himem.rst',
               'api-guides/romconsole.rst',
               'api-reference/system/ipc.rst',
@@ -143,7 +145,6 @@ ESP32_DOCS = ['api-reference/system/himem.rst',
 ESP32S2_DOCS = ['hw-reference/esp32s2/**',
                 'api-guides/usb-console.rst',
                 'api-reference/peripherals/ds.rst',
-                'api-reference/peripherals/spi_slave_hd.rst',
                 'api-reference/peripherals/temp_sensor.rst',
                 'api-reference/system/async_memcpy.rst',
                 'api-reference/peripherals/touch_element.rst',
@@ -201,6 +202,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_ANA_CMPR_SUPPORTED': ANA_CMPR_DOCS,
                             'SOC_SDM_SUPPORTED':SDM_DOCS,
                             'SOC_WIFI_MESH_SUPPORT':WIFI_MESH_DOCS,
+                            'SOC_SPI_SUPPORT_SLAVE_HD_VER2':SPI_SLAVE_HD_DOCS,
                             'esp32':ESP32_DOCS,
                             'esp32s2':ESP32S2_DOCS,
                             'esp32s3':ESP32S3_DOCS,
@@ -236,7 +238,7 @@ html_context['github_repo'] = 'esp-idf'
 project_slug = 'esp-idf'
 versions_url = 'https://dl.espressif.com/dl/esp-idf/idf_versions.js'
 
-idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2']
+idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2', 'esp32c6']
 languages = ['en', 'zh_CN']
 
 google_analytics_id = os.environ.get('CI_GOOGLE_ANALYTICS_ID', None)

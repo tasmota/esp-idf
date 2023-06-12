@@ -19,21 +19,12 @@ menu "LWIP"
         bool "Enable tcpip core locking"
         default n
         help
-            If Enable tcpip core locking,Creates a global mutex that is held
+            If Enable tcpip　core locking,Creates a global mutex that is held
             during TCPIP thread operations.Can be locked by client code to perform
             lwIP operations without changing into TCPIP thread using callbacks.
             See LOCK_TCPIP_CORE() and UNLOCK_TCPIP_CORE().
 
-            If disable tcpip core locking,TCP IP will perform tasks through context switching
-
-    config LWIP_CHECK_THREAD_SAFETY
-        bool "Checks that lwip API runs in expected context"
-        default n
-        help
-            Enable to check that the project does not violate lwip thread safety.
-            If enabled, all lwip functions that require thread awareness run an assertion
-            to verify that the TCP/IP core functionality is either locked or accessed
-            from the correct thread.
+            If disable tcpip　core locking,TCP IP will perform tasks through context switching．
 
     config LWIP_DNS_SUPPORT_MDNS_QUERIES
         bool "Enable mDNS queries in resolving host name"
@@ -242,24 +233,6 @@ menu "LWIP"
         help
             Set the timer interval for gratuitous ARP. The default value is 60s
 
-    config LWIP_ESP_MLDV6_REPORT
-        bool "Send mldv6 report periodically"
-        depends on LWIP_IPV6
-        default y
-        help
-            Enable this option allows to send mldv6 report periodically.
-
-            This option solve the issue that failed to receive multicast data.
-            Some routers fail to forward multicast packets.
-            To solve this problem, send multicast mdlv6 report to routers regularly.
-
-    config LWIP_MLDV6_TMR_INTERVAL
-        int "mldv6 report timer interval(seconds)"
-        default 40
-        depends on LWIP_ESP_MLDV6_REPORT
-        help
-            Set the timer interval for mldv6 report. The default value is 40s
-
     config LWIP_TCPIP_RECVMBOX_SIZE
         int "TCPIP task receive mail box size"
         default 32
@@ -309,14 +282,6 @@ menu "LWIP"
             Set total length of outgoing DHCP option msg. Generally bigger value means it can carry more
             options and values. If your code meets LWIP_ASSERT due to option value is too long.
             Please increase the LWIP_DHCP_OPTIONS_LEN value.
-
-    config LWIP_DHCP_COARSE_TIMER_SECS
-        int "DHCP coarse timer interval(s)"
-        default 1
-        range 1 10
-        help
-            Set DHCP coarse interval in seconds.
-            A higher value will be less precise but cost less power consumption.
 
     menu "DHCP server"
 
@@ -541,13 +506,7 @@ menu "LWIP"
             int "Maximum segment lifetime (MSL)"
             default 60000
             help
-                Set maximum segment lifetime in milliseconds.
-
-        config LWIP_TCP_FIN_WAIT_TIMEOUT
-            int "Maximum FIN segment lifetime"
-            default 20000
-            help
-                Set maximum segment lifetime in milliseconds.
+                Set maximum segment lifetime in in milliseconds.
 
         config LWIP_TCP_SND_BUF_DEFAULT
             int "Default send buffer size"

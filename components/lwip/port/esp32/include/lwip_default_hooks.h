@@ -18,7 +18,6 @@
 #include "lwip/arch.h"
 #include "lwip/err.h"
 
-
 #ifdef ESP_IDF_LWIP_HOOK_FILENAME
 #include ESP_IDF_LWIP_HOOK_FILENAME
 #endif

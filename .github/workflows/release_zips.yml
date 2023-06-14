@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Create a recursive clone source and stripped zip
-        uses: Jason2866/github-actions/release_zips@master
+        uses: Jason2866/github-actions/release_zips@release_idf
         env:
             RELEASE_PROJECT_NAME: ESP-IDF
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

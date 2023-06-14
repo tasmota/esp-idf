@@ -297,8 +297,12 @@ static void IRAM_ATTR flush_uarts(void)
     }
 }
 
-static void IRAM_ATTR suspend_uarts(void)
+/**
+ * Suspend enabled uarts and return suspended uarts bit map
+ */
+static uint32_t IRAM_ATTR suspend_uarts(void)
 {
+    uint32_t suspended_uarts_bmap = 0;
     for (int i = 0; i < SOC_UART_NUM; ++i) {
 #ifndef CONFIG_IDF_TARGET_ESP32
         if (!periph_ll_periph_enabled(PERIPH_UART0_MODULE + i)) {
@@ -306,6 +310,7 @@ static void IRAM_ATTR suspend_uarts(void)
         }
 #endif
         uart_ll_force_xoff(i);
+        suspended_uarts_bmap |= BIT(i);
 #if SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
         uint32_t uart_fsm = 0;
         do {
@@ -315,17 +320,16 @@ static void IRAM_ATTR suspend_uarts(void)
         while (uart_ll_get_fsm_status(i) != 0) {}
 #endif
     }
+    return suspended_uarts_bmap;
 }
 
-static void IRAM_ATTR resume_uarts(void)
+static void IRAM_ATTR resume_uarts(uint32_t uarts_resume_bmap)
 {
     for (int i = 0; i < SOC_UART_NUM; ++i) {
-#ifndef CONFIG_IDF_TARGET_ESP32
-        if (!periph_ll_periph_enabled(PERIPH_UART0_MODULE + i)) {
-            continue;
+        if (uarts_resume_bmap & 0x1) {
+            uart_ll_force_xon(i);
         }
-#endif
-        uart_ll_force_xon(i);
+        uarts_resume_bmap >>= 1;
     }
 }
 
@@ -375,11 +379,12 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     // For light sleep, suspend UART output — it will resume after wakeup.
     // For deep sleep, wait for the contents of UART FIFO to be sent.
     bool deep_sleep = pd_flags & RTC_SLEEP_PD_DIG;
+    uint32_t suspended_uarts_bmap = 0;
 
     if (deep_sleep) {
         flush_uarts();
     } else {
-        suspend_uarts();
+        suspended_uarts_bmap = suspend_uarts();
     }
 
 #if SOC_RTC_SLOW_CLOCK_SUPPORT_8MD256
@@ -438,6 +443,10 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
         if (esp_phy_is_initialized()){
             extern void phy_close_rf(void);
             phy_close_rf();
+#if !CONFIG_IDF_TARGET_ESP32
+            extern void phy_xpd_tsens(void);
+            phy_xpd_tsens();
+#endif
         }
     } else {
         misc_modules_sleep_prepare();
@@ -560,7 +569,7 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     }
 
     // re-enable UART output
-    resume_uarts();
+    resume_uarts(suspended_uarts_bmap);
 
     return result;
 }
@@ -1239,11 +1248,7 @@ esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause(void)
         return ESP_SLEEP_WAKEUP_UNDEFINED;
     }
 
-#ifdef CONFIG_IDF_TARGET_ESP32
-    uint32_t wakeup_cause = REG_GET_FIELD(RTC_CNTL_WAKEUP_STATE_REG, RTC_CNTL_WAKEUP_CAUSE);
-#else
-    uint32_t wakeup_cause = REG_GET_FIELD(RTC_CNTL_SLP_WAKEUP_CAUSE_REG, RTC_CNTL_WAKEUP_CAUSE);
-#endif
+    uint32_t wakeup_cause = rtc_cntl_ll_get_wakeup_cause();
 
     if (wakeup_cause & RTC_TIMER_TRIG_EN) {
         return ESP_SLEEP_WAKEUP_TIMER;
@@ -1420,7 +1425,13 @@ static uint32_t get_power_down_flags(void)
     return pd_flags;
 }
 
-void esp_deep_sleep_disable_rom_logging(void)
+#if CONFIG_IDF_TARGET_ESP32
+/* APP core of esp32 can't access to RTC FAST MEMORY, do not define it with RTC_IRAM_ATTR */
+void
+#else
+void RTC_IRAM_ATTR
+#endif
+esp_deep_sleep_disable_rom_logging(void)
 {
     rtc_suppress_rom_log();
 }

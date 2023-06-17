@@ -486,7 +486,6 @@ components/esp_rom/include/esp32c3/rom/crc.h
 components/esp_rom/include/esp32c3/rom/digital_signature.h
 components/esp_rom/include/esp32c3/rom/esp_flash.h
 components/esp_rom/include/esp32c3/rom/hmac.h
-components/esp_rom/include/esp32c3/rom/rom_layout.h
 components/esp_rom/include/esp32c3/rom/rsa_pss.h
 components/esp_rom/include/esp32c3/rom/sha.h
 components/esp_rom/include/esp32c3/rom/tjpgd.h
@@ -504,7 +503,6 @@ components/esp_rom/include/esp32s3/rom/crc.h
 components/esp_rom/include/esp32s3/rom/digital_signature.h
 components/esp_rom/include/esp32s3/rom/hmac.h
 components/esp_rom/include/esp32s3/rom/opi_flash.h
-components/esp_rom/include/esp32s3/rom/rom_layout.h
 components/esp_rom/include/esp32s3/rom/rsa_pss.h
 components/esp_rom/include/esp32s3/rom/sha.h
 components/esp_rom/include/esp32s3/rom/tjpgd.h
@@ -553,7 +551,6 @@ components/esp_wifi/include/esp_private/wifi_types.h
 components/esp_wifi/include/smartconfig_ack.h
 components/esp_wifi/src/lib_printf.c
 components/esp_wifi/src/mesh_event.c
-components/esp_wifi/src/smartconfig.c
 components/esp_wifi/test/test_wifi_init.c
 components/fatfs/diskio/diskio.c
 components/fatfs/diskio/diskio_impl.h
@@ -759,8 +756,6 @@ components/sdmmc/sdmmc_mmc.c
 components/sdmmc/sdmmc_sd.c
 components/soc/esp32/adc_periph.c
 components/soc/esp32/i2c_periph.c
-components/soc/esp32/include/soc/apb_ctrl_reg.h
-components/soc/esp32/include/soc/apb_ctrl_struct.h
 components/soc/esp32/include/soc/bb_reg.h
 components/soc/esp32/include/soc/boot_mode.h
 components/soc/esp32/include/soc/fe_reg.h
@@ -811,7 +806,6 @@ components/soc/esp32/spi_periph.c
 components/soc/esp32/uart_periph.c
 components/soc/esp32c3/i2c_bbpll.h
 components/soc/esp32c3/i2c_periph.c
-components/soc/esp32c3/include/soc/apb_ctrl_reg.h
 components/soc/esp32c3/include/soc/apb_saradc_reg.h
 components/soc/esp32c3/include/soc/assist_debug_reg.h
 components/soc/esp32c3/include/soc/bb_reg.h
@@ -851,7 +845,6 @@ components/soc/esp32c3/uart_periph.c
 components/soc/esp32s2/adc_periph.c
 components/soc/esp32s2/dedic_gpio_periph.c
 components/soc/esp32s2/i2c_periph.c
-components/soc/esp32s2/include/soc/apb_ctrl_reg.h
 components/soc/esp32s2/include/soc/apb_saradc_reg.h
 components/soc/esp32s2/include/soc/assist_debug_reg.h
 components/soc/esp32s2/include/soc/bb_reg.h
@@ -898,8 +891,6 @@ components/soc/esp32s2/uart_periph.c
 components/soc/esp32s2/usb_periph.c
 components/soc/esp32s3/dedic_gpio_periph.c
 components/soc/esp32s3/i2c_periph.c
-components/soc/esp32s3/include/soc/apb_ctrl_reg.h
-components/soc/esp32s3/include/soc/apb_ctrl_struct.h
 components/soc/esp32s3/include/soc/apb_saradc_reg.h
 components/soc/esp32s3/include/soc/assist_debug_reg.h
 components/soc/esp32s3/include/soc/assist_debug_struct.h
@@ -979,7 +970,6 @@ components/soc/include/soc/ledc_periph.h
 components/soc/include/soc/sdio_slave_periph.h
 components/soc/include/soc/sdmmc_periph.h
 components/soc/include/soc/sens_periph.h
-components/soc/include/soc/uart_periph.h
 components/soc/include/soc/uhci_periph.h
 components/soc/lldesc.c
 components/soc/soc_include_legacy_warn.c

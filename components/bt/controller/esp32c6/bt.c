@@ -50,6 +50,8 @@
 #include "esp_private/periph_ctrl.h"
 #include "esp_sleep.h"
 
+#include "hal/efuse_hal.h"
+
 /* Macro definition
  ************************************************************************
  */
@@ -449,7 +451,7 @@ IRAM_ATTR void controller_sleep_cb(uint32_t enable_tick, void *arg)
         esp_err_t err = esp_timer_start_once(s_ble_sleep_timer,
                                              us_to_sleep - BTDM_MIN_TIMER_UNCERTAINTY_US);
         if (err != ESP_OK) {
-            ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ESP timer start failed\n");
+            ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ESP timer start failed");
             return;
         }
     }
@@ -495,7 +497,7 @@ esp_err_t controller_sleep_init(void)
     esp_err_t rc = 0;
 
 #ifdef CONFIG_BT_LE_SLEEP_ENABLE
-    ESP_LOGW(NIMBLE_PORT_LOG_TAG, "BLE modem sleep is enabled\n");
+    ESP_LOGW(NIMBLE_PORT_LOG_TAG, "BLE modem sleep is enabled");
     ble_lll_rfmgmt_set_sleep_cb(controller_sleep_cb, controller_wakeup_cb, 0, 0,
                                 500 + BLE_RTC_DELAY_US);
 
@@ -586,6 +588,7 @@ void controller_sleep_deinit(void)
 esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 {
     uint8_t mac[6];
+    uint32_t chip_version;
     esp_err_t ret = ESP_OK;
     ble_npl_count_info_t npl_info;
 
@@ -647,7 +650,12 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 
     /* Enable BT-related clocks */
     modem_clock_module_enable(PERIPH_BT_MODULE);
-    modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL, 249);
+    chip_version = efuse_hal_chip_revision();
+    if (chip_version == 0) {
+        modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL, (160 - 1));
+    } else{
+        modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL, (2 - 1));
+    }
     esp_phy_modem_init();
     esp_phy_enable();
     esp_btbb_enable();

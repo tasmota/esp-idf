@@ -72,6 +72,7 @@
 #define SOC_LP_AON_SUPPORTED            1
 #define SOC_LP_PERIPHERALS_SUPPORTED    1
 #define SOC_LP_I2C_SUPPORTED            1
+#define SOC_CLK_TREE_SUPPORTED          1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -477,6 +478,7 @@
 #define SOC_PM_SUPPORT_RC_FAST_PD       (1)
 #define SOC_PM_SUPPORT_VDDSDIO_PD       (1)
 #define SOC_PM_SUPPORT_TOP_PD           (1)
+#define SOC_PM_SUPPORT_HP_AON_PD        (1)
 #define SOC_PM_SUPPORT_MAC_BB_PD        (1)
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
 

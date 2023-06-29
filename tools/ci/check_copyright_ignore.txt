@@ -966,10 +966,6 @@ components/soc/include/soc/gpio_periph.h
 components/soc/include/soc/i2c_periph.h
 components/soc/include/soc/interrupts.h
 components/soc/include/soc/ledc_periph.h
-components/soc/include/soc/sdio_slave_periph.h
-components/soc/include/soc/sdmmc_periph.h
-components/soc/include/soc/sens_periph.h
-components/soc/include/soc/uhci_periph.h
 components/soc/lldesc.c
 components/soc/soc_include_legacy_warn.c
 components/spi_flash/cache_utils.h
@@ -1395,8 +1391,6 @@ examples/peripherals/uart/uart_repl/main/uart_repl_example_main.c
 examples/peripherals/uart/uart_select/main/uart_select_example_main.c
 examples/peripherals/usb/host/msc/components/msc/test/msc_device.c
 examples/peripherals/wave_gen/main/wave_gen_example_main.c
-examples/protocols/coap_client/main/coap_client_example_main.c
-examples/protocols/coap_server/main/coap_server_example_main.c
 examples/protocols/esp_http_client/esp_http_client_test.py
 examples/protocols/esp_http_client/main/esp_http_client_example.c
 examples/protocols/esp_local_ctrl/example_test.py

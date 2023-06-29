@@ -191,6 +191,10 @@ config SOC_LP_I2C_SUPPORTED
     bool
     default y
 
+config SOC_CLK_TREE_SUPPORTED
+    bool
+    default y
+
 config SOC_XTAL_SUPPORT_40M
     bool
     default y
@@ -1160,6 +1164,10 @@ config SOC_PM_SUPPORT_VDDSDIO_PD
     default y
 
 config SOC_PM_SUPPORT_TOP_PD
+    bool
+    default y
+
+config SOC_PM_SUPPORT_HP_AON_PD
     bool
     default y
 

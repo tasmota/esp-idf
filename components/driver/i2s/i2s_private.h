@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// If ISR handler is allowed to run whilst cache is disabled,
+// Make sure all the code and related variables used by the handler are in the SRAM
+#if CONFIG_I2S_ISR_IRAM_SAFE
+#define I2S_INTR_ALLOC_FLAGS    (ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_LOWMED)
+#define I2S_MEM_ALLOC_CAPS      (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#else
+#define I2S_INTR_ALLOC_FLAGS    (ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_LOWMED)
+#define I2S_MEM_ALLOC_CAPS      MALLOC_CAP_DEFAULT
+#endif //CONFIG_I2S_ISR_IRAM_SAFE
+#define I2S_DMA_ALLOC_CAPS      (MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA)
 
 #define I2S_NULL_POINTER_CHECK(tag, p)          ESP_RETURN_ON_FALSE((p), ESP_ERR_INVALID_ARG, tag, "input parameter '"#p"' is NULL")
 
@@ -145,7 +156,7 @@ esp_err_t i2s_free_dma_desc(i2s_chan_handle_t handle);
  * @return
  *      - ESP_OK                Allocate memory success
  *      - ESP_ERR_INVALID_ARG   NULL pointer or bufsize is too big
- *      - ESP_ERR_NO_MEM        No memmory for DMA descriptor and DMA buffer
+ *      - ESP_ERR_NO_MEM        No memory for DMA descriptor and DMA buffer
  */
 esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t num, uint32_t bufsize);
 

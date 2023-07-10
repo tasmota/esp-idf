@@ -22,11 +22,9 @@
 
 const __attribute__((unused)) static char *TAG = "adc_cali";
 
-
 // coeff_a is actually a float number
 // it is scaled to put them into uint32_t so that the headers do not have to be changed
 static const int coeff_a_scaling = 65536;
-
 
 /* -------------------- Characterization Helper Data Types ------------------ */
 typedef struct {
@@ -42,7 +40,6 @@ typedef struct {
         adc_calib_data_ver1_t ver1;
     } ref_data;
 } adc_calib_info_t;
-
 
 /* ------------------------ Context Structure--------------------------- */
 typedef struct {
@@ -63,14 +60,12 @@ typedef struct {
     cali_chars_second_step_t chars_second_step;    ///< Calibration second step characteristics
 } cali_chars_curve_fitting_t;
 
-
 /* ----------------------- Characterization Functions ----------------------- */
 static void get_first_step_reference_point(int version_num, adc_unit_t unit_id, adc_atten_t atten, adc_calib_info_t *calib_info);
 static void calc_first_step_coefficients(const adc_calib_info_t *parsed_data, cali_chars_curve_fitting_t *chars);
 static void calc_second_step_coefficients(const adc_cali_curve_fitting_config_t *config, cali_chars_curve_fitting_t *ctx);
 static int32_t get_reading_error(uint64_t v_cali_1, const cali_chars_second_step_t *param, adc_atten_t atten);
 static esp_err_t check_valid(const adc_cali_curve_fitting_config_t *config);
-
 
 /* ------------------------ Interface Functions --------------------------- */
 static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage);
@@ -84,9 +79,9 @@ esp_err_t adc_cali_create_scheme_curve_fitting(const adc_cali_curve_fitting_conf
     if (ret != ESP_OK) {
         return ret;
     }
-    // current version only accepts encoding ver 1.
+    // current version only accepts encoding version: `ESP_EFUSE_ADC_CALIB_VER`.
     uint8_t adc_encoding_version = esp_efuse_rtc_calib_get_ver();
-    ESP_RETURN_ON_FALSE(adc_encoding_version == 1, ESP_ERR_NOT_SUPPORTED, TAG, "Calibration required eFuse bits not burnt");
+    ESP_RETURN_ON_FALSE(adc_encoding_version == ESP_EFUSE_ADC_CALIB_VER, ESP_ERR_NOT_SUPPORTED, TAG, "Calibration required eFuse bits not burnt");
 
     adc_cali_scheme_t *scheme = (adc_cali_scheme_t *)heap_caps_calloc(1, sizeof(adc_cali_scheme_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(scheme, ESP_ERR_NO_MEM, TAG, "no mem for adc calibration scheme");
@@ -131,14 +126,13 @@ esp_err_t adc_cali_delete_scheme_curve_fitting(adc_cali_handle_t handle)
     return ESP_OK;
 }
 
-
 /* ------------------------ Interface Functions --------------------------- */
 static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage)
 {
     //pointers are checked in the upper layer
 
     cali_chars_curve_fitting_t *ctx = arg;
-    uint64_t v_cali_1 = raw * ctx->chars_first_step.coeff_a / coeff_a_scaling + ctx->chars_first_step.coeff_b;
+    uint64_t v_cali_1 = (uint64_t)raw * ctx->chars_first_step.coeff_a / coeff_a_scaling + ctx->chars_first_step.coeff_b;
     int32_t error = get_reading_error(v_cali_1, &(ctx->chars_second_step), ctx->atten);
 
     *voltage = (int32_t)v_cali_1 - error;
@@ -146,12 +140,11 @@ static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage)
     return ESP_OK;
 }
 
-
 /* ----------------------- Characterization Functions ----------------------- */
 //To get the reference point (Dout, Vin)
 static void get_first_step_reference_point(int version_num, adc_unit_t unit_id, adc_atten_t atten, adc_calib_info_t *calib_info)
 {
-    assert(version_num == 1);
+    assert(version_num == ESP_EFUSE_ADC_CALIB_VER);
     esp_err_t ret;
 
     calib_info->version_num = version_num;
@@ -217,7 +210,7 @@ static int32_t get_reading_error(uint64_t v_cali_1, const cali_chars_second_step
     error = (int32_t)term[0] * (*param->sign)[atten][0];
 
     for (int i = 1; i < term_num; i++) {
-        variable[i] = variable[i-1] * v_cali_1;
+        variable[i] = variable[i - 1] * v_cali_1;
         coeff = (*param->coeff)[atten][i][0];
         term[i] = variable[i] * coeff;
         ESP_LOGV(TAG, "big coef is %llu, big term%d is %llu, coef_id is %d", coeff, i, term[i], i);

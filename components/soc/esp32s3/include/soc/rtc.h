@@ -112,19 +112,36 @@ set sleep_init default param
 */
 #define RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_DEFAULT  5
 #define RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_NODROP  0
-#define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_NODROP  0
 #define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_DEFAULT  14
 #define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_ULTRA_LOW 15
-#define RTC_CNTL_DBG_ATTEN_MONITOR_DEFAULT  0
-#define RTC_CNTL_BIASSLP_MONITOR_ON  0
-#define RTC_CNTL_BIASSLP_MONITOR_DEFAULT  1
-#define RTC_CNTL_BIASSLP_SLEEP_ON  0
+#define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_NODROP  0
 #define RTC_CNTL_BIASSLP_SLEEP_DEFAULT  1
-#define RTC_CNTL_PD_CUR_MONITOR_ON  0
-#define RTC_CNTL_PD_CUR_MONITOR_DEFAULT  1
-#define RTC_CNTL_PD_CUR_SLEEP_ON  0
+#define RTC_CNTL_BIASSLP_SLEEP_ON  0
 #define RTC_CNTL_PD_CUR_SLEEP_DEFAULT  1
+#define RTC_CNTL_PD_CUR_SLEEP_ON  0
 #define RTC_CNTL_DG_VDD_DRV_B_SLP_DEFAULT 0xf
+
+#define RTC_CNTL_DBG_ATTEN_MONITOR_DEFAULT  0
+#define RTC_CNTL_BIASSLP_MONITOR_DEFAULT  1
+#define RTC_CNTL_BIASSLP_MONITOR_ON  0
+#define RTC_CNTL_PD_CUR_MONITOR_DEFAULT  1
+#define RTC_CNTL_PD_CUR_MONITOR_ON  0
+
+
+/*
+The follow value is used to get a reasonable rtc voltage dbias value according to digital dbias & some other value
+storing in efuse
+*/
+#define K_RTC_MID_MUL10000 198
+#define K_DIG_MID_MUL10000 211
+#define V_RTC_MID_MUL10000  10181
+#define V_DIG_MID_MUL10000  10841
+
+/*
+set LDO slave during CPU switch
+*/
+#define DEFAULT_LDO_SLAVE 0x7
+
 
 
 /**
@@ -574,8 +591,7 @@ typedef struct {
     uint32_t rtc_fastmem_pd_en : 1;     //!< power down RTC fast memory
     uint32_t rtc_slowmem_pd_en : 1;     //!< power down RTC slow memory
     uint32_t rtc_peri_pd_en : 1;        //!< power down RTC peripherals
-    uint32_t wifi_pd_en : 1;            //!< power down WiFi
-    uint32_t bt_pd_en : 1;              //!< power down BT
+    uint32_t modem_pd_en : 1;           //!< power down Modem(wifi and ble)
     uint32_t cpu_pd_en : 1;             //!< power down CPU, but not restart when lightsleep.
     uint32_t int_8m_pd_en : 1;          //!< Power down Internal 8M oscillator
     uint32_t dig_peri_pd_en : 1;        //!< power down digital peripherals
@@ -583,7 +599,6 @@ typedef struct {
     uint32_t wdt_flashboot_mod_en : 1;  //!< enable WDT flashboot mode
     uint32_t dig_dbias_slp : 5;         //!< set bias for digital domain, in sleep mode
     uint32_t rtc_dbias_slp : 5;         //!< set bias for RTC domain, in sleep mode
-    uint32_t dbg_atten_monitor : 4;     //!< voltage parameter, in monitor mode
     uint32_t bias_sleep_monitor : 1;    //!< circuit control parameter, in monitor mode
     uint32_t dbg_atten_slp : 4;         //!< voltage parameter, in sleep mode
     uint32_t bias_sleep_slp : 1;        //!< circuit control parameter, in sleep mode
@@ -602,8 +617,7 @@ typedef struct {
 #define RTC_SLEEP_PD_RTC_FAST_MEM       BIT(3)  //!< Power down RTC FAST memory
 #define RTC_SLEEP_PD_RTC_MEM_FOLLOW_CPU BIT(4)  //!< RTC FAST and SLOW memories are automatically powered up and down along with the CPU
 #define RTC_SLEEP_PD_VDDSDIO            BIT(5)  //!< Power down VDDSDIO regulator
-#define RTC_SLEEP_PD_WIFI               BIT(6)  //!< Power down WIFI
-#define RTC_SLEEP_PD_BT                 BIT(7)  //!< Power down BT
+#define RTC_SLEEP_PD_MODEM              BIT(6)  //!< Power down Modem(wifi and ble)
 #define RTC_SLEEP_PD_CPU                BIT(8)  //!< Power down CPU when in lightsleep, but not restart
 #define RTC_SLEEP_PD_DIG_PERIPH         BIT(9)  //!< Power down DIG peripherals
 #define RTC_SLEEP_PD_INT_8M             BIT(10) //!< Power down Internal 8M oscillator

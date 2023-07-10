@@ -21,6 +21,14 @@
 #include "esp_log.h"
 #include "driver/rtc_io.h"
 #include "soc/rtc.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+#if SOC_RTC_FAST_MEM_SUPPORTED
+static RTC_DATA_ATTR struct timeval sleep_enter_time;
+#else
+static struct timeval sleep_enter_time;
+#endif
 
 #if SOC_TOUCH_SENSOR_SUPPORTED
 #include "soc/sens_periph.h"
@@ -36,8 +44,6 @@
 #endif
 #endif
 
-static RTC_DATA_ATTR struct timeval sleep_enter_time;
-
 #ifdef CONFIG_EXAMPLE_TOUCH_WAKEUP
 #if CONFIG_IDF_TARGET_ESP32
 #define TOUCH_THRESH_NO_USE 0
@@ -47,6 +53,35 @@ static void calibrate_touch_pad(touch_pad_t pad);
 
 void app_main(void)
 {
+    /**
+     * Prefer to use RTC mem instead of NVS to save the deep sleep enter time, unless the chip
+     * does not support RTC mem(such as esp32c2). Because the time overhead of NVS will cause
+     * the recorded deep sleep enter time to be not very accurate.
+     */
+#if !SOC_RTC_FAST_MEM_SUPPORTED
+    // Initialize NVS
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        // NVS partition was truncated and needs to be erased
+        // Retry nvs_flash_init
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t nvs_handle;
+    err = nvs_open("storage", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    } else {
+        printf("Open NVS done\n");
+    }
+
+    // Get deep sleep enter time
+    nvs_get_i32(nvs_handle, "slp_enter_sec", (int32_t *)&sleep_enter_time.tv_sec);
+    nvs_get_i32(nvs_handle, "slp_enter_usec", (int32_t *)&sleep_enter_time.tv_usec);
+#endif
+
     struct timeval now;
     gettimeofday(&now, NULL);
     int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
@@ -102,19 +137,23 @@ void app_main(void)
 
     const int wakeup_time_sec = 20;
     printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000));
 
 #if CONFIG_EXAMPLE_EXT0_WAKEUP
+#if CONFIG_IDF_TARGET_ESP32
+    const int ext_wakeup_pin_0 = 25;
+#else
     const int ext_wakeup_pin_0 = 3;
+#endif
 
     printf("Enabling EXT0 wakeup on pin GPIO%d\n", ext_wakeup_pin_0);
-    esp_sleep_enable_ext0_wakeup(ext_wakeup_pin_0, 1);
+    ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(ext_wakeup_pin_0, 1));
 
     // Configure pullup/downs via RTCIO to tie wakeup pins to inactive level during deepsleep.
     // EXT0 resides in the same power domain (RTC_PERIPH) as the RTC IO pullup/downs.
     // No need to keep that power domain explicitly, unlike EXT1.
-    rtc_gpio_pullup_dis(ext_wakeup_pin_0);
-    rtc_gpio_pulldown_en(ext_wakeup_pin_0);
+    ESP_ERROR_CHECK(rtc_gpio_pullup_dis(ext_wakeup_pin_0));
+    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(ext_wakeup_pin_0));
 #endif // CONFIG_EXAMPLE_EXT0_WAKEUP
 #ifdef CONFIG_EXAMPLE_EXT1_WAKEUP
     const int ext_wakeup_pin_1 = 2;
@@ -123,17 +162,17 @@ void app_main(void)
     const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
 
     printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2);
-    esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+    ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
 
     /* If there are no external pull-up/downs, tie wakeup pins to inactive level with internal pull-up/downs via RTC IO
      * during deepsleep. However, RTC IO relies on the RTC_PERIPH power domain. Keeping this power domain on will
      * increase some power comsumption. */
 #  if CONFIG_EXAMPLE_EXT1_USE_INTERNAL_PULLUPS
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-    rtc_gpio_pullup_dis(ext_wakeup_pin_1);
-    rtc_gpio_pulldown_en(ext_wakeup_pin_1);
-    rtc_gpio_pullup_dis(ext_wakeup_pin_2);
-    rtc_gpio_pulldown_en(ext_wakeup_pin_2);
+    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON));
+    ESP_ERROR_CHECK(rtc_gpio_pullup_dis(ext_wakeup_pin_1));
+    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(ext_wakeup_pin_1));
+    ESP_ERROR_CHECK(rtc_gpio_pullup_dis(ext_wakeup_pin_2));
+    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(ext_wakeup_pin_2));
 #  endif //CONFIG_EXAMPLE_EXT1_USE_INTERNAL_PULLUPS
 #endif // CONFIG_EXAMPLE_EXT1_WAKEUP
 
@@ -208,8 +247,8 @@ void app_main(void)
         TOUCH_PAD_NUM9, touch_value, (uint32_t)(touch_value * 0.1));
 #endif
     printf("Enabling touch pad wakeup\n");
-    esp_sleep_enable_touchpad_wakeup();
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    ESP_ERROR_CHECK(esp_sleep_enable_touchpad_wakeup());
+    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON));
 #endif // CONFIG_EXAMPLE_TOUCH_WAKEUP
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -220,8 +259,19 @@ void app_main(void)
 #endif
 
     printf("Entering deep sleep\n");
+
+    // get deep sleep enter time
     gettimeofday(&sleep_enter_time, NULL);
 
+#if !SOC_RTC_FAST_MEM_SUPPORTED
+    // record deep sleep enter time via nvs
+    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, "slp_enter_sec", sleep_enter_time.tv_sec));
+    ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, "slp_enter_usec", sleep_enter_time.tv_usec));
+    ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+    nvs_close(nvs_handle);
+#endif
+
+    // enter deep sleep
     esp_deep_sleep_start();
 }
 

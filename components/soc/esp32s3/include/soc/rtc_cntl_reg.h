@@ -1796,12 +1796,6 @@ ork.*/
 #define RTC_CNTL_DG_PERI_PD_EN_M  (BIT(28))
 #define RTC_CNTL_DG_PERI_PD_EN_V  0x1
 #define RTC_CNTL_DG_PERI_PD_EN_S  28
-/* RTC_CNTL_BT_PD_EN : R/W ;bitpos:[27] ;default: 0 ; */
-/*description: enable power down internal SRAM 2 in sleep.*/
-#define RTC_CNTL_BT_PD_EN    (BIT(27))
-#define RTC_CNTL_BT_PD_EN_M  (BIT(27))
-#define RTC_CNTL_BT_PD_EN_V  0x1
-#define RTC_CNTL_BT_PD_EN_S  27
 /* RTC_CNTL_CPU_TOP_FORCE_PU : R/W ;bitpos:[22] ;default: 1'd1 ; */
 /*description: digital dcdc force power up.*/
 #define RTC_CNTL_CPU_TOP_FORCE_PU    (BIT(22))
@@ -3577,7 +3571,7 @@ ork.*/
 #define RTC_CNTL_FIB_SEL_S  0
 
 #define RTC_CNTL_FIB_GLITCH_RST BIT(0)
-#define RTC_CNTL_FIB_BOR_RST BIT(1)
+#define RTC_CNTL_FIB_BOD_RST BIT(1)
 #define RTC_CNTL_FIB_SUPER_WDT_RST BIT(2)
 
 #define RTC_CNTL_TOUCH_DAC_REG          (DR_REG_RTCCNTL_BASE + 0x14C)
@@ -3682,6 +3676,9 @@ ork.*/
 #define RTC_CNTL_DISABLE_RTC_CPU_V  0x1
 #define RTC_CNTL_DISABLE_RTC_CPU_S  31
 
+/*
+Due to the LDO slaves, RTC_CNTL_DATE_REG[18:13] can only be used for LDO adjustment.
+*/
 #define RTC_CNTL_DATE_REG          (DR_REG_RTCCNTL_BASE + 0x1FC)
 /* RTC_CNTL_DATE : R/W ;bitpos:[27:0] ;default: 28'h2101271 ; */
 /*description: .*/
@@ -3689,7 +3686,12 @@ ork.*/
 #define RTC_CNTL_DATE_M  ((RTC_CNTL_DATE_V)<<(RTC_CNTL_DATE_S))
 #define RTC_CNTL_DATE_V  0xFFFFFFF
 #define RTC_CNTL_DATE_S  0
-
+/*LDO SLAVE : R/W ;bitpos:[18:13] ; default: 6'd0 ;*/
+/*description: .*/
+#define RTC_CNTL_SLAVE_PD    0x0000003F
+#define RTC_CNTL_SLAVE_PD_M  ((RTC_CNTL_SLAVE_V)<<(RTC_CNTL_SLAVE_S))
+#define RTC_CNTL_SLAVE_PD_V  0x3F
+#define RTC_CNTL_SLAVE_PD_S  13
 
 #ifdef __cplusplus
 }

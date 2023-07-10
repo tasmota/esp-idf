@@ -43,6 +43,14 @@ static int recent_test_id = STANDARD_TEST_ID;
 
 #define FAULT_ARR_SIZE 2
 
+#ifndef min
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef max
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
 static bool has_reg_fault = true;
 
 static int
@@ -443,7 +451,11 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    nimble_port_init();
+    ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(tag, "Failed to init nimble %d ", ret);
+        return;
+    }
 
     ble_svc_gap_init();
     ble_svc_gatt_init();

@@ -171,8 +171,10 @@ static void clear_bssid_flag(struct wpa_supplicant *wpa_s)
 	}
 
 	esp_wifi_get_config(WIFI_IF_STA, config);
-	config->sta.bssid_set = 0;
-	esp_wifi_set_config(WIFI_IF_STA, config);
+	if (config->sta.bssid_set) {
+		config->sta.bssid_set = 0;
+		esp_wifi_set_config(WIFI_IF_STA, config);
+	}
 	os_free(config);
 	wpa_printf(MSG_DEBUG, "cleared bssid flag");
 }
@@ -202,47 +204,6 @@ static void register_mgmt_frames(struct wpa_supplicant *wpa_s)
 				(1 << WLAN_FC_STYPE_REASSOC_RESP);
 #endif /* CONFIG_IEEE80211R */
 	esp_wifi_register_mgmt_frame_internal(wpa_s->type, wpa_s->subtype);
-}
-
-static void supplicant_sta_conn_handler(void* arg, esp_event_base_t event_base,
-					int32_t event_id, void* event_data)
-{
-	u8 bssid[ETH_ALEN];
-	u8 *ie;
-	struct wpa_supplicant *wpa_s = &g_wpa_supp;
-	int ret = esp_wifi_get_assoc_bssid_internal(bssid);
-	if (ret < 0) {
-		wpa_printf(MSG_ERROR, "Not able to get connected bssid");
-		return;
-	}
-	struct wpa_bss *bss = wpa_bss_get_bssid(wpa_s, bssid);
-	if (!bss) {
-		wpa_printf(MSG_INFO, "connected bss entry not present in scan cache");
-		return;
-	}
-	wpa_s->current_bss = bss;
-	ie = (u8 *)bss;
-	ie += sizeof(struct wpa_bss);
-	ieee802_11_parse_elems(wpa_s, ie, bss->ie_len);
-	wpa_bss_flush(wpa_s);
-	/* Register for mgmt frames */
-	register_mgmt_frames(wpa_s);
-	/* clear set bssid flag */
-	clear_bssid_flag(wpa_s);
-}
-
-static void supplicant_sta_disconn_handler(void* arg, esp_event_base_t event_base,
-					   int32_t event_id, void* event_data)
-{
-	struct wpa_supplicant *wpa_s = &g_wpa_supp;
-
-#ifdef CONFIG_WPA_11KV_SUPPORT
-	wpas_rrm_reset(wpa_s);
-	wpas_clear_beacon_rep_data(wpa_s);
-#endif /* CONFIG_WPA_11KV_SUPPORT */
-	if (wpa_s->current_bss) {
-		wpa_s->current_bss = NULL;
-	}
 }
 
 #ifdef CONFIG_IEEE80211R
@@ -381,11 +342,6 @@ int esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 #endif /* CONFIG_WPA_11KV_SUPPORT */
 	esp_scan_init(wpa_s);
 
-	esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED,
-			&supplicant_sta_conn_handler, NULL);
-	esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
-			&supplicant_sta_disconn_handler, NULL);
-
 #endif /* defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R) */
 	wpa_s->type = 0;
 	wpa_s->subtype = 0;
@@ -417,10 +373,6 @@ void esp_supplicant_common_deinit(void)
 	wpas_rrm_reset(wpa_s);
 	wpas_clear_beacon_rep_data(wpa_s);
 #endif /* CONFIG_WPA_11KV_SUPPORT */
-	esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED,
-			&supplicant_sta_conn_handler);
-	esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
-			&supplicant_sta_disconn_handler);
 #endif /* defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R) */
 	if (wpa_s->type) {
 		wpa_s->type = 0;
@@ -440,6 +392,44 @@ void esp_supplicant_common_deinit(void)
 	}
 #endif /* CONFIG_SUPPLICANT_TASK */
 #endif /* defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R) */
+}
+
+void supplicant_sta_conn_handler(uint8_t *bssid)
+{
+#if defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R)
+	u8 *ie;
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
+	struct wpa_bss *bss = wpa_bss_get_bssid(wpa_s, bssid);
+	if (!bss) {
+		wpa_printf(MSG_INFO, "connected bss entry not present in scan cache");
+		return;
+	}
+	wpa_s->current_bss = bss;
+	ie = (u8 *)bss;
+	ie += sizeof(struct wpa_bss);
+	ieee802_11_parse_elems(wpa_s, ie, bss->ie_len);
+	wpa_bss_flush(wpa_s);
+	/* Register for mgmt frames */
+	register_mgmt_frames(wpa_s);
+	/* clear set bssid flag */
+	clear_bssid_flag(wpa_s);
+#endif /* defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R) */
+}
+
+void supplicant_sta_disconn_handler(void)
+{
+#if defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R)
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
+
+#ifdef CONFIG_WPA_11KV_SUPPORT
+	wpas_rrm_reset(wpa_s);
+	wpas_clear_beacon_rep_data(wpa_s);
+#endif /* CONFIG_WPA_11KV_SUPPORT */
+	if (wpa_s->current_bss) {
+		wpa_s->current_bss = NULL;
+	}
+#endif /* defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R) */
+
 }
 
 #if defined(CONFIG_WPA_11KV_SUPPORT) || defined(CONFIG_IEEE80211R)

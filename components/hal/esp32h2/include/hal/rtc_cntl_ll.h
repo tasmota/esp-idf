@@ -1,19 +1,12 @@
-// Copyright 2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 
+#include "esp_attr.h"
 #include "soc/soc.h"
 #include "soc/rtc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -23,7 +16,7 @@
 extern "C" {
 #endif
 
-static inline void rtc_cntl_ll_set_wakeup_timer(uint64_t t)
+FORCE_INLINE_ATTR void rtc_cntl_ll_set_wakeup_timer(uint64_t t)
 {
     WRITE_PERI_REG(RTC_CNTL_SLP_TIMER0_REG, t & UINT32_MAX);
     WRITE_PERI_REG(RTC_CNTL_SLP_TIMER1_REG, t >> 32);
@@ -32,19 +25,15 @@ static inline void rtc_cntl_ll_set_wakeup_timer(uint64_t t)
     SET_PERI_REG_MASK(RTC_CNTL_SLP_TIMER1_REG, RTC_CNTL_MAIN_TIMER_ALARM_EN_M);
 }
 
-static inline uint32_t rtc_cntl_ll_gpio_get_wakeup_pins(void)
+FORCE_INLINE_ATTR uint32_t rtc_cntl_ll_gpio_get_wakeup_status(void)
 {
     return GET_PERI_REG_MASK(RTC_CNTL_GPIO_WAKEUP_REG, RTC_CNTL_GPIO_WAKEUP_STATUS);
 }
 
-static inline void rtc_cntl_ll_gpio_set_wakeup_pins(void)
-{
-    REG_CLR_BIT(RTC_CNTL_GPIO_WAKEUP_REG, RTC_CNTL_GPIO_WAKEUP_STATUS_CLR);
-}
-
-static inline void rtc_cntl_ll_gpio_clear_wakeup_pins(void)
+FORCE_INLINE_ATTR void rtc_cntl_ll_gpio_clear_wakeup_status(void)
 {
     REG_SET_BIT(RTC_CNTL_GPIO_WAKEUP_REG, RTC_CNTL_GPIO_WAKEUP_STATUS_CLR);
+    REG_CLR_BIT(RTC_CNTL_GPIO_WAKEUP_REG, RTC_CNTL_GPIO_WAKEUP_STATUS_CLR);
 }
 
 static inline void rtc_cntl_ll_enable_cpu_retention(uint32_t addr)
@@ -52,9 +41,43 @@ static inline void rtc_cntl_ll_enable_cpu_retention(uint32_t addr)
     // ESP32H2-TODO: IDF-3383
 }
 
-static inline void rtc_cntl_ll_disable_cpu_retention(void)
+FORCE_INLINE_ATTR void rtc_cntl_ll_disable_cpu_retention(void)
 {
     // ESP32H2-TODO: IDF-3383
+}
+
+FORCE_INLINE_ATTR void rtc_cntl_ll_reset_system(void)
+{
+    REG_WRITE(RTC_CNTL_OPTIONS0_REG, RTC_CNTL_SW_SYS_RST);
+}
+
+FORCE_INLINE_ATTR void rtc_cntl_ll_reset_cpu(int cpu_no)
+{
+    REG_WRITE(RTC_CNTL_OPTIONS0_REG, RTC_CNTL_SW_PROCPU_RST);
+}
+
+FORCE_INLINE_ATTR void rtc_cntl_ll_sleep_enable(void)
+{
+    SET_PERI_REG_MASK(RTC_CNTL_STATE0_REG, RTC_CNTL_SLEEP_EN);
+}
+
+FORCE_INLINE_ATTR uint64_t rtc_cntl_ll_get_rtc_time(void)
+{
+    SET_PERI_REG_MASK(RTC_CNTL_TIME_UPDATE_REG, RTC_CNTL_TIME_UPDATE);
+    uint64_t t = READ_PERI_REG(RTC_CNTL_TIME0_REG);
+    t |= ((uint64_t) READ_PERI_REG(RTC_CNTL_TIME1_REG)) << 32;
+    return t;
+}
+
+FORCE_INLINE_ATTR uint64_t rtc_cntl_ll_time_to_count(uint64_t time_in_us)
+{
+    uint32_t slow_clk_value = REG_READ(RTC_CNTL_STORE1_REG);
+    return ((time_in_us * (1 << RTC_CLK_CAL_FRACT)) / slow_clk_value);
+}
+
+FORCE_INLINE_ATTR uint32_t rtc_cntl_ll_get_wakeup_cause(void)
+{
+    return REG_GET_FIELD(RTC_CNTL_SLP_WAKEUP_CAUSE_REG, RTC_CNTL_WAKEUP_CAUSE);
 }
 
 #ifdef __cplusplus

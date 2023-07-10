@@ -379,10 +379,6 @@ config SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK
     hex
     default 0x0001FFFFFC000000
 
-config SOC_GPIO_SUPPORT_SLP_SWITCH
-    bool
-    default y
-
 config SOC_DEDIC_GPIO_OUT_CHANNELS_NUM
     int
     default 8
@@ -903,6 +899,10 @@ config SOC_PM_SUPPORT_BT_WAKEUP
     bool
     default y
 
+config SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
+    bool
+    default y
+
 config SOC_PM_SUPPORT_CPU_PD
     bool
     default y
@@ -915,11 +915,35 @@ config SOC_PM_SUPPORT_RTC_PERIPH_PD
     bool
     default y
 
-config SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
+config SOC_PM_SUPPORT_MODEM_PD
     bool
     default y
 
 config SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
+    bool
+    default y
+
+config SOC_EFUSE_DIS_DOWNLOAD_DCACHE
+    bool
+    default y
+
+config SOC_EFUSE_HARD_DIS_JTAG
+    bool
+    default y
+
+config SOC_EFUSE_DIS_USB_JTAG
+    bool
+    default y
+
+config SOC_EFUSE_SOFT_DIS_JTAG
+    bool
+    default y
+
+config SOC_EFUSE_DIS_DIRECT_BOOT
+    bool
+    default y
+
+config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
     bool
     default y
 
@@ -1056,6 +1080,14 @@ config SOC_BLE_SUPPORTED
     default y
 
 config SOC_BLE_MESH_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_50_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_DEVICE_PRIVACY_SUPPORTED
     bool
     default y
 

@@ -20,6 +20,7 @@
 #include "esp32/rom/spi_flash.h"
 #include "esp32/rom/cache.h"
 #include "esp32/rom/efuse.h"
+#include "esp32/rom/gpio.h"
 #include "esp_rom_efuse.h"
 #include "soc/dport_reg.h"
 #include "soc/efuse_periph.h"
@@ -28,6 +29,7 @@
 #include "soc/chip_revision.h"
 #include "driver/gpio.h"
 #include "hal/efuse_hal.h"
+#include "hal/efuse_ll.h"
 #include "hal/gpio_hal.h"
 #include "esp_private/spi_common_internal.h"
 #include "esp_private/periph_ctrl.h"
@@ -823,7 +825,7 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
 {
     psram_cache_speed_t mode = PSRAM_SPEED;
     psram_io_t psram_io={0};
-    uint32_t pkg_ver = esp_efuse_get_pkg_ver();
+    uint32_t pkg_ver = efuse_ll_get_chip_ver_pkg();
     if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32D2WDQ5) {
         ESP_EARLY_LOGI(TAG, "This chip is ESP32-D2WD");
         rtc_vddsdio_config_t cfg = rtc_vddsdio_get_config();
@@ -948,8 +950,8 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
          */
         psram_read_id(spi_num, &s_psram_id);
         if (!PSRAM_IS_VALID(s_psram_id)) {
-            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x", (uint32_t)s_psram_id);
-            return ESP_FAIL;
+            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x, PSRAM chip not found or not supported", (uint32_t)s_psram_id);
+            return ESP_ERR_NOT_SUPPORTED;
         }
     }
 

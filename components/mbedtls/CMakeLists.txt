@@ -67,7 +67,7 @@ if(CONFIG_MBEDTLS_CERTIFICATE_BUNDLE)
 
     target_add_binary_data(${COMPONENT_LIB} ${crt_bundle} BINARY)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES
+        APPEND PROPERTY ADDITIONAL_CLEAN_FILES
         "${crt_bundle}")
 endif()
 
@@ -118,6 +118,12 @@ set(mbedtls_target_sources ${mbedtls_target_sources}
                            "${COMPONENT_DIR}/port/dynamic/esp_ssl_cli.c"
                            "${COMPONENT_DIR}/port/dynamic/esp_ssl_srv.c"
                            "${COMPONENT_DIR}/port/dynamic/esp_ssl_tls.c")
+endif()
+
+# While updating to MbedTLS release/v3.4.0, building mbedtls/library/psa_crypto.c
+# clang produces an unreachable-code warning.
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    target_compile_options(mbedcrypto PRIVATE "-Wno-unreachable-code")
 endif()
 
 # net_sockets.c should only be compiled if BSD socket functions are available.

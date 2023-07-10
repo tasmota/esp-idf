@@ -9,8 +9,8 @@
 
 #include <errno.h>
 #include <string.h>
+#include <inttypes.h>
 #include <stdio.h>
-#include <string.h>
 #include "nvs_flash.h"
 #include "cmd_system.h"
 #include "argtable3/argtable3.h"
@@ -170,7 +170,7 @@ static void ftm_process_report(void)
             log_ptr += sprintf(log_ptr, "%6d|", s_ftm_report[i].dlog_token);
         }
         if (g_report_lvl & BIT1) {
-            log_ptr += sprintf(log_ptr, "%7u  |", s_ftm_report[i].rtt);
+            log_ptr += sprintf(log_ptr, "%7" PRIu32 "  |", s_ftm_report[i].rtt);
         }
         if (g_report_lvl & BIT2) {
             log_ptr += sprintf(log_ptr, "%14llu  |%14llu  |%14llu  |%14llu  |", s_ftm_report[i].t1,
@@ -491,7 +491,7 @@ static int wifi_cmd_ftm(int argc, char **argv)
         free(s_ftm_report);
         s_ftm_report = NULL;
         s_ftm_report_num_entries = 0;
-        ESP_LOGI(TAG_STA, "Estimated RTT - %d nSec, Estimated Distance - %d.%02d meters",
+        ESP_LOGI(TAG_STA, "Estimated RTT - %" PRId32 " nSec, Estimated Distance - %" PRId32 ".%02" PRId32 " meters",
                           s_rtt_est, s_dist_est / 100, s_dist_est % 100);
     } else {
         /* Failure case */
@@ -618,10 +618,24 @@ void app_main(void)
 
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+
     repl_config.prompt = "ftm>";
-    // init console REPL environment
+
+#if defined(CONFIG_ESP_CONSOLE_UART_DEFAULT) || defined(CONFIG_ESP_CONSOLE_UART_CUSTOM)
+    esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
+
+#elif defined(CONFIG_ESP_CONSOLE_USB_CDC)
+    esp_console_dev_usb_cdc_config_t hw_config = ESP_CONSOLE_DEV_CDC_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_console_new_repl_usb_cdc(&hw_config, &repl_config, &repl));
+
+#elif defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+    esp_console_dev_usb_serial_jtag_config_t hw_config = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&hw_config, &repl_config, &repl));
+#else
+#error Unsupported console type
+#endif
+
     /* Register commands */
     register_system();
     register_wifi();

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/param.h>
 
 #include "esp_attr.h"
@@ -299,10 +300,6 @@ esp_err_t esp_pm_configure(const void* vconfig)
     s_light_sleep_en = config->light_sleep_enable;
     s_config_changed = true;
     portEXIT_CRITICAL(&s_switch_lock);
-
-#if CONFIG_PM_SLP_DISABLE_GPIO && SOC_GPIO_SUPPORT_SLP_SWITCH
-    esp_sleep_enable_gpio_switch(config->light_sleep_enable);
-#endif
 
 #if CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP && SOC_PM_SUPPORT_CPU_PD
     esp_err_t ret = esp_sleep_cpu_pd_low_init(config->light_sleep_enable);
@@ -637,7 +634,7 @@ void IRAM_ATTR vApplicationSleep( TickType_t xExpectedIdleTime )
         int64_t sleep_time_us = MIN(wakeup_delay_us, time_until_next_alarm);
         if (sleep_time_us >= configEXPECTED_IDLE_TIME_BEFORE_SLEEP * portTICK_PERIOD_MS * 1000LL) {
             esp_sleep_enable_timer_wakeup(sleep_time_us - LIGHT_SLEEP_EARLY_WAKEUP_US);
-#ifdef CONFIG_PM_TRACE
+#if CONFIG_PM_TRACE && SOC_PM_SUPPORT_RTC_PERIPH_PD
             /* to force tracing GPIOs to keep state */
             esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
@@ -695,7 +692,7 @@ void esp_pm_impl_dump_stats(FILE* out)
             /* don't display light sleep mode if it's not enabled */
             continue;
         }
-        fprintf(out, "%-8s  %-3dM%-7s %-10lld  %-2d%%\n",
+        fprintf(out, "%-8s  %-3"PRIu32"M%-7s %-10lld  %-2d%%\n",
                 s_mode_names[i],
                 s_cpu_freq_by_mode[i].freq_mhz,
                 "",                                     //Empty space to align columns
@@ -744,9 +741,6 @@ void esp_pm_impl_init(void)
     esp_pm_trace_init();
 #endif
 
-#if CONFIG_PM_SLP_DISABLE_GPIO && SOC_GPIO_SUPPORT_SLP_SWITCH
-    esp_sleep_config_gpio_isolate();
-#endif
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "rtos0",
             &s_rtos_lock_handle[0]));
     ESP_ERROR_CHECK(esp_pm_lock_acquire(s_rtos_lock_handle[0]));

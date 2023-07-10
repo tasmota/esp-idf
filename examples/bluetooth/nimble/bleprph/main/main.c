@@ -47,10 +47,6 @@ static uint8_t own_addr_type;
 
 void ble_store_config_init(void);
 
-#if MYNEWT_VAL(BLE_POWER_CONTROL)
-static struct ble_gap_event_listener power_control_event_listener;
-#endif
-
 /**
  * Logs information about a connection to the console.
  */
@@ -89,8 +85,13 @@ ext_bleprph_advertise(void)
 {
     struct ble_gap_ext_adv_params params;
     struct os_mbuf *data;
-    uint8_t instance = 1;
+    uint8_t instance = 0;
     int rc;
+
+    /* First check if any instance is already active */
+    if(ble_gap_ext_adv_active(instance)) {
+        return;
+    }
 
     /* use defaults for non-set params */
     memset (&params, 0, sizeof(params));
@@ -214,7 +215,6 @@ static void bleprph_power_control(uint16_t conn_handle)
 }
 #endif
 
-
 /**
  * The nimble host executes this callback when a GAP event occurs.  The
  * application associates a GAP event callback with each connection that forms.
@@ -260,9 +260,6 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
 
 #if MYNEWT_VAL(BLE_POWER_CONTROL)
        bleprph_power_control(event->connect.conn_handle);
-
-       ble_gap_event_listener_register(&power_control_event_listener,
-                                        bleprph_gap_event, NULL);
 #endif
         return 0;
 
@@ -292,7 +289,9 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_ADV_COMPLETE:
         MODLOG_DFLT(INFO, "advertise complete; reason=%d",
                     event->adv_complete.reason);
-#if !CONFIG_EXAMPLE_EXTENDED_ADV
+#if CONFIG_EXAMPLE_EXTENDED_ADV
+        ext_bleprph_advertise();
+#else
         bleprph_advertise();
 #endif
         return 0;
@@ -305,6 +304,15 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         assert(rc == 0);
         bleprph_print_conn_desc(&desc);
         MODLOG_DFLT(INFO, "\n");
+        return 0;
+
+    case BLE_GAP_EVENT_NOTIFY_TX:
+        MODLOG_DFLT(INFO, "notify_tx event; conn_handle=%d attr_handle=%d "
+                    "status=%d is_indication=%d",
+                    event->notify_tx.conn_handle,
+                    event->notify_tx.attr_handle,
+                    event->notify_tx.status,
+                    event->notify_tx.indication);
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -389,27 +397,26 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
 
 #if MYNEWT_VAL(BLE_POWER_CONTROL)
     case BLE_GAP_EVENT_TRANSMIT_POWER:
-       MODLOG_DFLT(INFO, "Transmit power event : status=%d conn_handle=%d reason=%d "
-                          "phy=%d power_level=%x power_level_flag=%d delta=%d",
-                   event->transmit_power.status,
-                   event->transmit_power.conn_handle,
-                   event->transmit_power.reason,
-                   event->transmit_power.phy,
-                  event->transmit_power.transmit_power_level,
-                   event->transmit_power.transmit_power_level_flag,
-                   event->transmit_power.delta);
-       return 0;
+        MODLOG_DFLT(INFO, "Transmit power event : status=%d conn_handle=%d reason=%d "
+                           "phy=%d power_level=%x power_level_flag=%d delta=%d",
+                     event->transmit_power.status,
+                     event->transmit_power.conn_handle,
+                     event->transmit_power.reason,
+                     event->transmit_power.phy,
+                     event->transmit_power.transmit_power_level,
+                     event->transmit_power.transmit_power_level_flag,
+                     event->transmit_power.delta);
+        return 0;
 
-    case BLE_GAP_EVENT_PATHLOSS_THRESHOLD:
-       MODLOG_DFLT(INFO, "Pathloss threshold event : conn_handle=%d current path loss=%d "
-                          "zone_entered =%d",
-                   event->pathloss_threshold.conn_handle,
-                   event->pathloss_threshold.current_path_loss,
-                   event->pathloss_threshold.zone_entered);
-       return 0;
+     case BLE_GAP_EVENT_PATHLOSS_THRESHOLD:
+        MODLOG_DFLT(INFO, "Pathloss threshold event : conn_handle=%d current path loss=%d "
+                           "zone_entered =%d",
+                     event->pathloss_threshold.conn_handle,
+                     event->pathloss_threshold.current_path_loss,
+                     event->pathloss_threshold.zone_entered);
+        return 0;
 #endif
     }
-
     return 0;
 }
 
@@ -499,7 +506,11 @@ app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    nimble_port_init();
+    ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(tag, "Failed to init nimble %d ", ret);
+        return;
+    }
     /* Initialize the NimBLE host configuration. */
     ble_hs_cfg.reset_cb = bleprph_on_reset;
     ble_hs_cfg.sync_cb = bleprph_on_sync;
@@ -509,6 +520,11 @@ app_main(void)
     ble_hs_cfg.sm_io_cap = CONFIG_EXAMPLE_IO_TYPE;
 #ifdef CONFIG_EXAMPLE_BONDING
     ble_hs_cfg.sm_bonding = 1;
+    /* Enable the appropriate bit masks to make sure the keys
+     * that are needed are exchanged
+     */
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
 #endif
 #ifdef CONFIG_EXAMPLE_MITM
     ble_hs_cfg.sm_mitm = 1;
@@ -518,11 +534,11 @@ app_main(void)
 #else
     ble_hs_cfg.sm_sc = 0;
 #endif
-#ifdef CONFIG_EXAMPLE_BONDING
-    ble_hs_cfg.sm_our_key_dist = 1;
-    ble_hs_cfg.sm_their_key_dist = 1;
+#ifdef CONFIG_EXAMPLE_RESOLVE_PEER_ADDR
+    /* Stores the IRK */
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ID;
 #endif
-
 
     rc = gatt_svr_init();
     assert(rc == 0);

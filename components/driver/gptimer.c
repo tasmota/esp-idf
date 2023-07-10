@@ -1,10 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <sys/lock.h>
 #include "sdkconfig.h"
 #if CONFIG_GPTIMER_ENABLE_DEBUG_LOG
@@ -64,8 +65,11 @@ struct gptimer_group_t {
 };
 
 typedef enum {
-    GPTIMER_FSM_INIT,
-    GPTIMER_FSM_ENABLE,
+    GPTIMER_FSM_INIT,        // Timer is initialized, but not enabled
+    GPTIMER_FSM_ENABLE,      // Timer is enabled, but is not running
+    GPTIMER_FSM_ENABLE_WAIT, // Timer is in the middle of the enable process (Intermediate state)
+    GPTIMER_FSM_RUN,         // Timer is in running
+    GPTIMER_FSM_RUN_WAIT,    // Timer is in the middle of the run process (Intermediate state)
 } gptimer_fsm_t;
 
 struct gptimer_t {
@@ -76,7 +80,7 @@ struct gptimer_t {
     uint64_t alarm_count;
     gptimer_count_direction_t direction;
     timer_hal_context_t hal;
-    gptimer_fsm_t fsm;
+    _Atomic gptimer_fsm_t fsm;
     intr_handle_t intr;
     portMUX_TYPE spinlock; // to protect per-timer resources concurent accessed by task and ISR handler
     gptimer_alarm_cb_t on_alarm;
@@ -194,7 +198,8 @@ esp_err_t gptimer_new_timer(const gptimer_config_t *config, gptimer_handle_t *re
     portEXIT_CRITICAL(&group->spinlock);
     // initialize other members of timer
     timer->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
-    timer->fsm = GPTIMER_FSM_INIT; // put the timer into init state
+    // put the timer driver to the init state
+    atomic_init(&timer->fsm, GPTIMER_FSM_INIT);
     timer->direction = config->direction;
     timer->flags.intr_shared = config->flags.intr_shared;
     ESP_LOGD(TAG, "new gptimer (%d,%d) at %p, resolution=%"PRIu32"Hz", group_id, timer_id, timer, timer->resolution_hz);
@@ -211,7 +216,7 @@ err:
 esp_err_t gptimer_del_timer(gptimer_handle_t timer)
 {
     ESP_RETURN_ON_FALSE(timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE(timer->fsm == GPTIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
+    ESP_RETURN_ON_FALSE(atomic_load(&timer->fsm) == GPTIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
     gptimer_group_t *group = timer->group;
     int group_id = group->group_id;
     int timer_id = timer->timer_id;
@@ -260,7 +265,7 @@ esp_err_t gptimer_register_event_callbacks(gptimer_handle_t timer, const gptimer
 
     // lazy install interrupt service
     if (!timer->intr) {
-        ESP_RETURN_ON_FALSE(timer->fsm == GPTIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
+        ESP_RETURN_ON_FALSE(atomic_load(&timer->fsm) == GPTIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
         // if user wants to control the interrupt allocation more precisely, we can expose more flags in `gptimer_config_t`
         int isr_flags = timer->flags.intr_shared ? ESP_INTR_FLAG_SHARED | GPTIMER_INTR_ALLOC_FLAGS : GPTIMER_INTR_ALLOC_FLAGS;
         ESP_RETURN_ON_ERROR(esp_intr_alloc_intrstatus(timer_group_periph_signals.groups[group_id].timer_irq_id[timer_id], isr_flags,
@@ -312,63 +317,79 @@ esp_err_t gptimer_set_alarm_action(gptimer_handle_t timer, const gptimer_alarm_c
 esp_err_t gptimer_enable(gptimer_handle_t timer)
 {
     ESP_RETURN_ON_FALSE(timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE(timer->fsm == GPTIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
+    gptimer_fsm_t expected_fsm = GPTIMER_FSM_INIT;
+    ESP_RETURN_ON_FALSE(atomic_compare_exchange_strong(&timer->fsm, &expected_fsm, GPTIMER_FSM_ENABLE),
+                        ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
 
     // acquire power manager lock
     if (timer->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(timer->pm_lock), TAG, "acquire pm_lock failed");
     }
+
     // enable interrupt service
     if (timer->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_enable(timer->intr), TAG, "enable interrupt service failed");
     }
 
-    timer->fsm = GPTIMER_FSM_ENABLE;
     return ESP_OK;
 }
 
 esp_err_t gptimer_disable(gptimer_handle_t timer)
 {
     ESP_RETURN_ON_FALSE(timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE(timer->fsm == GPTIMER_FSM_ENABLE, ESP_ERR_INVALID_STATE, TAG, "timer not in enable state");
+    gptimer_fsm_t expected_fsm = GPTIMER_FSM_ENABLE;
+    ESP_RETURN_ON_FALSE(atomic_compare_exchange_strong(&timer->fsm, &expected_fsm, GPTIMER_FSM_INIT),
+                        ESP_ERR_INVALID_STATE, TAG, "timer not in enable state");
 
     // disable interrupt service
     if (timer->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_disable(timer->intr), TAG, "disable interrupt service failed");
     }
+
     // release power manager lock
     if (timer->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_release(timer->pm_lock), TAG, "release pm_lock failed");
     }
 
-    timer->fsm = GPTIMER_FSM_INIT;
     return ESP_OK;
 }
 
 esp_err_t gptimer_start(gptimer_handle_t timer)
 {
     ESP_RETURN_ON_FALSE_ISR(timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE_ISR(timer->fsm == GPTIMER_FSM_ENABLE, ESP_ERR_INVALID_STATE, TAG, "timer not enabled yet");
 
-    portENTER_CRITICAL_SAFE(&timer->spinlock);
-    timer_ll_enable_counter(timer->hal.dev, timer->timer_id, true);
-    timer_ll_enable_alarm(timer->hal.dev, timer->timer_id, timer->flags.alarm_en);
-    portEXIT_CRITICAL_SAFE(&timer->spinlock);
+    gptimer_fsm_t expected_fsm = GPTIMER_FSM_ENABLE;
+    if (atomic_compare_exchange_strong(&timer->fsm, &expected_fsm, GPTIMER_FSM_RUN_WAIT)) {
+        // the register used by the following LL functions are shared with other API,
+        // which is possible to run along with this function, so we need to protect
+        portENTER_CRITICAL_SAFE(&timer->spinlock);
+        timer_ll_enable_counter(timer->hal.dev, timer->timer_id, true);
+        timer_ll_enable_alarm(timer->hal.dev, timer->timer_id, timer->flags.alarm_en);
+        portEXIT_CRITICAL_SAFE(&timer->spinlock);
+    } else {
+        ESP_RETURN_ON_FALSE_ISR(false, ESP_ERR_INVALID_STATE, TAG, "timer is not enabled yet");
+    }
 
+    atomic_store(&timer->fsm, GPTIMER_FSM_RUN);
     return ESP_OK;
 }
 
 esp_err_t gptimer_stop(gptimer_handle_t timer)
 {
     ESP_RETURN_ON_FALSE_ISR(timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE_ISR(timer->fsm == GPTIMER_FSM_ENABLE, ESP_ERR_INVALID_STATE, TAG, "timer not enabled yet");
 
-    // disable counter, alarm, auto-reload
-    portENTER_CRITICAL_SAFE(&timer->spinlock);
-    timer_ll_enable_counter(timer->hal.dev, timer->timer_id, false);
-    timer_ll_enable_alarm(timer->hal.dev, timer->timer_id, false);
-    portEXIT_CRITICAL_SAFE(&timer->spinlock);
+    gptimer_fsm_t expected_fsm = GPTIMER_FSM_RUN;
+    if (atomic_compare_exchange_strong(&timer->fsm, &expected_fsm, GPTIMER_FSM_ENABLE_WAIT)) {
+        // disable counter, alarm, auto-reload
+        portENTER_CRITICAL_SAFE(&timer->spinlock);
+        timer_ll_enable_counter(timer->hal.dev, timer->timer_id, false);
+        timer_ll_enable_alarm(timer->hal.dev, timer->timer_id, false);
+        portEXIT_CRITICAL_SAFE(&timer->spinlock);
+    } else {
+        ESP_RETURN_ON_FALSE_ISR(false, ESP_ERR_INVALID_STATE, TAG, "timer is not running");
+    }
 
+    atomic_store(&timer->fsm, GPTIMER_FSM_ENABLE);
     return ESP_OK;
 }
 
@@ -417,10 +438,7 @@ static void gptimer_release_group_handle(gptimer_group_t *group)
         assert(s_platform.groups[group_id]);
         do_deinitialize = true;
         s_platform.groups[group_id] = NULL;
-        // Theoretically we need to disable the peripheral clock for the timer group
-        // However, next time when we enable the peripheral again, the registers will be reset to default value, including the watchdog registers inside the group
-        // Then the watchdog will go into reset state, e.g. the flash boot watchdog is enabled again and reset the system very soon
-        // periph_module_disable(timer_group_periph_signals.groups[group_id].module);
+        periph_module_disable(timer_group_periph_signals.groups[group_id].module);
     }
     _lock_release(&s_platform.mutex);
 
@@ -433,44 +451,39 @@ static void gptimer_release_group_handle(gptimer_group_t *group)
 static esp_err_t gptimer_select_periph_clock(gptimer_t *timer, gptimer_clock_source_t src_clk, uint32_t resolution_hz)
 {
     unsigned int counter_src_hz = 0;
-    esp_err_t ret = ESP_OK;
     int timer_id = timer->timer_id;
-    // [clk_tree] TODO: replace the following switch table by clk_tree API
+
+    // to make the gptimer work reliable, the source clock must stay alive and unchanged
+    // driver will create different pm lock for that purpose, according to different clock source
+    __attribute__((unused)) esp_pm_lock_type_t pm_lock_type = ESP_PM_NO_LIGHT_SLEEP;
+
     switch (src_clk) {
 #if SOC_TIMER_GROUP_SUPPORT_APB
     case GPTIMER_CLK_SRC_APB:
         counter_src_hz = esp_clk_apb_freq();
-#if CONFIG_PM_ENABLE
-        sprintf(timer->pm_lock_name, "gptimer_%d_%d", timer->group->group_id, timer_id); // e.g. gptimer_0_0
-        ret  = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, timer->pm_lock_name, &timer->pm_lock);
-        ESP_RETURN_ON_ERROR(ret, TAG, "create APB_FREQ_MAX lock failed");
-        ESP_LOGD(TAG, "install APB_FREQ_MAX lock for timer (%d,%d)", timer->group->group_id, timer_id);
-#endif
+        // APB clock frequency can be changed during DFS
+        pm_lock_type = ESP_PM_APB_FREQ_MAX;
         break;
 #endif // SOC_TIMER_GROUP_SUPPORT_APB
+
 #if SOC_TIMER_GROUP_SUPPORT_PLL_F40M
     case GPTIMER_CLK_SRC_PLL_F40M:
         counter_src_hz = 40 * 1000 * 1000;
-#if CONFIG_PM_ENABLE
-        sprintf(timer->pm_lock_name, "gptimer_%d_%d", timer->group->group_id, timer_id); // e.g. gptimer_0_0
-        // PLL_F40M will be turned off when DFS switches CPU clock source to XTAL
-        ret  = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, timer->pm_lock_name, &timer->pm_lock);
-        ESP_RETURN_ON_ERROR(ret, TAG, "create APB_FREQ_MAX lock failed");
-        ESP_LOGD(TAG, "install APB_FREQ_MAX lock for timer (%d,%d)", timer->group->group_id, timer_id);
-#endif
         break;
 #endif // SOC_TIMER_GROUP_SUPPORT_PLL_F40M
+
 #if SOC_TIMER_GROUP_SUPPORT_AHB
     case GPTIMER_CLK_SRC_AHB:
-        // TODO: decide which kind of PM lock we should use for such clock
         counter_src_hz = 48 * 1000 * 1000;
         break;
 #endif // SOC_TIMER_GROUP_SUPPORT_AHB
+
 #if SOC_TIMER_GROUP_SUPPORT_XTAL
     case GPTIMER_CLK_SRC_XTAL:
         counter_src_hz = esp_clk_xtal_freq();
         break;
 #endif // SOC_TIMER_GROUP_SUPPORT_XTAL
+
     default:
         ESP_RETURN_ON_FALSE(false, ESP_ERR_NOT_SUPPORTED, TAG, "clock source %d is not support", src_clk);
         break;
@@ -482,7 +495,14 @@ static esp_err_t gptimer_select_periph_clock(gptimer_t *timer, gptimer_clock_sou
     if (timer->resolution_hz != resolution_hz) {
         ESP_LOGW(TAG, "resolution lost, expect %"PRIu32", real %"PRIu32, resolution_hz, timer->resolution_hz);
     }
-    return ret;
+
+    // create pm lock
+#if CONFIG_PM_ENABLE
+    sprintf(timer->pm_lock_name, "gptimer_%d_%d", timer->group->group_id, timer_id); // e.g. gptimer_0_0
+    ESP_RETURN_ON_ERROR(esp_pm_lock_create(pm_lock_type, 0, timer->pm_lock_name, &timer->pm_lock), TAG, "create pm lock failed");
+#endif // CONFIG_PM_ENABLE
+
+    return ESP_OK;
 }
 
 // Put the default ISR handler in the IRAM for better performance

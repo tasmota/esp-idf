@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import os
@@ -8,10 +8,11 @@ import sys
 from asyncio.subprocess import Process
 from io import open
 from types import FunctionType
-from typing import Any, Dict, List, Match, Optional, TextIO, Tuple, Union
+from typing import Any, Dict, Generator, List, Match, Optional, TextIO, Tuple, Union
 
 import click
 import yaml
+from idf_monitor_base.ansi_color_converter import get_ansi_converter
 
 from .constants import GENERATORS
 from .errors import FatalError
@@ -34,16 +35,6 @@ def executable_exists(args: List) -> bool:
 
     except Exception:
         return False
-
-
-def realpath(path: str) -> str:
-    """
-    Return the cannonical path with normalized case.
-
-    It is useful on Windows to comparision paths in case-insensitive manner.
-    On Unix and Mac OS X it works as `os.path.realpath()` only.
-    """
-    return os.path.normcase(os.path.realpath(path))
 
 
 def _idf_version_from_cmake() -> Optional[str]:
@@ -116,53 +107,65 @@ def debug_print_idf_version() -> None:
     print_warning(f'ESP-IDF {idf_version() or "version unknown"}')
 
 
-def print_hints(*filenames: str) -> None:
-    """Getting output files and printing hints on how to resolve errors based on the output."""
+def load_hints() -> Any:
+    """Helper function to load hints yml file"""
     with open(os.path.join(os.path.dirname(__file__), 'hints.yml'), 'r') as file:
         hints = yaml.safe_load(file)
+    return hints
+
+
+def generate_hints_buffer(output: str, hints: list) -> Generator:
+    """Helper function to process hints within a string buffer"""
+    for hint in hints:
+        variables_list = hint.get('variables')
+        hint_list, hint_vars, re_vars = [], [], []
+        match: Optional[Match[str]] = None
+        try:
+            if variables_list:
+                for variables in variables_list:
+                    hint_vars = variables['hint_variables']
+                    re_vars = variables['re_variables']
+                    regex = hint['re'].format(*re_vars)
+                    if re.compile(regex).search(output):
+                        try:
+                            hint_list.append(hint['hint'].format(*hint_vars))
+                        except KeyError as e:
+                            red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
+                            sys.exit(1)
+            else:
+                match = re.compile(hint['re']).search(output)
+        except KeyError as e:
+            red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
+            sys.exit(1)
+        except re.error as e:
+            red_print('{} from hints.yml have {} problem. Check hints.yml file.'.format(hint['re'], e))
+            sys.exit(1)
+        if hint_list:
+            for message in hint_list:
+                yield ' '.join(['HINT:', message])
+        elif match:
+            extra_info = ', '.join(match.groups()) if hint.get('match_to_output', '') else ''
+            try:
+                yield ' '.join(['HINT:', hint['hint'].format(extra_info)])
+            except KeyError:
+                raise KeyError("Argument 'hint' missing in {}. Check hints.yml file.".format(hint))
+
+
+def generate_hints(*filenames: str) -> Generator:
+    """Getting output files and printing hints on how to resolve errors based on the output."""
+    hints = load_hints()
     for file_name in filenames:
         with open(file_name, 'r') as file:
             output = ' '.join(line.strip() for line in file if line.strip())
-        for hint in hints:
-            variables_list = hint.get('variables')
-            hint_list, hint_vars, re_vars = [], [], []
-            match: Optional[Match[str]] = None
-            try:
-                if variables_list:
-                    for variables in variables_list:
-                        hint_vars = variables['hint_variables']
-                        re_vars = variables['re_variables']
-                        regex = hint['re'].format(*re_vars)
-                        if re.compile(regex).search(output):
-                            try:
-                                hint_list.append(hint['hint'].format(*hint_vars))
-                            except KeyError as e:
-                                red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
-                                sys.exit(1)
-                else:
-                    match = re.compile(hint['re']).search(output)
-            except KeyError as e:
-                red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
-                sys.exit(1)
-            except re.error as e:
-                red_print('{} from hints.yml have {} problem. Check hints.yml file.'.format(hint['re'], e))
-                sys.exit(1)
-            if hint_list:
-                for message in hint_list:
-                    yellow_print('HINT:', message)
-            elif match:
-                extra_info = ', '.join(match.groups()) if hint.get('match_to_output', '') else ''
-                try:
-                    yellow_print(' '.join(['HINT:', hint['hint'].format(extra_info)]))
-                except KeyError as e:
-                    red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
-                    sys.exit(1)
+            yield from generate_hints_buffer(output, hints)
 
 
 def fit_text_in_terminal(out: str) -> str:
     """Fit text in terminal, if the string is not fit replace center with `...`"""
     space_for_dots = 3  # Space for "..."
     terminal_width, _ = os.get_terminal_size()
+    if not terminal_width:
+        return out
     if terminal_width <= space_for_dots:
         # if the wide of the terminal is too small just print dots
         return '.' * terminal_width
@@ -175,7 +178,7 @@ def fit_text_in_terminal(out: str) -> str:
 
 class RunTool:
     def __init__(self, tool_name: str, args: List, cwd: str, env: Dict=None, custom_error_handler: FunctionType=None, build_dir: str=None,
-                 hints: bool=True, force_progression: bool=False, interactive: bool=False) -> None:
+                 hints: bool=True, force_progression: bool=False, interactive: bool=False, convert_output: bool=False) -> None:
         self.tool_name = tool_name
         self.args = args
         self.cwd = cwd
@@ -186,6 +189,7 @@ class RunTool:
         self.hints = hints
         self.force_progression = force_progression
         self.interactive = interactive
+        self.convert_output = convert_output
 
     def __call__(self) -> None:
         def quote_arg(arg: str) -> str:
@@ -216,7 +220,10 @@ class RunTool:
             return
 
         if stderr_output_file and stdout_output_file:
-            print_hints(stderr_output_file, stdout_output_file)
+            # hints in interactive mode were already processed, don't print them again
+            if not self.interactive:
+                for hint in generate_hints(stderr_output_file, stdout_output_file):
+                    yellow_print(hint)
             raise FatalError('{} failed with exit code {}, output of the command is in the {} and {}'.format(self.tool_name, process.returncode,
                              stderr_output_file, stdout_output_file))
 
@@ -256,9 +263,8 @@ class RunTool:
 
         def print_progression(output: str) -> None:
             # Print a new line on top of the previous line
-            sys.stdout.write('\x1b[K')
-            print('\r', end='')
-            print(fit_text_in_terminal(output.strip('\n\r')), end='', file=output_stream)
+            print('\r' + fit_text_in_terminal(output.strip('\n\r')) + '\x1b[K', end='', file=output_stream)
+            output_stream.flush()
 
         async def read_stream() -> Optional[str]:
             try:
@@ -283,7 +289,14 @@ class RunTool:
                     if len(buffer) > 4:
                         # Multi-byte character contain up to 4 bytes and if buffer have more then 4 bytes
                         # and still can not decode it we can just ignore some bytes
-                        return buffer.decode(errors='ignore')
+                        return buffer.decode(errors='replace')
+
+        # use ANSI color converter for Monitor on Windows
+        output_converter = get_ansi_converter(output_stream) if self.convert_output else output_stream
+
+        # used in interactive mode to print hints after matched line
+        hints = load_hints()
+        last_line = ''
 
         try:
             with open(output_filename, 'w', encoding='utf8') as output_file:
@@ -294,6 +307,7 @@ class RunTool:
                         output = await read_stream()
                     if not output:
                         break
+
                     output_noescape = delete_ansi_escape(output)
                     # Always remove escape sequences when writing the build log.
                     output_file.write(output_noescape)
@@ -307,8 +321,16 @@ class RunTool:
                         # print output in progression way but only the progression related (that started with '[') and if verbose flag is not set
                         print_progression(output)
                     else:
-                        output_stream.write(output)
-                        output_stream.flush()
+                        output_converter.write(output)
+                        output_converter.flush()
+
+                        # process hints for last line and print them right away
+                        if self.interactive:
+                            last_line += output
+                            if last_line[-1] == '\n':
+                                for hint in generate_hints_buffer(last_line, hints):
+                                    yellow_print(hint)
+                                last_line = ''
         except (RuntimeError, EnvironmentError) as e:
             yellow_print('WARNING: The exception {} was raised and we can\'t capture all your {} and '
                          'hints on how to resolve errors can be not accurate.'.format(e, output_stream.name.strip('<>')))
@@ -475,10 +497,10 @@ def ensure_build_directory(args: 'PropertyDict', prog_name: str, always_run_cmak
 
     try:
         home_dir = cache['CMAKE_HOME_DIRECTORY']
-        if realpath(home_dir) != realpath(project_dir):
+        if os.path.realpath(home_dir) != os.path.realpath(project_dir):
             raise FatalError(
                 "Build directory '%s' configured for project '%s' not '%s'. Run '%s fullclean' to start again." %
-                (build_dir, realpath(home_dir), realpath(project_dir), prog_name))
+                (build_dir, os.path.realpath(home_dir), os.path.realpath(project_dir), prog_name))
     except KeyError:
         pass  # if cmake failed part way, CMAKE_HOME_DIRECTORY may not be set yet
 

@@ -36,11 +36,11 @@ examples/system/console/basic:
       temporary: true
       reason: lack of runners
 
-examples/system/deep_sleep:
+examples/system/deep_sleep_wake_stub:
   disable:
     - if: IDF_TARGET == "esp32c2"
       temporary: true
-      reason: target esp32c2 is not supported yet
+      reason: target(s) is not supported yet
 
 examples/system/efuse:
   disable_test:
@@ -89,12 +89,6 @@ examples/system/ipc/ipc_isr:
     - if: IDF_TARGET == "esp32" or IDF_TARGET == "esp32s3"
       temporary: true
       reason: the other targets are not tested yet
-
-examples/system/light_sleep:
-  disable:
-    - if: IDF_TARGET == "esp32c2"
-      temporary: true
-      reason: target esp32c2 is not supported yet
 
 examples/system/ota/advanced_https_ota:
   disable_test:
@@ -166,7 +160,7 @@ examples/system/ulp_fsm/ulp_adc:
 
 examples/system/ulp_riscv/adc:
   enable:
-    - if: IDF_TARGET in ["esp32s3"]
+    - if: IDF_TARGET in ["esp32s2", "esp32s3"]
       temporary: true
       reason: the other targets are not tested yet
 

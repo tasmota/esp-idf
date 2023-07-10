@@ -21,6 +21,7 @@
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/adc_private.h"
 #include "esp_private/adc_share_hw_ctrl.h"
+#include "esp_private/sar_periph_ctrl.h"
 #include "driver/gpio.h"
 #include "esp_adc/adc_continuous.h"
 #include "hal/adc_types.h"
@@ -83,11 +84,6 @@ typedef struct adc_continuous_ctx_t {
     void                            *user_data;                 //User context
     esp_pm_lock_handle_t            pm_lock;                    //For power management
 } adc_continuous_ctx_t;
-
-#ifdef CONFIG_PM_ENABLE
-//Only for deprecated API
-extern esp_pm_lock_handle_t adc_digi_arbiter_lock;
-#endif  //CONFIG_PM_ENABLE
 
 /*---------------------------------------------------------------
                    ADC Continuous Read Mode (via DMA)
@@ -170,7 +166,9 @@ esp_err_t adc_continuous_new_handle(const adc_continuous_handle_cfg_t *hdl_confi
     }
 
     //malloc dma descriptor
-    adc_ctx->hal.rx_desc = heap_caps_calloc(1, (sizeof(dma_descriptor_t)) * INTERNAL_BUF_NUM, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    uint32_t dma_desc_num_per_frame = (hdl_config->conv_frame_size + DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED - 1) / DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED;
+    uint32_t dma_desc_max_num = dma_desc_num_per_frame * INTERNAL_BUF_NUM;
+    adc_ctx->hal.rx_desc = heap_caps_calloc(1, (sizeof(dma_descriptor_t)) * dma_desc_max_num, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     if (!adc_ctx->hal.rx_desc) {
         ret = ESP_ERR_NO_MEM;
         goto cleanup;
@@ -260,7 +258,8 @@ esp_err_t adc_continuous_new_handle(const adc_continuous_handle_cfg_t *hdl_confi
 #elif CONFIG_IDF_TARGET_ESP32
         .dev = (void *)I2S_LL_GET_HW(adc_ctx->i2s_host),
 #endif
-        .desc_max_num = INTERNAL_BUF_NUM,
+        .eof_desc_num = INTERNAL_BUF_NUM,
+        .eof_step = dma_desc_num_per_frame,
         .dma_chan = dma_chan,
         .eof_num = hdl_config->conv_frame_size / SOC_ADC_DIGI_DATA_BYTES_PER_CONV
     };
@@ -294,6 +293,7 @@ static IRAM_ATTR bool adc_dma_in_suc_eof_callback(gdma_channel_handle_t dma_chan
     ctx->rx_eof_desc_addr = event_data->rx_eof_desc_addr;
     return s_adc_dma_intr(user_data);
 }
+
 #else
 static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 {
@@ -322,21 +322,22 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_continuous_ctx_t *adc_digi_ctx)
     bool need_yield = false;
     BaseType_t ret;
     adc_hal_dma_desc_status_t status = false;
-    dma_descriptor_t *current_desc = NULL;
+    uint8_t *finished_buffer = NULL;
+    uint32_t finished_size = 0;
 
     while (1) {
-        status = adc_hal_get_reading_result(&adc_digi_ctx->hal, adc_digi_ctx->rx_eof_desc_addr, &current_desc);
+        status = adc_hal_get_reading_result(&adc_digi_ctx->hal, adc_digi_ctx->rx_eof_desc_addr, &finished_buffer, &finished_size);
         if (status != ADC_HAL_DMA_DESC_VALID) {
             break;
         }
 
-        ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, current_desc->buffer, current_desc->dw0.length, &taskAwoken);
+        ret = xRingbufferSendFromISR(adc_digi_ctx->ringbuf_hdl, finished_buffer, finished_size, &taskAwoken);
         need_yield |= (taskAwoken == pdTRUE);
 
         if (adc_digi_ctx->cbs.on_conv_done) {
             adc_continuous_evt_data_t edata = {
-                .conv_frame_buffer = current_desc->buffer,
-                .size = current_desc->dw0.length,
+                .conv_frame_buffer = finished_buffer,
+                .size = finished_size,
             };
             if (adc_digi_ctx->cbs.on_conv_done(adc_digi_ctx, &edata, adc_digi_ctx->user_data)) {
                 need_yield |= true;
@@ -354,11 +355,6 @@ static IRAM_ATTR bool s_adc_dma_intr(adc_continuous_ctx_t *adc_digi_ctx)
         }
     }
 
-    if (status == ADC_HAL_DMA_DESC_NULL) {
-        //start next turns of dma operation
-        adc_hal_digi_start(&adc_digi_ctx->hal, adc_digi_ctx->rx_dma_buf);
-    }
-
     return need_yield;
 }
 
@@ -372,7 +368,7 @@ esp_err_t adc_continuous_start(adc_continuous_handle_t handle)
     }
 
     handle->fsm = ADC_FSM_STARTED;
-    adc_power_acquire();
+    sar_periph_ctrl_adc_continuous_power_acquire();
     //reset flags
     if (handle->use_adc1) {
         adc_lock_acquire(ADC_UNIT_1);
@@ -427,11 +423,6 @@ esp_err_t adc_continuous_stop(adc_continuous_handle_t handle)
     adc_hal_digi_stop(&handle->hal);
 
     adc_hal_digi_deinit(&handle->hal);
-#if CONFIG_PM_ENABLE
-    if (handle->pm_lock) {
-        esp_pm_lock_release(handle->pm_lock);
-    }
-#endif  //CONFIG_PM_ENABLE
 
     if (handle->use_adc2) {
         adc_lock_release(ADC_UNIT_2);
@@ -439,7 +430,7 @@ esp_err_t adc_continuous_stop(adc_continuous_handle_t handle)
     if (handle->use_adc1) {
         adc_lock_release(ADC_UNIT_1);
     }
-    adc_power_release();
+    sar_periph_ctrl_adc_continuous_power_release();
 
     //release power manager lock
     if (handle->pm_lock) {
@@ -492,11 +483,9 @@ esp_err_t adc_continuous_deinit(adc_continuous_handle_t handle)
         free(handle->ringbuf_struct);
     }
 
-#if CONFIG_PM_ENABLE
     if (handle->pm_lock) {
         esp_pm_lock_delete(handle->pm_lock);
     }
-#endif  //CONFIG_PM_ENABLE
 
     free(handle->rx_dma_buf);
     free(handle->hal.rx_desc);

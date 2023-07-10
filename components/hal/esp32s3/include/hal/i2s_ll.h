@@ -398,8 +398,8 @@ finish:
  */
 static inline void i2s_ll_tx_start(i2s_dev_t *hw)
 {
-    hw->tx_conf.tx_update = 0;
     hw->tx_conf.tx_update = 1;
+    while (hw->tx_conf.tx_update);
     hw->tx_conf.tx_start = 1;
 }
 
@@ -410,8 +410,8 @@ static inline void i2s_ll_tx_start(i2s_dev_t *hw)
  */
 static inline void i2s_ll_rx_start(i2s_dev_t *hw)
 {
-    hw->rx_conf.rx_update = 0;
     hw->rx_conf.rx_update = 1;
+    while (hw->rx_conf.rx_update);
     hw->rx_conf.rx_start = 1;
 }
 
@@ -758,6 +758,17 @@ static inline void i2s_ll_rx_enable_pdm(i2s_dev_t *hw)
 }
 
 /**
+ * @brief Set the PDM TX over sampling ratio
+ *
+ * @param hw  Peripheral I2S hardware instance address.
+ * @param ovr Over sampling ratio
+ */
+static inline void i2s_ll_tx_set_pdm_over_sample_ratio(i2s_dev_t *hw, uint32_t ovr)
+{
+    hw->tx_pcm2pdm_conf.tx_sinc_osr2 = ovr;
+}
+
+/**
  * @brief Configure I2S TX PDM sample rate
  *        Fpdm = 64*Fpcm*fp/fs
  *
@@ -769,7 +780,6 @@ static inline void i2s_ll_tx_set_pdm_fpfs(i2s_dev_t *hw, uint32_t fp, uint32_t f
 {
     hw->tx_pcm2pdm_conf1.tx_pdm_fp = fp;
     hw->tx_pcm2pdm_conf1.tx_pdm_fs = fs;
-    hw->tx_pcm2pdm_conf.tx_sinc_osr2 = fp / fs;
 }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -102,6 +102,8 @@ struct mcpwm_oper_t {
     mcpwm_operator_brake_mode_t brake_mode_on_soft_fault;          // brake mode on software triggered fault
     mcpwm_operator_brake_mode_t brake_mode_on_gpio_fault[SOC_MCPWM_GPIO_FAULTS_PER_GROUP]; // brake mode on GPIO triggered faults
     uint32_t deadtime_resolution_hz;     // resolution of deadtime submodule
+    mcpwm_gen_t *posedge_delay_owner;    // which generator owns the positive edge delay
+    mcpwm_gen_t *negedge_delay_owner;    // which generator owns the negative edge delay
     mcpwm_brake_event_cb_t on_brake_cbc; // callback function which would be invoked when mcpwm operator goes into trip zone
     mcpwm_brake_event_cb_t on_brake_ost; // callback function which would be invoked when mcpwm operator goes into trip zone
     void *user_data;                     // user data which would be passed to the trip zone callback
@@ -216,6 +218,9 @@ struct mcpwm_cap_channel_t {
     intr_handle_t intr;               // Interrupt handle
     mcpwm_capture_event_cb_t on_cap;  // Callback function which would be invoked in capture interrupt routine
     void *user_data;                  // user data which would be passed to the capture callback
+    struct {
+        uint32_t reset_io_at_exit: 1; // Whether to reset the GPIO configuration when capture channel is deleted
+    } flags;
 };
 
 mcpwm_group_t *mcpwm_acquire_group_handle(int group_id);

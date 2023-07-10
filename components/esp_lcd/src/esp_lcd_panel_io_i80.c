@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -339,7 +339,7 @@ static esp_err_t panel_io_i80_register_event_callbacks(esp_lcd_panel_io_handle_t
 {
     lcd_panel_io_i80_t *i80_device = __containerof(io, lcd_panel_io_i80_t, base);
 
-    if(i80_device->on_color_trans_done != NULL) {
+    if (i80_device->on_color_trans_done != NULL) {
         ESP_LOGW(TAG, "Callback on_color_trans_done was already set and now it was owerwritten!");
     }
 
@@ -493,11 +493,9 @@ static esp_err_t lcd_i80_select_periph_clock(esp_lcd_i80_bus_handle_t bus, lcd_c
     switch (clk_src) {
     case LCD_CLK_SRC_PLL160M:
         bus->resolution_hz = 160000000 / LCD_PERIPH_CLOCK_PRE_SCALE;
-#if CONFIG_PM_ENABLE
-        ret = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "i80_bus_lcd", &bus->pm_lock);
-        ESP_RETURN_ON_ERROR(ret, TAG, "create ESP_PM_APB_FREQ_MAX lock failed");
-        ESP_LOGD(TAG, "installed ESP_PM_APB_FREQ_MAX lock");
-#endif
+        break;
+    case LCD_CLK_SRC_PLL240M:
+        bus->resolution_hz = 240000000 / LCD_PERIPH_CLOCK_PRE_SCALE;
         break;
     case LCD_CLK_SRC_XTAL:
         bus->resolution_hz = esp_clk_xtal_freq() / LCD_PERIPH_CLOCK_PRE_SCALE;
@@ -506,6 +504,14 @@ static esp_err_t lcd_i80_select_periph_clock(esp_lcd_i80_bus_handle_t bus, lcd_c
         ESP_RETURN_ON_FALSE(false, ESP_ERR_NOT_SUPPORTED, TAG,  "unsupported clock source: %d", clk_src);
         break;
     }
+
+    // create pm lock based on different clock source
+    // clock sources like PLL and XTAL will be turned off in light sleep
+#if CONFIG_PM_ENABLE
+    ret = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "i80_bus_lcd", &bus->pm_lock);
+    ESP_RETURN_ON_ERROR(ret, TAG, "create pm lock failed");
+    ESP_LOGD(TAG, "installed pm lock");
+#endif
     return ret;
 }
 
@@ -583,9 +589,16 @@ static void lcd_periph_trigger_quick_trans_done_event(esp_lcd_i80_bus_handle_t b
 static void lcd_start_transaction(esp_lcd_i80_bus_t *bus, lcd_i80_trans_descriptor_t *trans_desc)
 {
     // by default, the dummy phase is disabled because it's not common for most LCDs
+    uint32_t dummy_cycles = 0;
+    uint32_t cmd_cycles = trans_desc->cmd_value >= 0 ? trans_desc->cmd_cycles : 0;
     // Number of data phase cycles are controlled by DMA buffer length, we only need to enable/disable the phase here
-    lcd_ll_set_phase_cycles(bus->hal.dev, trans_desc->cmd_cycles, 0, trans_desc->data ? 1 : 0);
-    lcd_ll_set_command(bus->hal.dev, bus->bus_width, trans_desc->cmd_value);
+    uint32_t data_cycles = trans_desc->data ? 1 : 0;
+    if (trans_desc->cmd_value >= 0) {
+        lcd_ll_set_command(bus->hal.dev, bus->bus_width, trans_desc->cmd_value);
+    }
+    lcd_ll_set_phase_cycles(bus->hal.dev, cmd_cycles, dummy_cycles, data_cycles);
+    lcd_ll_set_blank_cycles(bus->hal.dev, 1, 1);
+
     if (trans_desc->data) { // some specific LCD commands can have no parameters
         gdma_start(bus->dma_chan, (intptr_t)(bus->dma_nodes));
         // delay 1us is sufficient for DMA to pass data to LCD FIFO

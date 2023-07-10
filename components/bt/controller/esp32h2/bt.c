@@ -172,8 +172,9 @@ static void osi_assert_wrapper(const uint32_t ln, const char *fn, uint32_t param
 static uint32_t osi_random_wrapper(void);
 
 static void esp_reset_rpa_moudle(void);
-
-
+static int esp_ecc_gen_key_pair(uint8_t *pub, uint8_t *priv);
+static int esp_ecc_gen_dh_key(const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y,
+                              const uint8_t *our_priv_key, uint8_t *out_dhkey);
 /* Local variable definition
  ***************************************************************************
  */
@@ -227,8 +228,8 @@ struct ext_funcs_t ext_funcs_ro = {
     ._task_delete = task_delete_wrapper,
     ._osi_assert = osi_assert_wrapper,
     ._os_random = osi_random_wrapper,
-    ._ecc_gen_key_pair = ble_sm_alg_gen_key_pair,
-    ._ecc_gen_dh_key = ble_sm_alg_gen_dhkey,
+    ._ecc_gen_key_pair = esp_ecc_gen_key_pair,
+    ._ecc_gen_dh_key = esp_ecc_gen_dh_key,
     ._esp_reset_rpa_moudle = esp_reset_rpa_moudle,
     .magic = EXT_FUNC_MAGIC_VALUE,
 };
@@ -325,7 +326,7 @@ void esp_vhci_host_send_packet(uint8_t *data, uint16_t len)
     if (*(data) == DATA_TYPE_ACL) {
         struct os_mbuf *om = os_msys_get_pkthdr(len, ACL_DATA_MBUF_LEADINGSPCAE);
         assert(om);
-        os_mbuf_append(om, &data[1], len - 1);
+        assert(os_mbuf_append(om, &data[1], len - 1) == 0);
         ble_hci_trans_hs_acl_tx(om);
     }
 
@@ -351,6 +352,25 @@ static int task_create_wrapper(void *task_func, const char *name, uint32_t stack
 static void task_delete_wrapper(void *task_handle)
 {
     vTaskDelete(task_handle);
+}
+
+static int esp_ecc_gen_key_pair(uint8_t *pub, uint8_t *priv)
+{
+    int rc = -1;
+#if CONFIG_BT_LE_SM_LEGACY || CONFIG_BT_LE_SM_SC
+    rc = ble_sm_alg_gen_key_pair(pub, priv);
+#endif // CONFIG_BT_LE_SM_LEGACY || CONFIG_BT_LE_SM_SC
+    return rc;
+}
+
+static int esp_ecc_gen_dh_key(const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y,
+                              const uint8_t *our_priv_key, uint8_t *out_dhkey)
+{
+    int rc = -1;
+#if CONFIG_BT_LE_SM_LEGACY || CONFIG_BT_LE_SM_SC
+    rc = ble_sm_alg_gen_dhkey(peer_pub_key_x, peer_pub_key_y, our_priv_key, out_dhkey);
+#endif // CONFIG_BT_LE_SM_LEGACY || CONFIG_BT_LE_SM_SC
+    return rc;
 }
 
 #ifdef CONFIG_BT_LE_HCI_INTERFACE_USE_UART
@@ -613,8 +633,8 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     }
 
     ble_get_npl_element_info(cfg, &npl_info);
-
-    if (npl_freertos_mempool_init(&npl_info) != 0) {
+    npl_freertos_set_controller_npl_info(&npl_info);
+    if (npl_freertos_mempool_init() != 0) {
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "npl mempool init failed");
         ret = ESP_ERR_INVALID_ARG;
         goto free_mem;
@@ -790,7 +810,7 @@ esp_err_t esp_bt_mem_release(esp_bt_mode_t mode)
 {
      intptr_t mem_start, mem_end;
 
-    if (mode == ESP_BT_MODE_BLE) {
+    if (mode & ESP_BT_MODE_BLE) {
         mem_start = (intptr_t)&_bt_bss_start;
         mem_end = (intptr_t)&_bt_bss_end;
         if (mem_start != mem_end) {

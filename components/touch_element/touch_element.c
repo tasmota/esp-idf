@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
@@ -323,7 +324,7 @@ static void te_intr_cb(void *arg)
     TE_UNUSED(arg);
     static int scan_done_cnt = 0;
     int task_awoken = pdFALSE;
-    te_intr_msg_t te_intr_msg;
+    te_intr_msg_t te_intr_msg = {};
     /*< Figure out which touch sensor channel is triggered and the trigger type */
     uint32_t intr_mask = touch_pad_read_intr_status_mask();
     te_intr_msg.channel_num = touch_pad_get_current_meas_channel();
@@ -402,7 +403,7 @@ static void te_proc_timer_cb(void *arg)
                     ESP_LOGD(TE_DEBUG_TAG, "Set waterproof shield level");
                 }
             }
-            ESP_LOGD(TE_DEBUG_TAG, "read denoise channel %d", s_te_obj->denoise_channel_raw);
+            ESP_LOGD(TE_DEBUG_TAG, "read denoise channel %"PRIu32, s_te_obj->denoise_channel_raw);
         } else if (te_intr_msg.intr_type == TE_INTR_TIMEOUT) { //Timeout processing
             touch_pad_timeout_resume();
         }
@@ -516,7 +517,7 @@ esp_err_t te_dev_set_threshold(te_dev_t *device)
 {
     uint32_t smo_val = te_read_smooth_signal(device->channel);
     esp_err_t ret = touch_pad_set_thresh(device->channel, device->sens * smo_val);
-    ESP_LOGD(TE_DEBUG_TAG, "channel: %d, smo_val: %d", device->channel, smo_val);
+    ESP_LOGD(TE_DEBUG_TAG, "channel: %"PRIu8", smo_val: %"PRIu32, device->channel, smo_val);
     return ret;
 }
 
@@ -812,14 +813,14 @@ static bool waterproof_channel_check(touch_pad_t channel_num)
     te_waterproof_handle_t waterproof_handle = s_te_obj->waterproof_handle;
     if (waterproof_shield_check_state()) {
         if (channel_num == waterproof_handle->shield_channel) {
-            ESP_LOGE(TE_TAG, "TOUCH_PAD_NUM%d has been used for waterproof shield channel,"
+            ESP_LOGE(TE_TAG, "TOUCH_PAD_NUM%"PRIu8" has been used for waterproof shield channel,"
                      " please change the touch sensor channel or disable waterproof", channel_num);
             return true;
         }
     }
     if (waterproof_guard_check_state()) {
         if (channel_num == waterproof_handle->guard_device->channel) {
-            ESP_LOGE(TE_TAG, "TOUCH_PAD_NUM%d has been used for waterproof guard channel,"
+            ESP_LOGE(TE_TAG, "TOUCH_PAD_NUM%"PRIu8" has been used for waterproof guard channel,"
                      " please change the touch sensor channel or disable waterproof", channel_num);
             return true;
         }

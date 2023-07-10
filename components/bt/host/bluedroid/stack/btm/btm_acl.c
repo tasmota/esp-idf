@@ -509,12 +509,14 @@ void btm_acl_device_down (void)
 {
     tACL_CONN   *p = NULL;
     BTM_TRACE_DEBUG ("btm_acl_device_down\n");
-    for (list_node_t *p_node = list_begin(btm_cb.p_acl_db_list); p_node; p_node = list_next(p_node)) {
-       p = list_node(p_node);
-       if (p && p->in_use) {
-           BTM_TRACE_DEBUG ("hci_handle=%d HCI_ERR_HW_FAILURE \n", p->hci_handle );
-           l2c_link_hci_disc_comp (p->hci_handle, HCI_ERR_HW_FAILURE);
-       }
+    for (list_node_t *p_node = list_begin(btm_cb.p_acl_db_list); p_node;) {
+        list_node_t *p_next = list_next(p_node);
+        p = list_node(p_node);
+        if (p && p->in_use) {
+            BTM_TRACE_DEBUG ("hci_handle=%d HCI_ERR_HW_FAILURE \n", p->hci_handle );
+            l2c_link_hci_disc_comp (p->hci_handle, HCI_ERR_HW_FAILURE);
+        }
+        p_node = p_next;
    }
 }
 /*******************************************************************************
@@ -2657,29 +2659,37 @@ void btm_acl_connected(BD_ADDR bda, UINT16 handle, UINT8 link_type, UINT8 enc_mo
 *******************************************************************************/
 void btm_acl_disconnected(UINT16 handle, UINT8 reason)
 {
+    BOOLEAN need_report = TRUE;
+
 #if BTM_SCO_INCLUDED == TRUE
     /* If L2CAP doesn't know about it, send it to SCO */
     if (!l2c_link_hci_disc_comp (handle, reason)) {
         btm_sco_removed (handle, reason);
+        need_report = FALSE;
     }
 #else
-    /* Report BR/EDR ACL disconnection result to upper layer */
-    tACL_CONN *conn = btm_handle_to_acl(handle);
-#if BLE_INCLUDED == TRUE
-    if (conn->transport == BT_TRANSPORT_BR_EDR)
-#endif
-    {
-        tBTM_ACL_LINK_STAT_EVENT_DATA evt_data = {
-            .event = BTM_ACL_DISCONN_CMPL_EVT,
-            .link_act.disconn_cmpl.reason = reason,
-            .link_act.disconn_cmpl.handle = handle,
-        };
-        bdcpy(evt_data.link_act.disconn_cmpl.bd_addr, conn->remote_addr);
-        btm_acl_link_stat_report(&evt_data);
-    }
-
     l2c_link_hci_disc_comp(handle, reason);
 #endif /* BTM_SCO_INCLUDED */
+
+    if (need_report) {
+        /* Report BR/EDR ACL disconnection result to upper layer */
+        tACL_CONN *conn = btm_handle_to_acl(handle);
+        if (conn) {
+#if BLE_INCLUDED == TRUE
+            if (conn->transport == BT_TRANSPORT_BR_EDR)
+#endif
+            {
+                tBTM_ACL_LINK_STAT_EVENT_DATA evt_data = {
+                    .event = BTM_ACL_DISCONN_CMPL_EVT,
+                    .link_act.disconn_cmpl.reason = reason,
+                    .link_act.disconn_cmpl.handle = handle,
+                };
+                bdcpy(evt_data.link_act.disconn_cmpl.bd_addr, conn->remote_addr);
+                btm_acl_link_stat_report(&evt_data);
+            }
+        }
+    }
+
 #if (SMP_INCLUDED == TRUE)
     /* Notify security manager */
     btm_sec_disconnected(handle, reason);

@@ -154,15 +154,15 @@ Hardware Limitations
 
 .. only:: SOC_ADC_DMA_SUPPORTED
 
-    - A specific ADC unit can only work under one operating mode at any one time, either Continuous Mode or Oneshot Mode. :cpp:func:`adc_oneshot_read` has provided the protection.
+    - A specific ADC unit can only work under one operating mode at any one time, either continuous mode or oneshot mode. :cpp:func:`adc_oneshot_read` has provided the protection.
 
 .. only:: esp32 or esp32s2 or esp32s3
 
-    - ADC2 is also used by the Wi-Fi. :cpp:func:`adc_oneshot_read` has provided the protection between Wi-Fi driver and ADC continuous mode driver.
+    - ADC2 is also used by the Wi-Fi. :cpp:func:`adc_oneshot_read` has provided the protection between Wi-Fi driver and ADC oneshot mode driver.
 
 .. only:: esp32c3
 
-    - ADC2 oneshot mode is no longer supported, due to hardware limitation. The results are not stable. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`. For compatibility, you can enable :ref:`CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3` to force use ADC2.
+    - ADC2 oneshot mode is no longer supported, due to hardware limitation. The results are not stable. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3` to force use ADC2.
 
 .. only:: esp32
 

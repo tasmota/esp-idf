@@ -71,6 +71,8 @@ struct gdma_group_t {
     int group_id;           // Group ID, index from 0
     gdma_hal_context_t hal; // HAL instance is at group level
     portMUX_TYPE spinlock;  // group level spinlock
+    uint32_t tx_periph_in_use_mask; // each bit indicates which peripheral (TX direction) has been occupied
+    uint32_t rx_periph_in_use_mask; // each bit indicates which peripheral (RX direction) has been occupied
     gdma_pair_t *pairs[SOC_GDMA_PAIRS_PER_GROUP];  // handles of GDMA pairs
     int pair_ref_counts[SOC_GDMA_PAIRS_PER_GROUP]; // reference count used to protect pair install/uninstall
 };
@@ -246,53 +248,97 @@ err:
 
 esp_err_t gdma_connect(gdma_channel_handle_t dma_chan, gdma_trigger_t trig_periph)
 {
-    esp_err_t ret = ESP_OK;
     gdma_pair_t *pair = NULL;
     gdma_group_t *group = NULL;
-    ESP_GOTO_ON_FALSE(dma_chan, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
-    ESP_GOTO_ON_FALSE(dma_chan->periph_id == GDMA_INVALID_PERIPH_TRIG, ESP_ERR_INVALID_STATE, err, TAG, "channel is using by peripheral: %d", dma_chan->periph_id);
+    ESP_RETURN_ON_FALSE(dma_chan, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(dma_chan->periph_id == GDMA_INVALID_PERIPH_TRIG, ESP_ERR_INVALID_STATE, TAG, "channel is using by peripheral: %d", dma_chan->periph_id);
     pair = dma_chan->pair;
     group = pair->group;
-
-    dma_chan->periph_id = trig_periph.instance_id;
-    // enable/disable m2m mode
-    gdma_ll_enable_m2m_mode(group->hal.dev, pair->pair_id, trig_periph.periph == GDMA_TRIG_PERIPH_M2M);
+    bool periph_conflict = false;
 
     if (dma_chan->direction == GDMA_CHANNEL_DIRECTION_TX) {
-        gdma_ll_tx_reset_channel(group->hal.dev, pair->pair_id); // reset channel
-        if (trig_periph.periph != GDMA_TRIG_PERIPH_M2M) {
-            gdma_ll_tx_connect_to_periph(group->hal.dev, pair->pair_id, trig_periph.instance_id);
+        if (trig_periph.instance_id >= 0) {
+            portENTER_CRITICAL(&group->spinlock);
+            if (group->tx_periph_in_use_mask & (1 << trig_periph.instance_id)) {
+                periph_conflict = true;
+            } else {
+                group->tx_periph_in_use_mask |= (1 << trig_periph.instance_id);
+            }
+            portEXIT_CRITICAL(&group->spinlock);
+        }
+        if (!periph_conflict) {
+            gdma_ll_tx_reset_channel(group->hal.dev, pair->pair_id); // reset channel
+            gdma_ll_tx_connect_to_periph(group->hal.dev, pair->pair_id, trig_periph.periph, trig_periph.instance_id);
         }
     } else {
-        gdma_ll_rx_reset_channel(group->hal.dev, pair->pair_id); // reset channel
-        if (trig_periph.periph != GDMA_TRIG_PERIPH_M2M) {
-            gdma_ll_rx_connect_to_periph(group->hal.dev, pair->pair_id, trig_periph.instance_id);
+        if (trig_periph.instance_id >= 0) {
+            portENTER_CRITICAL(&group->spinlock);
+            if (group->rx_periph_in_use_mask & (1 << trig_periph.instance_id)) {
+                periph_conflict = true;
+            } else {
+                group->rx_periph_in_use_mask |= (1 << trig_periph.instance_id);
+            }
+            portEXIT_CRITICAL(&group->spinlock);
+        }
+        if (!periph_conflict) {
+            gdma_ll_rx_reset_channel(group->hal.dev, pair->pair_id); // reset channel
+            gdma_ll_rx_connect_to_periph(group->hal.dev, pair->pair_id, trig_periph.periph, trig_periph.instance_id);
         }
     }
 
-err:
-    return ret;
+    ESP_RETURN_ON_FALSE(!periph_conflict, ESP_ERR_INVALID_STATE, TAG, "peripheral %d is already used by another channel", trig_periph.instance_id);
+    dma_chan->periph_id = trig_periph.instance_id;
+    return ESP_OK;
 }
 
 esp_err_t gdma_disconnect(gdma_channel_handle_t dma_chan)
 {
-    esp_err_t ret = ESP_OK;
     gdma_pair_t *pair = NULL;
     gdma_group_t *group = NULL;
-    ESP_GOTO_ON_FALSE(dma_chan, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
-    ESP_GOTO_ON_FALSE(dma_chan->periph_id != GDMA_INVALID_PERIPH_TRIG, ESP_ERR_INVALID_STATE, err, TAG, "no peripheral is connected to the channel");
+    ESP_RETURN_ON_FALSE(dma_chan, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(dma_chan->periph_id != GDMA_INVALID_PERIPH_TRIG, ESP_ERR_INVALID_STATE, TAG, "no peripheral is connected to the channel");
+
+    pair = dma_chan->pair;
+    group = pair->group;
+    int save_periph_id = dma_chan->periph_id;
+
+    if (dma_chan->direction == GDMA_CHANNEL_DIRECTION_TX) {
+        if (save_periph_id >= 0) {
+            portENTER_CRITICAL(&group->spinlock);
+            group->tx_periph_in_use_mask &= ~(1 << save_periph_id);
+            portEXIT_CRITICAL(&group->spinlock);
+        }
+        gdma_ll_tx_disconnect_from_periph(group->hal.dev, pair->pair_id);
+    } else {
+        if (save_periph_id >= 0) {
+            portENTER_CRITICAL(&group->spinlock);
+            group->rx_periph_in_use_mask &= ~(1 << save_periph_id);
+            portEXIT_CRITICAL(&group->spinlock);
+        }
+        gdma_ll_rx_disconnect_from_periph(group->hal.dev, pair->pair_id);
+    }
+
+    dma_chan->periph_id = GDMA_INVALID_PERIPH_TRIG;
+    return ESP_OK;
+}
+
+esp_err_t gdma_get_free_m2m_trig_id_mask(gdma_channel_handle_t dma_chan, uint32_t *mask)
+{
+    gdma_pair_t *pair = NULL;
+    gdma_group_t *group = NULL;
+    ESP_RETURN_ON_FALSE(dma_chan && mask, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+
+    uint32_t free_mask = GDMA_LL_M2M_FREE_PERIPH_ID_MASK;
     pair = dma_chan->pair;
     group = pair->group;
 
-    dma_chan->periph_id = GDMA_INVALID_PERIPH_TRIG;
-    if (dma_chan->direction == GDMA_CHANNEL_DIRECTION_TX) {
-        gdma_ll_tx_connect_to_periph(group->hal.dev, pair->pair_id, GDMA_INVALID_PERIPH_TRIG);
-    } else {
-        gdma_ll_rx_connect_to_periph(group->hal.dev, pair->pair_id, GDMA_INVALID_PERIPH_TRIG);
-    }
+    portENTER_CRITICAL(&group->spinlock);
+    free_mask &= ~(group->tx_periph_in_use_mask);
+    free_mask &= ~(group->rx_periph_in_use_mask);
+    portEXIT_CRITICAL(&group->spinlock);
 
-err:
-    return ret;
+    *mask = free_mask;
+    return ESP_OK;
 }
 
 esp_err_t gdma_set_transfer_ability(gdma_channel_handle_t dma_chan, const gdma_transfer_ability_t *ability)
@@ -350,7 +396,7 @@ esp_err_t gdma_set_transfer_ability(gdma_channel_handle_t dma_chan, const gdma_t
 
     dma_chan->sram_alignment = sram_alignment;
     dma_chan->psram_alignment = psram_alignment;
-    ESP_LOGD(TAG, "%s channel (%d,%d), (%zu:%zu) bytes aligned, burst %s", dma_chan->direction == GDMA_CHANNEL_DIRECTION_TX ? "tx" : "rx",
+    ESP_LOGD(TAG, "%s channel (%d,%d), (%u:%u) bytes aligned, burst %s", dma_chan->direction == GDMA_CHANNEL_DIRECTION_TX ? "tx" : "rx",
              group->group_id, pair->pair_id, sram_alignment, psram_alignment, en_burst ? "enabled" : "disabled");
 err:
     return ret;
@@ -713,7 +759,7 @@ static void IRAM_ATTR gdma_default_rx_isr(void *args)
     gdma_ll_rx_clear_interrupt_status(group->hal.dev, pair->pair_id, intr_status);
 
     if (intr_status & GDMA_LL_EVENT_RX_SUC_EOF) {
-        if (rx_chan && rx_chan->on_recv_eof) {
+        if (rx_chan->on_recv_eof) {
             uint32_t eof_addr = gdma_ll_rx_get_success_eof_desc_addr(group->hal.dev, pair->pair_id);
             gdma_event_data_t edata = {
                 .rx_eof_desc_addr = eof_addr

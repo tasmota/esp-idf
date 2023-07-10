@@ -17,6 +17,7 @@
 #include "ap/wpa_auth_i.h"
 #include "esp_wifi_driver.h"
 #include "esp_wifi_types.h"
+#include "esp_wps.h"
 
 struct hostapd_data *global_hapd;
 
@@ -32,7 +33,7 @@ void *hostap_init(void)
     struct wpa_auth_config *auth_conf;
     u16 spp_attrubute = 0;
     u8 pairwise_cipher;
-    wifi_pmf_config_t pmf_cfg;
+    wifi_pmf_config_t pmf_cfg = {0};
 
     hapd = (struct hostapd_data *)os_zalloc(sizeof(struct hostapd_data));
 
@@ -46,7 +47,7 @@ void *hostap_init(void)
         os_free(hapd);
         return NULL;
     }
-    hapd->conf->max_num_sta = MAX_STA_COUNT;
+    hapd->conf->max_num_sta = esp_wifi_ap_get_max_sta_conn();
 
     auth_conf = (struct wpa_auth_config *)os_zalloc(sizeof(struct  wpa_auth_config));
 
@@ -69,11 +70,12 @@ void *hostap_init(void)
     pairwise_cipher = esp_wifi_ap_get_prof_pairwise_cipher_internal();
 
 #ifdef CONFIG_IEEE80211W
-
-    esp_wifi_get_pmf_config_internal(&pmf_cfg, WIFI_IF_AP);
-
-    if (pmf_cfg.required) {
-	pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+    if((auth_conf->wpa & WPA_PROTO_RSN) == WPA_PROTO_RSN)
+    {
+        esp_wifi_get_pmf_config_internal(&pmf_cfg, WIFI_IF_AP);
+        if (pmf_cfg.required) {
+            pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+        }
     }
 #endif /* CONFIG_IEEE80211W */
 
@@ -146,6 +148,13 @@ bool hostap_deinit(void *data)
     if (hapd == NULL) {
         return true;
     }
+
+#ifdef CONFIG_WPS_REGISTRAR
+    if (esp_wifi_get_wps_type_internal () != WPS_TYPE_DISABLE ||
+        esp_wifi_get_wps_status_internal() != WPS_STATUS_DISABLE) {
+        esp_wifi_ap_wps_disable();
+    }
+#endif /* CONFIG_WPS_REGISTRAR */
 
     if (hapd->wpa_auth != NULL) {
         if (hapd->wpa_auth->wpa_ie != NULL) {

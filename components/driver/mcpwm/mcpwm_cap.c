@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -269,6 +269,7 @@ esp_err_t mcpwm_new_capture_channel(mcpwm_cap_timer_handle_t cap_timer, const mc
 
     cap_chan->gpio_num = config->gpio_num;
     cap_chan->fsm = MCPWM_CAP_CHAN_FSM_INIT;
+    cap_chan->flags.reset_io_at_exit = !config->flags.keep_io_conf_at_exit && config->gpio_num >= 0;
     *ret_cap_channel = cap_chan;
     ESP_LOGD(TAG, "new capture channel (%d,%d) at %p", group->group_id, cap_chan_id, cap_chan);
     return ESP_OK;
@@ -289,7 +290,7 @@ esp_err_t mcpwm_del_capture_channel(mcpwm_cap_channel_handle_t cap_channel)
     int cap_chan_id = cap_channel->cap_chan_id;
 
     ESP_LOGD(TAG, "del capture channel (%d,%d)", group->group_id, cap_channel->cap_chan_id);
-    if (cap_channel->gpio_num >= 0) {
+    if (cap_channel->flags.reset_io_at_exit) {
         gpio_reset_pin(cap_channel->gpio_num);
     }
 
@@ -346,7 +347,7 @@ esp_err_t mcpwm_capture_channel_register_event_callbacks(mcpwm_cap_channel_handl
     int group_id = group->group_id;
     int cap_chan_id = cap_channel->cap_chan_id;
 
-#if CONFIG_MCWPM_ISR_IRAM_SAFE
+#if CONFIG_MCPWM_ISR_IRAM_SAFE
     if (cbs->on_cap) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_cap), ESP_ERR_INVALID_ARG, TAG, "on_cap callback not in IRAM");
     }

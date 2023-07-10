@@ -26,6 +26,7 @@
 #include "sdkconfig.h"
 #include "sntp/sntp_get_set_time.h"
 #include "sockets_ext.h"
+#include "arch/sys_arch.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,9 +47,20 @@ extern "C" {
  */
 #ifdef CONFIG_LWIP_TCPIP_CORE_LOCKING
 #define LWIP_TCPIP_CORE_LOCKING         1
+#define LOCK_TCPIP_CORE()     do { sys_mutex_lock(&lock_tcpip_core); sys_thread_tcpip(LWIP_CORE_LOCK_MARK_HOLDER); } while(0)
+#define UNLOCK_TCPIP_CORE()   do { sys_thread_tcpip(LWIP_CORE_LOCK_UNMARK_HOLDER); sys_mutex_unlock(&lock_tcpip_core);  } while(0)
+#ifdef CONFIG_LWIP_CHECK_THREAD_SAFETY
+#define LWIP_ASSERT_CORE_LOCKED() do { LWIP_ASSERT("Required to lock TCPIP core functionality!", sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)); } while(0)
+#endif /* CONFIG_LWIP_CHECK_THREAD_SAFETY */
+
 #else
 #define LWIP_TCPIP_CORE_LOCKING         0
-#endif
+#ifdef CONFIG_LWIP_CHECK_THREAD_SAFETY
+#define LWIP_ASSERT_CORE_LOCKED()     do { LWIP_ASSERT("Required to run in TCPIP context!", sys_thread_tcpip(LWIP_CORE_LOCK_QUERY_HOLDER)); } while(0)
+#endif /* CONFIG_LWIP_CHECK_THREAD_SAFETY */
+#endif /* CONFIG_LWIP_TCPIP_CORE_LOCKING */
+
+#define LWIP_MARK_TCPIP_THREAD() sys_thread_tcpip(LWIP_CORE_MARK_TCPIP_TASK)
 
 /**
  * SYS_LIGHTWEIGHT_PROT==1: if you want inter-task protection for certain
@@ -339,7 +351,7 @@ extern "C" {
 #define ESP_DHCP_DISABLE_VENDOR_CLASS_IDENTIFIER       CONFIG_LWIP_DHCP_DISABLE_VENDOR_CLASS_ID
 
 #define DHCP_DEFINE_CUSTOM_TIMEOUTS     1
-#define DHCP_COARSE_TIMER_SECS          (1)
+#define DHCP_COARSE_TIMER_SECS          CONFIG_LWIP_DHCP_COARSE_TIMER_SECS
 #define DHCP_NEXT_TIMEOUT_THRESHOLD     (3)
 /* Since for embedded devices it's not that hard to miss a discover packet, so lower
  * the discover retry backoff time from (2,4,8,16,32,60,60)s to (500m,1,2,4,8,15,15)s.
@@ -354,6 +366,7 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
     if (timeout == 0) {
         timeout = min;
     }
+    timeout = (timeout + DHCP_COARSE_TIMER_SECS - 1) / DHCP_COARSE_TIMER_SECS;
     return timeout;
 }
 
@@ -845,11 +858,7 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
  * The latter 2 can be invoked up by calling netconn_thread_init()/netconn_thread_cleanup().
  * Ports may call these for threads created with sys_thread_new().
  */
-#if LWIP_TCPIP_CORE_LOCKING
-#define LWIP_NETCONN_SEM_PER_THREAD     0
-#else
 #define LWIP_NETCONN_SEM_PER_THREAD     1
-#endif
 
 /** LWIP_NETCONN_FULLDUPLEX==1: Enable code that allows reading from one thread,
  * writing from a 2nd thread and closing from a 3rd thread at the same time.
@@ -1198,11 +1207,17 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
 #endif
 #define LWIP_HOOK_FILENAME              "lwip_default_hooks.h"
 #define LWIP_HOOK_IP4_ROUTE_SRC         ip4_route_src_hook
+#if LWIP_NETCONN_FULLDUPLEX
+#define LWIP_DONE_SOCK(sock)            done_socket(sock)
+#else
+#define LWIP_DONE_SOCK(sock)            ((void)1)
+#endif /* LWIP_NETCONN_FULLDUPLEX */
+
 #define LWIP_HOOK_SOCKETS_GETSOCKOPT(s, sock, level, optname, optval, optlen, err)    \
-        lwip_getsockopt_impl_ext(sock, level, optname, optval, optlen, err)?(done_socket(sock), true): false
+        lwip_getsockopt_impl_ext(sock, level, optname, optval, optlen, err)?(LWIP_DONE_SOCK(sock), true): false
 
 #define LWIP_HOOK_SOCKETS_SETSOCKOPT(s, sock, level, optname, optval, optlen, err)    \
-        lwip_setsockopt_impl_ext(sock, level, optname, optval, optlen, err)?(done_socket(sock), true): false
+        lwip_setsockopt_impl_ext(sock, level, optname, optval, optlen, err)?(LWIP_DONE_SOCK(sock), true): false
 
 /*
    ---------------------------------------
@@ -1453,6 +1468,15 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
 #define ESP_GRATUITOUS_ARP_INTERVAL     (CONFIG_LWIP_GARP_TMR_INTERVAL*1000UL)
 #else
 #define ESP_GRATUITOUS_ARP              0
+#endif
+
+/**
+ * ESP_MLDV6_REPORT==1: This option allows to send mldv6 report periodically.
+ */
+#ifdef CONFIG_LWIP_ESP_MLDV6_REPORT
+#define ESP_MLDV6_REPORT              1
+#else
+#define ESP_MLDV6_REPORT              0
 #endif
 
 #define ESP_LWIP                        1

@@ -40,6 +40,7 @@
 #include "wps/wps_defs.h"
 
 const wifi_osi_funcs_t *wifi_funcs;
+struct wpa_funcs *wpa_cb;
 
 void  wpa_install_key(enum wpa_alg alg, u8 *addr, int key_idx, int set_tx,
                       u8 *seq, size_t seq_len, u8 *key, size_t key_len, enum key_flag key_flag)
@@ -181,7 +182,14 @@ void wpa_ap_get_peer_spp_msg(void *sm_data, bool *spp_cap, bool *spp_req)
 
 bool  wpa_deattach(void)
 {
-    esp_wifi_sta_wpa2_ent_disable();
+    struct wpa_sm *sm = &gWpaSm;
+    if (sm->wpa_sm_wpa2_ent_disable) {
+        sm->wpa_sm_wpa2_ent_disable();
+    }
+    if (sm->wpa_sm_wps_disable) {
+        sm->wpa_sm_wps_disable();
+    }
+
     wpa_sm_deinit();
     return true;
 }
@@ -206,7 +214,7 @@ int wpa_sta_connect(uint8_t *bssid)
 
 void wpa_config_done(void)
 {
-    /* used in future for setting scan and assoc IEs */
+    esp_set_scan_ie();
 }
 
 int wpa_parse_wpa_ie_wrapper(const u8 *wpa_ie, size_t wpa_ie_len, wifi_wpa_ie_t *data)
@@ -225,6 +233,11 @@ int wpa_parse_wpa_ie_wrapper(const u8 *wpa_ie, size_t wpa_ie_len, wifi_wpa_ie_t 
     data->rsnxe_capa = ie.rsnxe_capa;
 
     return ret;
+}
+
+static void wpa_sta_connected_cb(uint8_t *bssid)
+{
+    supplicant_sta_conn_handler(bssid);
 }
 
 static void wpa_sta_disconnected_cb(uint8_t reason_code)
@@ -249,6 +262,8 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
 #ifdef CONFIG_OWE_STA
     owe_deinit();
 #endif /* CONFIG_OWE_STA */
+
+    supplicant_sta_disconn_handler();
 }
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
@@ -311,7 +326,6 @@ static bool hostap_sta_join(void **sta, u8 *bssid, u8 *wpa_ie, u8 wpa_ie_len, bo
 int esp_supplicant_init(void)
 {
     int ret = ESP_OK;
-    struct wpa_funcs *wpa_cb;
 
     wifi_funcs = WIFI_OSI_FUNCS_INITIALIZER();
     if (!wifi_funcs) {
@@ -326,6 +340,7 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_sta_deinit     = wpa_deattach;
     wpa_cb->wpa_sta_rx_eapol   = wpa_sm_rx_eapol;
     wpa_cb->wpa_sta_connect    = wpa_sta_connect;
+    wpa_cb->wpa_sta_connected_cb    = wpa_sta_connected_cb;
     wpa_cb->wpa_sta_disconnected_cb = wpa_sta_disconnected_cb;
     wpa_cb->wpa_sta_in_4way_handshake = wpa_sta_in_4way_handshake;
 
@@ -370,5 +385,6 @@ int esp_supplicant_deinit(void)
 {
     esp_supplicant_common_deinit();
     eloop_destroy();
+    wpa_cb = NULL;
     return esp_wifi_unregister_wpa_cb_internal();
 }

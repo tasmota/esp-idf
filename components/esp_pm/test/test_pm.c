@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <time.h>
 #include <sys/time.h>
 #include <sys/param.h>
@@ -268,8 +269,6 @@ TEST_CASE("Can wake up from automatic light sleep by GPIO", "[pm][ignore]")
 #endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32S3)
 #endif //CONFIG_ULP_COPROC_TYPE_FSM
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
-//IDF-5053
 typedef struct {
     int delay_us;
     int result;
@@ -345,7 +344,7 @@ TEST_CASE("esp_timer produces correct delays with light sleep", "[pm]")
         test_args_t *p_args = (test_args_t *) arg;
         int64_t t_end = esp_clk_rtc_time();
         int32_t ms_diff = (t_end - p_args->t_start) / 1000;
-        printf("timer #%d %dms\n", p_args->cur_interval, ms_diff);
+        printf("timer #%d %"PRIi32"ms\n", p_args->cur_interval, ms_diff);
         p_args->intervals[p_args->cur_interval++] = ms_diff;
         // Deliberately make timer handler run longer.
         // We check that this doesn't affect the result.
@@ -390,7 +389,6 @@ TEST_CASE("esp_timer produces correct delays with light sleep", "[pm]")
 
 #undef NUM_INTERVALS
 }
-#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
 
 static void timer_cb1(void *arg)
 {

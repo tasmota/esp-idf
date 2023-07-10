@@ -32,9 +32,11 @@ implement the bare minimum to control the root HCD port.
 #define HUB_ROOT_HCD_PORT_FIFO_BIAS                 HCD_PORT_FIFO_BIAS_BALANCED
 #endif
 
+#define SET_ADDR_RECOVERY_INTERVAL_MS               CONFIG_USB_HOST_SET_ADDR_RECOVERY_MS
+
 #define ENUM_CTRL_TRANSFER_MAX_DATA_LEN             CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE
 #define ENUM_DEV_ADDR                               1       //Device address used in enumeration
-#define ENUM_CONFIG_INDEX                           0       //Index of the first configuration of the device
+#define ENUM_CONFIG_INDEX                           0       //Index used to get the first configuration descriptor of the device
 #define ENUM_SHORT_DESC_REQ_LEN                     8       //Number of bytes to request when getting a short descriptor (just enough to get bMaxPacketSize0 or wTotalLength)
 #define ENUM_WORST_CASE_MPS_LS                      8       //The worst case MPS of EP0 for a LS device
 #define ENUM_WORST_CASE_MPS_FS                      64      //The worst case MPS of EP0 for a FS device
@@ -79,6 +81,7 @@ typedef enum {
     ENUM_STAGE_SECOND_RESET,                /**< Reset the device again (Workaround for old USB devices that get confused by the previous short dev desc request). */
     ENUM_STAGE_SET_ADDR,                    /**< Send SET_ADDRESS request */
     ENUM_STAGE_CHECK_ADDR,                  /**< Update the enum pipe's target address */
+    ENUM_STAGE_SET_ADDR_RECOVERY,           /**< Wait SET ADDRESS recovery interval at least for 2ms due to usb_20, chapter 9.2.6.3 */
     ENUM_STAGE_GET_FULL_DEV_DESC,           /**< Get the full dev desc */
     ENUM_STAGE_CHECK_FULL_DEV_DESC,         /**< Check the full dev desc, fill it into the device object in USBH. Save the string descriptor indexes*/
     ENUM_STAGE_GET_SHORT_CONFIG_DESC,       /**< Getting a short config desc (wLength is ENUM_SHORT_DESC_REQ_LEN) */
@@ -117,6 +120,7 @@ const char *const enum_stage_strings[] = {
     "SECOND_RESET",
     "SET_ADDR",
     "CHECK_ADDR",
+    "SET_ADDR_RECOVERY",
     "GET_FULL_DEV_DESC",
     "CHECK_FULL_DEV_DESC",
     "GET_SHORT_CONFIG_DESC",
@@ -160,6 +164,7 @@ typedef struct {
     uint8_t iProduct;               /**< Index of the Product string descriptor */
     uint8_t iSerialNumber;          /**< Index of the Serial Number string descriptor */
     uint8_t str_desc_bLength;       /**< Saved bLength from getting a short string descriptor */
+    uint8_t bConfigurationValue;    /**< Device's current configuration number */
 } enum_ctrl_t;
 
 typedef struct {
@@ -288,33 +293,34 @@ static bool enum_stage_second_reset(enum_ctrl_t *enum_ctrl)
     return true;
 }
 
-static uint8_t get_string_desc_index(enum_ctrl_t *enum_ctrl)
+static void get_string_desc_index_and_langid(enum_ctrl_t *enum_ctrl, uint8_t *index, uint16_t *langid)
 {
-    uint8_t index;
     switch (enum_ctrl->stage) {
         case ENUM_STAGE_GET_SHORT_LANGID_TABLE:
         case ENUM_STAGE_GET_FULL_LANGID_TABLE:
-            index = 0;  //The LANGID table uses an index of 0
+            *index = 0;     //The LANGID table uses an index of 0
+            *langid = 0;    //Getting the LANGID table itself should use a LANGID of 0
             break;
         case ENUM_STAGE_GET_SHORT_MANU_STR_DESC:
         case ENUM_STAGE_GET_FULL_MANU_STR_DESC:
-            index = enum_ctrl->iManufacturer;
+            *index = enum_ctrl->iManufacturer;
+            *langid = ENUM_LANGID;  //Use the default LANGID
             break;
         case ENUM_STAGE_GET_SHORT_PROD_STR_DESC:
         case ENUM_STAGE_GET_FULL_PROD_STR_DESC:
-            index = enum_ctrl->iProduct;
+            *index = enum_ctrl->iProduct;
+            *langid = ENUM_LANGID;  //Use the default LANGID
             break;
         case ENUM_STAGE_GET_SHORT_SER_STR_DESC:
         case ENUM_STAGE_GET_FULL_SER_STR_DESC:
-            index = enum_ctrl->iSerialNumber;
+            *index = enum_ctrl->iSerialNumber;
+            *langid = ENUM_LANGID;  //Use the default LANGID
             break;
         default:
             //Should not occur
-            index = 0;
             abort();
             break;
     }
-    return index;
 }
 
 static bool enum_stage_transfer(enum_ctrl_t *enum_ctrl)
@@ -360,7 +366,7 @@ static bool enum_stage_transfer(enum_ctrl_t *enum_ctrl)
             break;
         }
         case ENUM_STAGE_SET_CONFIG: {
-            USB_SETUP_PACKET_INIT_SET_CONFIG((usb_setup_packet_t *)transfer->data_buffer, ENUM_CONFIG_INDEX + 1);
+            USB_SETUP_PACKET_INIT_SET_CONFIG((usb_setup_packet_t *)transfer->data_buffer, enum_ctrl->bConfigurationValue);
             transfer->num_bytes = sizeof(usb_setup_packet_t);   //No data stage
             enum_ctrl->expect_num_bytes = 0;    //OUT transfer. No need to check number of bytes returned
             break;
@@ -369,11 +375,13 @@ static bool enum_stage_transfer(enum_ctrl_t *enum_ctrl)
         case ENUM_STAGE_GET_SHORT_MANU_STR_DESC:
         case ENUM_STAGE_GET_SHORT_PROD_STR_DESC:
         case ENUM_STAGE_GET_SHORT_SER_STR_DESC: {
-            uint8_t index = get_string_desc_index(enum_ctrl);
+            uint8_t index;
+            uint16_t langid;
+            get_string_desc_index_and_langid(enum_ctrl, &index, &langid);
             //Get only the header of the string descriptor
             USB_SETUP_PACKET_INIT_GET_STR_DESC((usb_setup_packet_t *)transfer->data_buffer,
                                                index,
-                                               ENUM_LANGID,
+                                               langid,
                                                sizeof(usb_str_desc_t));
             transfer->num_bytes = sizeof(usb_setup_packet_t) + usb_round_up_to_mps(sizeof(usb_str_desc_t), enum_ctrl->bMaxPacketSize0);
             //IN data stage should return exactly sizeof(usb_str_desc_t) bytes
@@ -384,11 +392,13 @@ static bool enum_stage_transfer(enum_ctrl_t *enum_ctrl)
         case ENUM_STAGE_GET_FULL_MANU_STR_DESC:
         case ENUM_STAGE_GET_FULL_PROD_STR_DESC:
         case ENUM_STAGE_GET_FULL_SER_STR_DESC: {
-            uint8_t index = get_string_desc_index(enum_ctrl);
+            uint8_t index;
+            uint16_t langid;
+            get_string_desc_index_and_langid(enum_ctrl, &index, &langid);
             //Get the full string descriptor at a particular index, requesting the descriptors exact length
             USB_SETUP_PACKET_INIT_GET_STR_DESC((usb_setup_packet_t *)transfer->data_buffer,
                                                index,
-                                               ENUM_LANGID,
+                                               langid,
                                                enum_ctrl->str_desc_bLength);
             transfer->num_bytes = sizeof(usb_setup_packet_t) + usb_round_up_to_mps(enum_ctrl->str_desc_bLength, enum_ctrl->bMaxPacketSize0);
             //IN data stage should return exactly str_desc_bLength bytes
@@ -406,6 +416,22 @@ static bool enum_stage_transfer(enum_ctrl_t *enum_ctrl)
     return true;
 }
 
+static bool enum_stage_wait(enum_ctrl_t *enum_ctrl)
+{
+    switch (enum_ctrl->stage) {
+        case ENUM_STAGE_SET_ADDR_RECOVERY: {
+            vTaskDelay(pdMS_TO_TICKS(SET_ADDR_RECOVERY_INTERVAL_MS)); // Need a short delay before device is ready. Todo:   IDF-7007
+            return true;
+        }
+
+        default:    //Should never occur
+            abort();
+            break;
+        }
+
+    return false;
+}
+
 static bool enum_stage_transfer_check(enum_ctrl_t *enum_ctrl)
 {
     //Dequeue the URB
@@ -415,12 +441,16 @@ static bool enum_stage_transfer_check(enum_ctrl_t *enum_ctrl)
     //Check transfer status
     usb_transfer_t *transfer = &dequeued_enum_urb->transfer;
     if (transfer->status != USB_TRANSFER_STATUS_COMPLETED) {
-        ESP_LOGE(HUB_DRIVER_TAG, "Bad transfer status: %s", enum_stage_strings[enum_ctrl->stage]);
+        ESP_LOGE(HUB_DRIVER_TAG, "Bad transfer status %d: %s", transfer->status, enum_stage_strings[enum_ctrl->stage]);
+        if (transfer->status == USB_TRANSFER_STATUS_STALL) {
+            //EP stalled, clearing the pipe to execute further stages
+            ESP_ERROR_CHECK(hcd_pipe_command(enum_ctrl->pipe, HCD_PIPE_CMD_CLEAR));
+        }
         return false;
     }
     //Check IN transfer returned the expected correct number of bytes
     if (enum_ctrl->expect_num_bytes != 0 && enum_ctrl->expect_num_bytes != transfer->actual_num_bytes) {
-        ESP_LOGE(HUB_DRIVER_TAG, "Incorrect number of bytes returned: %s", enum_stage_strings[enum_ctrl->stage]);
+        ESP_LOGE(HUB_DRIVER_TAG, "Incorrect number of bytes returned %d: %s", transfer->actual_num_bytes, enum_stage_strings[enum_ctrl->stage]);
         return false;
     }
 
@@ -487,6 +517,7 @@ static bool enum_stage_transfer_check(enum_ctrl_t *enum_ctrl)
         case ENUM_STAGE_CHECK_FULL_CONFIG_DESC: {
             //Fill configuration descriptor into the device object
             const usb_config_desc_t *config_desc = (usb_config_desc_t *)(transfer->data_buffer + sizeof(usb_setup_packet_t));
+            enum_ctrl->bConfigurationValue = config_desc->bConfigurationValue;
             ESP_ERROR_CHECK(usbh_hub_enum_fill_config_desc(enum_ctrl->dev_hdl, config_desc));
             ret = true;
             break;
@@ -617,6 +648,27 @@ static void enum_stage_cleanup_failed(enum_ctrl_t *enum_ctrl)
     HUB_DRIVER_EXIT_CRITICAL();
 }
 
+static enum_stage_t get_next_stage(enum_stage_t old_stage, enum_ctrl_t *enum_ctrl)
+{
+    enum_stage_t new_stage = old_stage + 1;
+    //Skip the GET_DESCRIPTOR string type corresponding stages if a particular index is 0.
+    while(((new_stage == ENUM_STAGE_GET_SHORT_MANU_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_SHORT_MANU_STR_DESC ||
+        new_stage == ENUM_STAGE_GET_FULL_MANU_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_FULL_MANU_STR_DESC) && enum_ctrl->iManufacturer == 0) ||
+        ((new_stage == ENUM_STAGE_GET_SHORT_PROD_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_SHORT_PROD_STR_DESC ||
+        new_stage == ENUM_STAGE_GET_FULL_PROD_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_FULL_PROD_STR_DESC) && enum_ctrl->iProduct == 0) ||
+        ((new_stage == ENUM_STAGE_GET_SHORT_SER_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_SHORT_SER_STR_DESC ||
+        new_stage == ENUM_STAGE_GET_FULL_SER_STR_DESC ||
+        new_stage == ENUM_STAGE_CHECK_FULL_SER_STR_DESC) && enum_ctrl->iSerialNumber == 0)) {
+            new_stage++;
+        }
+    return new_stage;
+}
+
 static void enum_set_next_stage(enum_ctrl_t *enum_ctrl, bool last_stage_pass)
 {
     //Set next stage
@@ -624,7 +676,7 @@ static void enum_set_next_stage(enum_ctrl_t *enum_ctrl, bool last_stage_pass)
         if (enum_ctrl->stage != ENUM_STAGE_NONE &&
             enum_ctrl->stage != ENUM_STAGE_CLEANUP &&
             enum_ctrl->stage != ENUM_STAGE_CLEANUP_FAILED) {
-                enum_ctrl->stage++; //Go to next stage
+                enum_ctrl->stage = get_next_stage(enum_ctrl->stage, enum_ctrl);
         } else {
                 enum_ctrl->stage = ENUM_STAGE_NONE;
         }
@@ -666,6 +718,7 @@ static void enum_set_next_stage(enum_ctrl_t *enum_ctrl, bool last_stage_pass)
         case ENUM_STAGE_GET_SHORT_DEV_DESC:
         case ENUM_STAGE_SECOND_RESET:
         case ENUM_STAGE_SET_ADDR:
+        case ENUM_STAGE_SET_ADDR_RECOVERY:
         case ENUM_STAGE_GET_FULL_DEV_DESC:
         case ENUM_STAGE_GET_SHORT_CONFIG_DESC:
         case ENUM_STAGE_GET_FULL_CONFIG_DESC:
@@ -826,6 +879,10 @@ static void enum_handle_events(void)
         case ENUM_STAGE_GET_SHORT_SER_STR_DESC:
         case ENUM_STAGE_GET_FULL_SER_STR_DESC:
             stage_pass = enum_stage_transfer(enum_ctrl);
+            break;
+        //Recovery interval
+        case ENUM_STAGE_SET_ADDR_RECOVERY:
+            stage_pass = enum_stage_wait(enum_ctrl);
             break;
         //Transfer check stages
         case ENUM_STAGE_CHECK_SHORT_DEV_DESC:

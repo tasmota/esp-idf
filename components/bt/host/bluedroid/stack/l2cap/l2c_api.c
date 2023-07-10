@@ -1297,7 +1297,7 @@ UINT8 L2CA_GetChnlFcrMode (UINT16 lcid)
 
 #endif  ///CLASSIC_BT_INCLUDED == TRUE
 
-#if (BLE_INCLUDED == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
 /*******************************************************************************
 **
 ** Function         L2CA_RegisterLECoc
@@ -1608,7 +1608,7 @@ BOOLEAN L2CA_GetPeerLECocConfig (UINT16 lcid, tL2CAP_LE_CFG_INFO* peer_cfg)
 
     return TRUE;
 }
-#endif  ///BLE_INCLUDED == TRUE
+#endif // (BLE_L2CAP_COC_INCLUDED == TRUE)
 
 #if (L2CAP_NUM_FIXED_CHNLS > 0)
 /*******************************************************************************
@@ -2384,6 +2384,12 @@ void l2ble_update_att_acl_pkt_num(UINT8 type, tl2c_buff_param_t *param)
         xSemaphoreGive(buff_semaphore);
         vSemaphoreDelete(buff_semaphore);
         buff_semaphore = NULL;
+        break;
+    }
+    case L2CA_BUFF_FREE:{
+        xSemaphoreTake(buff_semaphore, portMAX_DELAY);
+        // Do nothing
+        xSemaphoreGive(buff_semaphore);
         break;
     }
     default:

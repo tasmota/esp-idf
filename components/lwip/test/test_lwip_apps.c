@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,8 +10,10 @@
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "lwip/tcpip.h"
 #include "ping/ping_sock.h"
 #include "dhcpserver/dhcpserver.h"
+#include "dhcpserver/dhcpserver_options.h"
 
 #define ETH_PING_END_BIT BIT(1)
 #define ETH_PING_DURATION_MS (5000)
@@ -124,11 +126,18 @@ TEST_CASE("dhcp server init/deinit", "[lwip][leaks=0]")
     dhcps_delete(dhcps);
 }
 
-TEST_CASE("dhcp server start/stop on localhost", "[lwip]")
+struct dhcps_api {
+    EventGroupHandle_t event;
+    ip4_addr_t netmask;
+    ip4_addr_t ip;
+    err_t ret_start;
+    err_t ret_stop;
+};
+
+static void dhcps_test_net_classes_api(void* ctx)
 {
-    test_case_uses_tcpip();
-    dhcps_t *dhcps = dhcps_new();
     struct netif *netif;
+    struct dhcps_api *api = ctx;
 
     NETIF_FOREACH(netif) {
         if (netif->name[0] == 'l' && netif->name[1] == 'o') {
@@ -137,8 +146,49 @@ TEST_CASE("dhcp server start/stop on localhost", "[lwip]")
     }
     TEST_ASSERT_NOT_NULL(netif);
 
-    ip4_addr_t ip = { .addr = 0x7f0001 };
-    TEST_ASSERT(dhcps_start(dhcps, netif, ip) == ERR_OK);
-    TEST_ASSERT(dhcps_stop(dhcps, netif) == ERR_OK);
+    dhcps_t *dhcps = dhcps_new();
+    dhcps_set_option_info(dhcps, SUBNET_MASK, (void*)&api->netmask, sizeof(api->netmask));
+    api->ret_start = dhcps_start(dhcps, netif, api->ip);
+    api->ret_stop = dhcps_stop(dhcps, netif);
     dhcps_delete(dhcps);
+    xEventGroupSetBits(api->event, 1);
+}
+
+static void dhcps_test_net_classes(uint32_t ip, uint32_t mask, bool pass)
+{
+
+    struct dhcps_api api = {
+            .ret_start = ERR_IF,
+            .ret_stop = ERR_IF,
+            .ip = {.addr = PP_HTONL(ip)},
+            .netmask = {.addr = PP_HTONL(mask)},
+            .event = xEventGroupCreate()
+    };
+
+    tcpip_callback(dhcps_test_net_classes_api, &api);
+    xEventGroupWaitBits(api.event, 1, true, true, pdMS_TO_TICKS(5000));
+    vEventGroupDelete(api.event);
+    err_t ret_start_expected = pass ? ERR_OK : ERR_ARG;
+    TEST_ASSERT(api.ret_start == ret_start_expected);
+    TEST_ASSERT(api.ret_stop == ERR_OK);
+
+}
+
+TEST_CASE("dhcp server start/stop on localhost", "[lwip]")
+{
+    test_case_uses_tcpip();
+
+    // Class A: IP: 127.0.0.1, Mask: 255.0.0.0
+    dhcps_test_net_classes(0x7f000001, 0xFF000000, true);
+
+    // Class B: IP: 128.1.1.1, Mask: 255.255.0.0
+    dhcps_test_net_classes(0x80010101, 0xFFFF0000, true);
+
+    // Class C: IP: 192.168.1.1, Mask: 255.255.255.0
+    dhcps_test_net_classes(0xC0A80101, 0xFFFFFF00, true);
+
+
+    // Class A: IP: 127.0.0.1, with inaccurate Mask: 255.248.255.0
+    // expect dhcps_start() to fail
+    dhcps_test_net_classes(0x7f000001, 0xFFF8FF00, false);
 }

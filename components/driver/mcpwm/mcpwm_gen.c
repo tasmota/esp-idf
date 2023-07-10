@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -148,6 +148,28 @@ esp_err_t mcpwm_generator_set_force_level(mcpwm_gen_handle_t gen, int level, boo
     return ESP_OK;
 }
 
+esp_err_t mcpwm_generator_set_action_on_timer_event(mcpwm_gen_handle_t gen, mcpwm_gen_timer_event_action_t ev_act)
+{
+    ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(ev_act.event != MCPWM_TIMER_EVENT_INVALID, ESP_ERR_INVALID_ARG, TAG, "invalid event");
+    mcpwm_oper_t *oper = gen->oper;
+    mcpwm_group_t *group = oper->group;
+    mcpwm_timer_t *timer = oper->timer;
+    ESP_RETURN_ON_FALSE(timer, ESP_ERR_INVALID_STATE, TAG, "no timer is connected to the operator");
+    bool invalid_utep = (timer->count_mode == MCPWM_TIMER_COUNT_MODE_UP_DOWN) &&
+                        (ev_act.direction == MCPWM_TIMER_DIRECTION_UP) &&
+                        (ev_act.event == MCPWM_TIMER_EVENT_FULL);
+    bool invalid_dtez = (timer->count_mode == MCPWM_TIMER_COUNT_MODE_UP_DOWN) &&
+                        (ev_act.direction == MCPWM_TIMER_DIRECTION_DOWN) &&
+                        (ev_act.event == MCPWM_TIMER_EVENT_EMPTY);
+    if (invalid_utep || invalid_dtez) {
+        ESP_RETURN_ON_FALSE(false, ESP_ERR_INVALID_ARG, TAG, "UTEP and DTEZ can't be reached under MCPWM_TIMER_COUNT_MODE_UP_DOWN mode");
+    }
+    mcpwm_ll_generator_set_action_on_timer_event(group->hal.dev, oper->oper_id, gen->gen_id,
+            ev_act.direction, ev_act.event, ev_act.action);
+    return ESP_OK;
+}
+
 esp_err_t mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_t gen, mcpwm_gen_timer_event_action_t ev_act, ...)
 {
     ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
@@ -179,6 +201,17 @@ esp_err_t mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_t gen, mcp
     return ESP_OK;
 }
 
+esp_err_t mcpwm_generator_set_action_on_compare_event(mcpwm_gen_handle_t gen, mcpwm_gen_compare_event_action_t ev_act)
+{
+    ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(ev_act.comparator, ESP_ERR_INVALID_ARG, TAG, "invalid comparator");
+    mcpwm_oper_t *oper = gen->oper;
+    mcpwm_group_t *group = oper->group;
+    mcpwm_ll_generator_set_action_on_compare_event(group->hal.dev, oper->oper_id, gen->gen_id,
+            ev_act.direction, ev_act.comparator->cmpr_id, ev_act.action);
+    return ESP_OK;
+}
+
 esp_err_t mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_t gen, mcpwm_gen_compare_event_action_t ev_act, ...)
 {
     ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
@@ -193,6 +226,17 @@ esp_err_t mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_t gen, m
         ev_act_itor = va_arg(it, mcpwm_gen_compare_event_action_t);
     }
     va_end(it);
+    return ESP_OK;
+}
+
+esp_err_t mcpwm_generator_set_action_on_brake_event(mcpwm_gen_handle_t gen, mcpwm_gen_brake_event_action_t ev_act)
+{
+    ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(ev_act.brake_mode != MCPWM_OPER_BRAKE_MODE_INVALID, ESP_ERR_INVALID_ARG, TAG, "invalid brake mode");
+    mcpwm_oper_t *oper = gen->oper;
+    mcpwm_group_t *group = oper->group;
+    mcpwm_ll_generator_set_action_on_brake_event(group->hal.dev, oper->oper_id, gen->gen_id,
+            ev_act.direction, ev_act.brake_mode, ev_act.action);
     return ESP_OK;
 }
 
@@ -223,6 +267,36 @@ esp_err_t mcpwm_generator_set_dead_time(mcpwm_gen_handle_t in_generator, mcpwm_g
     mcpwm_group_t *group = oper->group;
     mcpwm_hal_context_t *hal = &group->hal;
     int oper_id = oper->oper_id;
+
+    // one delay module can only be used by one generator at a time
+    bool delay_module_conflict = false;
+    portENTER_CRITICAL(&oper->spinlock);
+    if (config->posedge_delay_ticks) {
+        if (oper->posedge_delay_owner && oper->posedge_delay_owner != in_generator) {
+            delay_module_conflict = true;
+        }
+    }
+    if (config->negedge_delay_ticks) {
+        if (oper->negedge_delay_owner && oper->negedge_delay_owner != in_generator) {
+            delay_module_conflict = true;
+        }
+    }
+    if (!delay_module_conflict) {
+        if (config->posedge_delay_ticks) {
+            // set owner if delay module is used
+            oper->posedge_delay_owner = in_generator;
+        } else if (oper->posedge_delay_owner == in_generator) {
+            // clear owner if delay module is previously used by in_generator, but now it is not used
+            oper->posedge_delay_owner = NULL;
+        }
+        if (config->negedge_delay_ticks) {
+            oper->negedge_delay_owner = in_generator;
+        } else if (oper->negedge_delay_owner == in_generator) {
+            oper->negedge_delay_owner = NULL;
+        }
+    }
+    portEXIT_CRITICAL(&oper->spinlock);
+    ESP_RETURN_ON_FALSE(!delay_module_conflict, ESP_ERR_INVALID_STATE, TAG, "delay module is in use by other generator");
 
     // Note: to better understand the following code, you should read the deadtime module topology diagram in the TRM
     // check if we want to bypass the deadtime module

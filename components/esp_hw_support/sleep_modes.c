@@ -46,6 +46,7 @@
 #include "esp_rom_sys.h"
 #include "brownout.h"
 #include "esp_private/sleep_retention.h"
+#include "esp_private/sar_periph_ctrl.h"
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/cache.h"
@@ -336,20 +337,35 @@ static void IRAM_ATTR resume_uarts(uint32_t uarts_resume_bmap)
 /**
  * These save-restore workaround should be moved to lower layer
  */
-inline static void IRAM_ATTR misc_modules_sleep_prepare(void)
+inline static void IRAM_ATTR misc_modules_sleep_prepare(bool deep_sleep)
 {
+    if (deep_sleep) {
+        extern bool esp_phy_is_initialized(void);
+        if (esp_phy_is_initialized()){
+            extern void phy_close_rf(void);
+            phy_close_rf();
+#if !CONFIG_IDF_TARGET_ESP32
+            extern void phy_xpd_tsens(void);
+            phy_xpd_tsens();
+#endif
+        }
+    } else {
 #if CONFIG_MAC_BB_PD
-    mac_bb_power_down_cb_execute();
+        mac_bb_power_down_cb_execute();
 #endif
 #if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
-    gpio_sleep_mode_config_apply();
+        gpio_sleep_mode_config_apply();
 #endif
 #if SOC_PM_SUPPORT_CPU_PD || SOC_PM_SUPPORT_TAGMEM_PD
-    sleep_enable_memory_retention();
+        sleep_enable_memory_retention();
 #endif
 #if REGI2C_ANA_CALI_PD_WORKAROUND
-    regi2c_analog_cali_reg_read();
+        regi2c_analog_cali_reg_read();
 #endif
+    }
+    if (!(deep_sleep && s_adc_tsen_enabled)) {
+        sar_periph_ctrl_power_disable();
+    }
 }
 
 /**
@@ -357,6 +373,7 @@ inline static void IRAM_ATTR misc_modules_sleep_prepare(void)
  */
 inline static void IRAM_ATTR misc_modules_wake_prepare(void)
 {
+    sar_periph_ctrl_power_enable();
 #if SOC_PM_SUPPORT_CPU_PD || SOC_PM_SUPPORT_TAGMEM_PD
     sleep_disable_memory_retention();
 #endif
@@ -438,19 +455,7 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     }
 #endif
 
-    if (deep_sleep) {
-        extern bool esp_phy_is_initialized(void);
-        if (esp_phy_is_initialized()){
-            extern void phy_close_rf(void);
-            phy_close_rf();
-#if !CONFIG_IDF_TARGET_ESP32
-            extern void phy_xpd_tsens(void);
-            phy_xpd_tsens();
-#endif
-        }
-    } else {
-        misc_modules_sleep_prepare();
-    }
+    misc_modules_sleep_prepare(deep_sleep);
 
 #if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
     if (deep_sleep) {
@@ -559,8 +564,10 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     rtc_clk_cpu_freq_set_config(&cpu_freq_config);
 
 #if SOC_SPI_MEM_SUPPORT_TIME_TUNING
-    // Restore mspi clock freq
-    spi_timing_change_speed_mode_cache_safe(false);
+    if (cpu_freq_config.source == RTC_CPU_FREQ_SRC_PLL) {
+        // Restore mspi clock freq
+        spi_timing_change_speed_mode_cache_safe(false);
+    }
 #endif
 
     if (!deep_sleep) {

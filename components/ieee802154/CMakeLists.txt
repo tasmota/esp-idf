@@ -14,6 +14,16 @@ if(CONFIG_IEEE802154_ENABLED)
         "driver/esp_ieee802154_sec.c"
         "driver/esp_ieee802154_timer.c")
     list(APPEND private_include "private_include")
+
+    if(CONFIG_IEEE802154_TEST)
+        list(REMOVE_ITEM private_include "private_include")
+        list(APPEND include "private_include")
+    endif()
+
+endif()
+
+if(CONFIG_IEEE802154_DEBUG)
+    list(APPEND srcs "driver/esp_ieee802154_debug.c")
 endif()
 
 idf_component_register(

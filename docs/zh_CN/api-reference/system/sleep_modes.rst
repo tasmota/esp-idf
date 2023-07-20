@@ -38,6 +38,8 @@
 
     在 Light-sleep 和 Deep-sleep 模式下，无线外设会被断电。因此，在进入这两种睡眠模式前，应用程序必须调用恰当的函数（:cpp:func:`esp_bluedroid_disable`、:cpp:func:`esp_bt_controller_disable` 或 :cpp:func:`esp_wifi_stop`）来禁用 Wi-Fi 和 Bluetooth。在 Light-sleep 或 Deep-sleep 模式下，即使不调用这些函数也无法连接 Wi-Fi 和 Bluetooth。
 
+    如需保持 Wi-Fi 和 Bluetooth 连接，请启用 Wi-Fi 和 Bluetooth Modem-sleep 模式和自动 Light-sleep 模式（请参阅 :doc:`电源管理 API <power_management>`）。在这两种模式下，Wi-Fi 和 Bluetooth 驱动程序发出请求时，系统将自动从睡眠中被唤醒，从而保持连接。
+
 .. only:: not SOC_BT_SUPPORTED
 
     睡眠模式下的 Wi-Fi 功能
@@ -45,7 +47,7 @@
 
     在 Light-sleep 和 Deep-sleep 模式下，无线外设会被断电。因此，在进入这两种睡眠模式前，应用程序必须调用恰当的函数 (:cpp:func:`esp_wifi_stop`) 来禁用 Wi-Fi。在 Light-sleep 或 Deep-sleep 模式下，即使不调用此函数也无法连接 Wi-Fi。
 
-如需保持 Wi-Fi 连接，请启用 Wi-Fi Modem-sleep 模式和自动 Light-sleep 模式（请参阅 :doc:`电源管理 API <power_management>`）。在这两种模式下，Wi-Fi 驱动程序发出请求时，系统将自动从睡眠中被唤醒，从而保持与 AP 的连接。
+    如需保持 Wi-Fi 连接，请启用 Wi-Fi Modem-sleep 模式和自动 Light-sleep 模式（请参阅 :doc:`电源管理 API <power_management>`）。在这两种模式下，Wi-Fi 驱动程序发出请求时，系统将自动从睡眠中被唤醒，从而保持与 AP 的连接。
 
 .. _api-reference-wakeup-source:
 
@@ -237,7 +239,7 @@ Flash 断电
 
 一些 {IDF_TARGET_NAME} IO 在默认情况下启用内部上拉或下拉电阻。如果这些管脚在 Deep-sleep 模式下中受外部电路驱动，电流流经这些上下拉电阻时，可能会增加电流消耗。
 
-.. only:: SOC_RTCIO_HOLD_SUPPORTED
+.. only:: SOC_RTCIO_HOLD_SUPPORTED and SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
 
     想要隔离这些管脚以避免额外的电流消耗，请调用 :cpp:func:`rtc_gpio_isolate` 函数。
 
@@ -293,7 +295,11 @@ UART 输出处理
 -------------------
 
 - :example:`protocols/sntp`：如何实现 Deep-sleep 模式的基本功能，周期性唤醒 ESP 模块，以从 NTP 服务器获取时间。
-- :example:`wifi/power_save`：如何实现 Modem-sleep 模式。
+- :example:`wifi/power_save`：如何实现 Wi-Fi Modem-sleep 模式。
+
+.. only:: SOC_BT_SUPPORTED
+
+    - :example:`bluetooth/nimble/power_save`：如何实现 Bluetooth Modem-sleep 模式。
 
 .. only:: SOC_ULP_SUPPORTED
 

@@ -359,7 +359,7 @@ example_test_pytest_esp32_ethernet_bridge:
     - .rules:test:example_test-esp32
   needs:
     - build_pytest_examples_esp32
-  tags: [ esp32, ethernet_w5500 ]
+  tags: [ esp32, eth_w5500 ]
   variables:
     PYTEST_EXTRA_FLAGS: "--dev-passwd ${ETHERNET_TEST_PASSWORD} --dev-user ${ETHERNET_TEST_USER}"
 
@@ -813,6 +813,14 @@ pytest_components_esp32c3_generic:
   tags: [ esp32c3, generic ]
   parallel: 3
 
+pytest_components_esp32c3_i2c_oled:
+  extends:
+    - .pytest_components_dir_template
+    - .rules:test:component_ut-esp32c3
+  needs:
+    - build_pytest_components_esp32c3
+  tags: [ esp32c3, i2c_oled ]
+
 pytest_components_esp32c3_generic_multi_device:
   extends:
     - .pytest_components_dir_template
@@ -986,6 +994,16 @@ pytest_examples_openthread_br:
   tags:
     - esp32c6
     - openthread_br
+
+pytest_examples_zigbee:
+  extends:
+    - .pytest_examples_dir_template
+    - .rules:test:example_test-esp32h2
+  needs:
+    - build_pytest_examples_esp32h2
+  tags:
+    - esp32h2
+    - zigbee_multi_dut
 
 pytest_components_esp32s3_usb_host:
   extends:

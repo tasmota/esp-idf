@@ -24,6 +24,7 @@ if(NOT BOOTLOADER_BUILD)
                      "intr_alloc.c"
                      "mac_addr.c"
                      "periph_ctrl.c"
+                     "revision.c"
                      "rtc_module.c"
                      "sleep_modes.c"
                      "sleep_gpio.c"
@@ -137,7 +138,7 @@ idf_component_register(SRCS ${srcs}
                        PRIV_INCLUDE_DIRS port/include include/esp_private
                        REQUIRES ${requires}
                        PRIV_REQUIRES "${priv_requires}"
-                       LDFRAGMENTS linker.lf)
+                       LDFRAGMENTS linker.lf dma/linker.lf)
 
 idf_build_get_property(target IDF_TARGET)
 add_subdirectory(port/${target})

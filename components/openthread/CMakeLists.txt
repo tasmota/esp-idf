@@ -73,6 +73,7 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/api/message_api.cpp"
             "openthread/src/core/api/nat64_api.cpp"
             "openthread/src/core/api/netdata_api.cpp"
+            "openthread/src/core/api/netdiag_api.cpp"
             "openthread/src/core/api/random_crypto_api.cpp"
             "openthread/src/core/api/tcp_api.cpp"
             "openthread/src/core/api/udp_api.cpp"
@@ -106,6 +107,7 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/thread/network_data_leader_ftd.cpp"
             "openthread/src/core/thread/network_data_types.cpp"
             "openthread/src/core/thread/network_data_service.cpp"
+            "openthread/src/core/thread/network_diagnostic.cpp"
             "openthread/src/core/thread/panid_query_server.cpp"
             "openthread/src/core/thread/thread_netif.cpp"
             "openthread/src/core/thread/tmf.cpp"
@@ -121,7 +123,8 @@ if(CONFIG_OPENTHREAD_ENABLED)
             )
     elseif(CONFIG_OPENTHREAD_RADIO_SPINEL_UART OR CONFIG_OPENTHREAD_RADIO_SPINEL_SPI)
         list(APPEND exclude_srcs
-            "src/port/esp_openthread_radio.c")
+            "src/port/esp_openthread_radio.c"
+            "src/port/esp_openthread_sleep.c")
     endif()
 
     if(CONFIG_OPENTHREAD_BORDER_ROUTER)

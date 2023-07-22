@@ -511,7 +511,7 @@ blecent_should_connect(const struct ble_gap_disc_desc *disc)
 
     rc = ble_hs_adv_parse_fields(&fields, disc->data, disc->length_data);
     if (rc != 0) {
-        return rc;
+        return 0;
     }
 
     if (strlen(CONFIG_EXAMPLE_PEER_ADDR) && (strncmp(CONFIG_EXAMPLE_PEER_ADDR, "ADDR_ANY", strlen("ADDR_ANY")) != 0)) {
@@ -808,7 +808,7 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
 #if MYNEWT_VAL(BLE_POWER_CONTROL)
     case BLE_GAP_EVENT_TRANSMIT_POWER:
 	MODLOG_DFLT(INFO, "Transmit power event : status=%d conn_handle=%d reason=%d "
-                          "phy=%d power_level=%x power_level_flag=%d delta=%d",
+                          "phy=%d power_level=%d power_level_flag=%d delta=%d",
 		    event->transmit_power.status,
 		    event->transmit_power.conn_handle,
 		    event->transmit_power.reason,

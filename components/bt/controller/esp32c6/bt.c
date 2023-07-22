@@ -186,6 +186,10 @@ static int esp_ecc_gen_dh_key(const uint8_t *peer_pub_key_x, const uint8_t *peer
 static DRAM_ATTR esp_bt_controller_status_t ble_controller_status = ESP_BT_CONTROLLER_STATUS_IDLE;
 
 /* This variable tells if BLE is running */
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+static bool s_ble_backed_up = false;
+#endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
+
 static bool s_ble_active = false;
 #ifdef CONFIG_PM_ENABLE
 static DRAM_ATTR esp_pm_lock_handle_t s_pm_lock = NULL;
@@ -470,6 +474,7 @@ IRAM_ATTR void controller_sleep_cb(uint32_t enable_tick, void *arg)
 #endif // CONFIG_BT_LE_WAKEUP_SOURCE_BLE_RTC_TIMER
 #if SOC_PM_RETENTION_HAS_CLOCK_BUG
     sleep_retention_do_extra_retention(true);
+    s_ble_backed_up = true;
 #endif // SOC_PM_RETENTION_HAS_CLOCK_BUG
 #endif /* CONFIG_FREERTOS_USE_TICKLESS_IDLE */
     esp_phy_disable();
@@ -491,6 +496,7 @@ IRAM_ATTR void controller_wakeup_cb(void *arg)
 #endif // CONFIG_BT_LE_WAKEUP_SOURCE_BLE_RTC_TIMER
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE && SOC_PM_RETENTION_HAS_CLOCK_BUG
     sleep_retention_do_extra_retention(false);
+    s_ble_backed_up = false;
 #endif /* CONFIG_FREERTOS_USE_TICKLESS_IDLE && SOC_PM_RETENTION_HAS_CLOCK_BUG */
 #endif //CONFIG_PM_ENABLE
     esp_phy_enable();
@@ -596,6 +602,10 @@ error:
 void controller_sleep_deinit(void)
 {
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    if (s_ble_backed_up) {
+        sleep_retention_module_deinit();
+        s_ble_backed_up = false;
+    }
 #ifdef CONFIG_BT_LE_WAKEUP_SOURCE_BLE_RTC_TIMER
     r_ble_rtc_wake_up_state_clr();
     esp_sleep_disable_bt_wakeup();
@@ -617,10 +627,77 @@ void controller_sleep_deinit(void)
 #endif //CONFIG_PM_ENABLE
 }
 
+typedef enum {
+    FILTER_DUPLICATE_PDUTYPE = BIT(0),
+    FILTER_DUPLICATE_LENGTH  = BIT(1),
+    FILTER_DUPLICATE_ADDRESS = BIT(2),
+    FILTER_DUPLICATE_ADVDATA = BIT(3),
+    FILTER_DUPLICATE_DEFAULT = FILTER_DUPLICATE_PDUTYPE | FILTER_DUPLICATE_ADDRESS,
+    FILTER_DUPLICATE_PDU_ALL = 0xF,
+    FILTER_DUPLICATE_EXCEPTION_FOR_MESH = BIT(4),
+    FILTER_DUPLICATE_AD_TYPE = BIT(5),
+}disc_duplicate_mode_t;
+
+
+extern void filter_duplicate_mode_enable(disc_duplicate_mode_t mode);
+extern void filter_duplicate_mode_disable(disc_duplicate_mode_t mode);
+extern void filter_duplicate_set_ring_list_max_num(uint32_t max_num);
+extern void scan_duplicate_cache_refresh_set_time(uint32_t period_time);
+
+int
+ble_vhci_disc_duplicate_mode_enable(int mode)
+{
+    // TODO: use vendor hci to update
+    filter_duplicate_mode_enable(mode);
+    return true;
+}
+
+int
+ble_vhci_disc_duplicate_mode_disable(int mode)
+{
+    // TODO: use vendor hci to update
+    filter_duplicate_mode_disable(mode);
+    return true;
+}
+
+int ble_vhci_disc_duplicate_set_max_cache_size(int max_cache_size){
+    // TODO: use vendor hci to update
+    filter_duplicate_set_ring_list_max_num(max_cache_size);
+    return true;
+}
+
+int ble_vhci_disc_duplicate_set_period_refresh_time(int refresh_period_time){
+    // TODO: use vendor hci to update
+    scan_duplicate_cache_refresh_set_time(refresh_period_time);
+    return true;
+}
+
+/**
+ * @brief Config scan duplicate option mode from menuconfig (Adapt to the old configuration method.)
+ */
+void ble_controller_scan_duplicate_config(void)
+{
+    uint32_t duplicate_mode = FILTER_DUPLICATE_DEFAULT;
+    uint32_t cache_size = CONFIG_BT_LE_SCAN_DUPL_CACHE_SIZE;
+    if (CONFIG_BT_LE_SCAN_DUPL_TYPE == 0) {
+        duplicate_mode = FILTER_DUPLICATE_ADDRESS | FILTER_DUPLICATE_PDUTYPE;
+    } else if (CONFIG_BT_LE_SCAN_DUPL_TYPE == 1) {
+        duplicate_mode = FILTER_DUPLICATE_ADVDATA;
+    } else if (CONFIG_BT_LE_SCAN_DUPL_TYPE == 2) {
+        duplicate_mode = FILTER_DUPLICATE_ADDRESS | FILTER_DUPLICATE_ADVDATA;
+    }
+
+    duplicate_mode |= FILTER_DUPLICATE_EXCEPTION_FOR_MESH;
+
+    ble_vhci_disc_duplicate_mode_disable(0xFFFFFFFF);
+    ble_vhci_disc_duplicate_mode_enable(duplicate_mode);
+    ble_vhci_disc_duplicate_set_max_cache_size(cache_size);
+    ble_vhci_disc_duplicate_set_period_refresh_time(CONFIG_BT_LE_SCAN_DUPL_CACHE_REFRESH_PERIOD);
+}
+
 esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 {
     uint8_t mac[6];
-    uint32_t chip_version;
     esp_err_t ret = ESP_OK;
     ble_npl_count_info_t npl_info;
 
@@ -685,7 +762,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     /* Select slow clock source for BT momdule */
 #if CONFIG_BT_LE_LP_CLK_SRC_MAIN_XTAL
     ESP_LOGI(NIMBLE_PORT_LOG_TAG, "Using main XTAL as clock source");
-    chip_version = efuse_hal_chip_revision();
+    uint32_t chip_version = efuse_hal_chip_revision();
     if (chip_version == 0) {
         modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL, (400 - 1));
     } else{
@@ -729,6 +806,8 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_init failed %d", ret);
         goto free_controller;
     }
+
+    ble_controller_scan_duplicate_config();
 
     ret = controller_sleep_init();
     if (ret != ESP_OK) {

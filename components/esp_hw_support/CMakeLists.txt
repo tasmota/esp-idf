@@ -30,6 +30,7 @@ if(NOT BOOTLOADER_BUILD)
                      "sleep_modem.c"
                      "regi2c_ctrl.c"
                      "esp_gpio_reserve.c"
+                     "sar_periph_ctrl_common.c"
                      "port/${target}/io_mux.c"
                      "port/${target}/esp_clk_tree.c"
                      "port/esp_clk_tree_common.c")
@@ -116,10 +117,7 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_IDF_TARGET_ESP32H2)
         list(REMOVE_ITEM srcs
-                "sleep_cpu.c"         # TODO: IDF-6267
-                "sleep_modes.c"       # TODO: IDF-6267
-                "sleep_wake_stub.c"   # TODO: IDF-6267
-                "sleep_gpio.c"        # TODO: IDF-6267
+                "sleep_wake_stub.c"   # TODO: IDF-6268
             )
     endif()
 else()

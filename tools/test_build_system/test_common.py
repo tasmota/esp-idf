@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import List
 
 import pytest
-from test_build_system_helpers import (EnvDict, IdfPyFunc, append_to_file, find_python, get_snapshot, replace_in_file,
-                                       run_idf_py)
+from test_build_system_helpers import (EnvDict, IdfPyFunc, append_to_file, file_contains, find_python, get_snapshot,
+                                       replace_in_file, run_idf_py)
 
 
 def get_subdirs_absolute_paths(path: Path) -> List[str]:
@@ -237,6 +237,21 @@ def test_create_project(idf_py: IdfPyFunc, idf_copy: Path) -> None:
     assert ret.returncode == 4, 'Command create-project exit value is wrong.'
 
 
+def test_create_project_with_idf_readonly(idf_copy: Path) -> None:
+    def change_to_readonly(src: Path) -> None:
+        for root, dirs, files in os.walk(src):
+            for name in dirs:
+                os.chmod(os.path.join(root, name), 0o555)  # read & execute
+            for name in files:
+                path = os.path.join(root, name)
+                if '/bin/' in path:
+                    continue  # skip excutables
+                os.chmod(os.path.join(root, name), 0o444)  # readonly
+    logging.info('Check that command for creating new project will success if the IDF itself is readonly.')
+    change_to_readonly(idf_copy)
+    run_idf_py('create-project', '--path', str(idf_copy / 'example_proj'), 'temp_test_project')
+
+
 @pytest.mark.usefixtures('test_app_copy')
 def test_docs_command(idf_py: IdfPyFunc) -> None:
     logging.info('Check docs command')
@@ -263,3 +278,26 @@ def test_deprecation_warning(idf_py: IdfPyFunc) -> None:
     ret = idf_py('efuse_common_table', check=False)
     # cmake warning
     assert 'Have you wanted to run "efuse-common-table" instead?' in ret.stdout
+
+
+def test_save_defconfig_check(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
+    logging.info('Save-defconfig checks')
+    (test_app_copy / 'sdkconfig').write_text('\n'.join(['CONFIG_COMPILER_OPTIMIZATION_SIZE=y',
+                                                        'CONFIG_ESPTOOLPY_FLASHFREQ_80M=y']))
+    idf_py('save-defconfig')
+    assert not file_contains(test_app_copy / 'sdkconfig.defaults', 'CONFIG_IDF_TARGET'), \
+        'CONFIG_IDF_TARGET should not be in sdkconfig.defaults'
+    assert file_contains(test_app_copy / 'sdkconfig.defaults', 'CONFIG_COMPILER_OPTIMIZATION_SIZE=y'), \
+        'Missing CONFIG_COMPILER_OPTIMIZATION_SIZE=y in sdkconfig.defaults'
+    assert file_contains(test_app_copy / 'sdkconfig.defaults', 'CONFIG_ESPTOOLPY_FLASHFREQ_80M=y'), \
+        'Missing CONFIG_ESPTOOLPY_FLASHFREQ_80M=y in sdkconfig.defaults'
+    idf_py('fullclean')
+    (test_app_copy / 'sdkconfig').unlink()
+    (test_app_copy / 'sdkconfig.defaults').unlink()
+    idf_py('set-target', 'esp32c3')
+    (test_app_copy / 'sdkconfig').write_text('CONFIG_PARTITION_TABLE_OFFSET=0x8001')
+    idf_py('save-defconfig')
+    assert file_contains(test_app_copy / 'sdkconfig.defaults', 'CONFIG_IDF_TARGET="esp32c3"'), \
+        'Missing CONFIG_IDF_TARGET="esp32c3" in sdkconfig.defaults'
+    assert file_contains(test_app_copy / 'sdkconfig.defaults', 'CONFIG_PARTITION_TABLE_OFFSET=0x8001'), \
+        'Missing CONFIG_PARTITION_TABLE_OFFSET=0x8001 in sdkconfig.defaults'

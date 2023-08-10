@@ -1,24 +1,19 @@
-// Copyright 2010-2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include "esp_err.h"
-#include "soc/soc.h"
 #include "ulp_common.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief Run the program loaded into RTC memory
@@ -42,3 +37,7 @@ esp_err_t ulp_riscv_run(void);
  *      - ESP_ERR_INVALID_SIZE if program_size_bytes is more than 8KiB
  */
 esp_err_t ulp_riscv_load_binary(const uint8_t* program_binary, size_t program_size_bytes);
+
+#ifdef __cplusplus
+}
+#endif

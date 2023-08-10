@@ -100,6 +100,7 @@ ENV_MARKERS = {
     'ethernet': 'ethernet runner',
     'ethernet_flash_8m': 'ethernet runner with 8mb flash',
     'ethernet_router': 'both the runner and dut connect to the same router through ethernet NIC',
+    'ethernet_vlan': 'ethernet runner GARM-32-SH-1-R16S5N3',
     'wifi_ap': 'a wifi AP in the environment',
     'wifi_router': 'both the runner and dut connect to the same wifi router',
     'wifi_high_traffic': 'wifi high traffic runners',
@@ -132,6 +133,7 @@ ENV_MARKERS = {
     # multi-dut markers
     'ieee802154': 'ieee802154 related tests should run on ieee802154 runners.',
     'openthread_br': 'tests should be used for openthread border router.',
+    'openthread_sleep': 'tests should be used for openthread sleepy device.',
     'zigbee_multi_dut': 'zigbee runner which have multiple duts.',
     'wifi_two_dut': 'tests should be run on runners which has two wifi duts connected.',
     'generic_multi_device': 'generic multiple devices whose corresponding gpio pins are connected to each other.',

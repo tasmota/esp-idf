@@ -28,6 +28,7 @@ except ImportError:
 IDF_PATH = os.environ.get('IDF_PATH', '../..')
 TOOLS_DIR = os.environ.get('IDF_TOOLS_PATH') or os.path.expanduser(idf_tools.IDF_TOOLS_PATH_DEFAULT)
 PYTHON_DIR = os.path.join(TOOLS_DIR, 'python_env')
+PYTHON_DIR_BACKUP = tempfile.mkdtemp()
 REQ_SATISFIED = 'Python requirements are satisfied'
 REQ_CORE = '- {}'.format(os.path.join(IDF_PATH, 'tools', 'requirements', 'requirements.core.txt'))
 REQ_GDBGUI = '- {}'.format(os.path.join(IDF_PATH, 'tools', 'requirements', 'requirements.gdbgui.txt'))
@@ -40,9 +41,20 @@ idf_tools.global_idf_path = IDF_PATH
 idf_tools.global_idf_tools_path = TOOLS_DIR
 
 
+def setUpModule():  # type: () -> None
+    shutil.rmtree(PYTHON_DIR_BACKUP)
+    shutil.move(PYTHON_DIR, PYTHON_DIR_BACKUP)
+
+
+def tearDownModule():  # type: () -> None
+    if os.path.isdir(PYTHON_DIR):
+        shutil.rmtree(PYTHON_DIR)
+    shutil.move(PYTHON_DIR_BACKUP, PYTHON_DIR)
+
+
 class BasePythonInstall(unittest.TestCase):
     def run_tool(self, cmd):  # type: (List[str]) -> str
-        ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+        ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         decoded_output = ret.stdout.decode('utf-8', 'ignore')
         with open(os.path.join(IDF_PATH, 'tools', 'test_idf_tools', 'test_python_env_logs.txt'), 'a+') as w:
             # stack() returns list of callers frame records. [1] represent caller of this function
@@ -58,6 +70,15 @@ class BasePythonInstall(unittest.TestCase):
         _, _, python_venv, _ = idf_tools.get_python_env_path()
         cmd = [python_venv] + args
         return self.run_tool(cmd)
+
+    def dump_package(self, whl, name):  # type: (bytes, str) -> str
+        tmpdir = tempfile.mkdtemp()
+        foopackage_fn = os.path.join(tmpdir, name)
+        with open(foopackage_fn, 'wb') as fd:
+            fd.write(whl)
+
+        self.addCleanup(shutil.rmtree, tmpdir)
+        return foopackage_fn
 
     def dump_foopackage(self):  # type: () -> str
         # Wheel for foopackage-0.99-py3-none-any.whl
@@ -111,13 +132,43 @@ class BasePythonInstall(unittest.TestCase):
                b'\x00\x00\x00\x00\xb4\x81\xb6\x01\x00\x00foopackage-0.99.dist-info/RECORDPK\x05\x06\x00\x00\x00\x00\x05'
                b'\x00\x05\x00\x84\x01\x00\x00\xf1\x02\x00\x00\x00\x00')
 
-        tmpdir = tempfile.mkdtemp()
-        foopackage_fn = os.path.join(tmpdir, 'foopackage-0.99-py3-none-any.whl')
-        with open(foopackage_fn, 'wb') as fd:
-            fd.write(whl)
+        return self.dump_package(whl, 'foopackage-0.99-py3-none-any.whl')
 
-        self.addCleanup(shutil.rmtree, tmpdir)
-        return foopackage_fn
+    def dump_foopackage_dev(self):  # type: () -> str
+        # similar to dump_foopackage, but using dev release version
+
+        whl = (b'PK\x03\x04\x14\x00\x00\x00\x08\x00\nl\x03W !Z\xfc%\x00\x00\x00%\x00\x00\x00\x16\x00\x00\x00'
+               b'foopackage/__init__.py\xcbLS\x88\x8f\xcfK\xccM\x8d\x8fW\xb0\xb5UP\x8f\x8f\xcfM\xcc\xcc\x8b\x8fW\xb7'
+               b'\xe2R\x00\x82\xa2\xd4\x92\xd2\xa2<\x00PK\x03\x04\x14\x00\x00\x00\x08\x00Jl\x03W\xb4wO\x876\x00\x00'
+               b'\x00;\x00\x00\x00\'\x00\x00\x00foopackage-0.99.dev0.dist-info/METADATA\xf3M-ILI,I\xd4\rK-*\xce\xcc'
+               b'\xcf\xb3R0\xd23\xe4\xf2K\xccM\xb5RH\xcb\xcf/HL\xceNLO\xe5\x82\xcb\x1a\xe8YZ\xea\xa5\xa4\x96\x19pq'
+               b'\x01\x00PK\x03\x04\x14\x00\x00\x00\x08\x00Jl\x03W\xda9\xe8\xb4[\x00\x00\x00\\\x00\x00\x00$\x00\x00'
+               b'\x00foopackage-0.99.dev0.dist-info/WHEEL\x0b\xcfHM\xcd\xd1\rK-*\xce\xcc\xcf\xb3R0\xd43\xe0rO\xcdK-J,'
+               b'\xc9/\xb2RHJ\xc9,.\x89/\x07\xa9Q\xd00\xd03\x01Jkr\x05\xe5\xe7\x97\xe8z\x16\xeb\x06\x94\x16\xa5\xe6'
+               b'd&Y)\x94\x14\x95\xa6r\x85$\xa6[)\x14T\x1a\xeb\xe6\xe5\xe7\xa5\xea&\xe6Urq\x01\x00PK\x03\x04\x14\x00'
+               b'\x00\x00\x08\x00Jl\x03WI*\x9e\xa7\r\x00\x00\x00\x0b\x00\x00\x00,\x00\x00\x00foopackage-0.99.dev0'
+               b'.dist-info/top_level.txtK\xcb\xcf/HL\xceNLO\xe5\x02\x00PK\x03\x04\x14\x00\x00\x00\x08\x00Jl\x03W'
+               b'\x1e\xbaW\xb5\x00\x01\x00\x00\x91\x01\x00\x00%\x00\x00\x00foopackage-0.99.dev0.dist-info/RECORD\x85'
+               b'\xcd\xbbv\x820\x00\x00\xd0\xddo\t\x18\xe4\x08d\xe8\x80\x88"\xf2\xb0T\xe4\xb1\xe4\x08\x06B\xa1\x064F'
+               b'\xe8\xd7w\xb2\xab?po\xc5X\x7f.\xdbsM\xe6\x187\xd7\x86c,\xf7\x13\xb8\xd3\xf3b\xa9}d\x98\x90\xc1\n\xbc'
+               b'[m\xea\x0fI\x848\xda\xb1\x80)\xf5-D\xc7&\xcc\x9d\xe8\xa1\x1f\nj\x97\xbdZ\x02U\x9fU\xff\x98\x04e\x84'
+               b'\xe4\x0b\x11P\xbe4w.5\xd7\x8a\xcd}\xfbh\xae\xcd\xa3\xf9\xd2]\xb1jQ4$^?\xe6\xd9\xe4C\xb6\xdfdE3\x89'
+               b'\xb1m\x8dt0\xb2.6s[B\xbb_-\x03K\xf4NO\x1c\xdb\xf6^\xb4\xc9W[\xed+\xf5\xd4\xfd\x06\x0b\x18\x8c^\x05'
+               b'\t\x9dN!\x85%\xeb.\x92[\xb8Y\x1al\xd9\xcd\xd2>\x01Z\xbc\xa39\xebqG\x04\xe9d>\xf2W\x11\xd7\x10\xeb'
+               b'\xca\x83\xbb\t\xf3\xa9\xf33\t5\x7f\xfa\x90\xd2\xe2\x04}\x9eW\xb5\xee\xe2\xefx\x07\x0f\xced\x00EyWD'
+               b'\xb6\x15Fk\x00f\x7fPK\x01\x02\x14\x03\x14\x00\x00\x00\x08\x00\nl\x03W !Z\xfc%\x00\x00\x00%\x00\x00'
+               b'\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x81\x00\x00\x00\x00foopackage/__init__.py'
+               b'PK\x01\x02\x14\x03\x14\x00\x00\x00\x08\x00Jl\x03W\xb4wO\x876\x00\x00\x00;\x00\x00\x00\'\x00\x00\x00'
+               b'\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x81Y\x00\x00\x00foopackage-0.99.dev0.dist-info/METADATAPK\x01'
+               b'\x02\x14\x03\x14\x00\x00\x00\x08\x00Jl\x03W\xda9\xe8\xb4[\x00\x00\x00\\\x00\x00\x00$\x00\x00\x00\x00'
+               b'\x00\x00\x00\x00\x00\x00\x00\xa4\x81\xd4\x00\x00\x00foopackage-0.99.dev0.dist-info/WHEELPK\x01\x02'
+               b'\x14\x03\x14\x00\x00\x00\x08\x00Jl\x03WI*\x9e\xa7\r\x00\x00\x00\x0b\x00\x00\x00,\x00\x00\x00\x00'
+               b'\x00\x00\x00\x00\x00\x00\x00\xa4\x81q\x01\x00\x00foopackage-0.99.dev0.dist-info/top_level.txtPK\x01'
+               b'\x02\x14\x03\x14\x00\x00\x00\x08\x00Jl\x03W\x1e\xbaW\xb5\x00\x01\x00\x00\x91\x01\x00\x00%\x00\x00'
+               b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb4\x81\xc8\x01\x00\x00foopackage-0.99.dev0.dist-info/RECORDPK'
+               b'\x05\x06\x00\x00\x00\x00\x05\x00\x05\x00\x98\x01\x00\x00\x0b\x03\x00\x00\x00\x00')
+
+        return self.dump_package(whl, 'foopackage-0.99.dev0-py3-none-any.whl')
 
 
 class TestPythonInstall(BasePythonInstall):
@@ -192,13 +243,37 @@ class TestCustomPythonPathInstall(BasePythonInstall):
 
 
 class TestCheckPythonDependencies(BasePythonInstall):
+
+    """
+    The constraint file name is available as the constraint_file attribute. The content of the file is changed by these
+    tests. The backup_constraint_file is a temporary file with the content of the original constraint file. This is
+    kept in order to restore the original content of the constraint file. Keeping the original constraint file is
+    important for consequent tests which should not download a new one especially when the test was run with a custom
+    constraint file different from the one on dl.espressif.com.
+    """
+    constraint_file: str
+    backup_constraint_file: str
+
+    @classmethod
+    def setUpClass(cls):  # type: () -> None
+        cls.constraint_file = idf_tools.get_constraints(idf_tools.get_idf_version(), online=False)
+        with tempfile.NamedTemporaryFile() as f:
+            cls.backup_constraint_file = f.name
+        shutil.copyfile(cls.constraint_file, cls.backup_constraint_file)
+
+    @classmethod
+    def tearDownClass(cls):  # type: () -> None
+        try:
+            os.remove(cls.backup_constraint_file)
+        except OSError:
+            pass
+
     def setUp(self):  # type: () -> None
         if os.path.isdir(PYTHON_DIR):
             shutil.rmtree(PYTHON_DIR)
 
     def tearDown(self):  # type: () -> None
-        if os.path.isdir(PYTHON_DIR):
-            shutil.rmtree(PYTHON_DIR)
+        shutil.copyfile(self.backup_constraint_file, self.constraint_file)
 
     def test_check_python_dependencies(self):  # type: () -> None
         # Prepare artificial constraints file containing packages from
@@ -217,14 +292,10 @@ class TestCheckPythonDependencies(BasePythonInstall):
         # are also present in the freeze list.
         con_list = [r.replace('==', '>') for r in freeze_output.splitlines() if r.split('==')[0] in req_list]
 
-        con_fn = idf_tools.get_constraints(idf_tools.get_idf_version(), online=False)
-        # delete modified constraints file after this test is finished
-        self.addCleanup(os.remove, con_fn)
-
         # Write the created constraints list into existing constraints file.
         # It will not be overwritten by subsequent idf_tools.py run, because
         # there is timestamp check.
-        with open(con_fn, 'w') as fd:
+        with open(self.constraint_file, 'w') as fd:
             fd.write(os.linesep.join(con_list))
 
         # Test that check_python_dependencies reports that requirements are not satisfied for
@@ -244,15 +315,36 @@ class TestCheckPythonDependencies(BasePythonInstall):
         foo_pkg = self.dump_foopackage()
         self.run_in_venv(['-m', 'pip', 'install', foo_pkg])
 
-        con_fn = idf_tools.get_constraints(idf_tools.get_idf_version(), online=False)
-        # delete modified constraints file after this test is finished
-        self.addCleanup(os.remove, con_fn)
-
         # append foopackage constraint to the existing constraints file
-        with open(con_fn, 'a') as fd:
+        with open(self.constraint_file, 'a') as fd:
             fd.write('foopackage>0.99')
 
         # check-python-dependencies should not complain about dummy_package
+        output = self.run_idf_tools(['check-python-dependencies'])
+        self.assertIn(REQ_SATISFIED, output)
+
+    def test_dev_version(self):  # type: () -> None
+        # Install python env with core requirements, plus foopackage in dev version.
+        # Add foopackage to constraints file meeting requirement
+        # Dependency check should pass as the requirement was met
+        # Change dependency to require dev version
+        # Dependency check should pass again
+        self.run_idf_tools(['install-python-env'])
+        foo_pkg = self.dump_foopackage_dev()
+        self.run_in_venv(['-m', 'pip', 'install', foo_pkg])
+
+        # append foopackage constraint to the existing constraints file
+        with open(self.constraint_file, 'r+') as fd:
+            con_lines = fd.readlines()
+            fd.write('foopackage~=0.98')
+
+        output = self.run_idf_tools(['check-python-dependencies'])
+        self.assertIn(REQ_SATISFIED, output)
+
+        # append foopackage dev version constraint to the existing constraints file
+        with open(self.constraint_file, 'r+') as fd:
+            fd.writelines(con_lines + ['foopackage==0.99.dev0'])
+
         output = self.run_idf_tools(['check-python-dependencies'])
         self.assertIn(REQ_SATISFIED, output)
 

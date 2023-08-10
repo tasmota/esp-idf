@@ -397,8 +397,6 @@ void esp_deep_sleep_deregister_hook(esp_deep_sleep_cb_t old_dslp_cb)
     portEXIT_CRITICAL(&spinlock_rtc_deep_sleep);
 }
 
-#if (CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND && !CONFIG_IDF_TARGET_ESP32H2) \
-    || CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
 static int s_cache_suspend_cnt = 0;
 
 // Must be called from critical sections.
@@ -417,7 +415,6 @@ static void IRAM_ATTR resume_cache(void) {
         cache_hal_resume(CACHE_TYPE_ALL);
     }
 }
-#endif
 
 // [refactor-todo] provide target logic for body of uart functions below
 static void IRAM_ATTR flush_uarts(void)
@@ -579,6 +576,14 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     bool deep_sleep = (mode == ESP_SLEEP_MODE_DEEP_SLEEP);
     bool should_skip_sleep = false;
 
+#if CONFIG_ESP_SLEEP_DEBUG
+    // The following three logs are used to confirm whether the digital domain and modem are powered off.
+    // Some CI tests depend on these three logs and it is best not to modify them.
+    ESP_EARLY_LOGD(TAG, "pd_lags %lu", pd_flags);
+    ESP_EARLY_LOGD(TAG, "PMU_SLEEP_PD_TOP: %s", (pd_flags & PMU_SLEEP_PD_TOP) ? "True":"False");
+    ESP_EARLY_LOGD(TAG, "PMU_SLEEP_PD_MODEM: %s", (pd_flags & PMU_SLEEP_PD_MODEM) ? "True":"False");
+#endif
+
     int64_t sleep_duration = (int64_t) s_config.sleep_duration - (int64_t) s_config.sleep_time_adjustment;
 
 #if SOC_RTC_SLOW_CLK_SUPPORT_RC_FAST_D256
@@ -737,13 +742,14 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
 #endif
 #endif // SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
         } else {
+            /* Cache Suspend 1: will wait cache idle in cache suspend */
+            suspend_cache();
             /* On esp32c6, only the lp_aon pad hold function can only hold the GPIO state in the active mode.
                In order to avoid the leakage of the SPI cs pin, hold it here */
 #if (CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND)
 #if !CONFIG_IDF_TARGET_ESP32H2 // ESP32H2 TODO IDF-7359: related rtcio ll func not supported yet
             if(!(pd_flags & RTC_SLEEP_PD_VDDSDIO)) {
-                /* Cache Suspend 1: will wait cache idle in cache suspend, also means SPI bus IDLE, then we can hold SPI CS pin safely*/
-                suspend_cache();
+                /* Cache suspend also means SPI bus IDLE, then we can hold SPI CS pin safely */
                 gpio_ll_hold_en(&GPIO, SPI_CS0_GPIO_NUM);
             }
 #endif
@@ -766,11 +772,11 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
 #if !CONFIG_IDF_TARGET_ESP32H2 // ESP32H2 TODO IDF-7359: related rtcio ll func not supported yet
             if(!(pd_flags & RTC_SLEEP_PD_VDDSDIO)) {
                 gpio_ll_hold_dis(&GPIO, SPI_CS0_GPIO_NUM);
-                /* Cache Resume 1: Resume cache for continue running*/
-                resume_cache();
             }
 #endif
 #endif
+            /* Cache Resume 1: Resume cache for continue running*/
+            resume_cache();
         }
 
 #if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
@@ -862,6 +868,9 @@ void IRAM_ATTR esp_deep_sleep_start(void)
 #if SOC_PMU_SUPPORTED
     uint32_t force_pd_flags = PMU_SLEEP_PD_TOP | PMU_SLEEP_PD_VDDSDIO | PMU_SLEEP_PD_MODEM | PMU_SLEEP_PD_HP_PERIPH \
                             | PMU_SLEEP_PD_CPU | PMU_SLEEP_PD_MEM | PMU_SLEEP_PD_XTAL;
+#if SOC_PM_SUPPORT_HP_AON_PD
+    force_pd_flags |= PMU_SLEEP_PD_HP_AON;
+#endif
 #else
     uint32_t force_pd_flags = RTC_SLEEP_PD_DIG | RTC_SLEEP_PD_VDDSDIO | RTC_SLEEP_PD_INT_8M | RTC_SLEEP_PD_XTAL;
 #endif
@@ -884,6 +893,10 @@ void IRAM_ATTR esp_deep_sleep_start(void)
 
     // Enter sleep
     if (esp_sleep_start(force_pd_flags | pd_flags, ESP_SLEEP_MODE_DEEP_SLEEP) == ESP_ERR_SLEEP_REJECT) {
+#if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
+        /* Cache Resume 2: if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION is enabled, cache has been suspended in esp_sleep_start */
+        resume_cache();
+#endif
         ESP_EARLY_LOGE(TAG, "Deep sleep request is rejected");
     } else {
         // Because RTC is in a slower clock domain than the CPU, it
@@ -907,11 +920,14 @@ static esp_err_t esp_light_sleep_inner(uint32_t pd_flags,
 static esp_err_t esp_light_sleep_inner(uint32_t pd_flags,
                                        uint32_t flash_enable_time_us)
 {
+#if SOC_CONFIGURABLE_VDDSDIO_SUPPORTED
+    rtc_vddsdio_config_t vddsdio_config = rtc_vddsdio_get_config();
+#endif
+
     // Enter sleep
     esp_err_t reject = esp_sleep_start(pd_flags, ESP_SLEEP_MODE_LIGHT_SLEEP);
 
 #if SOC_CONFIGURABLE_VDDSDIO_SUPPORTED
-    rtc_vddsdio_config_t vddsdio_config = rtc_vddsdio_get_config();
     // If VDDSDIO regulator was controlled by RTC registers before sleep,
     // restore the configuration.
     if (vddsdio_config.force) {

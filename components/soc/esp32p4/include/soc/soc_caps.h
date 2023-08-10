@@ -34,11 +34,11 @@
 #define SOC_AXI_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
 // #define SOC_PCNT_SUPPORTED              1  //TODO: IDF-7475
-// #define SOC_MCPWM_SUPPORTED             1  //TODO: IDF-7493
+#define SOC_MCPWM_SUPPORTED                1
 // #define SOC_TWAI_SUPPORTED              1  //TODO: IDF-7470
 // #define SOC_ETM_SUPPORTED               1  //TODO: IDF-7478
 // #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471, TODO: IDF-7472
-// #define SOC_ASYNC_MEMCPY_SUPPORTED      1
+#define SOC_ASYNC_MEMCPY_SUPPORTED      1
 // disable usb serial jtag for esp32p4, current image does not support
 // #define SOC_USB_SERIAL_JTAG_SUPPORTED   1  //TODO: IDF-7496
 // #define SOC_TEMP_SENSOR_SUPPORTED       1  //TODO: IDF-7482
@@ -55,11 +55,12 @@
 // #define SOC_I2C_SUPPORTED               1  //TODO: IDF-6507, TODO: IDF-7491
 #define SOC_SYSTIMER_SUPPORTED          1
 // #define SOC_AES_SUPPORTED               1  //TODO: IDF-6519
-// #define SOC_MPI_SUPPORTED               1
+#define SOC_MPI_SUPPORTED               1
 // #define SOC_SHA_SUPPORTED               1  //TODO: IDF-7541
 // #define SOC_HMAC_SUPPORTED              1  //TODO: IDF-7543
 // #define SOC_DIG_SIGN_SUPPORTED          1  //TODO: IDF-6518
-// #define SOC_ECC_SUPPORTED               1  //TODO: IDF-7549
+#define SOC_ECC_SUPPORTED               1
+#define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1
 // #define SOC_SECURE_BOOT_SUPPORTED       1  //TODO: IDF-7544
 // #define SOC_BOD_SUPPORTED               1  //TODO: IDF-7519
@@ -160,6 +161,7 @@
 #define SOC_AHB_GDMA_VERSION            2
 #define SOC_GDMA_NUM_GROUPS_MAX         2
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
+#define SOC_AXI_GDMA_SUPPORT_PSRAM      1
 // #define SOC_GDMA_SUPPORT_ETM            1  // Both AHB-DMA and AXI-DMA supports ETM  //TODO: IDF-7478
 
 /*-------------------------- ETM CAPS --------------------------------------*/
@@ -271,7 +273,7 @@
 #define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST as the RMT clock source */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
-#define SOC_MCPWM_GROUPS                     (1U)   ///< 1 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
+#define SOC_MCPWM_GROUPS                     (2U)   ///< 2 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
 #define SOC_MCPWM_TIMERS_PER_GROUP           (3)    ///< The number of timers that each group has
 #define SOC_MCPWM_OPERATORS_PER_GROUP        (3)    ///< The number of operators that each group has
 #define SOC_MCPWM_COMPARATORS_PER_OPERATOR   (2)    ///< The number of comparators that each operator has
@@ -296,8 +298,12 @@
 #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the RX unit */
 #define SOC_PARLIO_TX_RX_SHARE_INTERRUPT     1   /*!< TX and RX unit share the same interrupt source number */
 
+/*--------------------------- MPI CAPS ---------------------------------------*/
+#define SOC_MPI_MEM_BLOCKS_NUM (4)
+#define SOC_MPI_OPERATIONS_NUM (3)
+
 /*--------------------------- RSA CAPS ---------------------------------------*/
-#define SOC_RSA_MAX_BIT_LEN    (3072)
+#define SOC_RSA_MAX_BIT_LEN    (4096)
 
 // TODO: IDF-5353 (Copy from esp32c3, need check)
 /*--------------------------- SHA CAPS ---------------------------------------*/

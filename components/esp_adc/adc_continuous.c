@@ -288,7 +288,7 @@ static IRAM_ATTR void adc_dma_intr_handler(void *arg)
 
 static IRAM_ATTR bool s_adc_dma_intr(adc_continuous_ctx_t *adc_digi_ctx)
 {
-    portBASE_TYPE taskAwoken = 0;
+    BaseType_t taskAwoken = 0;
     bool need_yield = false;
     BaseType_t ret;
     adc_hal_dma_desc_status_t status = false;
@@ -613,12 +613,12 @@ esp_err_t adc_continuous_register_event_callbacks(adc_continuous_handle_t handle
     return ESP_OK;
 }
 
-esp_err_t adc_continuous_io_to_channel(int io_num, adc_unit_t *unit_id, adc_channel_t *channel)
+esp_err_t adc_continuous_io_to_channel(int io_num, adc_unit_t * const unit_id, adc_channel_t * const channel)
 {
     return adc_io_to_channel(io_num, unit_id, channel);
 }
 
-esp_err_t adc_continuous_channel_to_io(adc_unit_t unit_id, adc_channel_t channel, int *io_num)
+esp_err_t adc_continuous_channel_to_io(adc_unit_t unit_id, adc_channel_t channel, int * const io_num)
 {
     return adc_channel_to_io(unit_id, channel, io_num);
 }

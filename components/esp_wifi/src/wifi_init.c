@@ -165,6 +165,7 @@ esp_err_t esp_wifi_deinit(void)
 #endif
     esp_wifi_power_domain_off();
 #if CONFIG_MAC_BB_PD
+    esp_wifi_internal_set_mac_sleep(false);
     esp_mac_bb_pd_mem_deinit();
 #endif
     esp_phy_modem_deinit();
@@ -325,6 +326,9 @@ void wifi_apb80m_request(void)
 {
     assert(s_wifi_modem_sleep_lock);
     esp_pm_lock_acquire(s_wifi_modem_sleep_lock);
+    if (esp_clk_apb_freq() != APB_CLK_FREQ) {
+        ESP_LOGE(__func__, "WiFi needs 80MHz APB frequency to work, but got %dHz", esp_clk_apb_freq());
+    }
 }
 
 void wifi_apb80m_release(void)

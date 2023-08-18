@@ -257,11 +257,13 @@ static esp_err_t gpio_hysteresis_disable(gpio_num_t gpio_num)
     return ESP_OK;
 }
 
+#if SOC_GPIO_SUPPORT_PIN_HYS_CTRL_BY_EFUSE
 static esp_err_t gpio_hysteresis_by_efuse(gpio_num_t gpio_num)
 {
     gpio_hal_hysteresis_from_efuse(gpio_context.gpio_hal, gpio_num);
     return ESP_OK;
 }
+#endif
 #endif  //SOC_GPIO_SUPPORT_PIN_HYS_FILTER
 
 esp_err_t gpio_set_pull_mode(gpio_num_t gpio_num, gpio_pull_mode_t pull)
@@ -416,10 +418,14 @@ esp_err_t gpio_config(const gpio_config_t *pGPIOConfig)
                 gpio_hysteresis_enable(io_num);
             } else if (pGPIOConfig->hys_ctrl_mode == GPIO_HYS_SOFT_DISABLE) {
                 gpio_hysteresis_disable(io_num);
-            } else {
+            }
+#if SOC_GPIO_SUPPORT_PIN_HYS_CTRL_BY_EFUSE
+            else {
                 gpio_hysteresis_by_efuse(io_num);
             }
+#endif
 #endif  //SOC_GPIO_SUPPORT_PIN_HYS_FILTER
+
             /* By default, all the pins have to be configured as GPIO pins. */
             gpio_hal_iomux_func_sel(io_reg, PIN_FUNC_GPIO);
         }
@@ -582,7 +588,11 @@ esp_err_t gpio_isr_register(void (*fn)(void *), void *arg, int intr_alloc_flags,
 {
     GPIO_CHECK(fn, "GPIO ISR null", ESP_ERR_INVALID_ARG);
     gpio_isr_alloc_t p;
+#if !CONFIG_IDF_TARGET_ESP32P4  //TODO: IDF-7995
     p.source = ETS_GPIO_INTR_SOURCE;
+#else
+    p.source = ETS_GPIO_INTR0_SOURCE;
+#endif
     p.intr_alloc_flags = intr_alloc_flags;
 #if SOC_ANA_CMPR_SUPPORTED
     p.intr_alloc_flags |= ESP_INTR_FLAG_SHARED;

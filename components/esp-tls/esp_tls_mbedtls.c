@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -212,7 +212,7 @@ int esp_mbedtls_handshake(esp_tls_t *tls, const esp_tls_cfg_t *cfg)
             mbedtls_print_error_msg(ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED);
-            if (cfg->cacert_buf != NULL || cfg->use_global_ca_store == true) {
+            if (cfg->crt_bundle_attach != NULL || cfg->cacert_buf != NULL || cfg->use_global_ca_store == true) {
                 /* This is to check whether handshake failed due to invalid certificate*/
                 esp_mbedtls_verify_certificate(tls);
             }
@@ -230,7 +230,10 @@ ssize_t esp_mbedtls_read(esp_tls_t *tls, char *data, size_t datalen)
 
     ssize_t ret = mbedtls_ssl_read(&tls->ssl, (unsigned char *)data, datalen);
 #if CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_MBEDTLS_CLIENT_SSL_SESSION_TICKETS
-    while (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) {
+    // If a post-handshake message is received, connection state is changed to `MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET`
+    // Call mbedtls_ssl_read() till state is `MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET` or return code is `MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET`
+    // to process session tickets in TLS 1.3 connection
+    while (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET || tls->ssl.MBEDTLS_PRIVATE(state) == MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET) {
         ESP_LOGD(TAG, "got session ticket in TLS 1.3 connection, retry read");
         ret = mbedtls_ssl_read(&tls->ssl, (unsigned char *)data, datalen);
     }
@@ -973,8 +976,9 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki)
     }
     mbedtls_x509_crt_init(&tls->clientcert);
 
-    if(cfg->clientcert_buf != NULL) {
-        ret = mbedtls_x509_crt_parse(&tls->clientcert, (const unsigned char*)((esp_tls_pki_t *)pki->publiccert_pem_buf), (esp_tls_pki_t *)pki->publiccert_pem_bytes);
+    esp_tls_pki_t *pki_l = (esp_tls_pki_t *) pki;
+    if (pki_l->publiccert_pem_buf != NULL) {
+        ret = mbedtls_x509_crt_parse(&tls->clientcert, pki_l->publiccert_pem_buf, pki_l->publiccert_pem_bytes);
         if (ret < 0) {
             ESP_LOGE(TAG, "mbedtls_x509_crt_parse of client cert returned -0x%04X", -ret);
             mbedtls_print_error_msg(ret);

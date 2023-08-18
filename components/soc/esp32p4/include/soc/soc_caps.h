@@ -33,8 +33,8 @@
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_AXI_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
-// #define SOC_PCNT_SUPPORTED              1  //TODO: IDF-7475
-#define SOC_MCPWM_SUPPORTED                1
+#define SOC_PCNT_SUPPORTED              1
+#define SOC_MCPWM_SUPPORTED             1
 // #define SOC_TWAI_SUPPORTED              1  //TODO: IDF-7470
 // #define SOC_ETM_SUPPORTED               1  //TODO: IDF-7478
 // #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471, TODO: IDF-7472
@@ -52,7 +52,7 @@
 // #define SOC_SDM_SUPPORTED               1  //TODO: IDF-7551
 // #define SOC_GPSPI_SUPPORTED             1  //TODO: IDF-7502, TODO: IDF-7503
 // #define SOC_LEDC_SUPPORTED              1  //TODO: IDF-6510
-// #define SOC_I2C_SUPPORTED               1  //TODO: IDF-6507, TODO: IDF-7491
+#define SOC_I2C_SUPPORTED               1  //TODO: IDF-6507, TODO: IDF-7491
 #define SOC_SYSTIMER_SUPPORTED          1
 // #define SOC_AES_SUPPORTED               1  //TODO: IDF-6519
 #define SOC_MPI_SUPPORTED               1
@@ -171,30 +171,36 @@
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-P4 has 1 GPIO peripheral
 #define SOC_GPIO_PORT                      1U
-#define SOC_GPIO_PIN_COUNT                 64
+#define SOC_GPIO_PIN_COUNT                 57
 // #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1  //TODO: IDF-7481
 // #define SOC_GPIO_FLEX_GLITCH_FILTER_NUM    8  //TODO: IDF-7481
+#define SOC_GPIO_SUPPORT_PIN_HYS_FILTER    1
 
 // GPIO peripheral has the ETM extension
-// #define SOC_GPIO_SUPPORT_ETM          1
+// #define SOC_GPIO_SUPPORT_ETM          1  //TODO: IDF-7841
 #define SOC_GPIO_ETM_EVENTS_PER_GROUP 8
 #define SOC_GPIO_ETM_TASKS_PER_GROUP  8
 
 // Target has the full LP IO subsystem
 // On ESP32-P4, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
 #define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    (1)
-// GPIO0~7 on ESP32P4 can support chip deep sleep wakeup
-// #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
+// GPIO0~15 on ESP32P4 can support chip deep sleep wakeup
+// #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1) // TODO: IDF-7480
 
-#define SOC_GPIO_VALID_GPIO_MASK        (0xFFFFFFFFFFFFFFFF)
+#define SOC_GPIO_VALID_GPIO_MASK        (0x01FFFFFFFFFFFFFF)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
-#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6 | BIT7)
+#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | 0xFFFF)
 
-// digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_8~GPIO_NUM_30)
-#define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x000000007FFFFF00ULL
+// digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_16~GPIO_NUM_56)
+#define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x01FFFFFFFFFF0000ULL
+
+// Support to force hold all IOs
+#define SOC_GPIO_SUPPORT_FORCE_HOLD              (1)
+// Support to hold a single digital I/O when the digital domain is powered off
+#define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
-// #define SOC_RTCIO_PIN_COUNT                 8  //TODO: IDF-7480
+// #define SOC_RTCIO_PIN_COUNT                 16  //TODO: IDF-7480
 // #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1  //TODO: IDF-7480
 // #define SOC_RTCIO_HOLD_SUPPORTED            1  //TODO: IDF-7480
 // #define SOC_RTCIO_WAKE_SUPPORTED            1  //TODO: IDF-7480
@@ -205,10 +211,11 @@
 #define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-P4 has 1 I2C
-#define SOC_I2C_NUM                 (1U)
+// ESP32-P4 has 2 I2Cs
+#define SOC_I2C_NUM                 (2U)
 
 #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
+#define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
 #define SOC_I2C_SUPPORT_SLAVE       (1)
 
 // FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
@@ -255,6 +262,7 @@
 #define SOC_PCNT_CHANNELS_PER_UNIT            2
 #define SOC_PCNT_THRES_POINT_PER_UNIT         2
 #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
+#define SOC_PCNT_SUPPORT_ZERO_INPUT           1 /*!< Support encoder with Zero phase input */
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -363,7 +371,6 @@
 // host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
 #define SOC_SPI_PERIPH_SUPPORT_MULTILINE_MODE(host_id)  ({(void)host_id; 1;})
 
-#define SOC_MEMSPI_IS_INDEPENDENT 1
 #define SOC_SPI_MAX_PRE_DIVIDER 16
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
@@ -485,3 +492,6 @@
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_XTAL                (1)
+
+/*-------------------------- Memory CAPS --------------------------*/
+#define SOC_MEM_TCM_SUPPORTED    (1)

@@ -121,6 +121,9 @@
 /*!< Interrupt */
 #define SOC_ADC_TEMPERATURE_SHARE_INTR          (1)
 
+/*!< ADC power control is shared by PWDET */
+#define SOC_ADC_SHARED_POWER                    1
+
 // ESP32H2-TODO: Copy from esp32c6, need check
 /*-------------------------- APB BACKUP DMA CAPS -------------------------------*/
 #define SOC_APB_BACKUP_DMA              (0)
@@ -177,8 +180,9 @@
 #define SOC_GPIO_PORT                        1U
 #define SOC_GPIO_PIN_COUNT                   28
 #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER   1
-#define SOC_GPIO_SUPPORT_PIN_HYS_FILTER      1
 #define SOC_GPIO_FLEX_GLITCH_FILTER_NUM      8
+#define SOC_GPIO_SUPPORT_PIN_HYS_FILTER      1
+#define SOC_GPIO_SUPPORT_PIN_HYS_CTRL_BY_EFUSE 1 // By default, hysteresis enable/disable is controlled by efuse
 
 // GPIO peripheral has the ETM extension
 #define SOC_GPIO_SUPPORT_ETM          1
@@ -230,6 +234,7 @@
 
 #define SOC_I2C_SUPPORT_XTAL        (1)
 #define SOC_I2C_SUPPORT_RTC         (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_NUM                 (1U)
@@ -465,6 +470,7 @@
 /*-------------------------- Power Management CAPS ----------------------------*/
 #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
+#define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configue the EXT1 trigger level */
 #define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_MODEM_PD         (1) /*!<modem includes BLE and 15.4 */
 #define SOC_PM_SUPPORT_XTAL32K_PD       (1)

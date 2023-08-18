@@ -134,6 +134,9 @@
 #define SOC_ADC_RTC_MIN_BITWIDTH                (9)
 #define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
+/*!< ADC power control is shared by PWDET */
+#define SOC_ADC_SHARED_POWER                    1
+
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 #if SOC_CAPS_ECO_VER >= 100
 #define SOC_BROWNOUT_RESET_SUPPORTED 1
@@ -183,6 +186,9 @@
 #define SOC_I2C_SUPPORT_SLAVE   (1)
 
 #define SOC_I2C_SUPPORT_APB     (1)
+
+// On ESP32, the stop bit should be independent, we can't put trans data and stop command together
+#define SOC_I2C_STOP_INDEPENDENT (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 // ESP32 has 2 I2S

@@ -112,6 +112,9 @@
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
 #define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
 
+/*!< ADC power control is shared by PWDET, TempSensor */
+#define SOC_ADC_SHARED_POWER                    1
+
 /*-------------------------- APB BACKUP DMA CAPS -------------------------------*/
 #define SOC_APB_BACKUP_DMA              (1)
 
@@ -186,6 +189,7 @@
 
 #define SOC_I2C_SUPPORT_XTAL        (1)
 #define SOC_I2C_SUPPORT_RTC         (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_NUM                 (1U)

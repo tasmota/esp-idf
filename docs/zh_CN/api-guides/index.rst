@@ -8,6 +8,7 @@ API 指南
    app_trace
    startup
    :SOC_BLUFI_SUPPORTED: blufi
+   :SOC_BT_SUPPORTED: bluetooth
    bootloader
    build-system
    :SOC_SUPPORT_COEXISTENCE: coexist
@@ -32,7 +33,7 @@ API 指南
    partition-tables
    performance/index
    reproducible-builds
-   :not esp32h2: RF_calibration
+   :SOC_WIFI_SUPPORTED or SOC_BT_SUPPORTED or SOC_IEEE802154_SUPPORTED: RF_calibration
    thread-local-storage
    tools/index
    unit-tests

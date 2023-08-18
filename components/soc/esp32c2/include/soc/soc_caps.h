@@ -84,6 +84,9 @@
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
 #define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
 
+/*!< ADC power control is shared by PWDET, TempSensor */
+#define SOC_ADC_SHARED_POWER                    1
+
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 #define SOC_BROWNOUT_RESET_SUPPORTED 1
 
@@ -147,6 +150,7 @@
 
 #define SOC_I2C_SUPPORT_XTAL        (1)
 #define SOC_I2C_SUPPORT_RTC         (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR  (1)
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK  (1)

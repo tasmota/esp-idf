@@ -315,6 +315,10 @@ config SOC_ADC_TEMPERATURE_SHARE_INTR
     bool
     default y
 
+config SOC_ADC_SHARED_POWER
+    bool
+    default y
+
 config SOC_APB_BACKUP_DMA
     bool
     default n
@@ -508,6 +512,10 @@ config SOC_I2C_SUPPORT_XTAL
     default y
 
 config SOC_I2C_SUPPORT_RTC
+    bool
+    default y
+
+config SOC_I2C_SUPPORT_10BIT_ADDR
     bool
     default y
 
@@ -1156,6 +1164,10 @@ config SOC_PM_SUPPORT_BT_WAKEUP
     default y
 
 config SOC_PM_SUPPORT_EXT1_WAKEUP
+    bool
+    default y
+
+config SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN
     bool
     default y
 

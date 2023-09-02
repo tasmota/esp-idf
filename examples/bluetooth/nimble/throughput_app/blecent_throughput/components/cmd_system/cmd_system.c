@@ -221,10 +221,11 @@ static int deep_sleep(int argc, char **argv)
 #endif
     }
 
-#if SOC_RTCIO_HOLD_SUPPORTED
+#if CONFIG_IDF_TARGET_ESP32
     rtc_gpio_isolate(GPIO_NUM_12);
 #endif
     esp_deep_sleep_start();
+    return 1;
 }
 
 static void register_deep_sleep(void)

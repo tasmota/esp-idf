@@ -519,6 +519,12 @@
 #define BTM_BLE_PRIVATE_ADDR_INT UC_BT_BLE_RPA_TIMEOUT
 #endif
 
+#if (UC_BT_CLASSIC_BQB_ENABLED == TRUE)
+#define BT_CLASSIC_BQB_INCLUDED TRUE
+#else
+#define BT_CLASSIC_BQB_INCLUDED FALSE
+#endif
+
 /* This feature is used to eanble interleaved scan*/
 #ifndef BTA_HOST_INTERLEAVE_SEARCH
 #define BTA_HOST_INTERLEAVE_SEARCH FALSE
@@ -1498,7 +1504,7 @@
 
 /* The maximum number of simultaneous client and server connections. */
 #ifndef SDP_MAX_CONNECTIONS
-#define SDP_MAX_CONNECTIONS         2 // 4
+#define SDP_MAX_CONNECTIONS         4
 #endif
 
 /* The MTU size for the L2CAP configuration. */
@@ -1528,6 +1534,12 @@
 ******************************************************************************/
 #ifndef RFCOMM_INCLUDED
 #define RFCOMM_INCLUDED             FALSE
+#endif
+
+#if (RFCOMM_INCLUDED == TRUE) && (BT_CLASSIC_BQB_INCLUDED == TRUE)
+#define BT_RFCOMM_BQB_INCLUDED      TRUE
+#else
+#define BT_RFCOMM_BQB_INCLUDED      FALSE
 #endif
 
 #ifndef BTA_JV_RFCOMM_INCLUDED
@@ -2068,6 +2080,12 @@
  */
 #ifndef A2D_INCLUDED
 #define A2D_INCLUDED            FALSE
+#endif
+
+#if (BTC_AV_SRC_INCLUDED == TRUE) && (BT_CLASSIC_BQB_INCLUDED == TRUE)
+#define A2D_SRC_BQB_INCLUDED TRUE
+#else
+#define A2D_SRC_BQB_INCLUDED FALSE
 #endif
 
 /******************************************************************************

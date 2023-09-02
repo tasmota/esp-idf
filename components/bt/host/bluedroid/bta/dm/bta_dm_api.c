@@ -226,6 +226,7 @@ void BTA_DmConfigEir(tBTA_DM_EIR_CONF *eir_config)
         p_msg->hdr.event = BTA_DM_API_CONFIG_EIR_EVT;
 
         p_msg->eir_fec_required = eir_config->bta_dm_eir_fec_required;
+        p_msg->eir_included_name = eir_config->bta_dm_eir_included_name;
         p_msg->eir_included_tx_power = eir_config->bta_dm_eir_included_tx_power;
         p_msg->eir_included_uuid = eir_config->bta_dm_eir_included_uuid;
         p_msg->eir_flags = eir_config->bta_dm_eir_flags;
@@ -2853,7 +2854,7 @@ void BTA_DmBleGapConfigExtAdvDataRaw(BOOLEAN is_scan_rsp, UINT8 instance, UINT16
         p_msg->is_scan_rsp = is_scan_rsp;
         p_msg->instance = instance;
         p_msg->length = length;
-        p_msg->data = (UINT8 *)(p_msg + 1);
+        p_msg->data = length != 0 ? (UINT8 *)(p_msg + 1) : NULL;
         if (data) {
             memcpy(p_msg->data, data, length);
         }
@@ -2943,6 +2944,7 @@ void BTA_DmBleGapPeriodicAdvCfgDataRaw(UINT8 instance, UINT16 length,
         p_msg->length = length;
         p_msg->data = (UINT8 *)(p_msg + 1);
         memcpy(p_msg->data, data, length);
+        p_msg->data = length != 0 ? (UINT8 *)(p_msg + 1) : NULL;
         //start sent the msg to the bta system control moudle
         bta_sys_sendmsg(p_msg);
     } else {

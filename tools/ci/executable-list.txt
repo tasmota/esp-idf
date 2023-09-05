@@ -76,8 +76,6 @@ tools/ci/mirror-submodule-update.sh
 tools/ci/multirun_with_pyenv.sh
 tools/ci/push_to_github.sh
 tools/ci/test_autocomplete.py
-tools/ci/test_build_system_cmake.sh
-tools/ci/test_build_system_spaces.py
 tools/ci/test_check_kconfigs.py
 tools/ci/test_configure_ci_environment.sh
 tools/ci/test_reproducible_build.sh
@@ -87,6 +85,7 @@ tools/esp_app_trace/sysviewtrace_proc.py
 tools/esp_app_trace/test/logtrace/test.sh
 tools/esp_app_trace/test/sysview/test.sh
 tools/format.sh
+tools/gdb_panic_server.py
 tools/gen_esp_err_to_name.py
 tools/gen_soc_caps_kconfig/gen_soc_caps_kconfig.py
 tools/gen_soc_caps_kconfig/test/test_gen_soc_caps_kconfig.py

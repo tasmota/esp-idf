@@ -36,7 +36,7 @@
 #define SOC_PCNT_SUPPORTED              1
 #define SOC_MCPWM_SUPPORTED             1
 // #define SOC_TWAI_SUPPORTED              1  //TODO: IDF-7470
-// #define SOC_ETM_SUPPORTED               1  //TODO: IDF-7478
+#define SOC_ETM_SUPPORTED               1
 // #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471, TODO: IDF-7472
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 // disable usb serial jtag for esp32p4, current image does not support
@@ -45,6 +45,7 @@
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 // #define SOC_RISCV_COPROC_SUPPORTED      1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1
+// #define SOC_EFUSE_SUPPORTED             1  //TODO: IDF-7512
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
 // #define SOC_I2S_SUPPORTED               1  //TODO: IDF-6508
@@ -68,7 +69,7 @@
 // #define SOC_PMU_SUPPORTED               1  //TODO: IDF-7531
 // #define SOC_PAU_SUPPORTED               1  //TODO: IDF-7531
 // #define SOC_LP_TIMER_SUPPORTED          1  //TODO: IDF-7532
-// #define SOC_SPIRAM_SUPPORTED            1  //TODO: IDF-7495
+#define SOC_SPIRAM_SUPPORTED            1
 // #define SOC_ULP_SUPPORTED               1  //TODO: IDF-7534
 // #define SOC_SDMMC_HOST_SUPPORTED        1  //TODO: IDF-6502
 // #define SOC_CLK_TREE_SUPPORTED          1  //TODO: IDF-7526
@@ -136,6 +137,7 @@
 #define SOC_CPU_HAS_FLEXIBLE_INTC       1
 #define SOC_INT_PLIC_SUPPORTED          0       //riscv platform-level interrupt controller
 #define SOC_INT_CLIC_SUPPORTED          1
+#define SOC_INT_HW_NESTED_SUPPORTED     1       // Support for hardware interrupts nesting
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
 
 #define SOC_CPU_BREAKPOINTS_NUM         4
@@ -159,10 +161,11 @@
 
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION            2
+#define SOC_GDMA_SUPPORT_CRC            1
 #define SOC_GDMA_NUM_GROUPS_MAX         2
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
 #define SOC_AXI_GDMA_SUPPORT_PSRAM      1
-// #define SOC_GDMA_SUPPORT_ETM            1  // Both AHB-DMA and AXI-DMA supports ETM  //TODO: IDF-7478
+// #define SOC_GDMA_SUPPORT_ETM            1
 
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
@@ -177,7 +180,7 @@
 #define SOC_GPIO_SUPPORT_PIN_HYS_FILTER    1
 
 // GPIO peripheral has the ETM extension
-// #define SOC_GPIO_SUPPORT_ETM          1  //TODO: IDF-7841
+#define SOC_GPIO_SUPPORT_ETM          1
 #define SOC_GPIO_ETM_EVENTS_PER_GROUP 8
 #define SOC_GPIO_ETM_TASKS_PER_GROUP  8
 
@@ -225,15 +228,16 @@
 #define SOC_I2C_SUPPORT_RTC         (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
+//TODO: IDF-6508
 #define SOC_I2S_NUM                 (1U)
 #define SOC_I2S_HW_VERSION_2        (1)
 #define SOC_I2S_SUPPORTS_XTAL       (1)
 #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
-#define SOC_I2S_SUPPORTS_PDM        (1)
-#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+// #define SOC_I2S_SUPPORTS_PDM        (1)
+// #define SOC_I2S_SUPPORTS_PDM_TX     (1)
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)
-#define SOC_I2S_SUPPORTS_TDM        (1)
+// #define SOC_I2S_SUPPORTS_TDM        (1)
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -262,7 +266,7 @@
 #define SOC_PCNT_CHANNELS_PER_UNIT            2
 #define SOC_PCNT_THRES_POINT_PER_UNIT         2
 #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
-#define SOC_PCNT_SUPPORT_ZERO_INPUT           1 /*!< Support encoder with Zero phase input */
+#define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1  /*!< Support clear signal input */
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -273,8 +277,8 @@
 #define SOC_RMT_SUPPORT_RX_PINGPONG           1  /*!< Support Ping-Pong mode on RX path */
 #define SOC_RMT_SUPPORT_RX_DEMODULATION       1  /*!< Support signal demodulation on RX path (i.e. remove carrier) */
 #define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
-#define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
-#define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */
+// #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
+// #define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */    //TODO: IDF-7476
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
 #define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
 #define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
@@ -408,6 +412,7 @@
 #define SOC_TIMER_GROUP_SUPPORT_XTAL      1
 #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   1
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      4
+#define SOC_TIMER_SUPPORT_ETM             1
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM         2

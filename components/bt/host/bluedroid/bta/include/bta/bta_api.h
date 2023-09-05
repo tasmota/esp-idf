@@ -303,6 +303,7 @@ typedef void (tBTA_DM_CONFIG_EIR_CBACK) (tBTA_STATUS status, UINT8 eir_type_num,
 
 typedef struct {
     BOOLEAN bta_dm_eir_fec_required;        /* FEC required */
+    BOOLEAN bta_dm_eir_included_name;       /* Included device name or not */
     UINT8   bta_dm_eir_min_name_len;        /* minimum length of local name when it is shortened */
 
     BOOLEAN bta_dm_eir_included_uuid;       /* Included UUIDs or not */
@@ -436,6 +437,9 @@ typedef tBTM_RSSI_RESULTS tBTA_RSSI_RESULTS;
 
 typedef tBTM_SET_AFH_CHANNELS_RESULTS tBTA_SET_AFH_CHANNELS_RESULTS;
 typedef tBTM_BLE_SET_CHANNELS_RESULTS tBTA_BLE_SET_CHANNELS_RESULTS;
+
+typedef tBTM_SET_PAGE_TIMEOUT_RESULTS tBTA_SET_PAGE_TIMEOUT_RESULTS;
+typedef tBTM_GET_PAGE_TIMEOUT_RESULTS tBTA_GET_PAGE_TIMEOUT_RESULTS;
 
 typedef tBTM_REMOTE_DEV_NAME tBTA_REMOTE_DEV_NAME;
 
@@ -1759,6 +1763,29 @@ void BTA_DmSetAfhChannels(const uint8_t *channels, tBTA_CMPL_CB  *set_afh_cb);
 void BTA_DmSetQos(BD_ADDR bd_addr, UINT32 t_poll, tBTM_CMPL_CB *p_cb);
 #endif /// (BTA_DM_QOS_INCLUDED == TRUE)
 
+/*******************************************************************************
+**
+** Function         BTA_DmSetPageTimeout
+**
+** Description      This function sets the Bluetooth page timeout.
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void BTA_DmSetPageTimeout(UINT16 page_to, tBTM_CMPL_CB *p_cb);
+/*******************************************************************************
+**
+** Function         BTA_DmGetPageTimeout
+**
+** Description      This function gets the Bluetooth page timeout.
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void BTA_DmGetPageTimeout(tBTM_CMPL_CB *p_cb);
+
 #if (BLE_INCLUDED == TRUE)
 /*******************************************************************************
 **
@@ -2997,9 +3024,9 @@ extern void BTA_DmBleGapPeriodicAdvSetParams(UINT8 instance,
                                                          tBTA_DM_BLE_Periodic_Adv_Params *params);
 
 extern void BTA_DmBleGapPeriodicAdvCfgDataRaw(UINT8 instance, UINT16 length,
-                                                           const UINT8 *data);
+                                                           const UINT8 *data,BOOLEAN only_update_did);
 
-extern void BTA_DmBleGapPeriodicAdvEnable(BOOLEAN enable, UINT8 instance);
+extern void BTA_DmBleGapPeriodicAdvEnable(UINT8 enable, UINT8 instance);
 
 extern void BTA_DmBleGapPeriodicAdvCreateSync(tBTA_DM_BLE_Periodic_Sync_Params *params);
 

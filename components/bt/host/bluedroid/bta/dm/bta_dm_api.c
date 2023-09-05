@@ -226,6 +226,7 @@ void BTA_DmConfigEir(tBTA_DM_EIR_CONF *eir_config)
         p_msg->hdr.event = BTA_DM_API_CONFIG_EIR_EVT;
 
         p_msg->eir_fec_required = eir_config->bta_dm_eir_fec_required;
+        p_msg->eir_included_name = eir_config->bta_dm_eir_included_name;
         p_msg->eir_included_tx_power = eir_config->bta_dm_eir_included_tx_power;
         p_msg->eir_included_uuid = eir_config->bta_dm_eir_included_uuid;
         p_msg->eir_flags = eir_config->bta_dm_eir_flags;
@@ -266,6 +267,51 @@ void BTA_DmSetAfhChannels(const uint8_t *channels, tBTA_CMPL_CB  *set_afh_cb)
 
         p_msg->set_afh_cb = set_afh_cb;
         memcpy(p_msg->channels, channels, AFH_CHANNELS_LEN);
+
+        bta_sys_sendmsg(p_msg);
+    }
+}
+
+/*******************************************************************************
+**
+** Function         BTA_DmSetPageTimeout
+**
+** Description      This function sets the Bluetooth page timeout.
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void BTA_DmSetPageTimeout(UINT16 page_to, tBTM_CMPL_CB *p_cb)
+{
+    tBTA_DM_API_PAGE_TO_SET *p_msg;
+
+    if ((p_msg = (tBTA_DM_API_PAGE_TO_SET *) osi_malloc(sizeof(tBTA_DM_API_PAGE_TO_SET))) != NULL) {
+        p_msg->hdr.event = BTA_DM_API_PAGE_TO_SET_EVT;
+        p_msg->page_to = page_to;
+        p_msg->set_page_to_cb = p_cb;
+
+        bta_sys_sendmsg(p_msg);
+    }
+}
+
+/*******************************************************************************
+**
+** Function         BTA_DmGetPageTimeout
+**
+** Description      This function gets the Bluetooth page timeout.
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void BTA_DmGetPageTimeout(tBTM_CMPL_CB *p_cb)
+{
+    tBTA_DM_API_PAGE_TO_GET *p_msg;
+
+    if ((p_msg = (tBTA_DM_API_PAGE_TO_GET *) osi_malloc(sizeof(tBTA_DM_API_PAGE_TO_GET))) != NULL) {
+        p_msg->hdr.event = BTA_DM_API_PAGE_TO_GET_EVT;
+        p_msg->get_page_to_cb = p_cb;
 
         bta_sys_sendmsg(p_msg);
     }
@@ -2932,7 +2978,7 @@ void BTA_DmBleGapPeriodicAdvSetParams(UINT8 instance,
 }
 
 void BTA_DmBleGapPeriodicAdvCfgDataRaw(UINT8 instance, UINT16 length,
-                                                           const UINT8 *data)
+                                                           const UINT8 *data,bool only_update_did)
 {
     tBTA_DM_API_CFG_PERIODIC_ADV_DATA *p_msg;
     APPL_TRACE_API("%s, Periodic ADV config data raw.", __func__);
@@ -2944,6 +2990,7 @@ void BTA_DmBleGapPeriodicAdvCfgDataRaw(UINT8 instance, UINT16 length,
         p_msg->data = (UINT8 *)(p_msg + 1);
         memcpy(p_msg->data, data, length);
         p_msg->data = length != 0 ? (UINT8 *)(p_msg + 1) : NULL;
+        p_msg->only_update_did = only_update_did;
         //start sent the msg to the bta system control moudle
         bta_sys_sendmsg(p_msg);
     } else {
@@ -2952,7 +2999,7 @@ void BTA_DmBleGapPeriodicAdvCfgDataRaw(UINT8 instance, UINT16 length,
 
 }
 
-void BTA_DmBleGapPeriodicAdvEnable(BOOLEAN enable, UINT8 instance)
+void BTA_DmBleGapPeriodicAdvEnable(UINT8 enable, UINT8 instance)
 {
     tBTA_DM_API_ENABLE_PERIODIC_ADV *p_msg;
     APPL_TRACE_API("%s, Periodic ADV %s.", __func__, enable ? "start" : "stop");

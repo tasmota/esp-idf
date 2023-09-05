@@ -104,9 +104,6 @@ typedef uint32_t TickType_t;
 #define portTASK_FUNCTION_PROTO(vFunction, pvParameters) void vFunction(void *pvParameters)
 #define portTASK_FUNCTION(vFunction, pvParameters) void vFunction(void *pvParameters)
 
-// interrupt module will mask interrupt with priority less than threshold
-#define RVHAL_EXCM_LEVEL            4
-
 
 /* ----------------------------------------------- Port Configurations -------------------------------------------------
  * - Configurations values supplied by each port
@@ -427,7 +424,19 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void)
     return (BaseType_t) esp_cpu_get_core_id();
 }
 
+// --------------------- TCB Cleanup -----------------------
 
+/**
+ * @brief TCB cleanup hook
+ *
+ * The portCLEAN_UP_TCB() macro is called in prvDeleteTCB() right before a
+ * deleted task's memory is freed. We map that macro to this internal function
+ * so that IDF FreeRTOS ports can inject some task pre-deletion operations.
+ *
+ * @note We can't use vPortCleanUpTCB() due to API compatibility issues. See
+ * CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP. Todo: IDF-8097
+ */
+void vPortTCBPreDeleteHook( void *pxTCB );
 
 /* ------------------------------------------- FreeRTOS Porting Interface ----------------------------------------------
  * - Contains all the mappings of the macros required by FreeRTOS
@@ -561,11 +570,7 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void)
 
 // --------------------- TCB Cleanup -----------------------
 
-#if CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP
-/* If enabled, users must provide an implementation of vPortCleanUpTCB() */
-extern void vPortCleanUpTCB ( void *pxTCB );
-#define portCLEAN_UP_TCB( pxTCB )                   vPortCleanUpTCB( pxTCB )
-#endif /* CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP */
+#define portCLEAN_UP_TCB( pxTCB ) vPortTCBPreDeleteHook( pxTCB )
 
 // -------------- Optimized Task Selection -----------------
 
@@ -636,6 +641,12 @@ FORCE_INLINE_ATTR bool xPortCanYield(void)
     uint32_t threshold = REG_READ(INTERRUPT_CORE0_CPU_INT_THRESH_REG);
 #if SOC_INT_CLIC_SUPPORTED
     threshold = threshold >> (CLIC_CPU_INT_THRESH_S + (8 - NLBITS));
+
+    /* When CLIC is supported, the lowest interrupt threshold level is 0.
+     * Therefore, an interrupt threshold level above 0 would mean that we
+     * are either in a critical section or in an ISR.
+     */
+    return (threshold == 0);
 #endif /* SOC_INT_CLIC_SUPPORTED */
     /* when enter critical code, FreeRTOS will mask threshold to RVHAL_EXCM_LEVEL
      * and exit critical code, will recover threshold value (1). so threshold <= 1

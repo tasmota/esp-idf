@@ -103,7 +103,7 @@ list(APPEND srcs
 
 if(kernel_impl STREQUAL "FreeRTOS-Kernel")
     list(APPEND srcs
-        "esp_additions/freertos_v8_compat.c")
+        "esp_additions/freertos_compatibility.c")
 endif()
 
 if(arch STREQUAL "linux")
@@ -250,7 +250,4 @@ else()
         idf_component_optional_requires(PRIVATE esp_pm)
     endif()
 
-    if(CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP AND CONFIG_FREERTOS_SMP)
-        target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=vPortCleanUpTCB")
-    endif()
 endif()

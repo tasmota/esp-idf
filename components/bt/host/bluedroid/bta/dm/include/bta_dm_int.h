@@ -56,6 +56,8 @@ enum {
     BTA_DM_API_GET_NAME_EVT,
 #if (CLASSIC_BT_INCLUDED == TRUE)
     BTA_DM_API_CONFIG_EIR_EVT,
+    BTA_DM_API_PAGE_TO_SET_EVT,
+    BTA_DM_API_PAGE_TO_GET_EVT,
 #endif
     BTA_DM_API_SET_AFH_CHANNELS_EVT,
 #if (SDP_INCLUDED == TRUE)
@@ -246,6 +248,7 @@ typedef struct {
 typedef struct {
     BT_HDR              hdr;
     BOOLEAN             eir_fec_required;
+    BOOLEAN             eir_included_name;
     BOOLEAN             eir_included_tx_power;
     BOOLEAN             eir_included_uuid;
     UINT8               eir_flags;
@@ -262,6 +265,19 @@ typedef struct {
     AFH_CHANNELS        channels;
     tBTA_CMPL_CB        *set_afh_cb;
 }tBTA_DM_API_SET_AFH_CHANNELS;
+
+/* data type for BTA_DM_API_PAGE_TO_SET_EVT */
+typedef struct {
+    BT_HDR              hdr;
+    UINT16              page_to;
+    tBTM_CMPL_CB        *set_page_to_cb;
+} tBTA_DM_API_PAGE_TO_SET;
+
+/* data type for BTA_DM_API_PAGE_TO_GET_EVT */
+typedef struct {
+    BT_HDR              hdr;
+    tBTM_CMPL_CB        *get_page_to_cb;
+} tBTA_DM_API_PAGE_TO_GET;
 
 /* data type for BTA_DM_API_GET_REMOTE_NAME_EVT */
 typedef struct {
@@ -968,12 +984,13 @@ typedef struct {
     UINT8                           instance;
     UINT16                          length;
     UINT8                           *data;
+    BOOLEAN                         only_update_did;
 } tBTA_DM_API_CFG_PERIODIC_ADV_DATA;
 
 typedef struct {
     BT_HDR                          hdr;
     UINT8                           instance;
-    BOOLEAN                         enable;
+    UINT8                           enable;
 } tBTA_DM_API_ENABLE_PERIODIC_ADV;
 
 typedef struct {
@@ -1076,6 +1093,8 @@ typedef union {
     tBTA_DM_API_CONFIG_EIR config_eir;
 
     tBTA_DM_API_SET_AFH_CHANNELS set_afh_channels;
+    tBTA_DM_API_PAGE_TO_SET set_page_timeout;
+    tBTA_DM_API_PAGE_TO_GET get_page_timeout;
 #if (SDP_INCLUDED == TRUE)
     tBTA_DM_API_GET_REMOTE_NAME  get_rmt_name;
 #endif
@@ -1576,6 +1595,8 @@ extern void bta_dm_set_dev_name (tBTA_DM_MSG *p_data);
 extern void bta_dm_get_dev_name (tBTA_DM_MSG *p_data);
 #if (CLASSIC_BT_INCLUDED == TRUE)
 extern void bta_dm_config_eir (tBTA_DM_MSG *p_data);
+extern void bta_dm_set_page_timeout (tBTA_DM_MSG *p_data);
+extern void bta_dm_get_page_timeout (tBTA_DM_MSG *p_data);
 #endif
 extern void bta_dm_set_afh_channels (tBTA_DM_MSG *p_data);
 extern void bta_dm_read_rmt_name(tBTA_DM_MSG *p_data);

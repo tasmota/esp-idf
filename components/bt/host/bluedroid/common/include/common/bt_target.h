@@ -198,6 +198,12 @@
 #define BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER   FALSE
 #endif
 
+#if (UC_BT_BLE_FEAT_PERIODIC_ADV_ENH == TRUE)
+#define BLE_FEAT_PERIODIC_ADV_ENH   TRUE
+#else
+#define BLE_FEAT_PERIODIC_ADV_ENH   FALSE
+#endif
+
 #if (UC_BT_BLE_HIGH_DUTY_ADV_INTERVAL == TRUE)
 #define BLE_HIGH_DUTY_ADV_INTERVAL TRUE
 #else
@@ -2092,6 +2098,12 @@
  */
 #ifndef A2D_INCLUDED
 #define A2D_INCLUDED            FALSE
+#endif
+
+#if (BTC_AV_SRC_INCLUDED == TRUE) && (BT_CLASSIC_BQB_INCLUDED == TRUE)
+#define A2D_SRC_BQB_INCLUDED TRUE
+#else
+#define A2D_SRC_BQB_INCLUDED FALSE
 #endif
 
 /******************************************************************************

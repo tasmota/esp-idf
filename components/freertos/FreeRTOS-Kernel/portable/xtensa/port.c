@@ -4,7 +4,7 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileContributor: 2016-2023 Espressif Systems (Shanghai) CO LTD
  */
 /*
  * FreeRTOS Kernel V10.4.3
@@ -605,12 +605,39 @@ void vPortSetStackWatchpoint( void *pxStackStart )
     esp_cpu_set_watchpoint(STACK_WATCH_POINT_NUMBER, (char *)addr, 32, ESP_CPU_WATCHPOINT_STORE);
 }
 
-// -------------------- Co-Processor -----------------------
+// --------------------- TCB Cleanup -----------------------
 
-#if XCHAL_CP_NUM > 0
-void _xt_coproc_release(volatile void *coproc_sa_base, BaseType_t xTargetCoreID);
+#if ( CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS )
+static void vPortTLSPointersDelCb( void *pxTCB )
+{
+    /* Typecast pxTCB to StaticTask_t type to access TCB struct members.
+     * pvDummy15 corresponds to pvThreadLocalStoragePointers member of the TCB.
+     */
+    StaticTask_t *tcb = ( StaticTask_t * )pxTCB;
 
-void vPortCleanUpCoprocArea(void *pvTCB)
+    /* The TLSP deletion callbacks are stored at an offset of (configNUM_THREAD_LOCAL_STORAGE_POINTERS/2) */
+    TlsDeleteCallbackFunction_t *pvThreadLocalStoragePointersDelCallback = ( TlsDeleteCallbackFunction_t * )( &( tcb->pvDummy15[ ( configNUM_THREAD_LOCAL_STORAGE_POINTERS / 2 ) ] ) );
+
+    /* We need to iterate over half the depth of the pvThreadLocalStoragePointers area
+     * to access all TLS pointers and their respective TLS deletion callbacks.
+     */
+    for ( int x = 0; x < ( configNUM_THREAD_LOCAL_STORAGE_POINTERS / 2 ); x++ ) {
+        if ( pvThreadLocalStoragePointersDelCallback[ x ] != NULL ) {  //If del cb is set
+            /* In case the TLSP deletion callback has been overwritten by a TLS pointer, gracefully abort. */
+            if ( !esp_ptr_executable( pvThreadLocalStoragePointersDelCallback[ x ] ) ) {
+                // We call EARLY log here as currently portCLEAN_UP_TCB() is called in a critical section
+                ESP_EARLY_LOGE("FreeRTOS", "Fatal error: TLSP deletion callback at index %d overwritten with non-excutable pointer %p", x, pvThreadLocalStoragePointersDelCallback[ x ]);
+                abort();
+            }
+
+            pvThreadLocalStoragePointersDelCallback[ x ]( x, tcb->pvDummy15[ x ] );   //Call del cb
+        }
+    }
+}
+#endif /* CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS */
+
+#if ( XCHAL_CP_NUM > 0 )
+static void vPortCleanUpCoprocArea(void *pvTCB)
 {
     UBaseType_t uxCoprocArea;
     BaseType_t xTargetCoreID;
@@ -623,6 +650,36 @@ void vPortCleanUpCoprocArea(void *pvTCB)
     xTargetCoreID = ( ( StaticTask_t * ) pvTCB )->xDummyCoreID;
 
     /* If task has live floating point registers somewhere, release them */
+    void _xt_coproc_release(volatile void *coproc_sa_base, BaseType_t xTargetCoreID);
     _xt_coproc_release( (void *)uxCoprocArea, xTargetCoreID );
 }
 #endif /* XCHAL_CP_NUM > 0 */
+
+void vPortTCBPreDeleteHook( void *pxTCB )
+{
+    #if ( CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK )
+        /* Call the user defined task pre-deletion hook */
+        extern void vTaskPreDeletionHook( void * pxTCB );
+        vTaskPreDeletionHook( pxTCB );
+    #endif /* CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK */
+
+    #if ( CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP )
+        /*
+         * If the user is using the legacy task pre-deletion hook, call it.
+         * Todo: Will be removed in IDF-8097
+         */
+        #warning "CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP is deprecated. Use CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK instead."
+        extern void vPortCleanUpTCB( void * pxTCB );
+        vPortCleanUpTCB( pxTCB );
+    #endif /* CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP */
+
+    #if ( CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS )
+        /* Call TLS pointers deletion callbacks */
+        vPortTLSPointersDelCb( pxTCB );
+    #endif /* CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS */
+
+    #if ( XCHAL_CP_NUM > 0 )
+        /* Cleanup coproc save area */
+        vPortCleanUpCoprocArea( pxTCB );
+    #endif /* XCHAL_CP_NUM > 0 */
+}

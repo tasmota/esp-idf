@@ -158,12 +158,9 @@
 #define SOC_DROM_LOW    0x40000000
 #define SOC_DROM_HIGH   0x44000000
 
-#define SOC_SINGLE_BANK_LOW  0x40000000
-#define SOC_SINGLE_BANK_HIGH 0x44000000
 #define SOC_EXTRAM_LOW    0x48000000
 #define SOC_EXTRAM_HIGH   0x4c000000
-#define SOC_EXT_DBRAM_DATA_LOW 0x4a000000
-#define SOC_EXT_DBRAM_DATA_HIGH 0x4c000000
+#define SOC_EXTRAM_SIZE (SOC_EXTRAM_HIGH - SOC_EXTRAM_LOW)
 
 #define SOC_IROM_MASK_LOW  0x4fc00000
 #define SOC_IROM_MASK_HIGH 0x4fc20000
@@ -233,7 +230,7 @@
 //On RISC-V CPUs, the interrupt sources are all external interrupts, whose type, source and priority are configured by SW.
 //There is no HW NMI conception. SW should controlled the masked levels through INT_THRESH_REG.
 
-//CPU0 Interrupt number reserved in riscv/vector.S, not touch this.
+//CPU0 Interrupt number reserved in riscv/vector_clic.S, do not touch this.
 #define ETS_T1_WDT_INUM                         24
 #define ETS_CACHEERR_INUM                       25
 #define ETS_MEMPROT_ERR_INUM                    26

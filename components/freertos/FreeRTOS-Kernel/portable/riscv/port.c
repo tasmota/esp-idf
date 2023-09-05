@@ -92,6 +92,10 @@ volatile UBaseType_t xPortSwitchFlag[portNUM_PROCESSORS] = {0};
 __attribute__((aligned(16))) StackType_t xIsrStack[portNUM_PROCESSORS][configISR_STACK_SIZE];
 StackType_t *xIsrStackTop[portNUM_PROCESSORS] = {0};
 
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+StackType_t *xIsrStackBottom[portNUM_PROCESSORS] = {0};
+#endif
+
 /* ------------------------------------------------ FreeRTOS Portable --------------------------------------------------
  * - Provides implementation for functions required by FreeRTOS
  * - Declared in portable.h
@@ -107,9 +111,12 @@ BaseType_t xPortStartScheduler(void)
     port_uxCriticalNesting[coreID] = 0;
     port_xSchedulerRunning[coreID] = 0;
 
-    /* Initialize ISR Stack top */
+    /* Initialize ISR Stack(s) */
     for (int i = 0; i < portNUM_PROCESSORS; i++) {
         xIsrStackTop[i] = &xIsrStack[i][0] + (configISR_STACK_SIZE & (~((portPOINTER_SIZE_TYPE)portBYTE_ALIGNMENT_MASK)));
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+        xIsrStackBottom[i] = &xIsrStack[i][0];
+#endif
     }
 
     /* Setup the hardware to generate the tick. */
@@ -365,7 +372,7 @@ UBaseType_t xPortSetInterruptMaskFromISR(void)
     RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
 #else
     /* When CLIC is supported, all interrupt priority levels less than or equal to the threshold level are masked. */
-    prev_int_level = rv_utils_set_intlevel(RVHAL_EXCM_LEVEL - 1);
+    prev_int_level = rv_utils_mask_int_level_lower_than(RVHAL_EXCM_LEVEL);
 #endif /* !SOC_INIT_CLIC_SUPPORTED */
     /**
      * In theory, this function should not return immediately as there is a
@@ -589,7 +596,59 @@ void vPortSetStackWatchpoint(void *pxStackStart)
     esp_cpu_set_watchpoint(STACK_WATCH_POINT_NUMBER, (char *)addr, STACK_WATCH_AREA_SIZE, ESP_CPU_WATCHPOINT_STORE);
 }
 
+// --------------------- TCB Cleanup -----------------------
 
+#if ( CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS )
+static void vPortTLSPointersDelCb( void *pxTCB )
+{
+    /* Typecast pxTCB to StaticTask_t type to access TCB struct members.
+     * pvDummy15 corresponds to pvThreadLocalStoragePointers member of the TCB.
+     */
+    StaticTask_t *tcb = ( StaticTask_t * )pxTCB;
+
+    /* The TLSP deletion callbacks are stored at an offset of (configNUM_THREAD_LOCAL_STORAGE_POINTERS/2) */
+    TlsDeleteCallbackFunction_t *pvThreadLocalStoragePointersDelCallback = ( TlsDeleteCallbackFunction_t * )( &( tcb->pvDummy15[ ( configNUM_THREAD_LOCAL_STORAGE_POINTERS / 2 ) ] ) );
+
+    /* We need to iterate over half the depth of the pvThreadLocalStoragePointers area
+     * to access all TLS pointers and their respective TLS deletion callbacks.
+     */
+    for ( int x = 0; x < ( configNUM_THREAD_LOCAL_STORAGE_POINTERS / 2 ); x++ ) {
+        if ( pvThreadLocalStoragePointersDelCallback[ x ] != NULL ) {  //If del cb is set
+            /* In case the TLSP deletion callback has been overwritten by a TLS pointer, gracefully abort. */
+            if ( !esp_ptr_executable( pvThreadLocalStoragePointersDelCallback[ x ] ) ) {
+                ESP_LOGE("FreeRTOS", "Fatal error: TLSP deletion callback at index %d overwritten with non-excutable pointer %p", x, pvThreadLocalStoragePointersDelCallback[ x ]);
+                abort();
+            }
+
+            pvThreadLocalStoragePointersDelCallback[ x ]( x, tcb->pvDummy15[ x ] );   //Call del cb
+        }
+    }
+}
+#endif /* CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS */
+
+void vPortTCBPreDeleteHook( void *pxTCB )
+{
+    #if ( CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK )
+        /* Call the user defined task pre-deletion hook */
+        extern void vTaskPreDeletionHook( void * pxTCB );
+        vTaskPreDeletionHook( pxTCB );
+    #endif /* CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK */
+
+    #if ( CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP )
+        /*
+         * If the user is using the legacy task pre-deletion hook, call it.
+         * Todo: Will be removed in IDF-8097
+         */
+        #warning "CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP is deprecated. Use CONFIG_FREERTOS_TASK_PRE_DELETION_HOOK instead."
+        extern void vPortCleanUpTCB( void * pxTCB );
+        vPortCleanUpTCB( pxTCB );
+    #endif /* CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP */
+
+    #if ( CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS )
+        /* Call TLS pointers deletion callbacks */
+        vPortTLSPointersDelCb( pxTCB );
+    #endif /* CONFIG_FREERTOS_TLSP_DELETION_CALLBACKS */
+}
 
 /* ---------------------------------------------- Misc Implementations -------------------------------------------------
  *

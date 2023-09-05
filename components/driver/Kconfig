@@ -130,7 +130,6 @@ menu "Driver Configurations"
         config TWAI_ISR_IN_IRAM
             bool "Place TWAI ISR function into IRAM"
             default n
-            select PERIPH_CTRL_FUNC_IN_IRAM if TWAI_ERRATA_FIX_RX_FRAME_INVALID || TWAI_ERRATA_FIX_RX_FIFO_CORRUPT
             help
                 Place the TWAI ISR in to IRAM. This will allow the ISR to avoid
                 cache misses, and also be able to run whilst the cache is disabled
@@ -225,17 +224,7 @@ menu "Driver Configurations"
 
     endmenu # TEMP_SENSOR Configuration
 
-    menu "UART Configuration"
-
-        config UART_ISR_IN_IRAM
-            bool "Place UART ISR function into IRAM"
-            depends on !RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH
-            default n
-            help
-                If this option is not selected, UART interrupt will be disabled for a long time and
-                may cause data lost when doing spi flash operation.
-
-    endmenu # UART Configuration
+    orsource "./uart/Kconfig.uart"
 
     menu "GPIO Configuration"
         config GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL

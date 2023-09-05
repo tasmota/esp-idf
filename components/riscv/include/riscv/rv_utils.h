@@ -24,7 +24,8 @@ extern "C" {
 #define CSR_PCMR_MACHINE    0x7e1
 #define CSR_PCCR_MACHINE    0x7e2
 
-//TODO: IDF-7771
+/* SW defined level which the interrupt module will mask interrupt with priority less than threshold during critical sections
+   and spinlocks */
 #define RVHAL_EXCM_LEVEL    4
 
 /* --------------------------------------------------- CPU Control -----------------------------------------------------
@@ -132,8 +133,9 @@ FORCE_INLINE_ATTR void rv_utils_intr_disable(uint32_t intr_mask)
     RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
 }
 
-//TODO: IDF-7795, clic related
-#if (SOC_CPU_CORES_NUM > 1)
+
+#if SOC_INT_CLIC_SUPPORTED
+
 FORCE_INLINE_ATTR void __attribute__((always_inline)) rv_utils_restore_intlevel(uint32_t restoreval)
 {
     REG_SET_FIELD(CLIC_INT_THRESH_REG, CLIC_CPU_INT_THRESH, ((restoreval << (8 - NLBITS))) | 0x1f);
@@ -144,8 +146,10 @@ FORCE_INLINE_ATTR uint32_t __attribute__((always_inline)) rv_utils_set_intlevel(
     uint32_t old_mstatus = RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
     uint32_t old_thresh;
 
-    old_thresh = REG_READ(CLIC_INT_THRESH_REG);
-    old_thresh = old_thresh >> (24 + (8 - NLBITS));
+    old_thresh = REG_GET_FIELD(CLIC_INT_THRESH_REG, CLIC_CPU_INT_THRESH);
+    old_thresh = (old_thresh >> (8 - NLBITS));
+    /* Upper bits should already be 0, but let's be safe and keep NLBITS */
+    old_thresh &= BIT(NLBITS) - 1;
 
     REG_SET_FIELD(CLIC_INT_THRESH_REG, CLIC_CPU_INT_THRESH, ((intlevel << (8 - NLBITS))) | 0x1f);
     /**
@@ -162,11 +166,18 @@ FORCE_INLINE_ATTR uint32_t __attribute__((always_inline)) rv_utils_set_intlevel(
 
     return old_thresh;
 }
-#endif  //#if (SOC_CPU_CORES_NUM > 1)
+
+FORCE_INLINE_ATTR uint32_t __attribute__((always_inline)) rv_utils_mask_int_level_lower_than(uint32_t intlevel)
+{
+    /* CLIC's set interrupt level is inclusive, i.e. it does mask the set level  */
+    return rv_utils_set_intlevel(intlevel - 1);
+}
+
+#endif /* SOC_INT_CLIC_SUPPORTED */
+
 
 FORCE_INLINE_ATTR uint32_t rv_utils_intr_get_enabled_mask(void)
 {
-//TODO: IDF-7795
 #if SOC_INT_CLIC_SUPPORTED
     unsigned intr_ena_mask = 0;
     unsigned intr_num;
@@ -182,7 +193,6 @@ FORCE_INLINE_ATTR uint32_t rv_utils_intr_get_enabled_mask(void)
 
 FORCE_INLINE_ATTR void rv_utils_intr_edge_ack(unsigned int intr_num)
 {
-//TODO: IDF-7795
 #if SOC_INT_CLIC_SUPPORTED
     REG_SET_BIT(CLIC_INT_CTRL_REG(intr_num + CLIC_EXT_INTR_NUM_OFFSET) , CLIC_INT_IP);
 #else
@@ -295,9 +305,22 @@ FORCE_INLINE_ATTR void rv_utils_dbgr_break(void)
 
 FORCE_INLINE_ATTR bool rv_utils_compare_and_set(volatile uint32_t *addr, uint32_t compare_value, uint32_t new_value)
 {
-    // ESP32C6 starts to support atomic CAS instructions, but it is still a single core target, no need to implement
-    // through lr and sc instructions for now
-    // For an RV target has no atomic CAS instruction, we can achieve atomicity by disabling interrupts
+#if __riscv_atomic
+    uint32_t old_value = 0;
+    int error = 0;
+
+    /* Based on sample code for CAS from RISCV specs v2.2, atomic instructions */
+    __asm__ __volatile__(
+        "cas: lr.w %0, 0(%2)     \n"                        // load 4 bytes from addr (%2) into old_value (%0)
+        "     bne  %0, %3, fail  \n"                        // fail if old_value if not equal to compare_value (%3)
+        "     sc.w %1, %4, 0(%2) \n"                        // store new_value (%4) into addr,
+        "     bnez %1, cas       \n"                        // if we failed to store the new value then retry the operation
+        "fail:                   \n"
+        : "+r" (old_value), "+r" (error)                    // output parameters
+        : "r" (addr), "r" (compare_value), "r" (new_value)  // input parameters
+    );
+#else
+    // For a single core RV target has no atomic CAS instruction, we can achieve atomicity by disabling interrupts
     unsigned old_mstatus;
     old_mstatus = RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
     // Compare and set
@@ -309,6 +332,7 @@ FORCE_INLINE_ATTR bool rv_utils_compare_and_set(volatile uint32_t *addr, uint32_
     // Restore interrupts
     RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
 
+#endif //__riscv_atomic
     return (old_value == compare_value);
 }
 

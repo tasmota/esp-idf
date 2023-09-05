@@ -156,21 +156,32 @@ void esp_cpu_wait_for_intr(void)
 
 #if SOC_CPU_HAS_FLEXIBLE_INTC
 
+
+#if SOC_INT_CLIC_SUPPORTED
+
+static bool is_intr_num_resv(int ext_intr_num) {
+    /* On targets that uses CLIC as the interrupt controller, the first 16 lines (0..15) are reserved for software
+     * interrupts, all the other lines starting from 16 and above can be used by external peripheral.
+     * in the case of this function, the parameter only refers to the external peripheral index, so if
+     * `ext_intr_num` is 0, it refers to interrupt index 16.
+     *
+     * Only interrupt line 6 is reserved at the moment since it is used for disabling interrupts */
+    return ext_intr_num == 6;
+}
+
+#else // !SOC_INT_CLIC_SUPPORTED
+
 static bool is_intr_num_resv(int intr_num)
 {
     // Workaround to reserve interrupt number 1 for Wi-Fi, 5,8 for Bluetooth, 6 for "permanently disabled interrupt"
     // [TODO: IDF-2465]
     uint32_t reserved = BIT(1) | BIT(5) | BIT(6) | BIT(8);
 
-    // int_num 0,3,4,7 are inavaliable for PULP cpu
+    // int_num 0,3,4,7 are unavailable for PULP cpu
 #if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2// TODO: IDF-5728 replace with a better macro name
     reserved |= BIT(0) | BIT(3) | BIT(4) | BIT(7);
 #endif
 
-#if SOC_INT_CLIC_SUPPORTED
-    //TODO: IDF-7795
-    return false;
-#endif
     if (reserved & BIT(intr_num)) {
         return true;
     }
@@ -184,6 +195,8 @@ static bool is_intr_num_resv(int intr_num)
 
     return destination != (intptr_t)&_interrupt_handler;
 }
+
+#endif // SOC_INT_CLIC_SUPPORTED
 
 void esp_cpu_intr_get_desc(int core_id, int intr_num, esp_cpu_intr_desc_t *intr_desc_ret)
 {
@@ -338,8 +351,9 @@ esp_err_t esp_cpu_set_breakpoint(int bp_num, const void *bp_addr)
         if (ret == 0) {
             return ESP_ERR_INVALID_RESPONSE;
         }
-    }
-    rv_utils_set_breakpoint(bp_num, (uint32_t)bp_addr);
+    } else {
+        rv_utils_set_breakpoint(bp_num, (uint32_t)bp_addr);
+	}
 #endif // __XTENSA__
     return ESP_OK;
 }
@@ -360,8 +374,9 @@ esp_err_t esp_cpu_clear_breakpoint(int bp_num)
         if (ret == 0) {
             return ESP_ERR_INVALID_RESPONSE;
         }
-    }
-    rv_utils_clear_breakpoint(bp_num);
+    } else {
+        rv_utils_clear_breakpoint(bp_num);
+	}
 #endif // __XTENSA__
     return ESP_OK;
 }
@@ -393,8 +408,9 @@ esp_err_t esp_cpu_set_watchpoint(int wp_num, const void *wp_addr, size_t size, e
         if (ret == 0) {
             return ESP_ERR_INVALID_RESPONSE;
         }
-    }
-    rv_utils_set_watchpoint(wp_num, (uint32_t)wp_addr, size, on_read, on_write);
+    } else {
+        rv_utils_set_watchpoint(wp_num, (uint32_t)wp_addr, size, on_read, on_write);
+	}
 #endif // __XTENSA__
     return ESP_OK;
 }
@@ -415,8 +431,9 @@ esp_err_t esp_cpu_clear_watchpoint(int wp_num)
         if (ret == 0) {
             return ESP_ERR_INVALID_RESPONSE;
         }
-    }
-    rv_utils_clear_watchpoint(wp_num);
+    } else {
+        rv_utils_clear_watchpoint(wp_num);
+	}
 #endif // __XTENSA__
     return ESP_OK;
 }
@@ -467,30 +484,7 @@ exit:
     }
     return ret;
 
-//TODO: IDF-7771
 #else // __riscv
-#if SOC_CPU_CORES_NUM > 1
-    /* We use lr.w and sc.w pair for riscv TAS. lr.w will read the memory and register a cpu lock signal
-     * The state of the lock signal is internal to core, and it is not possible for another core to
-     * interface. sc.w will assert the address is registered. Then write memory and release the lock
-     * signal. During the lr.w and sc.w time, if other core acquires the same address, will wait
-     */
-    volatile uint32_t old_value = 0xB33FFFFF;
-    volatile int error = 1;
-
-    __asm__ __volatile__(
-        "0: lr.w %0, 0(%2)     \n"
-        "   bne  %0, %3, 1f    \n"
-        "   sc.w %1, %4, 0(%2) \n"
-        "   bnez %1, 0b        \n"
-        "1:                    \n"
-        : "+r" (old_value), "+r" (error)
-        : "r" (addr), "r" (compare_value), "r" (new_value)
-    );
-    return (old_value == compare_value);
-#else
-    // Single core targets don't have atomic CAS instruction. So access method is the same for internal and external RAM
     return rv_utils_compare_and_set(addr, compare_value, new_value);
-#endif
 #endif
 }

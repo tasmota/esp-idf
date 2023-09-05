@@ -507,7 +507,7 @@ static void bta_dm_sys_hw_cback( tBTA_SYS_HW_EVT status )
 #endif  ///SMP_INCLUDED == TRUE
         BTM_SetDefaultLinkSuperTout(p_bta_dm_cfg->link_timeout);
 #if CLASSIC_BT_INCLUDED
-        BTM_WritePageTimeout(p_bta_dm_cfg->page_timeout);
+        BTM_WritePageTimeout(p_bta_dm_cfg->page_timeout, NULL);
         bta_dm_cb.cur_policy = p_bta_dm_cfg->policy_settings;
         BTM_SetDefaultLinkPolicy(bta_dm_cb.cur_policy);
 #endif
@@ -788,6 +788,7 @@ void bta_dm_config_eir (tBTA_DM_MSG *p_data)
     tBTA_DM_API_CONFIG_EIR *config_eir = &p_data->config_eir;
 
     p_bta_dm_eir_cfg->bta_dm_eir_fec_required = config_eir->eir_fec_required;
+    p_bta_dm_eir_cfg->bta_dm_eir_included_name = config_eir->eir_included_name;
     p_bta_dm_eir_cfg->bta_dm_eir_included_uuid = config_eir->eir_included_uuid;
     p_bta_dm_eir_cfg->bta_dm_eir_included_tx_power = config_eir->eir_included_tx_power;
     p_bta_dm_eir_cfg->bta_dm_eir_flags = config_eir->eir_flags;
@@ -823,6 +824,36 @@ void bta_dm_config_eir (tBTA_DM_MSG *p_data)
     }
 
     bta_dm_set_eir(NULL);
+}
+
+/*******************************************************************************
+**
+** Function         bta_dm_set_page_timeout
+**
+** Description      Sets page timeout
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void bta_dm_set_page_timeout (tBTA_DM_MSG *p_data)
+{
+    BTM_WritePageTimeout(p_data->set_page_timeout.page_to, p_data->set_page_timeout.set_page_to_cb);
+}
+
+/*******************************************************************************
+**
+** Function         bta_dm_get_page_timeout
+**
+** Description      Gets page timeout
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void bta_dm_get_page_timeout (tBTA_DM_MSG *p_data)
+{
+    BTM_ReadPageTimeout(p_data->get_page_timeout.get_page_to_cb);
 }
 #endif
 /*******************************************************************************
@@ -4039,14 +4070,19 @@ static void bta_dm_set_eir (char *local_name)
         }
         return;
     }
-
-    /* if local name is not provided, get it from controller */
-    if ( local_name == NULL ) {
-        if ( BTM_ReadLocalDeviceName( &local_name ) != BTM_SUCCESS ) {
-            APPL_TRACE_ERROR("Fail to read local device name for EIR");
-        }
-    }
 #endif  // BTA_EIR_CANNED_UUID_LIST
+
+    if (p_bta_dm_eir_cfg->bta_dm_eir_included_name) {
+        /* if local name is not provided, get it from controller */
+        if ( local_name == NULL ) {
+            if ( BTM_ReadLocalDeviceName( &local_name ) != BTM_SUCCESS ) {
+                APPL_TRACE_ERROR("Fail to read local device name for EIR");
+            }
+        }
+    } else {
+        local_name = NULL;
+    }
+
 
     /* Allocate a buffer to hold HCI command */
     if ((p_buf = (BT_HDR *)osi_malloc(BTM_CMD_BUF_SIZE)) == NULL) {
@@ -4092,15 +4128,16 @@ static void bta_dm_set_eir (char *local_name)
         }
     }
 
-    UINT8_TO_STREAM(p, local_name_len + 1);
-    UINT8_TO_STREAM(p, data_type);
-    eir_type[eir_type_num++] = data_type;
+
 
     if (local_name != NULL) {
+        UINT8_TO_STREAM(p, local_name_len + 1);
+        UINT8_TO_STREAM(p, data_type);
+        eir_type[eir_type_num++] = data_type;
         memcpy(p, local_name, local_name_len);
         p += local_name_len;
+        free_eir_length -= local_name_len + 2;
     }
-    free_eir_length -= local_name_len + 2;
 
     /* if UUIDs are provided in configuration */
     if (p_bta_dm_eir_cfg->bta_dm_eir_included_uuid) {
@@ -5714,7 +5751,8 @@ void bta_dm_ble_gap_periodic_adv_cfg_data_raw(tBTA_DM_MSG *p_data)
 
     BTM_BlePeriodicAdvCfgDataRaw(p_data->ble_cfg_periodic_adv_data.instance,
                                  p_data->ble_cfg_periodic_adv_data.length,
-                                 p_data->ble_cfg_periodic_adv_data.data);
+                                 p_data->ble_cfg_periodic_adv_data.data,
+                                 p_data->ble_cfg_periodic_adv_data.only_update_did);
 }
 
 void bta_dm_ble_gap_periodic_adv_enable(tBTA_DM_MSG *p_data)

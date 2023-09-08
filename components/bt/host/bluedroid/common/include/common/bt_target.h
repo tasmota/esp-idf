@@ -134,10 +134,6 @@
 #endif
 #endif  /* UC_BT_HFP_CLIENT_ENABLED */
 
-#if UC_BT_SSP_ENABLED
-#define BT_SSP_INCLUDED             TRUE
-#endif /* UC_BT_SSP_ENABLED */
-
 #if UC_BT_HID_ENABLED
 #define BT_HID_INCLUDED             TRUE
 #endif /* UC_BT_HID_ENABLED */
@@ -1433,19 +1429,6 @@
 
 /******************************************************************************
 **
-** BT_SSP
-**
-******************************************************************************/
-#ifndef BT_SSP_INCLUDED
-#define BT_SSP_INCLUDED         FALSE
-#endif
-
-#if BT_SSP_INCLUDED == TRUE && CLASSIC_BT_INCLUDED == FALSE
-#error "Can't have SSP without CLASSIC BT"
-#endif
-
-/******************************************************************************
-**
 ** SDP
 **
 ******************************************************************************/
@@ -2049,6 +2032,12 @@
 
 #ifndef HID_DEV_FLUSH_TO
 #define HID_DEV_FLUSH_TO 0xffff
+#endif
+
+#if (BTA_HD_INCLUDED == TRUE) && (HID_DEV_INCLUDED == TRUE) && (BT_CLASSIC_BQB_INCLUDED == TRUE)
+#define BT_HID_DEVICE_BQB_INCLUDED      TRUE
+#else
+#define BT_HID_DEVICE_BQB_INCLUDED      FALSE
 #endif
 
 /*************************************************************************

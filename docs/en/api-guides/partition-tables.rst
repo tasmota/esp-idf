@@ -1,5 +1,6 @@
 Partition Tables
 ================
+
 :link_to_translation:`zh_CN:[中文]`
 
 Overview
@@ -114,7 +115,11 @@ See enum :cpp:type:`esp_partition_subtype_t` for the full list of subtypes defin
   - ``nvs`` (2) is for the :doc:`Non-Volatile Storage (NVS) API <../api-reference/storage/nvs_flash>`.
 
     - NVS is used to store per-device PHY calibration data (different to initialisation data).
-    - NVS is used to store WiFi data if the :doc:`esp_wifi_set_storage(WIFI_STORAGE_FLASH) <../api-reference/network/esp_wifi>` initialisation function is used.
+
+    .. only:: SOC_WIFI_SUPPORTED
+
+        - NVS is used to store Wi-Fi data if the :doc:`esp_wifi_set_storage(WIFI_STORAGE_FLASH) <../api-reference/network/esp_wifi>` initialization function is used.
+
     - The NVS API can also be used for other application data.
     - It is strongly recommended that you include an NVS partition of at least 0x3000 bytes in your project.
     - If using NVS API to store a lot of data, increase the NVS partition size from the default 0x6000 bytes.
@@ -123,13 +128,22 @@ See enum :cpp:type:`esp_partition_subtype_t` for the full list of subtypes defin
     - It is used to store NVS encryption keys when `NVS Encryption` feature is enabled.
     - The size of this partition should be 4096 bytes (minimum partition size).
 
-  - There are other predefined data subtypes for data storage supported by ESP-IDF. These include :doc:`FAT filesystem </api-reference/storage/fatfs>` (:cpp:enumerator:`ESP_PARTITION_SUBTYPE_DATA_FAT`), :doc:`SPIFFS </api-reference/storage/spiffs>` (:cpp:enumerator:`ESP_PARTITION_SUBTYPE_DATA_SPIFFS`), etc.
+  - There are other predefined data subtypes for data storage supported by ESP-IDF. These include:
+
+    - ``coredump`` (0x03) is for storing core dumps while using a custom partition table CSV file. See :doc:`/api-guides/core_dump` for more details.
+    - ``efuse`` (0x05) is for emulating eFuse bits using :ref:`virtual-efuses`.
+    - ``undefined`` (0x06) is implicitly used for data partitions with unspecified (empty) subtype, but it is possible to explicitly mark them as undefined as well.
+    - ``fat`` (0x81) is for :doc:`/api-reference/storage/fatfs`.
+    - ``spiffs`` (0x82) is for :doc:`/api-reference/storage/spiffs`.
+    - ``littlefs`` (0x83) is for `LittleFS filesystem <https://github.com/littlefs-project/littlefs>`_. See :example:`storage/littlefs` example for more details.
+
+.. Comment: ``esphttpd`` (0x80) was not added to the list because there is no docs section for it and it is not clear whether user should use it explicitly.
 
   Other subtypes of ``data`` type are reserved for future ESP-IDF uses.
 
 * If the partition type is any application-defined value (range 0x40-0xFE), then ``subtype`` field can be any value chosen by the application (range 0x00-0xFE).
 
-  Note that when writing in C++, an application-defined subtype value requires casting to type :cpp:type:`esp_partition_subtype_t` in order to use it with the :ref:`partition API<api-reference-partition-table>`.
+  Note that when writing in C++, an application-defined subtype value requires casting to type :cpp:type:`esp_partition_subtype_t` in order to use it with the :ref:`partition API <api-reference-partition-table>`.
 
 Extra Partition SubTypes
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -185,7 +199,7 @@ The ESP-IDF build system will automatically check if generated binaries fit in t
 Currently these checks are performed for the following binaries:
 
 * Bootloader binary must fit in space before partition table (see :ref:`bootloader-size`).
-* App binary should fit in at least one partition of type "app". If the app binary doesn't fit in any app partition, the build will fail. If it only fits in some of the app partitions, a warning is printed about this.
+* App binary should fit in at least one partition of type "app". If the app binary does not fit in any app partition, the build will fail. If it only fits in some of the app partitions, a warning is printed about this.
 
 .. note::
 
@@ -215,13 +229,13 @@ A manual flashing command is also printed as part of ``idf.py partition-table`` 
 
 .. note::
 
-  Note that updating the partition table doesn't erase data that may have been stored according to the old partition table. You can use ``idf.py erase-flash`` (or ``esptool.py erase_flash``) to erase the entire flash contents.
+  Note that updating the partition table does not erase data that may have been stored according to the old partition table. You can use ``idf.py erase-flash`` (or ``esptool.py erase_flash``) to erase the entire flash contents.
 
 
-Partition Tool (parttool.py)
-----------------------------
+Partition Tool (``parttool.py``)
+--------------------------------
 
-The component `partition_table` provides a tool :component_file:`parttool.py<partition_table/parttool.py>` for performing partition-related operations on a target device. The following operations can be performed using the tool:
+The component `partition_table` provides a tool :component_file:`parttool.py <partition_table/parttool.py>` for performing partition-related operations on a target device. The following operations can be performed using the tool:
 
   - reading a partition and saving the contents to a file (read_partition)
   - writing the contents of a file to a partition (write_partition)

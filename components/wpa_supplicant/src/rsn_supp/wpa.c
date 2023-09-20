@@ -35,7 +35,7 @@
 #include "esp_common_i.h"
 #include "esp_owe_i.h"
 #include "common/sae.h"
-#include "esp_wpa2_i.h"
+#include "esp_eap_client_i.h"
 
 /**
  * eapol_sm_notify_eap_success - Notification of external EAP success trigger
@@ -170,6 +170,7 @@ unsigned cipher_type_map_public_to_supp(wifi_cipher_type_t cipher)
     }
 }
 
+#ifdef CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT
 static bool is_wpa2_enterprise_connection(void)
 {
     uint8_t authmode;
@@ -185,6 +186,7 @@ static bool is_wpa2_enterprise_connection(void)
 
     return false;
 }
+#endif
 
 /**
  * get_bssid - Get the current BSSID
@@ -654,7 +656,7 @@ void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
     size_t kde_len;
 
     if (is_wpa2_enterprise_connection()) {
-        wpa2_ent_eap_state_t state = wpa2_get_eap_state();
+        wpa2_ent_eap_state_t state = eap_client_get_eap_state();
         if (state == WPA2_ENT_EAP_STATE_IN_PROGRESS) {
             wpa_printf(MSG_INFO, "EAP Success has not been processed yet."
                " Drop EAPOL message.");
@@ -688,9 +690,11 @@ void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
     if (res)
         goto failed;
 
+#ifdef CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT
     if (is_wpa2_enterprise_connection()) {
         pmksa_cache_set_current(sm, NULL, sm->bssid, 0, 0);
     }
+#endif
 
     if (sm->renew_snonce) {
         if (os_get_random(sm->snonce, WPA_NONCE_LEN)) {

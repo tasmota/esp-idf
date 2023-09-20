@@ -213,7 +213,7 @@ Figures below show serial port for ESP32 DevKitC and ESP32 WROVER KIT
 Check Port on Linux and macOS
 -----------------------------
 
-To check the device name for the serial port of your {IDF_TARGET_NAME} board (or external converter dongle), run this command two times, first with the board / dongle unplugged, then with plugged in. The port which appears the second time is the one you need:
+To check the device name for the serial port of your {IDF_TARGET_NAME} board (or external converter dongle), run this command two times, first with the board/dongle unplugged, then with plugged in. The port which appears the second time is the one you need:
 
 Linux ::
 
@@ -276,11 +276,25 @@ Run terminal and set identified serial port. Baud rate = 115200 (if needed, chan
 
     Setting Serial Communication in PuTTY on Linux
 
-Then open serial port in terminal and check, if you see any log printed out by {IDF_TARGET_NAME}. The log contents depend on application loaded to {IDF_TARGET_NAME}, see `Example Output`_.
+Then open serial port in terminal and check, if you see any log printed out by {IDF_TARGET_NAME}. The log contents depend on application loaded to {IDF_TARGET_NAME}, see `Example Output`_. Reset the board if no log has been printed out.
 
 .. note::
 
    Close the serial terminal after verification that communication is working. If you keep the terminal session open, the serial port will be inaccessible for uploading firmware later.
+
+.. note::
+
+   If there is no log output, check
+
+   - if the required power is supplied to {IDF_TARGET_NAME}
+   - if the board was reset after starting the terminal program
+   - if the selected serial port is the correct one by using the method stated in `Check Port on Windows`_ and `Check Port on Linux and macOS`_
+   - if the serial port is not being used by another program
+   - if the identified port has been selected in serial terminal programs you are using, as stated in `Windows and Linux`_
+   - if settings of the serial port in serial terminal programs are applicable to corresponding applications
+   - if the correct USB connector (UART) is used on the development board
+   - if your application is expected to output some log
+   - if the log output has not been disabled (use :example:`hello world application <get-started/hello_world>` to test)
 
 macOS
 ^^^^^

@@ -101,6 +101,7 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/thread/mesh_forwarder_ftd.cpp"
             "openthread/src/core/thread/mesh_forwarder_mtd.cpp"
             "openthread/src/core/thread/mle.cpp"
+            "openthread/src/core/thread/mle_types.cpp"
             "openthread/src/core/thread/neighbor_table.cpp"
             "openthread/src/core/thread/network_data.cpp"
             "openthread/src/core/thread/network_data_leader.cpp"
@@ -146,6 +147,11 @@ if(CONFIG_OPENTHREAD_ENABLED)
     if(NOT CONFIG_FREERTOS_USE_TICKLESS_IDLE)
         list(APPEND exclude_srcs
             "src/port/esp_openthread_sleep.c")
+    endif()
+
+    if(NOT CONFIG_OPENTHREAD_PLATFORM_MSGPOOL_MANAGEMENT)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_messagepool.c")
     endif()
 
     if(CONFIG_OPENTHREAD_FTD)

@@ -419,8 +419,6 @@ components/esp_hid/private/bt_hidd.h
 components/esp_hid/private/bt_hidh.h
 components/esp_hid/private/esp_hidd_private.h
 components/esp_hid/src/esp_hid_common.c
-components/esp_hid/test/hid_descriptor.h
-components/esp_hid/test/test_esp_hid.c
 components/esp_local_ctrl/src/esp_local_ctrl_handler.c
 components/esp_local_ctrl/src/esp_local_ctrl_priv.h
 components/esp_local_ctrl/src/esp_local_ctrl_transport_ble.c
@@ -1271,7 +1269,6 @@ examples/system/gcov/main/gcov_example_main.c
 examples/system/gdbstub/main/gdbstub_main.c
 examples/system/heap_task_tracking/main/heap_task_tracking_main.c
 examples/system/himem/main/himem_example_main.c
-examples/system/ipc/ipc_isr/main/main.c
 examples/system/ota/advanced_https_ota/main/advanced_https_ota_example.c
 examples/system/ota/native_ota_example/main/native_ota_example.c
 examples/system/ota/otatool/main/otatool_main.c
@@ -1335,7 +1332,6 @@ tools/test_apps/system/cxx_no_except/main/main.cpp
 tools/test_apps/system/gdb_loadable_elf/main/hello_world_main.c
 tools/test_apps/system/longjmp_test/main/hello_world_main.c
 tools/test_apps/system/memprot/main/esp32s2/test_memprot_main.c
-tools/test_apps/system/monitor_ide_integration/main/main.c
 tools/test_apps/system/no_embedded_paths/check_for_file_paths.py
 tools/test_apps/system/no_embedded_paths/main/test_no_embedded_paths_main.c
 tools/test_apps/system/startup/main/test_startup_main.c

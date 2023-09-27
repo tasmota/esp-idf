@@ -55,6 +55,10 @@ config SOC_RTC_MEM_SUPPORTED
     bool
     default y
 
+config SOC_RMT_SUPPORTED
+    bool
+    default y
+
 config SOC_I2C_SUPPORTED
     bool
     default y
@@ -88,6 +92,14 @@ config SOC_ECDSA_SUPPORTED
     default y
 
 config SOC_FLASH_ENC_SUPPORTED
+    bool
+    default y
+
+config SOC_LP_GPIO_MATRIX_SUPPORTED
+    bool
+    default y
+
+config SOC_LP_PERIPHERALS_SUPPORTED
     bool
     default y
 
@@ -315,6 +327,10 @@ config SOC_GPIO_SUPPORT_RTC_INDEPENDENT
     bool
     default y
 
+config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    bool
+    default y
+
 config SOC_GPIO_VALID_GPIO_MASK
     hex
     default 0x01FFFFFFFFFFFFFF
@@ -332,6 +348,22 @@ config SOC_GPIO_SUPPORT_FORCE_HOLD
     default y
 
 config SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+    bool
+    default y
+
+config SOC_RTCIO_PIN_COUNT
+    int
+    default 16
+
+config SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_HOLD_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_WAKE_SUPPORTED
     bool
     default y
 
@@ -489,15 +521,15 @@ config SOC_RMT_GROUPS
 
 config SOC_RMT_TX_CANDIDATES_PER_GROUP
     int
-    default 2
+    default 4
 
 config SOC_RMT_RX_CANDIDATES_PER_GROUP
     int
-    default 2
+    default 4
 
 config SOC_RMT_CHANNELS_PER_GROUP
     int
-    default 4
+    default 8
 
 config SOC_RMT_MEM_WORDS_PER_CHANNEL
     int
@@ -515,6 +547,14 @@ config SOC_RMT_SUPPORT_TX_ASYNC_STOP
     bool
     default y
 
+config SOC_RMT_SUPPORT_TX_LOOP_COUNT
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP
+    bool
+    default y
+
 config SOC_RMT_SUPPORT_TX_SYNCHRO
     bool
     default y
@@ -527,7 +567,7 @@ config SOC_RMT_SUPPORT_XTAL
     bool
     default y
 
-config SOC_RMT_SUPPORT_RC_FAST
+config SOC_RMT_SUPPORT_DMA
     bool
     default y
 

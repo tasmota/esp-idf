@@ -73,15 +73,6 @@
 	path = components/libsodium/libsodium
 	url = ../../jedisct1/libsodium.git
 
-[submodule "components/spiffs/spiffs"]
-	path = components/spiffs/spiffs
-	url = ../../pellepl/spiffs.git
-	sbom-version = 0.2-255-g0dbb3f71c5f6
-	sbom-supplier = Person: Peter Andersson
-	sbom-url = https://github.com/pellepl/spiffs
-	sbom-description = Wear-leveled SPI flash file system for embedded devices
-	sbom-hash = 0dbb3f71c5f6fae3747a9d935372773762baf852
-
 [submodule "components/json/cJSON"]
 	path = components/json/cJSON
 	url = ../../DaveGamble/cJSON.git

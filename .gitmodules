@@ -174,3 +174,6 @@
 [submodule "components/ieee802154/lib"]
 	path = components/ieee802154/lib
 	url = ../../espressif/esp-ieee802154-lib.git
+[submodule "components/spiffs/spiffs"]
+	path = components/spiffs/spiffs
+	url = https://github.com/pellepl/spiffs.git

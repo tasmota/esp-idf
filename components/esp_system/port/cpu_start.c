@@ -233,7 +233,7 @@ void IRAM_ATTR call_start_cpu1(void)
 #endif
 
     s_cpu_up[1] = true;
-    ESP_EARLY_LOGI(TAG, "App cpu up.");
+    ESP_EARLY_LOGD(TAG, "App cpu up");
 
     // Clear interrupt matrix for APP CPU core
     core_intr_matrix_clear();
@@ -271,7 +271,7 @@ static void start_other_core(void)
         abort();
     }
 
-    ESP_EARLY_LOGI(TAG, "Starting app cpu, entry point is %p", call_start_cpu1);
+    ESP_EARLY_LOGD(TAG, "Starting app cpu, entry point is %p", call_start_cpu1);
 
 #if CONFIG_IDF_TARGET_ESP32 && !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
     Cache_Flush(1);
@@ -315,7 +315,6 @@ static void start_other_core(void)
         for (int i = 0; i < SOC_CPU_CORES_NUM; i++) {
             cpus_up &= s_cpu_up[i];
         }
-        //TODO: IDF-7891, check mixing logs
         esp_rom_delay_us(100);
     }
 }
@@ -341,7 +340,7 @@ void IRAM_ATTR do_multicore_settings(void)
     cache_bus_mask_t cache_bus_mask_core0 = cache_ll_l1_get_enabled_bus(0);
 #ifndef CONFIG_IDF_TARGET_ESP32
     // 1. disable the cache before changing its settings.
-    cache_hal_disable(CACHE_TYPE_ALL);
+    cache_hal_disable(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
 #endif
     for (unsigned core = 1; core < SOC_CPU_CORES_NUM; core++) {
         // 2. change cache settings. All cores must have the same settings.
@@ -349,7 +348,7 @@ void IRAM_ATTR do_multicore_settings(void)
     }
 #ifndef CONFIG_IDF_TARGET_ESP32
     // 3. enable the cache after changing its settings.
-    cache_hal_enable(CACHE_TYPE_ALL);
+    cache_hal_enable(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
 #endif
 }
 #endif  //#if !CONFIG_IDF_TARGET_ESP32P4
@@ -496,7 +495,7 @@ void IRAM_ATTR call_start_cpu0(void)
 #endif // CONFIG_IDF_TARGET_ESP32S3
 
 #if CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-7516, add cache init API
+    //TODO: IDF-5670, add cache init API
     extern void esp_config_l2_cache_mode(void);
     esp_config_l2_cache_mode();
 #endif
@@ -571,7 +570,7 @@ void IRAM_ATTR call_start_cpu0(void)
     s_cpu_up[0] = true;
 #endif
 
-    ESP_EARLY_LOGI(TAG, "Pro cpu up.");
+    ESP_EARLY_LOGD(TAG, "Pro cpu up");
 
 #if SOC_CPU_CORES_NUM > 1 // there is no 'single-core mode' for natively single-core processors
 #if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE

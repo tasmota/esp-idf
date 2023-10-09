@@ -175,6 +175,10 @@ config SOC_PMU_SUPPORTED
     bool
     default y
 
+config SOC_PMU_PVT_SUPPORTED
+    bool
+    default y
+
 config SOC_LP_TIMER_SUPPORTED
     bool
     default y
@@ -482,6 +486,10 @@ config SOC_DEDIC_PERIPH_ALWAYS_ENABLE
 config SOC_ANA_CMPR_NUM
     int
     default 1
+
+config SOC_ANA_CMPR_INTR_SHARE_WITH_GPIO
+    bool
+    default y
 
 config SOC_I2C_NUM
     int
@@ -1180,10 +1188,6 @@ config SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
     default y
 
 config SOC_PM_RETENTION_HAS_REGDMA_POWER_BUG
-    bool
-    default y
-
-config SOC_PM_RETENTION_HAS_CLOCK_BUG
     bool
     default y
 

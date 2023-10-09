@@ -26,7 +26,7 @@
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 // #define SOC_ADC_SUPPORTED               1  //TODO: IDF-6496
-// #define SOC_ANA_CMPR_SUPPORTED          1  //TODO: IDF-7479
+#define SOC_ANA_CMPR_SUPPORTED          1
 // #define SOC_DEDICATED_GPIO_SUPPORTED    1  //TODO: IDF-7552
 #define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
@@ -37,7 +37,7 @@
 #define SOC_MCPWM_SUPPORTED             1
 // #define SOC_TWAI_SUPPORTED              1  //TODO: IDF-7470
 #define SOC_ETM_SUPPORTED               1
-// #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471, TODO: IDF-7472
+#define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 // disable usb serial jtag for esp32p4, current image does not support
 // #define SOC_USB_SERIAL_JTAG_SUPPORTED   1  //TODO: IDF-7496
@@ -48,8 +48,9 @@
 // #define SOC_EFUSE_SUPPORTED             1  //TODO: IDF-7512
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
-// #define SOC_I2S_SUPPORTED               1  //TODO: IDF-6508
 #define SOC_RMT_SUPPORTED               1
+#define SOC_I2S_SUPPORTED               1
+// #define SOC_RMT_SUPPORTED               1  //TODO: IDF-7476
 // #define SOC_SDM_SUPPORTED               1  //TODO: IDF-7551
 // #define SOC_GPSPI_SUPPORTED             1  //TODO: IDF-7502, TODO: IDF-7503
 // #define SOC_LEDC_SUPPORTED              1  //TODO: IDF-6510
@@ -74,6 +75,7 @@
 #define SOC_LP_GPIO_MATRIX_SUPPORTED    1
 #define SOC_LP_PERIPHERALS_SUPPORTED    1
 #define SOC_SPIRAM_SUPPORTED            1
+#define SOC_PSRAM_DMA_CAPABLE           1
 // #define SOC_ULP_SUPPORTED               1  //TODO: IDF-7534
 // #define SOC_SDMMC_HOST_SUPPORTED        1  //TODO: IDF-6502
 // #define SOC_CLK_TREE_SUPPORTED          1  //TODO: IDF-7526
@@ -132,8 +134,9 @@
 
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
+#define SOC_CACHE_WRITEBACK_SUPPORTED           1
 #define SOC_CACHE_FREEZE_SUPPORTED              1
-#define SOC_CACHE_L2_SUPPORTED                  1
+#define SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE      1
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (2U)
@@ -219,6 +222,11 @@
 #define SOC_DEDIC_GPIO_IN_CHANNELS_NUM  (8) /*!< 8 inward channels on each CPU core */
 #define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
+/*------------------------- Analog Comparator CAPS ---------------------------*/
+#define SOC_ANA_CMPR_NUM                       (2)
+#define SOC_ANA_CMPR_CAN_DISTINGUISH_EDGE      (1)  // Support positive/negative/any cross interrupt
+#define SOC_ANA_CMPR_SUPPORT_ETM               (1)
+
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-P4 has 2 I2Cs
 #define SOC_I2C_NUM                 (2U)
@@ -234,16 +242,20 @@
 #define SOC_I2C_SUPPORT_RTC         (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
-//TODO: IDF-6508
-#define SOC_I2S_NUM                 (1U)
+#define SOC_I2S_NUM                 (3U)
 #define SOC_I2S_HW_VERSION_2        (1)
 #define SOC_I2S_SUPPORTS_XTAL       (1)
-#define SOC_I2S_SUPPORTS_PLL_F160M  (1)
+#define SOC_I2S_SUPPORTS_APLL       (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
-// #define SOC_I2S_SUPPORTS_PDM        (1)
-// #define SOC_I2S_SUPPORTS_PDM_TX     (1)
-#define SOC_I2S_PDM_MAX_TX_LINES    (2)
-// #define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_SUPPORTS_PDM        (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+#define SOC_I2S_SUPPORTS_PDM_RX     (1)
+#define SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER (1)
+#define SOC_I2S_SUPPORTS_TX_SYNC_CNT      (1)
+#define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_PDM_MAX_TX_LINES    (2)     // On I2S0
+#define SOC_I2S_PDM_MAX_RX_LINES    (4)     // On I2S0
+#define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -317,7 +329,7 @@
 #define SOC_PARLIO_RX_UNITS_PER_GROUP        1U  /*!< number of RX units in each group */
 #define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the TX unit */
 #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the RX unit */
-#define SOC_PARLIO_TX_RX_SHARE_INTERRUPT     1   /*!< TX and RX unit share the same interrupt source number */
+#define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -504,6 +516,7 @@
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (0)
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (0)
 
+#define SOC_CLK_APLL_SUPPORTED                    (1)     /*!< Support Audio PLL */
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */

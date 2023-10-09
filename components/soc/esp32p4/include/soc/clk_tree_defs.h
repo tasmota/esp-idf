@@ -150,6 +150,7 @@ typedef enum {
     SOC_MOD_CLK_XTAL32K,                       /*!< XTAL32K_CLK comes from the external 32kHz crystal, passing a clock gating to the peripherals */
     SOC_MOD_CLK_RC_FAST,                       /*!< RC_FAST_CLK comes from the internal 20MHz rc oscillator, passing a clock gating to the peripherals */
     SOC_MOD_CLK_XTAL,                          /*!< XTAL_CLK comes from the external 40MHz crystal */
+    SOC_MOD_CLK_APLL,                          /*!< Audio PLL is sourced from PLL, and its frequency is configurable through APLL configuration registers */
     SOC_MOD_CLK_INVALID,                       /*!< Indication of the end of the available module clock sources */
 } soc_module_clk_t;
 
@@ -334,6 +335,21 @@ typedef enum {
 
 ///////////////////////////////////////////////// I2S //////////////////////////////////////////////////////////////
 
+/**
+ * @brief Array initializer for all supported clock sources of I2S
+ */
+#define SOC_I2S_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_APLL, I2S_CLK_SRC_EXTERNAL}
+
+/**
+ * @brief I2S clock source enum
+ */
+typedef enum {
+    I2S_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,             /*!< Select XTAL as the default source clock  */
+    I2S_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,                /*!< Select XTAL as the source clock */
+    I2S_CLK_SRC_APLL = SOC_MOD_CLK_APLL,                /*!< Select APLL as the source clock */
+    I2S_CLK_SRC_EXTERNAL = -1,                          /*!< Select external clock as source clock */
+} soc_periph_i2s_clk_src_t;
+
 /////////////////////////////////////////////////I2C////////////////////////////////////////////////////////////////////
 
 /**
@@ -405,6 +421,22 @@ typedef enum {
 
 //////////////////////////////////////////////////GPIO Glitch Filter////////////////////////////////////////////////////
 
+///////////////////////////////////////////////////Analog Comparator////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of Analog Comparator
+ */
+#define SOC_ANA_CMPR_CLKS {SOC_MOD_CLK_PLL_F80M, SOC_MOD_CLK_XTAL}
+
+/**
+ * @brief Analog Comparator clock source
+ */
+typedef enum {
+    ANA_CMPR_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,                   /*!< Select XTAL clock as the source clock */
+    ANA_CMPR_CLK_SRC_PLL_F80M = SOC_MOD_CLK_PLL_F80M,           /*!< Select PLL_F80M clock as the source clock */
+    ANA_CMPR_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F80M,            /*!< Select PLL_F80M as the default clock choice */
+} soc_periph_ana_cmpr_clk_src_t;
+
 //////////////////////////////////////////////////TWAI//////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////ADC///////////////////////////////////////////////////////////////////
@@ -447,6 +479,26 @@ typedef enum {
 } soc_periph_ledc_clk_src_legacy_t;
 
 //////////////////////////////////////////////////PARLIO////////////////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of PARLIO
+ */
+#define SOC_PARLIO_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_RC_FAST, PARLIO_CLK_SRC_EXTERNAL}
+
+/**
+ * @brief PARLIO clock source
+ */
+typedef enum {
+    PARLIO_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,           /*!< Select XTAL as the source clock */
+    PARLIO_CLK_SRC_PLL_F160M = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the source clock */
+    PARLIO_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,     /*!< Select RC_FAST as the source clock */
+    PARLIO_CLK_SRC_EXTERNAL = -1,                     /*!< Select EXTERNAL clock as the source clock */
+#if SOC_CLK_TREE_SUPPORTED
+    PARLIO_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M,   /*!< Select PLL_F160M as the default clock choice */
+#else
+    PARLIO_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,        /*!< Select XTAL as the default clock choice */
+#endif
+} soc_periph_parlio_clk_src_t;
 
 #ifdef __cplusplus
 }

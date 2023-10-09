@@ -30,6 +30,7 @@
 #include "hal/dma_types.h"
 #include "hal/gpio_hal.h"
 #include "hal/cache_hal.h"
+#include "hal/cache_ll.h"
 #include "esp_private/gdma.h"
 #include "driver/gpio.h"
 #include "esp_private/periph_ctrl.h"
@@ -424,8 +425,8 @@ static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     // wait all pending transaction in the queue to finish
     size_t num_trans_inflight = next_device->num_trans_inflight;
     for (size_t i = 0; i < num_trans_inflight; i++) {
-        ESP_RETURN_ON_FALSE( xQueueReceive(next_device->done_queue, &trans_desc, portMAX_DELAY) == pdTRUE,
-                             ESP_FAIL, TAG, "recycle inflight transactions failed");
+        ESP_RETURN_ON_FALSE(xQueueReceive(next_device->done_queue, &trans_desc, portMAX_DELAY) == pdTRUE,
+                            ESP_FAIL, TAG, "recycle inflight transactions failed");
         next_device->num_trans_inflight--;
     }
 
@@ -491,7 +492,7 @@ static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     trans_desc->user_ctx = i80_device->user_ctx;
 
     if (esp_ptr_external_ram(color)) {
-        uint32_t dcache_line_size = cache_hal_get_cache_line_size(CACHE_TYPE_DATA);
+        uint32_t dcache_line_size = cache_hal_get_cache_line_size(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_DATA);
         // flush frame buffer from cache to the physical PSRAM
         // note the esp_cache_msync function will check the alignment of the address and size, make sure they're aligned to current cache line size
         esp_cache_msync((void *)ALIGN_DOWN((intptr_t)color, dcache_line_size), ALIGN_UP(color_size, dcache_line_size), 0);

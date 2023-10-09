@@ -47,6 +47,9 @@ endif()
 # Analog comparator related source files
 if(CONFIG_SOC_ANA_CMPR_SUPPORTED)
     list(APPEND srcs "analog_comparator/ana_cmpr.c")
+    if(CONFIG_SOC_ANA_CMPR_SUPPORT_ETM)
+        list(APPEND srcs "analog_comparator/ana_cmpr_etm.c")
+    endif()
 endif()
 
 # DAC related source files
@@ -108,6 +111,7 @@ endif()
 # I2S related source files
 if(CONFIG_SOC_I2S_SUPPORTED)
     list(APPEND srcs "i2s/i2s_common.c"
+                     "i2s/i2s_platform.c"
                      "i2s/i2s_std.c"
                      "deprecated/i2s_legacy.c")
     if(CONFIG_SOC_I2S_SUPPORTS_PDM)
@@ -121,6 +125,8 @@ endif()
 # LEDC related source files
 if(CONFIG_SOC_LEDC_SUPPORTED)
     list(APPEND srcs "ledc/ledc.c")
+
+    list(APPEND ldfragments "ledc/linker.lf")
 endif()
 
 # MCPWM related source files
@@ -233,7 +239,7 @@ else()
     # Can be removed together with legacy drivers)
     idf_component_register(SRCS "${srcs}"
                            INCLUDE_DIRS ${includes}
-                           PRIV_REQUIRES efuse esp_timer
+                           PRIV_REQUIRES efuse esp_timer esp_mm
                            REQUIRES esp_pm esp_ringbuf freertos soc hal esp_hw_support
                            LDFRAGMENTS ${ldfragments}
                           )

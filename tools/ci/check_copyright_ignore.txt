@@ -422,7 +422,6 @@ components/esp_hid/src/esp_hid_common.c
 components/esp_local_ctrl/src/esp_local_ctrl_handler.c
 components/esp_local_ctrl/src/esp_local_ctrl_priv.h
 components/esp_local_ctrl/src/esp_local_ctrl_transport_ble.c
-components/esp_netif/include/esp_netif_ppp.h
 components/esp_phy/test/test_phy_rtc.c
 components/esp_pm/include/esp_private/pm_trace.h
 components/esp_rom/esp32/ld/esp32.rom.api.ld
@@ -587,7 +586,6 @@ components/mbedtls/port/include/sha512_alt.h
 components/mbedtls/port/sha/dma/include/esp_sha_dma_priv.h
 components/mbedtls/port/sha/dma/sha.c
 components/mbedtls/port/sha/parallel_engine/sha.c
-components/nvs_flash/host_test/nvs_page_test/main/nvs_page_test.cpp
 components/nvs_flash/include/nvs_handle.hpp
 components/nvs_flash/src/nvs_cxx_api.cpp
 components/nvs_flash/src/nvs_encrypted_partition.hpp

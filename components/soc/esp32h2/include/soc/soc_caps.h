@@ -69,6 +69,7 @@
 #define SOC_BOD_SUPPORTED               1
 #define SOC_APM_SUPPORTED               1
 #define SOC_PMU_SUPPORTED               1
+#define SOC_PMU_PVT_SUPPORTED           1
 #define SOC_LP_TIMER_SUPPORTED          1
 #define SOC_LP_AON_SUPPORTED            1
 #define SOC_PAU_SUPPORTED               1
@@ -220,7 +221,8 @@
 #define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
 /*------------------------- Analog Comparator CAPS ---------------------------*/
-#define SOC_ANA_CMPR_NUM             (1U)
+#define SOC_ANA_CMPR_NUM                    (1U)
+#define SOC_ANA_CMPR_INTR_SHARE_WITH_GPIO   (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-H2 has 2 I2C
@@ -487,7 +489,6 @@
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA           (1)
 #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 #define SOC_PM_RETENTION_HAS_REGDMA_POWER_BUG      (1)
-#define SOC_PM_RETENTION_HAS_CLOCK_BUG      (1)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)

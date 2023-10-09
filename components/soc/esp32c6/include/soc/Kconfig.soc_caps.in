@@ -179,6 +179,10 @@ config SOC_PMU_SUPPORTED
     bool
     default y
 
+config SOC_PMU_PVT_SUPPORTED
+    bool
+    default y
+
 config SOC_PAU_SUPPORTED
     bool
     default y
@@ -1344,5 +1348,9 @@ config SOC_BLE_MULTI_CONN_OPTIMIZATION
     default y
 
 config SOC_BLE_USE_WIFI_PWR_CLK_WORKAROUND
+    bool
+    default y
+
+config SOC_PHY_COMBO_MODULE
     bool
     default y

@@ -43,6 +43,7 @@
 #include "regi2c_ctrl.h"    //For `REGI2C_ANA_CALI_PD_WORKAROUND`, temp
 
 #include "hal/cache_hal.h"
+#include "hal/cache_ll.h"
 #include "hal/wdt_hal.h"
 #include "hal/uart_hal.h"
 #if SOC_TOUCH_SENSOR_SUPPORTED
@@ -403,7 +404,7 @@ static int s_cache_suspend_cnt = 0;
 static void IRAM_ATTR suspend_cache(void) {
     s_cache_suspend_cnt++;
     if (s_cache_suspend_cnt == 1) {
-        cache_hal_suspend(CACHE_TYPE_ALL);
+        cache_hal_suspend(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
     }
 }
 
@@ -412,7 +413,7 @@ static void IRAM_ATTR resume_cache(void) {
     s_cache_suspend_cnt--;
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
-        cache_hal_resume(CACHE_TYPE_ALL);
+        cache_hal_resume(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
     }
 }
 
@@ -488,12 +489,12 @@ FORCE_INLINE_ATTR void resume_uarts(void)
 FORCE_INLINE_ATTR bool light_sleep_uart_prepare(uint32_t pd_flags, int64_t sleep_duration)
 {
     bool should_skip_sleep = false;
-#if !SOC_PM_SUPPORT_TOP_PD
+#if !SOC_PM_SUPPORT_TOP_PD || !CONFIG_ESP_CONSOLE_UART
     suspend_uarts();
 #else
     if (pd_flags & PMU_SLEEP_PD_TOP) {
         if ((s_config.wakeup_triggers & RTC_TIMER_TRIG_EN) &&
-            // +1 is for cover the last charactor flush time
+            // +1 is for cover the last character flush time
             (sleep_duration < (int64_t)((UART_LL_FIFO_DEF_LEN - uart_ll_get_txfifo_len(CONSOLE_UART_DEV) + 1) * UART_FLUSH_US_PER_CHAR) + SLEEP_UART_FLUSH_DONE_TO_SLEEP_US)) {
             should_skip_sleep = true;
         } else {
@@ -666,10 +667,14 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     }
 #endif
 
-    /* Enable sleep reject for faster return from this function,
-     * in case the wakeup is already triggerred.
-     */
-    uint32_t reject_triggers = (s_config.wakeup_triggers & RTC_SLEEP_REJECT_MASK) | sleep_modem_reject_triggers();
+    uint32_t reject_triggers = s_config.wakeup_triggers & RTC_SLEEP_REJECT_MASK;
+
+    if (!deep_sleep) {
+        /* Enable sleep reject for faster return from this function,
+         * in case the wakeup is already triggerred.
+         */
+        reject_triggers |= sleep_modem_reject_triggers();
+    }
 
     //Append some flags in addition to power domains
     uint32_t sleep_flags = pd_flags;

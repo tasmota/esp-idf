@@ -219,8 +219,6 @@ esp_err_t rmt_new_rx_channel(const rmt_rx_channel_config_t *config, rmt_channel_
     rmt_hal_context_t *hal = &group->hal;
     int channel_id = rx_channel->base.channel_id;
     int group_id = group->group_id;
-    // select the clock source
-    ESP_GOTO_ON_ERROR(rmt_select_periph_clock(&rx_channel->base, config->clk_src), err, TAG, "set group clock failed");
 
     // reset channel, make sure the RX engine is not working, and events are cleared
     portENTER_CRITICAL(&group->spinlock);
@@ -249,6 +247,8 @@ esp_err_t rmt_new_rx_channel(const rmt_rx_channel_config_t *config, rmt_channel_
         ESP_GOTO_ON_ERROR(ret, err, TAG, "install rx interrupt failed");
     }
 
+    // select the clock source
+    ESP_GOTO_ON_ERROR(rmt_select_periph_clock(&rx_channel->base, config->clk_src), err, TAG, "set group clock failed");
     // set channel clock resolution
     uint32_t real_div = group->resolution_hz / config->resolution_hz;
     rmt_ll_rx_set_channel_clock_div(hal->regs, channel_id, real_div);
@@ -353,7 +353,7 @@ esp_err_t rmt_receive(rmt_channel_handle_t channel, void *buffer, size_t buffer_
         ESP_RETURN_ON_FALSE(esp_ptr_internal(buffer), ESP_ERR_INVALID_ARG, TAG, "buffer must locate in internal RAM for DMA use");
 
 #if CONFIG_IDF_TARGET_ESP32P4
-        uint32_t data_cache_line_mask = cache_hal_get_cache_line_size(CACHE_TYPE_DATA) - 1;
+        uint32_t data_cache_line_mask = cache_hal_get_cache_line_size(CACHE_LL_LEVEL_INT_MEM, CACHE_TYPE_DATA) - 1;
         ESP_RETURN_ON_FALSE(((uintptr_t)buffer & data_cache_line_mask) == 0, ESP_ERR_INVALID_ARG, TAG, "buffer must be aligned to cache line size");
         ESP_RETURN_ON_FALSE((buffer_size & data_cache_line_mask) == 0, ESP_ERR_INVALID_ARG, TAG, "buffer size must be aligned to cache line size");
 #endif

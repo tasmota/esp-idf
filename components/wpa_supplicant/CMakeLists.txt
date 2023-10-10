@@ -290,4 +290,4 @@ if(CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA)
 endif()
 set_property(TARGET ${COMPONENT_LIB} APPEND PROPERTY LINK_INTERFACE_MULTIPLICITY 3)
 
-target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-format -Wno-error=implicit-function-declaration)

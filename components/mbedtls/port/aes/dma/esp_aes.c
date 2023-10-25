@@ -188,8 +188,9 @@ static esp_err_t esp_aes_isr_initialise( void )
             ESP_LOGE(TAG, "Failed to create intr semaphore");
             return ESP_FAIL;
         }
+        const int isr_flags = esp_intr_level_to_flags(CONFIG_MBEDTLS_AES_INTERRUPT_LEVEL);
 
-        esp_err_t ret = esp_intr_alloc(ETS_AES_INTR_SOURCE, 0, esp_aes_complete_isr, NULL, NULL);
+        esp_err_t ret = esp_intr_alloc(ETS_AES_INTR_SOURCE, isr_flags, esp_aes_complete_isr, NULL, NULL);
         if (ret != ESP_OK) {
             return ret;
         }
@@ -333,7 +334,7 @@ static int esp_aes_process_dma(esp_aes_context *ctx, const unsigned char *input,
     lldesc_t *in_desc_head = NULL, *out_desc_head = NULL;
     lldesc_t *out_desc_tail = NULL; /* pointer to the final output descriptor */
     lldesc_t *block_desc = NULL, *block_in_desc = NULL, *block_out_desc = NULL;
-    size_t lldesc_num;
+    size_t lldesc_num = 0;
     unsigned stream_bytes = len % AES_BLOCK_BYTES; // bytes which aren't in a full block
     unsigned block_bytes = len - stream_bytes;     // bytes which are in a full block
     unsigned blocks = (block_bytes / AES_BLOCK_BYTES) + ((stream_bytes > 0) ? 1 : 0);

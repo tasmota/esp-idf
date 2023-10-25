@@ -177,9 +177,9 @@ static const char *SPI_TAG = "spi_master";
 #define SPI_CHECK(a, str, ret_val)  ESP_RETURN_ON_FALSE_ISR(a, ret_val, SPI_TAG, str)
 
 #if SOC_PERIPH_CLK_CTRL_SHARED
-#define SPI_MASTER_RCC_CLOCK_ATOMIC() PERIPH_RCC_ATOMIC()
+#define SPI_MASTER_PERI_CLOCK_ATOMIC() PERIPH_RCC_ATOMIC()
 #else
-#define SPI_MASTER_RCC_CLOCK_ATOMIC()
+#define SPI_MASTER_PERI_CLOCK_ATOMIC()
 #endif
 
 static void spi_intr(void *arg);
@@ -270,6 +270,9 @@ static esp_err_t spi_master_init_driver(spi_host_device_t host_id)
         .rx_dma_chan = bus_attr->rx_dma_chan,
         .dmadesc_n = bus_attr->dma_desc_num,
     };
+    SPI_MASTER_PERI_CLOCK_ATOMIC() {
+        spi_ll_enable_clock(host_id, true);
+    }
     spi_hal_init(&host->hal, host_id, &hal_config);
 
     if (host_id != SPI1_HOST) {
@@ -556,7 +559,7 @@ static SPI_MASTER_ISR_ATTR void spi_setup_device(spi_device_t *dev)
     if (spi_bus_lock_touch(dev_lock)) {
         /* Configuration has not been applied yet. */
         spi_hal_setup_device(hal, hal_dev);
-        SPI_MASTER_RCC_CLOCK_ATOMIC() {
+        SPI_MASTER_PERI_CLOCK_ATOMIC() {
             spi_ll_set_clk_source(hal->hw, hal_dev->timing_conf.clock_source);
         }
     }
@@ -1143,6 +1146,19 @@ esp_err_t SPI_MASTER_ISR_ATTR spi_device_polling_end(spi_device_handle_t handle,
             return ESP_ERR_TIMEOUT;
         }
     }
+
+#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE   //invalidate here to let user access rx data in post_cb if possible
+    const spi_bus_attr_t *bus_attr = host->bus_attr;
+    if (host->cur_trans_buf.buffer_to_rcv) {
+        uint16_t alignment = bus_attr->internal_mem_align_size;
+        uint32_t buffer_byte_len = (host->cur_trans_buf.trans->rxlength + 7) / 8;
+        buffer_byte_len = (buffer_byte_len + alignment - 1) & (~(alignment - 1));
+        esp_err_t ret = esp_cache_msync((void *)host->cur_trans_buf.buffer_to_rcv, buffer_byte_len, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+    }
+#endif
 
     ESP_LOGV(SPI_TAG, "polling trans done");
     //deal with the in-flight transaction

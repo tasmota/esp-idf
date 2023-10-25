@@ -89,7 +89,8 @@ typedef enum {
     ESP_PWR_LVL_P12 = 12,             /*!< Corresponding to  +12dbm */
     ESP_PWR_LVL_P15 = 13,             /*!< Corresponding to  +15dbm */
     ESP_PWR_LVL_P18 = 14,             /*!< Corresponding to  +18dbm */
-    ESP_PWR_LVL_P21 = 15,              /*!< Corresponding to  +21dbm */
+    ESP_PWR_LVL_P20 = 15,              /*!< Corresponding to  +20dbm */
+    ESP_PWR_LVL_P21 = 15,              /*!< Corresponding to  +20dbm, this enum variable has been deprecated */
     ESP_PWR_LVL_INVALID = 0xFF,         /*!< Indicates an invalid value */
 } esp_power_level_t;
 
@@ -104,6 +105,14 @@ typedef enum {
     ESP_BLE_ENHANCED_PWR_TYPE_CONN,
     ESP_BLE_ENHANCED_PWR_TYPE_MAX,
 } esp_ble_enhanced_power_type_t;
+
+/**
+ * @brief Select buffers
+*/
+typedef enum {
+    ESP_BLE_LOG_BUF_HCI         = 0x02,
+    ESP_BLE_LOG_BUF_CONTROLLER  = 0x05,
+} esp_ble_log_buf_t;
 
 /**
  * @brief Address type and address value.

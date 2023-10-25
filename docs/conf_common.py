@@ -13,6 +13,7 @@ from __future__ import print_function, unicode_literals
 
 import os.path
 import re
+from pathlib import Path
 
 from esp_docs.conf_docs import *  # noqa: F403,F401
 
@@ -178,7 +179,8 @@ ESP32C6_DOCS = ['api-guides/RF_calibration.rst',
 
 ESP32H2_DOCS = ['api-guides/RF_calibration.rst']
 
-ESP32P4_DOCS = ['api-reference/system/ipc.rst']
+ESP32P4_DOCS = ['api-reference/system/ipc.rst',
+                'api-reference/peripherals/sd_pullup_requirements.rst']
 
 # format: {tag needed to include: documents to included}, tags are parsed from sdkconfig and peripheral_caps.h headers
 conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
@@ -293,6 +295,8 @@ with open('../page_redirects.txt') as f:
 html_redirect_pages = [tuple(line.split(' ')) for line in lines]
 
 html_static_path = ['../_static']
+
+idf_build_system = {'doxygen_component_info': True, 'component_info_ignore_file': Path(os.environ['IDF_PATH']) / 'docs' / 'component_info_ignore_file.txt'}
 
 
 # Callback function for user setup that needs be done after `config-init`-event

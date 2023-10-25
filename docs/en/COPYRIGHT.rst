@@ -4,7 +4,7 @@ Copyrights and Licenses
 Software Copyrights
 ===================
 
-All original source code in this repository is Copyright (C) 2015-2022 Espressif Systems. This source code is licensed under the Apache License 2.0 as described in the file LICENSE.
+All original source code in this repository is Copyright (C) 2015-2023 Espressif Systems. This source code is licensed under the Apache License 2.0 as described in the file LICENSE.
 
 Additional third party copyrighted code is included under the following licenses.
 
@@ -53,7 +53,7 @@ These third party libraries can be included into the application (firmware) prod
 
 * :component:`ESP-MQTT <mqtt>` MQTT Package (contiki-mqtt) - Copyright (c) 2014, Stephen Robinson, MQTT-ESP - Tuan PM <tuanpm at live dot com> is licensed under Apache License 2.0 as described in :component_file:`LICENSE file <mqtt/esp-mqtt/LICENSE>`.
 
-* :component:`BLE Mesh <bt/esp_ble_mesh>` is adapted from Zephyr Project, Copyright (c) 2017-2018 Intel Corporation and licensed under Apache License 2.0
+* :component:`BLE Mesh <bt/esp_ble_mesh>` is adapted from Zephyr Project, Copyright (c) 2017-2018 Intel Corporation and licensed under Apache License 2.0.
 
 * `mynewt-nimble`_ Apache Mynewt NimBLE, Copyright 2015-2018, The Apache Software Foundation, is licensed under Apache License 2.0 as described in :component_file:`LICENSE file <bt/host/nimble/nimble/LICENSE>`.
 
@@ -75,7 +75,7 @@ Documentation
 ROM Source Code Copyrights
 ==========================
 
-ESP32, ESP32-S and ESP32-C Series SoCs mask ROM hardware includes binaries compiled from portions of the following third party software:
+Espressif SoCs mask ROM hardware includes binaries compiled from portions of the following third party software:
 
 * :component:`Newlib <newlib>`, licensed under the BSD License and is Copyright of various parties, as described in :component_file:`COPYING.NEWLIB <newlib/COPYING.NEWLIB>`.
 
@@ -94,7 +94,11 @@ ESP32, ESP32-S and ESP32-C Series SoCs mask ROM hardware includes binaries compi
     * `Generic USB device driver`_ Copyright (c) 2006 Bertrik Sikken (bertrik@sikken.nl), 2016 Intel Corporation and licensed under BSD 3-clause license.
     * `USB descriptors functionality`_ Copyright (c) 2017 PHYTEC Messtechnik GmbH, 2017-2018 Intel Corporation and licensed under Apache 2.0 license.
     * `USB DFU class driver`_ Copyright (c) 2015-2016 Intel Corporation, 2017 PHYTEC Messtechnik GmbH and licensed under BSD 3-clause license.
-    * `USB CDC ACM class driver`_ Copyright (c) 2015-2016 Intel Corporation and licensed under Apache 2.0 license
+    * `USB CDC ACM class driver`_ Copyright (c) 2015-2016 Intel Corporation and licensed under Apache 2.0 license.
+
+.. only:: CONFIG_ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB
+
+    * `Mbed TLS`_ library, Copyright (C) 2006-2018 ARM Limited and licensed under Apache 2.0 License.
 
 Xtensa libhal MIT License
 =========================

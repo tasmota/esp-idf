@@ -777,7 +777,7 @@ void esp_phy_load_cal_and_init(void)
     // Set PHY whether in combo module
     // For comode mode, phy enable will be not in WiFi RX state
 #if SOC_PHY_COMBO_MODULE
-    phy_init_param_set(1);
+    phy_init_param_set(0);
 #endif
 
     esp_phy_calibration_data_t* cal_data =
@@ -1113,3 +1113,8 @@ esp_err_t esp_phy_update_country_info(const char *country)
 
 void esp_wifi_power_domain_on(void) __attribute__((alias("esp_wifi_bt_power_domain_on")));
 void esp_wifi_power_domain_off(void) __attribute__((alias("esp_wifi_bt_power_domain_off")));
+
+_lock_t phy_get_lock(void)
+{
+    return s_phy_access_lock;
+}

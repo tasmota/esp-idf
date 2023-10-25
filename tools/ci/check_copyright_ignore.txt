@@ -460,7 +460,6 @@ components/esp_rom/include/esp32/rom/aes.h
 components/esp_rom/include/esp32/rom/bigint.h
 components/esp_rom/include/esp32/rom/crc.h
 components/esp_rom/include/esp32/rom/efuse.h
-components/esp_rom/include/esp32/rom/libc_stubs.h
 components/esp_rom/include/esp32/rom/sha.h
 components/esp_rom/include/esp32/rom/tbconsole.h
 components/esp_rom/include/esp32/rom/tjpgd.h
@@ -477,7 +476,6 @@ components/esp_rom/include/esp32s2/rom/bigint.h
 components/esp_rom/include/esp32s2/rom/crc.h
 components/esp_rom/include/esp32s2/rom/digital_signature.h
 components/esp_rom/include/esp32s2/rom/hmac.h
-components/esp_rom/include/esp32s2/rom/libc_stubs.h
 components/esp_rom/include/esp32s2/rom/opi_flash.h
 components/esp_rom/include/esp32s2/rom/rsa_pss.h
 components/esp_rom/include/esp32s2/rom/sha.h
@@ -549,7 +547,6 @@ components/hal/include/hal/dac_types.h
 components/hal/spi_slave_hal.c
 components/hal/spi_slave_hal_iram.c
 components/hal/test/test_mpu.c
-components/heap/include/heap_memory_layout.h
 components/heap/test_multi_heap_host/main.cpp
 components/heap/test_multi_heap_host/test_multi_heap.cpp
 components/idf_test/include/idf_performance.h
@@ -561,7 +558,6 @@ components/lwip/apps/ping/ping.c
 components/lwip/include/apps/dhcpserver/dhcpserver_options.h
 components/lwip/include/apps/esp_ping.h
 components/lwip/include/apps/ping/ping.h
-components/lwip/weekend_test/net_suite_test.py
 components/mbedtls/esp_crt_bundle/test_gen_crt_bundle/test_gen_crt_bundle.py
 components/mbedtls/port/aes/block/esp_aes.c
 components/mbedtls/port/aes/dma/esp_aes.c
@@ -593,16 +589,13 @@ components/nvs_flash/src/nvs_handle_locked.cpp
 components/nvs_flash/src/nvs_handle_locked.hpp
 components/nvs_flash/src/nvs_item_hash_list.cpp
 components/nvs_flash/src/nvs_pagemanager.hpp
-components/nvs_flash/src/nvs_partition.cpp
 components/nvs_flash/src/nvs_partition_lookup.cpp
 components/nvs_flash/src/nvs_partition_lookup.hpp
 components/nvs_flash/src/nvs_platform.hpp
 components/nvs_flash/src/nvs_test_api.h
 components/nvs_flash/src/nvs_types.cpp
-components/nvs_flash/src/partition.hpp
 components/nvs_flash/test_nvs_host/main.cpp
 components/nvs_flash/test_nvs_host/sdkconfig.h
-components/nvs_flash/test_nvs_host/test_fixtures.hpp
 components/nvs_flash/test_nvs_host/test_intrusive_list.cpp
 components/protocomm/include/transports/protocomm_console.h
 components/protocomm/include/transports/protocomm_httpd.h
@@ -662,7 +655,6 @@ components/soc/esp32/include/soc/uhci_reg.h
 components/soc/esp32/include/soc/uhci_struct.h
 components/soc/esp32/include/soc/wdev_reg.h
 components/soc/esp32/ledc_periph.c
-components/soc/esp32/sdmmc_periph.c
 components/soc/esp32/spi_periph.c
 components/soc/esp32/uart_periph.c
 components/soc/esp32c3/i2c_periph.c
@@ -803,7 +795,6 @@ components/soc/esp32s3/include/soc/usb_wrap_reg.h
 components/soc/esp32s3/include/soc/usb_wrap_struct.h
 components/soc/esp32s3/include/soc/wdev_reg.h
 components/soc/esp32s3/ledc_periph.c
-components/soc/esp32s3/sdmmc_periph.c
 components/soc/esp32s3/uart_periph.c
 components/soc/esp32s3/usb_periph.c
 components/soc/include/soc/dedic_gpio_periph.h
@@ -1153,8 +1144,6 @@ examples/mesh/ip_internal_network/main/mqtt_app.c
 examples/mesh/manual_networking/main/include/mesh_light.h
 examples/mesh/manual_networking/main/mesh_light.c
 examples/mesh/manual_networking/main/mesh_main.c
-examples/network/network_tests/main/stdinout.c
-examples/network/network_tests/main/stdinout.h
 examples/network/simple_sniffer/main/cmd_sniffer.c
 examples/network/simple_sniffer/main/cmd_sniffer.h
 examples/network/simple_sniffer/main/simple_sniffer_example_main.c
@@ -1331,7 +1320,3 @@ tools/test_apps/system/memprot/main/esp32s2/test_memprot_main.c
 tools/test_apps/system/no_embedded_paths/check_for_file_paths.py
 tools/test_apps/system/no_embedded_paths/main/test_no_embedded_paths_main.c
 tools/test_apps/system/startup/main/test_startup_main.c
-tools/unit-test-app/idf_ext.py
-tools/unit-test-app/main/app_main.c
-tools/unit-test-app/tools/CreateSectionTable.py
-tools/unit-test-app/tools/UnitTestParser.py

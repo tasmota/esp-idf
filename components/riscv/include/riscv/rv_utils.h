@@ -24,6 +24,21 @@ extern "C" {
 #define CSR_PCMR_MACHINE    0x7e1
 #define CSR_PCCR_MACHINE    0x7e2
 
+#if SOC_CPU_HAS_FPU
+
+/* FPU bits in mstatus start at bit 13 */
+#define CSR_MSTATUS_FPU_SHIFT       13
+/* FPU registers are clean if bits are 0b10 */
+#define CSR_MSTATUS_FPU_CLEAN_STATE 2
+/* FPU status in mstatus are represented with two bits */
+#define CSR_MSTATUS_FPU_MASK        3
+/* FPU is enabled when writing 1 to FPU bits */
+#define CSR_MSTATUS_FPU_ENA         BIT(13)
+/* Set FPU registers state to clean (after being dirty) */
+#define CSR_MSTATUS_FPU_CLEAR       BIT(13)
+
+#endif /* SOC_CPU_HAS_FPU */
+
 /* SW defined level which the interrupt module will mask interrupt with priority less than threshold during critical sections
    and spinlocks */
 #define RVHAL_EXCM_LEVEL    4
@@ -112,6 +127,20 @@ FORCE_INLINE_ATTR void rv_utils_set_mtvec(uint32_t mtvec_val)
 #endif
     RV_WRITE_CSR(mtvec, mtvec_val);
 }
+
+#if SOC_INT_CLIC_SUPPORTED
+ FORCE_INLINE_ATTR __attribute__((pure)) uint32_t rv_utils_get_interrupt_level(void)
+{
+#if CONFIG_IDF_TARGET_ESP32P4
+    // As per CLIC specs, mintstatus CSR should be at 0xFB1, however esp32p4 implements it at 0x346
+    #define MINTSTATUS 0x346
+#else
+    #error "rv_utils_get_mintstatus() is not implemented. Check for correct mintstatus register address."
+#endif /* CONFIG_IDF_TARGET_ESP32P4 */
+    uint32_t mintstatus = RV_READ_CSR(MINTSTATUS);
+    return ((mintstatus >> 24) & 0xFF); // Return the mintstatus[31:24] bits to get the mil field
+}
+#endif /* SOC_INT_CLIC_SUPPORTED */
 
 // ------------------ Interrupt Control --------------------
 
@@ -207,6 +236,37 @@ FORCE_INLINE_ATTR void rv_utils_intr_global_disable(void)
 {
     RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
 }
+
+
+#if SOC_CPU_HAS_FPU
+
+/* ------------------------------------------------- FPU Related ----------------------------------------------------
+ *
+ * ------------------------------------------------------------------------------------------------------------------ */
+
+FORCE_INLINE_ATTR bool rv_utils_enable_fpu(void)
+{
+    /* Set mstatus[14:13] to 0b01 to start the floating-point unit initialization */
+    RV_SET_CSR(mstatus, CSR_MSTATUS_FPU_ENA);
+    /* On the ESP32-P4, the FPU can be used directly after setting `mstatus` bit 13.
+     * Since the interrupt handler expects the FPU states to be either 0b10 or 0b11,
+     * let's write the FPU CSR and clear the dirty bit afterwards. */
+    RV_WRITE_CSR(fcsr, 1);
+    RV_CLEAR_CSR(mstatus, CSR_MSTATUS_FPU_CLEAR);
+    const uint32_t mstatus = RV_READ_CSR(mstatus);
+    /* Make sure the FPU state is 0b10 (clean registers) */
+    return ((mstatus >> CSR_MSTATUS_FPU_SHIFT) & CSR_MSTATUS_FPU_MASK) == CSR_MSTATUS_FPU_CLEAN_STATE;
+}
+
+
+FORCE_INLINE_ATTR void rv_utils_disable_fpu(void)
+{
+    /* Clear mstatus[14:13] bits to disable the floating-point unit */
+    RV_CLEAR_CSR(mstatus, CSR_MSTATUS_FPU_MASK << CSR_MSTATUS_FPU_SHIFT);
+}
+
+#endif /* SOC_CPU_HAS_FPU */
+
 
 /* -------------------------------------------------- Memory Ports -----------------------------------------------------
  *

@@ -143,6 +143,7 @@ typedef enum {
     // For digital domain: peripherals
     SOC_MOD_CLK_PLL_F80M,                      /*!< PLL_F80M_CLK is derived from SPLL (clock gating + fixed divider of 6), it has a fixed frequency of 80MHz */
     SOC_MOD_CLK_PLL_F160M,                     /*!< PLL_F160M_CLK is derived from SPLL (clock gating + fixed divider of 3), it has a fixed frequency of 160MHz */
+    SOC_MOD_CLK_PLL_F200M,                     /*!< PLL_F200M_CLK is derived from SPLL (clock gating + fixed divider of 3), it has a fixed frequency of 200MHz */
     SOC_MOD_CLK_PLL_F240M,                     /*!< PLL_F240M_CLK is derived from SPLL (clock gating + fixed divider of 2), it has a fixed frequency of 240MHz */
     SOC_MOD_CLK_CPLL,                          /*!< CPLL is from 40MHz XTAL oscillator frequency multipliers, it has a fixed frequency of 400MHz */
     SOC_MOD_CLK_SPLL,                          /*!< SPLL is from 40MHz XTAL oscillator frequency multipliers, it has a fixed frequency of 480MHz */
@@ -485,7 +486,6 @@ typedef enum {
 
 //////////////////////////////////////////////////LEDC/////////////////////////////////////////////////////////////////
 
-//TODO: IDF-6510
 /**
  * @brief Array initializer for all supported clock sources of LEDC
  */
@@ -496,11 +496,9 @@ typedef enum {
  */
 typedef enum {
     LEDC_AUTO_CLK = 0,                              /*!< LEDC source clock will be automatically selected based on the giving resolution and duty parameter when init the timer*/
+    LEDC_USE_XTAL_CLK = SOC_MOD_CLK_XTAL,           /*!< Select XTAL as the source clock */
     LEDC_USE_PLL_DIV_CLK = SOC_MOD_CLK_PLL_F80M,    /*!< Select PLL_F80M clock as the source clock */
     LEDC_USE_RC_FAST_CLK = SOC_MOD_CLK_RC_FAST,     /*!< Select RC_FAST as the source clock */
-    LEDC_USE_XTAL_CLK = SOC_MOD_CLK_XTAL,           /*!< Select XTAL as the source clock */
-
-    LEDC_USE_RTC8M_CLK __attribute__((deprecated("please use 'LEDC_USE_RC_FAST_CLK' instead"))) = LEDC_USE_RC_FAST_CLK,   /*!< Alias of 'LEDC_USE_RC_FAST_CLK' */
 } soc_periph_ledc_clk_src_legacy_t;
 
 //////////////////////////////////////////////////PARLIO////////////////////////////////////////////////////////////////
@@ -524,6 +522,22 @@ typedef enum {
     PARLIO_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,        /*!< Select XTAL as the default clock choice */
 #endif
 } soc_periph_parlio_clk_src_t;
+
+//////////////////////////////////////////////////SDMMC///////////////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of SDMMC
+ */
+#define SOC_SDMMC_CLKS {SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_PLL_F200M}
+
+/**
+ * @brief Type of SDMMC clock source
+ */
+typedef enum {
+    SDMMC_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M,  /*!< Select PLL_160M as the default choice */
+    SDMMC_CLK_SRC_PLL160M = SOC_MOD_CLK_PLL_F160M,  /*!< Select PLL_160M as the source clock */
+    SDMMC_CLK_SRC_PLL200M = SOC_MOD_CLK_PLL_F200M,  /*!< Select PLL_200M as the source clock */
+} soc_periph_sdmmc_clk_src_t;
 
 #ifdef __cplusplus
 }

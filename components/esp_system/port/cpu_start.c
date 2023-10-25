@@ -113,7 +113,10 @@ extern int _bss_start;
 extern int _bss_end;
 extern int _rtc_bss_start;
 extern int _rtc_bss_end;
-
+#if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
+extern int _bss_bt_start;
+extern int _bss_bt_end;
+#endif // CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
 extern int _instruction_reserved_start;
 extern int _instruction_reserved_end;
 extern int _rodata_reserved_start;
@@ -187,16 +190,6 @@ void IRAM_ATTR call_start_cpu1(void)
         ".option pop"
     );
 #endif  //#ifdef __riscv
-
-#if CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-7770
-    //set mstatus.fs=2'b01, floating-point unit in the initialization state
-    asm volatile(
-        "li t0, 0x2000\n"
-        "csrrs t0, mstatus, t0\n"
-        :::"t0"
-    );
-#endif  //#if CONFIG_IDF_TARGET_ESP32P4
 
 #if SOC_BRANCH_PREDICTOR_SUPPORTED
     esp_cpu_branch_prediction_enable();
@@ -319,8 +312,7 @@ static void start_other_core(void)
     }
 }
 
-#if !CONFIG_IDF_TARGET_ESP32P4
-//TODO: IDF-7692
+#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 // This function is needed to make the multicore app runnable on a unicore bootloader (built with FREERTOS UNICORE).
 // It does some cache settings for other CPUs.
 void IRAM_ATTR do_multicore_settings(void)
@@ -351,7 +343,7 @@ void IRAM_ATTR do_multicore_settings(void)
     cache_hal_enable(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
 #endif
 }
-#endif  //#if !CONFIG_IDF_TARGET_ESP32P4
+#endif // !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 #endif // !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
 
 /*
@@ -385,16 +377,6 @@ void IRAM_ATTR call_start_cpu0(void)
     );
 #endif
 
-#if CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-7770
-    //set mstatus.fs=2'b01, floating-point unit in the initialization state
-    asm volatile(
-        "li t0, 0x2000\n"
-        "csrrs t0, mstatus, t0\n"
-        :::"t0"
-    );
-#endif  //#if CONFIG_IDF_TARGET_ESP32P4
-
 #if SOC_BRANCH_PREDICTOR_SUPPORTED
     esp_cpu_branch_prediction_enable();
 #endif
@@ -415,6 +397,11 @@ void IRAM_ATTR call_start_cpu0(void)
     //Clear BSS. Please do not attempt to do any complex stuff (like early logging) before this.
     memset(&_bss_start, 0, (&_bss_end - &_bss_start) * sizeof(_bss_start));
 
+#if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
+    // Clear Bluetooth bss
+    memset(&_bss_bt_start, 0, (&_bss_bt_end - &_bss_bt_start) * sizeof(_bss_bt_start));
+#endif // CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
+
 #if defined(CONFIG_IDF_TARGET_ESP32) && defined(CONFIG_ESP32_IRAM_AS_8BIT_ACCESSIBLE_MEMORY)
     // Clear IRAM BSS
     memset(&_iram_bss_start, 0, (&_iram_bss_end - &_iram_bss_start) * sizeof(_iram_bss_start));
@@ -432,11 +419,10 @@ void IRAM_ATTR call_start_cpu0(void)
     ESP_EARLY_LOGI(TAG, "Unicore app");
 #else
     ESP_EARLY_LOGI(TAG, "Multicore app");
-#if !CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-7692
+#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
     // It helps to fix missed cache settings for other cores. It happens when bootloader is unicore.
     do_multicore_settings();
-#endif  //#if !CONFIG_IDF_TARGET_ESP32P4
+#endif // !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 #endif
 #endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 

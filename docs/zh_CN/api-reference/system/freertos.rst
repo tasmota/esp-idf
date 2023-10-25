@@ -18,7 +18,7 @@ FreeRTOS 是一个开源的 RTOS（实时操作系统）内核，它以组件的
 ESP-IDF FreeRTOS
 ^^^^^^^^^^^^^^^^
 
-    ESP-IDF FreeRTOS 是基于原生 FreeRTOS v10.4.3 的 FreeRTOS 实现，其中包含支持 SMP 的大量更新。ESP-IDF FreeRTOS 最多支持两个核（即双核 SMP），但在设计上对这种场景进行了优化。关于 ESP-IDF FreeRTOS 及具体更新内容，请参考 :doc:`freertos_idf` 文档。
+    ESP-IDF FreeRTOS 是基于原生 FreeRTOS v10.5.1 的 FreeRTOS 实现，其中包含支持 SMP 的大量更新。ESP-IDF FreeRTOS 最多支持两个核（即双核 SMP），但在设计上对这种场景进行了优化。关于 ESP-IDF FreeRTOS 及具体更新内容，请参考 :doc:`freertos_idf` 文档。
 
     .. note::
 
@@ -126,7 +126,7 @@ ESP-IDF FreeRTOS
 FreeRTOS 附加功能
 ------------------
 
-ESP-IDF 还为 FreeRTOS 提供了一些补充功能，如环形缓冲区、ESP-IDF 风格的 Tick 和 Idle 钩子、以及 TLSP 删除回调。要了解更多信息，请参见 :doc:`freertos_additions`。
+ESP-IDF 还为 FreeRTOS 提供了一些补充功能，如环形 buffer、ESP-IDF 风格的 tick 钩子和 idle 钩子、以及 TLSP 删除回调。要了解更多信息，请参见 :doc:`freertos_additions`。
 
 .. _freertos-heap:
 

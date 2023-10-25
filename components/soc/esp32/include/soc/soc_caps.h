@@ -98,6 +98,9 @@
 #define SOC_BOD_SUPPORTED           1
 #define SOC_ULP_FSM_SUPPORTED       1
 #define SOC_CLK_TREE_SUPPORTED      1
+#define SOC_MPU_SUPPORTED           1
+#define SOC_WDT_SUPPORTED           1
+#define SOC_SPI_FLASH_SUPPORTED     1
 
 #if SOC_CAPS_ECO_VER < 200
 #define SOC_DPORT_WORKAROUND                   1
@@ -177,6 +180,9 @@
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM: 1, 3, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19, 21, 22, 23)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0xEF0FEAULL
+
+// The Clock Out singnal is binding to the pin's IO_MUX function
+#define SOC_GPIO_CLOCKOUT_BY_IO_MUX    (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32 has 2 I2C

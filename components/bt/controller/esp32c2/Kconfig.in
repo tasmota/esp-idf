@@ -257,7 +257,21 @@ config BT_LE_CONTROLLER_LOG_ENABLED
     bool "Controller log enable"
     default n
     help
+        Enable controller log
+
+config BT_LE_CONTROLLER_LOG_CTRL_ENABLED
+    bool "enable controller log module"
+    depends on BT_LE_CONTROLLER_LOG_ENABLED
+    default y
+    help
         Enable controller log module
+
+config BT_LE_CONTROLLER_LOG_HCI_ENABLED
+    bool "enable HCI log module"
+    depends on BT_LE_CONTROLLER_LOG_ENABLED
+    default y
+    help
+        Enable hci log module
 
 config BT_LE_CONTROLLER_LOG_DUMP_ONLY
     bool "Controller log dump mode only"
@@ -358,7 +372,7 @@ config BT_LE_MAX_CONNECTIONS
 choice BT_LE_COEX_PHY_CODED_TX_RX_TLIM
     prompt "Coexistence: limit on MAX Tx/Rx time for coded-PHY connection"
     default BT_LE_COEX_PHY_CODED_TX_RX_TLIM_DIS
-    depends on !BT_NIMBLE_ENABLED
+    depends on ESP_COEX_SW_COEXIST_ENABLE
     help
         When using PHY-Coded in BLE connection, limitation on max tx/rx time can be applied to
         better avoid dramatic performance deterioration of Wi-Fi.
@@ -376,7 +390,7 @@ endchoice
 
 config BT_LE_COEX_PHY_CODED_TX_RX_TLIM_EFF
     int
-    depends on !BT_NIMBLE_ENABLED
+    default 0 if !ESP_COEX_SW_COEXIST_ENABLE
     default 1 if BT_LE_COEX_PHY_CODED_TX_RX_TLIM_EN
     default 0 if BT_LE_COEX_PHY_CODED_TX_RX_TLIM_DIS
 
@@ -425,3 +439,7 @@ config BT_CTRL_BLE_ADV_REPORT_DISCARD_THRSHOLD
         of ADV packets lost in the controller reaches this threshold. It is better to set a larger value.
         If you set `BT_CTRL_BLE_ADV_REPORT_DISCARD_THRSHOLD` to a small value or printf every adv lost event, it
         may cause adv packets lost more.
+
+config BT_LE_RELEASE_IRAM_SUPPORTED
+    bool
+    default y

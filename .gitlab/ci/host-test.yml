@@ -114,7 +114,7 @@ test_idf_py:
 test_idf_tools:
   extends:
     - .host_test_template
-    - .before_script_minimal
+    - .before_script:minimal
   artifacts:
     when: on_failure
     paths:
@@ -126,10 +126,10 @@ test_idf_tools:
     entrypoint: [""]  # use system python3. no extra pip package installed
   script:
     # Tools must be downloaded for testing
-    - python3 ${IDF_PATH}/tools/idf_tools.py download
+    - python3 ${IDF_PATH}/tools/idf_tools.py download required qemu-riscv32 qemu-xtensa
     - cd ${IDF_PATH}/tools/test_idf_tools
     - python3 -m pip install jsonschema
-    - python3 ./test_idf_tools.py
+    - python3 ./test_idf_tools.py -v
     - python3 ./test_idf_tools_python_env.py
 
 .test_efuse_table_on_host_template:
@@ -207,12 +207,6 @@ test_mkdfu:
   script:
     - cd ${IDF_PATH}/tools/test_mkdfu
     - ./test_mkdfu.py
-
-test_mkuf2:
-  extends: .host_test_template
-  script:
-    - cd ${IDF_PATH}/tools/test_mkuf2
-    - ./test_mkuf2.py
 
 test_sbom:
   extends:
@@ -300,7 +294,7 @@ test_gen_soc_caps_kconfig:
 test_pytest_qemu:
   extends:
     - .host_test_template
-    - .before_script_build_jobs
+    - .before_script:build
   image: $QEMU_IMAGE
   artifacts:
     when: always
@@ -334,7 +328,7 @@ test_pytest_qemu:
 test_pytest_linux:
   extends:
     - .host_test_template
-    - .before_script_build_jobs
+    - .before_script:build
   artifacts:
     when: always
     paths:

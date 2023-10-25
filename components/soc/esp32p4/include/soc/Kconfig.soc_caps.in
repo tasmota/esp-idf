@@ -55,6 +55,10 @@ config SOC_EFUSE_KEY_PURPOSE_FIELD
     bool
     default y
 
+config SOC_EFUSE_SUPPORTED
+    bool
+    default y
+
 config SOC_RTC_FAST_MEM_SUPPORTED
     bool
     default y
@@ -72,6 +76,10 @@ config SOC_I2S_SUPPORTED
     default y
 
 config SOC_GPSPI_SUPPORTED
+    bool
+    default y
+
+config SOC_LEDC_SUPPORTED
     bool
     default y
 
@@ -111,6 +119,10 @@ config SOC_FLASH_ENC_SUPPORTED
     bool
     default y
 
+config SOC_SECURE_BOOT_SUPPORTED
+    bool
+    default y
+
 config SOC_LP_GPIO_MATRIX_SUPPORTED
     bool
     default y
@@ -124,6 +136,18 @@ config SOC_SPIRAM_SUPPORTED
     default y
 
 config SOC_PSRAM_DMA_CAPABLE
+    bool
+    default y
+
+config SOC_SDMMC_HOST_SUPPORTED
+    bool
+    default y
+
+config SOC_WDT_SUPPORTED
+    bool
+    default y
+
+config SOC_SPI_FLASH_SUPPORTED
     bool
     default y
 
@@ -262,6 +286,18 @@ config SOC_INT_HW_NESTED_SUPPORTED
 config SOC_BRANCH_PREDICTOR_SUPPORTED
     bool
     default y
+
+config SOC_CPU_HAS_FPU
+    bool
+    default y
+
+config SOC_CPU_HAS_FPU_EXT_ILL_BUG
+    bool
+    default y
+
+config SOC_CPU_COPROC_NUM
+    int
+    default 2
 
 config SOC_CPU_BREAKPOINTS_NUM
     int
@@ -509,19 +545,27 @@ config SOC_LEDC_SUPPORT_XTAL_CLOCK
 
 config SOC_LEDC_CHANNEL_NUM
     int
-    default 6
+    default 8
 
 config SOC_LEDC_TIMER_BIT_WIDTH
     int
     default 20
 
+config SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED
+    bool
+    default y
+
+config SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX
+    int
+    default 16
+
 config SOC_LEDC_SUPPORT_FADE_STOP
     bool
     default y
 
-config SOC_LEDC_GAMMA_FADE_RANGE_MAX
+config SOC_LEDC_FADE_PARAMS_BIT_WIDTH
     int
-    default 16
+    default 10
 
 config SOC_MMU_PAGE_SIZE_CONFIGURABLE
     bool
@@ -735,6 +779,22 @@ config SOC_RSA_MAX_BIT_LEN
     int
     default 4096
 
+config SOC_SDMMC_USE_IOMUX
+    bool
+    default y
+
+config SOC_SDMMC_USE_GPIO_MATRIX
+    bool
+    default y
+
+config SOC_SDMMC_NUM_SLOTS
+    int
+    default 2
+
+config SOC_SDMMC_DELAY_PHASE_NUM
+    int
+    default 4
+
 config SOC_SHA_DMA_MAX_BUFFER_SIZE
     int
     default 3968
@@ -764,26 +824,6 @@ config SOC_SHA_SUPPORT_SHA256
     default y
 
 config SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
-    bool
-    default y
-
-config SOC_SDMMC_USE_IOMUX
-    bool
-    default y
-
-config SOC_SDMMC_USE_GPIO_MATRIX
-    bool
-    default y
-
-config SOC_SDMMC_NUM_SLOTS
-    int
-    default 2
-
-config SOC_SDMMC_IOMUX_FUNC
-    bool
-    default n
-
-config SOC_SDMMC_DMA_NEED_CACHE_WB
     bool
     default y
 
@@ -844,10 +884,6 @@ config SOC_SPI_MAX_PRE_DIVIDER
     default 16
 
 config SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE
-    bool
-    default y
-
-config SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND
     bool
     default y
 

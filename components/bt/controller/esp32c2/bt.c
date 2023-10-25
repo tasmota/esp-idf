@@ -124,7 +124,7 @@ typedef void (*interface_func_t) (uint32_t len, const uint8_t*addr, bool end);
 extern int ble_osi_coex_funcs_register(struct osi_coex_funcs_t *coex_funcs);
 extern int ble_controller_init(esp_bt_controller_config_t *cfg);
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-extern int ble_log_init_async(interface_func_t bt_controller_log_interface, bool task_create);
+extern int ble_log_init_async(interface_func_t bt_controller_log_interface, bool task_create, uint8_t buffers, uint32_t *bufs_size);
 extern int ble_log_deinit_async(void);
 extern void ble_log_async_output_dump_all(bool output);
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
@@ -156,14 +156,14 @@ extern int ble_txpwr_set(esp_ble_enhanced_power_type_t power_type, uint16_t hand
 extern int ble_txpwr_get(esp_ble_enhanced_power_type_t power_type, uint16_t handle);
 extern int ble_get_npl_element_info(esp_bt_controller_config_t *cfg, ble_npl_count_info_t * npl_info);
 extern void bt_track_pll_cap(void);
-extern uint32_t _bt_bss_start;
+
+#if CONFIG_BT_RELEASE_IRAM
+extern uint32_t _iram_bt_text_start;
+extern uint32_t _bss_bt_end;
+#else
 extern uint32_t _bt_bss_end;
-extern uint32_t _nimble_bss_start;
-extern uint32_t _nimble_bss_end;
-extern uint32_t _nimble_data_start;
-extern uint32_t _nimble_data_end;
-extern uint32_t _bt_data_start;
-extern uint32_t _bt_data_end;
+extern uint32_t _bt_controller_data_start;
+#endif
 
 /* Local Function Declaration
  *********************************************************************
@@ -199,6 +199,10 @@ static void esp_bt_controller_log_interface(uint32_t len, const uint8_t *addr, b
  */
 /* Static variable declare */
 static DRAM_ATTR esp_bt_controller_status_t ble_controller_status = ESP_BT_CONTROLLER_STATUS_IDLE;
+
+#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+const static uint32_t log_bufs_size[] = {2048, 1024, 1024};
+#endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
 
 /* This variable tells if BLE is running */
 static bool s_ble_active = false;
@@ -628,6 +632,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 #endif
     esp_phy_modem_init();
     periph_module_enable(PERIPH_BT_MODULE);
+    periph_module_reset(PERIPH_BT_MODULE);
 
     if (ble_osi_coex_funcs_register((struct osi_coex_funcs_t *)&s_osi_coex_funcs_ro) != 0) {
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "osi coex funcs reg failed");
@@ -638,25 +643,33 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 #if CONFIG_SW_COEXIST_ENABLE
     coex_init();
 #endif
+
+#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+    interface_func_t bt_controller_log_interface;
+    bt_controller_log_interface = esp_bt_controller_log_interface;
+    uint8_t buffers = 0;
+#if CONFIG_BT_LE_CONTROLLER_LOG_CTRL_ENABLED
+    buffers |= ESP_BLE_LOG_BUF_CONTROLLER;
+#endif // CONFIG_BT_LE_CONTROLLER_LOG_CTRL_ENABLED
+#if CONFIG_BT_LE_CONTROLLER_LOG_HCI_ENABLED
+    buffers |= ESP_BLE_LOG_BUF_HCI;
+#endif // CONFIG_BT_LE_CONTROLLER_LOG_HCI_ENABLED
+#if CONFIG_BT_LE_CONTROLLER_LOG_DUMP_ONLY
+    ret = ble_log_init_async(bt_controller_log_interface, false, buffers, (uint32_t *)log_bufs_size);
+#else
+    ret = ble_log_init_async(bt_controller_log_interface, true, buffers, (uint32_t *)log_bufs_size);
+#endif // CONFIG_BT_CONTROLLER_LOG_DUMP
+    if (ret != ESP_OK) {
+        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_log_init failed %d", ret);
+        goto modem_deint;
+    }
+#endif // CONFIG_BT_CONTROLLER_LOG_ENABLED
+
     ret = ble_controller_init(cfg);
     if (ret != ESP_OK) {
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_init failed %d", ret);
         goto modem_deint;
     }
-
-#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-    interface_func_t bt_controller_log_interface;
-    bt_controller_log_interface = esp_bt_controller_log_interface;
-#if CONFIG_BT_LE_CONTROLLER_LOG_DUMP_ONLY
-    ret = ble_log_init_async(bt_controller_log_interface, false);
-#else
-    ret = ble_log_init_async(bt_controller_log_interface, true);
-#endif // CONFIG_BT_CONTROLLER_LOG_DUMP
-    if (ret != ESP_OK) {
-        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_log_init failed %d", ret);
-        goto controller_init_err;
-    }
-#endif // CONFIG_BT_CONTROLLER_LOG_ENABLED
 
     ret = controller_sleep_init();
     if (ret != ESP_OK) {
@@ -678,13 +691,13 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     return ESP_OK;
 free_controller:
     controller_sleep_deinit();
-#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-controller_init_err:
-    ble_log_deinit_async();
-#endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     ble_controller_deinit();
 modem_deint:
+#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+    ble_log_deinit_async();
+#endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     esp_phy_modem_deinit();
+    periph_module_disable(PERIPH_BT_MODULE);
 #if CONFIG_BT_NIMBLE_ENABLED
     ble_npl_eventq_deinit(nimble_port_get_dflt_eventq());
 #endif // CONFIG_BT_NIMBLE_ENABLED
@@ -710,6 +723,8 @@ esp_err_t esp_bt_controller_deinit(void)
     ble_log_deinit_async();
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     ble_controller_deinit();
+
+    periph_module_disable(PERIPH_BT_MODULE);
 
 #if CONFIG_BT_NIMBLE_ENABLED
     /* De-initialize default event queue */
@@ -828,32 +843,28 @@ esp_err_t esp_bt_mem_release(esp_bt_mode_t mode)
 {
     intptr_t mem_start, mem_end;
 
+#if CONFIG_BT_RELEASE_IRAM && CONFIG_ESP_SYSTEM_PMP_IDRAM_SPLIT
+    /* Release Bluetooth text section and merge Bluetooth data, bss & text into a large free heap
+     * region when esp_bt_mem_release is called, total saving ~21kB or more of IRAM. ESP32-C2 has
+     * only 3 configurable PMP entries available, rest of them are hard-coded. We cannot split the
+     * memory into 3 different regions (IRAM, BLE-IRAM, DRAM). So `ESP_SYSTEM_PMP_IDRAM_SPLIT` needs
+     * to be disabled.
+     */
+    ESP_LOGE(NIMBLE_PORT_LOG_TAG, "`ESP_SYSTEM_PMP_IDRAM_SPLIT` should be disabled!");
+    assert(0);
+#endif // CONFIG_BT_RELEASE_IRAM && CONFIG_ESP_SYSTEM_PMP_IDRAM_SPLIT
+
     if (mode & ESP_BT_MODE_BLE) {
-        mem_start = (intptr_t)&_bt_bss_start;
+#if CONFIG_BT_RELEASE_IRAM
+        mem_start = (intptr_t)MAP_IRAM_TO_DRAM((intptr_t)&_iram_bt_text_start);
+        mem_end = (intptr_t)&_bss_bt_end;
+#else
+        mem_start = (intptr_t)&_bt_controller_data_start;
         mem_end = (intptr_t)&_bt_bss_end;
+#endif // CONFIG_BT_RELEASE_IRAM
         if (mem_start != mem_end) {
-            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "Release BT BSS [0x%08x] - [0x%08x]", mem_start, mem_end);
-            ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
-        }
-
-        mem_start = (intptr_t)&_bt_data_start;
-        mem_end = (intptr_t)&_bt_data_end;
-        if (mem_start != mem_end) {
-            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "Release BT Data [0x%08x] - [0x%08x]", mem_start, mem_end);
-            ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
-        }
-
-        mem_start = (intptr_t)&_nimble_bss_start;
-        mem_end = (intptr_t)&_nimble_bss_end;
-        if (mem_start != mem_end) {
-            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "Release NimBLE BSS [0x%08x] - [0x%08x]", mem_start, mem_end);
-            ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
-        }
-
-        mem_start = (intptr_t)&_nimble_data_start;
-        mem_end = (intptr_t)&_nimble_data_end;
-        if (mem_start != mem_end) {
-            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "Release NimBLE Data [0x%08x] - [0x%08x]", mem_start, mem_end);
+            ESP_LOGI(NIMBLE_PORT_LOG_TAG, "Release BLE [0x%08x] - [0x%08x], len %d", mem_start,
+                     mem_end, mem_end - mem_start);
             ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
         }
     }

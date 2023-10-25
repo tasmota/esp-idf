@@ -1,3 +1,9 @@
+idf_build_get_property(target IDF_TARGET)
+
+if(${target} STREQUAL "linux")
+    return() # This component is not supported by the POSIX/Linux simulator
+endif()
+
 set(srcs "port/os_xtensa.c"
     "port/eloop.c"
     "src/ap/ap_config.c"
@@ -172,7 +178,7 @@ if(CONFIG_ESP_WIFI_ENABLE_SAE_PK)
     "src/common/sae_pk.c")
 endif()
 
-if(CONFIG_ESP_WIFI_11KV_SUPPORT OR CONFIG_ESP_WIFI_11R_SUPPORT OR CONFIG_ESP_WIFI_ENABLE_SAE_PK)
+if(CONFIG_ESP_WIFI_11KV_SUPPORT OR CONFIG_ESP_WIFI_11R_SUPPORT)
     set(srcs ${srcs}
     "src/common/bss.c"
     "src/common/scan.c"

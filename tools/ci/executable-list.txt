@@ -79,7 +79,6 @@ tools/ci/mirror-submodule-update.sh
 tools/ci/multirun_with_pyenv.sh
 tools/ci/push_to_github.sh
 tools/ci/test_autocomplete.py
-tools/ci/test_check_kconfigs.py
 tools/ci/test_configure_ci_environment.sh
 tools/ci/test_reproducible_build.sh
 tools/docker/entrypoint.sh
@@ -113,6 +112,3 @@ tools/test_idf_py/test_hints.py
 tools/test_idf_py/test_idf_py.py
 tools/test_idf_tools/test_idf_tools.py
 tools/test_mkdfu/test_mkdfu.py
-tools/test_mkuf2/test_mkuf2.py
-tools/unit-test-app/tools/get_available_configs.sh
-tools/unit-test-app/unit_test.py

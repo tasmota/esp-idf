@@ -146,11 +146,14 @@ static const char *TAG = "bootloader_flash";
    63th block for bootloader_flash_read
 */
 #define MMU_BLOCK0_VADDR  SOC_DROM_LOW
-#if CONFIG_IDF_TARGET_ESP32P4
-//TODO: IDF-7918
-#define MMAP_MMU_SIZE     (SOC_DRAM_FLASH_ADDRESS_HIGH - SOC_DRAM_FLASH_ADDRESS_LOW) // This mmu size means that the mmu size to be mapped
-#else
+#if CONFIG_IDF_TARGET_ESP32S2
+/**
+ * On ESP32S2 we use `(SOC_DRAM0_CACHE_ADDRESS_HIGH - SOC_DRAM0_CACHE_ADDRESS_LOW)`.
+ * As this code is in bootloader, we keep this on ESP32S2
+ */
 #define MMAP_MMU_SIZE     (SOC_DRAM0_CACHE_ADDRESS_HIGH - SOC_DRAM0_CACHE_ADDRESS_LOW) // This mmu size means that the mmu size to be mapped
+#else
+#define MMAP_MMU_SIZE     (SOC_DRAM_FLASH_ADDRESS_HIGH - SOC_DRAM_FLASH_ADDRESS_LOW) // This mmu size means that the mmu size to be mapped
 #endif
 #define MMU_BLOCK63_VADDR (MMU_BLOCK0_VADDR + MMAP_MMU_SIZE - SPI_FLASH_MMU_PAGE_SIZE)
 #define FLASH_READ_VADDR MMU_BLOCK63_VADDR
@@ -426,7 +429,7 @@ esp_err_t bootloader_flash_erase_range(uint32_t start_addr, uint32_t size)
     return spi_to_esp_err(rc);
 }
 
-#if CONFIG_SPI_FLASH_32BIT_ADDR_ENABLE
+#if CONFIG_BOOTLOADER_CACHE_32BIT_ADDR_QUAD_FLASH || CONFIG_BOOTLOADER_CACHE_32BIT_ADDR_OCTAL_FLASH
 void bootloader_flash_32bits_address_map_enable(esp_rom_spiflash_read_mode_t flash_mode)
 {
     esp_rom_opiflash_spi0rd_t cache_rd = {};
@@ -453,6 +456,18 @@ void bootloader_flash_32bits_address_map_enable(esp_rom_spiflash_read_mode_t fla
         cache_rd.addr_bit_len = 32;
         cache_rd.dummy_bit_len = 6;
         cache_rd.cmd = CMD_FASTRD_QIO_4B;
+        cache_rd.cmd_bit_len = 8;
+        break;
+    case ESP_ROM_SPIFLASH_FASTRD_MODE:
+        cache_rd.addr_bit_len = 32;
+        cache_rd.dummy_bit_len = 8;
+        cache_rd.cmd = CMD_FASTRD_4B;
+        cache_rd.cmd_bit_len = 8;
+        break;
+     case ESP_ROM_SPIFLASH_SLOWRD_MODE:
+        cache_rd.addr_bit_len = 32;
+        cache_rd.dummy_bit_len = 0;
+        cache_rd.cmd = CMD_SLOWRD_4B;
         cache_rd.cmd_bit_len = 8;
         break;
     default:

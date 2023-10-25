@@ -45,7 +45,7 @@
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 // #define SOC_RISCV_COPROC_SUPPORTED      1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1
-// #define SOC_EFUSE_SUPPORTED             1  //TODO: IDF-7512
+#define SOC_EFUSE_SUPPORTED             1
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
 #define SOC_RMT_SUPPORTED               1
@@ -53,7 +53,7 @@
 // #define SOC_RMT_SUPPORTED               1  //TODO: IDF-7476
 // #define SOC_SDM_SUPPORTED               1  //TODO: IDF-7551
 #define SOC_GPSPI_SUPPORTED             1
-// #define SOC_LEDC_SUPPORTED              1  //TODO: IDF-6510
+#define SOC_LEDC_SUPPORTED              1
 #define SOC_I2C_SUPPORTED               1  //TODO: IDF-6507, TODO: IDF-7491
 #define SOC_SYSTIMER_SUPPORTED          1
 // #define SOC_AES_SUPPORTED               1  //TODO: IDF-6519
@@ -66,7 +66,7 @@
 #define SOC_ECDSA_SUPPORTED             1
 // #define SOC_KEY_MANAGER_SUPPORTED       1  //TODO: IDF-7925
 #define SOC_FLASH_ENC_SUPPORTED         1
-// #define SOC_SECURE_BOOT_SUPPORTED       1  //TODO: IDF-7544
+#define SOC_SECURE_BOOT_SUPPORTED       1
 // #define SOC_BOD_SUPPORTED               1  //TODO: IDF-7519
 // #define SOC_APM_SUPPORTED               1  //TODO: IDF-7542
 // #define SOC_PMU_SUPPORTED               1  //TODO: IDF-7531
@@ -78,9 +78,11 @@
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_PSRAM_DMA_CAPABLE           1
 // #define SOC_ULP_SUPPORTED               1  //TODO: IDF-7534
-// #define SOC_SDMMC_HOST_SUPPORTED        1  //TODO: IDF-6502
+#define SOC_SDMMC_HOST_SUPPORTED        1
 // #define SOC_CLK_TREE_SUPPORTED          1  //TODO: IDF-7526
 // #define SOC_ASSIST_DEBUG_SUPPORTED      1  //TODO: IDF-7565
+#define SOC_WDT_SUPPORTED               1
+#define SOC_SPI_FLASH_SUPPORTED         1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -147,6 +149,9 @@
 #define SOC_INT_CLIC_SUPPORTED          1
 #define SOC_INT_HW_NESTED_SUPPORTED     1       // Support for hardware interrupts nesting
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
+#define SOC_CPU_HAS_FPU                 1
+#define SOC_CPU_HAS_FPU_EXT_ILL_BUG     1       // EXT_ILL CSR doesn't support FLW/FSW
+#define SOC_CPU_COPROC_NUM              2
 
 #define SOC_CPU_BREAKPOINTS_NUM         4
 #define SOC_CPU_WATCHPOINTS_NUM         4
@@ -261,10 +266,12 @@
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
 #define SOC_LEDC_SUPPORT_XTAL_CLOCK         (1)
-#define SOC_LEDC_CHANNEL_NUM                (6)
+#define SOC_LEDC_CHANNEL_NUM                (8)
 #define SOC_LEDC_TIMER_BIT_WIDTH            (20)
+#define SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED (1)
+#define SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX (16)
 #define SOC_LEDC_SUPPORT_FADE_STOP          (1)
-#define SOC_LEDC_GAMMA_FADE_RANGE_MAX       (16)
+#define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
 #define SOC_MMU_PAGE_SIZE_CONFIGURABLE        (0)
@@ -339,6 +346,19 @@
 /*--------------------------- RSA CAPS ---------------------------------------*/
 #define SOC_RSA_MAX_BIT_LEN    (4096)
 
+/*-------------------------- SDMMC CAPS -----------------------------------------*/
+
+/**
+ * Card detect, write protect, interrupt use GPIO Matrix on all chips.
+ * Slot 0 clock/cmd/data pins use IOMUX
+ * Slot 1 clock/cmd/data pins use GPIO Matrix
+ */
+#define SOC_SDMMC_USE_IOMUX          1
+#define SOC_SDMMC_USE_GPIO_MATRIX    1
+#define SOC_SDMMC_NUM_SLOTS          2
+/* Supported host clock delay phase number */
+#define SOC_SDMMC_DELAY_PHASE_NUM    4
+
 // TODO: IDF-5353 (Copy from esp32c3, need check)
 /*--------------------------- SHA CAPS ---------------------------------------*/
 
@@ -362,15 +382,6 @@
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
-
-#ifdef SDMMC_DEFAULT_IOMUX
-#define SOC_SDMMC_USE_IOMUX 1
-#else
-#define SOC_SDMMC_USE_GPIO_MATRIX 1
-#endif
-#define SOC_SDMMC_NUM_SLOTS 2
-#define SOC_SDMMC_IOMUX_FUNC 0
-#define SOC_SDMMC_DMA_NEED_CACHE_WB 1
 
 /*-------------------------- Sigma Delta Modulator CAPS -----------------*/
 #define SOC_SDM_GROUPS               1U
@@ -404,7 +415,7 @@
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
-#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
+//#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                (1) //TODO: IDF-7518
 #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)

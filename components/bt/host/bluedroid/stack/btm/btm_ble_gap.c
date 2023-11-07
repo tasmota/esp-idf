@@ -4352,7 +4352,7 @@ void btm_ble_read_remote_features_complete(UINT8 *p)
 *******************************************************************************/
 void btm_ble_write_adv_enable_complete(UINT8 *p)
 {
-    /* if write adv enable/disbale not succeed */
+    /* if write adv enable/disable not succeed */
     if (*p != HCI_SUCCESS) {
         BTM_TRACE_ERROR("%s failed", __func__);
     }
@@ -4667,6 +4667,28 @@ BOOLEAN BTM_Ble_Authorization(BD_ADDR bd_addr, BOOLEAN authorize)
 
     BTM_TRACE_ERROR("Authorization fail");
     return FALSE;
+}
+
+/*******************************************************************************
+**
+** Function         BTM_BleClearAdv
+**
+** Description      This function is called to clear legacy advertising
+**
+** Parameter        p_clear_adv_cback - Command complete callback
+**
+*******************************************************************************/
+BOOLEAN BTM_BleClearAdv(tBTM_CLEAR_ADV_CMPL_CBACK *p_clear_adv_cback)
+{
+    tBTM_BLE_CB *p_cb = &btm_cb.ble_ctr_cb;
+
+    if (btsnd_hcic_ble_clear_adv() == FALSE) {
+        BTM_TRACE_ERROR("%s: Unable to Clear Advertising", __FUNCTION__);
+        return FALSE;
+    }
+
+    p_cb->inq_var.p_clear_adv_cb = p_clear_adv_cback;
+    return TRUE;
 }
 
 bool btm_ble_adv_pkt_ready(void)

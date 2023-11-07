@@ -1,6 +1,7 @@
 idf_build_get_property(target IDF_TARGET)
 if(${target} STREQUAL "linux")
-    idf_component_register(INCLUDE_DIRS include
+    idf_component_register(SRCS "linux/spi_flash_linux.c"
+                           INCLUDE_DIRS include
                            PRIV_INCLUDE_DIRS include/spi_flash)
     return()
 endif()
@@ -47,7 +48,9 @@ else()
         "spi_flash_os_func_noos.c")
 
     list(APPEND srcs ${cache_srcs})
-    set(priv_requires bootloader_support app_update soc driver esp_mm)
+    set(priv_requires bootloader_support app_update soc esp_mm
+                      driver esp_driver_gpio # TODO: IDF-8503 move spi_bus_lock to esp_hw_support component
+    )
 endif()
 
 idf_component_register(SRCS "${srcs}"
@@ -71,5 +74,4 @@ if(NOT BOOTLOADER_BUILD AND NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
         # will be replaced with MMU requirements
         idf_component_optional_requires(PRIVATE esp_psram)
     endif()
-    target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
 endif()

@@ -6,9 +6,9 @@ stages:
   - pre_check
   - build
   - assign_test
-  - build_doc
   - target_test
   - host_test
+  - build_doc
   - test_deploy
   - deploy
   - post_deploy
@@ -45,10 +45,10 @@ variables:
   PYTHON_VER: 3.8.17
 
   # Docker images
-  ESP_ENV_IMAGE: "$CI_DOCKER_REGISTRY/esp-env-v5.2:2"
-  ESP_IDF_DOC_ENV_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.2:2-1"
-  QEMU_IMAGE: "${CI_DOCKER_REGISTRY}/qemu-v5.2:2-20230522"
-  TARGET_TEST_ENV_IMAGE: "$CI_DOCKER_REGISTRY/target-test-env-v5.2:2"
+  ESP_ENV_IMAGE: "$CI_DOCKER_REGISTRY/esp-env-v5.3:1"
+  ESP_IDF_DOC_ENV_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.3:1-1"
+  QEMU_IMAGE: "${CI_DOCKER_REGISTRY}/qemu-v5.3:1-20230522"
+  TARGET_TEST_ENV_IMAGE: "$CI_DOCKER_REGISTRY/target-test-env-v5.3:1"
 
   SONARQUBE_SCANNER_IMAGE: "${CI_DOCKER_REGISTRY}/sonarqube-scanner:5"
 
@@ -66,7 +66,7 @@ variables:
   CI_PYTHON_CONSTRAINT_BRANCH: ""
 
   # Update the filename for a specific ESP-IDF release. It is used only with CI_PYTHON_CONSTRAINT_BRANCH.
-  CI_PYTHON_CONSTRAINT_FILE: "espidf.constraints.v5.2.txt"
+  CI_PYTHON_CONSTRAINT_FILE: "espidf.constraints.v5.3.txt"
 
   # Set this variable to repository name of a Python tool you wish to install and test in the context of ESP-IDF CI.
   # Keep the variable empty when not used.
@@ -92,6 +92,7 @@ variables:
 
   if echo "$CI_MERGE_REQUEST_LABELS" | egrep "(^|,)include_nightly_run(,|$)"; then
     export INCLUDE_NIGHTLY_RUN="1"
+    export NIGHTLY_RUN="1"
   fi
 
   # configure cmake related flags

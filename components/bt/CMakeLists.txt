@@ -70,30 +70,35 @@ if(CONFIG_BT_ENABLED)
     set(srcs "")
     set(include_dirs "")
     set(ldfragments "linker.lf")
+    if(CONFIG_BT_CONTROLLER_ENABLED)
+        if(CONFIG_IDF_TARGET_ESP32)
+            list(APPEND srcs "controller/esp32/bt.c"
+                             "controller/esp32/hli_api.c"
+                             "controller/esp32/hli_vectors.S")
 
-    if(CONFIG_IDF_TARGET_ESP32)
-        list(APPEND srcs "controller/esp32/bt.c"
-                         "controller/esp32/hli_api.c"
-                         "controller/esp32/hli_vectors.S")
+        elseif(CONFIG_IDF_TARGET_ESP32C3)
+            list(APPEND srcs "controller/esp32c3/bt.c")
 
-    elseif(CONFIG_IDF_TARGET_ESP32C3)
-        list(APPEND srcs "controller/esp32c3/bt.c")
+        elseif(CONFIG_IDF_TARGET_ESP32S3)
+            list(APPEND srcs "controller/esp32c3/bt.c")
 
-    elseif(CONFIG_IDF_TARGET_ESP32S3)
-        list(APPEND srcs "controller/esp32c3/bt.c")
+        elseif(CONFIG_IDF_TARGET_ESP32C2)
+            list(APPEND srcs "controller/esp32c2/bt.c")
 
-    elseif(CONFIG_IDF_TARGET_ESP32C2)
-        set(ldfragments "linker.lf.esp32c2")
-        list(APPEND srcs "controller/esp32c2/bt.c")
+        elseif(CONFIG_IDF_TARGET_ESP32C2)
+            set(ldfragments "linker.lf.esp32c2")
+            list(APPEND srcs "controller/esp32c2/bt.c")
 
-    elseif(CONFIG_IDF_TARGET_ESP32C6)
-        list(APPEND srcs "controller/esp32c6/bt.c")
+        elseif(CONFIG_IDF_TARGET_ESP32C6)
+            list(APPEND srcs "controller/esp32c6/bt.c")
 
-    elseif(CONFIG_IDF_TARGET_ESP32H2)
-        list(APPEND srcs "controller/esp32h2/bt.c")
+        elseif(CONFIG_IDF_TARGET_ESP32H2)
+            list(APPEND srcs "controller/esp32h2/bt.c")
+        endif()
+
+        list(APPEND include_dirs ${target_specific_include_dirs})
+
     endif()
-
-    list(APPEND include_dirs ${target_specific_include_dirs})
 
     # Common
     list(APPEND include_dirs common/osi/include)
@@ -174,6 +179,7 @@ if(CONFIG_BT_ENABLED)
 
         list(APPEND srcs "host/bluedroid/api/esp_a2dp_api.c"
                    "host/bluedroid/api/esp_avrc_api.c"
+                   "host/bluedroid/api/esp_bluedroid_hci.c"
                    "host/bluedroid/api/esp_bt_device.c"
                    "host/bluedroid/api/esp_bt_main.c"
                    "host/bluedroid/api/esp_gap_ble_api.c"
@@ -608,6 +614,7 @@ if(CONFIG_BT_ENABLED)
                     host/nimble/nimble/nimble/host/services/ipss/include
                     host/nimble/nimble/nimble/host/services/lls/include
                     host/nimble/nimble/nimble/host/services/prox/include
+                    host/nimble/nimble/nimble/host/services/cts/include
                     host/nimble/nimble/nimble/host/services/tps/include
                     host/nimble/nimble/nimble/host/util/include
                     host/nimble/nimble/nimble/host/store/ram/include
@@ -628,6 +635,7 @@ if(CONFIG_BT_ENABLED)
                     "host/nimble/nimble/nimble/host/services/dis/src/ble_svc_dis.c"
                     "host/nimble/nimble/nimble/host/services/lls/src/ble_svc_lls.c"
                     "host/nimble/nimble/nimble/host/services/prox/src/ble_svc_prox.c"
+                    "host/nimble/nimble/nimble/host/services/cts/src/ble_svc_cts.c"
                     "host/nimble/nimble/nimble/host/src/ble_hs_conn.c"
                     "host/nimble/nimble/nimble/host/src/ble_store_util.c"
                     "host/nimble/nimble/nimble/host/src/ble_sm.c"

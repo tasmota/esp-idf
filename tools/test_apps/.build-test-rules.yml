@@ -15,10 +15,6 @@ tools/test_apps/linux_compatible/driver_mock:
   enable:
     - if: IDF_TARGET == "linux"
 
-tools/test_apps/linux_compatible/hello_world_linux_compatible:
-  enable:
-    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET == "linux"
-
 tools/test_apps/linux_compatible/linux_freertos:
   enable:
     - if: IDF_TARGET == "linux"
@@ -176,12 +172,6 @@ tools/test_apps/system/panic:
     - if: IDF_TARGET in ["esp32p4"]
       temporary: true
       reason: target(s) not supported yet # TODO: IDF-7511
-
-tools/test_apps/system/ram_loadable_app:
-  disable:
-    - if: IDF_TARGET == "esp32h2"
-      temporary: true
-      reason: lack of runners
 
 tools/test_apps/system/startup:
   disable:

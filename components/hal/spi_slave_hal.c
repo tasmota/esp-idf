@@ -35,13 +35,14 @@ static void s_spi_slave_hal_dma_init_config(const spi_slave_hal_context_t *hal)
 
 void spi_slave_hal_init(spi_slave_hal_context_t *hal, const spi_slave_hal_config_t *hal_config)
 {
-    memset(hal, 0, sizeof(spi_slave_hal_context_t));
     spi_dev_t *hw = SPI_LL_GET_HW(hal_config->host_id);
     hal->hw = hw;
     hal->dma_in = hal_config->dma_in;
     hal->dma_out = hal_config->dma_out;
 
-    s_spi_slave_hal_dma_init_config(hal);
+    if (hal->use_dma) {
+        s_spi_slave_hal_dma_init_config(hal);
+    }
     spi_ll_slave_init(hal->hw);
 
     //Force a transaction done interrupt. This interrupt won't fire yet because we initialized the SPI interrupt as

@@ -363,7 +363,6 @@ test_app_test_003:
 
 test_app_test_004:
   extends: .test_app_esp32s2_template
-  parallel: 2
   tags:
     - ESP32S2
     - Example_GENERIC
@@ -407,17 +406,11 @@ test_app_test_flash_psram_f8r8:
     - ESP32S3
     - MSPI_F8R8
 
-test_app_test_xip_psram_esp32s2:
-  extends: .test_app_esp32s2_template
+test_app_test_flash_psram_esp32:
+  extends: .test_app_esp32_template
   tags:
-    - ESP32S2
-    - Example_GENERIC
-
-test_app_test_xip_psram_esp32s3:
-  extends: .test_app_esp32s3_template
-  tags:
-    - ESP32S3
-    - MSPI_F4R8
+    - ESP32
+    - psram
 
 .component_ut_template:
   extends: .target_test_job_template
@@ -522,7 +515,7 @@ UT_001:
 
 UT_002:
   extends: .unit_test_esp32_template
-  parallel: 15
+  parallel: 16
   tags:
     - ESP32_IDF
     - UT_T1_1
@@ -727,7 +720,7 @@ UT_S2_SDSPI:
 
 UT_C3:
   extends: .unit_test_esp32c3_template
-  parallel: 35
+  parallel: 36
   tags:
     - ESP32C3_IDF
     - UT_T1_1
@@ -816,7 +809,7 @@ component_ut_test_lan8720:
     CONFIG_FILE_PATH: "${CI_PROJECT_DIR}/tools/ci/integration_test/test_configs"
     KNOWN_ISSUE_FILE: "${CI_PROJECT_DIR}/tools/ci/integration_test/KnownIssues"
     CI_RUNNER_SCRIPT: "${CI_PROJECT_DIR}/auto_test_script/bin/CIRunner.py"
-    PREPARE_TEST_BIN_SCRIPT: "${CI_PROJECT_DIR}/tools/ci/integration_test/prepare_test_bins.py"
+    PREPARE_TEST_BIN_SCRIPT: "${CI_PROJECT_DIR}/auto_test_script/tools/ci/idf_prepare_test_bins.py"
     PYTHONPATH: "${CI_PROJECT_DIR}/auto_test_script/packages:${CI_PROJECT_DIR}/tools/ci/python_packages:${PYTHONPATH}"
     INITIAL_CONDITION_RETRY_COUNT: "1"
     GIT_LFS_SKIP_SMUDGE: 1

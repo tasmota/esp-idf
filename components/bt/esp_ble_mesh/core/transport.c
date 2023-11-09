@@ -90,7 +90,7 @@ static struct seg_tx {
     uint8_t                tag;         /* Additional metadata */
     const struct bt_mesh_send_cb *cb;
     void                  *cb_data;
-    struct k_delayed_work  retransmit;  /* Retransmit timer */
+    struct k_delayed_work  rtx_timer;   /* Segment Retransmission timer */
 } seg_tx[CONFIG_BLE_MESH_TX_SEG_MSG_COUNT];
 
 static struct seg_rx {
@@ -106,7 +106,7 @@ static struct seg_rx {
     uint16_t               dst;
     uint32_t               block;
     uint32_t               last;
-    struct k_delayed_work  ack;
+    struct k_delayed_work  ack_timer;
     struct net_buf_simple  buf;
 } seg_rx[CONFIG_BLE_MESH_RX_SEG_MSG_COUNT] = {
     [0 ... (CONFIG_BLE_MESH_RX_SEG_MSG_COUNT - 1)] = {
@@ -145,7 +145,7 @@ uint8_t bt_mesh_get_seg_rtx_num(void)
     return SEG_RETRANSMIT_ATTEMPTS;
 }
 
-int32_t bt_mesh_get_seg_rtx_timeout(uint8_t ttl)
+int32_t bt_mesh_get_seg_rtx_timeout(uint16_t dst, uint8_t ttl)
 {
     /* This function will be used when a client model sending an
      * acknowledged message. And if the dst of a message is not
@@ -322,7 +322,7 @@ static void seg_tx_reset(struct seg_tx *tx)
 
     bt_mesh_seg_tx_lock();
 
-    k_delayed_work_cancel(&tx->retransmit);
+    k_delayed_work_cancel(&tx->rtx_timer);
 
     tx->cb = NULL;
     tx->cb_data = NULL;
@@ -360,6 +360,8 @@ static inline void seg_tx_complete(struct seg_tx *tx, int err)
 
     seg_tx_reset(tx);
 
+    /* TODO: notify the completion of sending segmented message */
+
     if (cb && cb->end) {
         cb->end(err, cb_data);
     }
@@ -377,7 +379,7 @@ static void schedule_retransmit(struct seg_tx *tx)
         return;
     }
 
-    k_delayed_work_submit(&tx->retransmit, SEG_RETRANSMIT_TIMEOUT(tx));
+    k_delayed_work_submit(&tx->rtx_timer, SEG_RETRANSMIT_TIMEOUT(tx));
 }
 
 static void seg_first_send_start(uint16_t duration, int err, void *user_data)
@@ -471,7 +473,7 @@ static void seg_tx_send_unacked(struct seg_tx *tx)
 
 static void seg_retransmit(struct k_work *work)
 {
-    struct seg_tx *tx = CONTAINER_OF(work, struct seg_tx, retransmit);
+    struct seg_tx *tx = CONTAINER_OF(work, struct seg_tx, rtx_timer);
 
     seg_tx_send_unacked(tx);
 }
@@ -511,10 +513,6 @@ static int send_seg(struct bt_mesh_net_tx *net_tx, struct net_buf_simple *sdu,
     }
 
     tx->dst = net_tx->ctx->addr;
-    /* TODO:
-     * When SAR Transmitter is introduced, the xmit may be
-     * updated with "bt_mesh_get_sar_seg_transmit()".
-     */
     if (sdu->len) {
         tx->seg_n = (sdu->len - 1) / seg_len(!!ctl_op);
     } else {
@@ -784,6 +782,12 @@ static int sdu_recv(struct bt_mesh_net_rx *rx, uint32_t seq, uint8_t hdr,
                    rx->ctl, rx->ctx.recv_ttl, rx->ctx.addr, rx->ctx.recv_dst,
                    bt_hex(sdu->data, sdu->len));
 
+            /* When the Device Key Candidate is available, and an access message
+             * is decrypted using the Device Key Candidate that was delivered to
+             * the access layer, then the node shall revoke the device key, the
+             * Device Key Candidate shall become the device key, and the Device
+             * Key Candidate shall become unavailable.
+             */
             revoke_dev_key(dev_key);
 
             rx->ctx.app_idx = BLE_MESH_KEY_DEV;
@@ -942,7 +946,7 @@ static int trans_ack(struct bt_mesh_net_rx *rx, uint8_t hdr,
         return -EINVAL;
     }
 
-    k_delayed_work_cancel(&tx->retransmit);
+    k_delayed_work_cancel(&tx->rtx_timer);
 
     while ((bit = find_lsb_set(ack))) {
         if (tx->seg[bit - 1]) {
@@ -1216,11 +1220,9 @@ static int send_ack(struct bt_mesh_subnet *sub, uint16_t src, uint16_t dst,
 
 static void seg_rx_reset(struct seg_rx *rx, bool full_reset)
 {
-    BT_DBG("rx %p", rx);
-
     bt_mesh_seg_rx_lock();
 
-    k_delayed_work_cancel(&rx->ack);
+    k_delayed_work_cancel(&rx->ack_timer);
 
     if (IS_ENABLED(CONFIG_BLE_MESH_FRIEND) && rx->obo &&
         rx->block != BLOCK_COMPLETE(rx->seg_n)) {
@@ -1267,9 +1269,7 @@ static uint32_t incomplete_timeout(struct seg_rx *rx)
 
 static void seg_ack(struct k_work *work)
 {
-    struct seg_rx *rx = CONTAINER_OF(work, struct seg_rx, ack);
-
-    BT_DBG("rx %p", rx);
+    struct seg_rx *rx = CONTAINER_OF(work, struct seg_rx, ack_timer);
 
     bt_mesh_seg_rx_lock();
 
@@ -1291,14 +1291,14 @@ static void seg_ack(struct k_work *work)
     send_ack(rx->sub, rx->dst, rx->src, rx->ttl, &rx->seq_auth,
              rx->block, rx->obo);
 
-    k_delayed_work_submit(&rx->ack, ack_timeout(rx));
+    k_delayed_work_submit(&rx->ack_timer, ack_timeout(rx));
 
     bt_mesh_seg_rx_unlock();
 }
 
 static inline bool sdu_len_is_ok(bool ctl, uint8_t seg_n)
 {
-    return ((seg_n * seg_len(ctl) + 1) <= CONFIG_BLE_MESH_RX_SDU_MAX);
+    return ((seg_n + 1) * seg_len(ctl) <= CONFIG_BLE_MESH_RX_SDU_MAX);
 }
 
 static struct seg_rx *seg_rx_find(struct bt_mesh_net_rx *net_rx,
@@ -1568,9 +1568,9 @@ found_rx:
     /* Reset the Incomplete Timer */
     rx->last = k_uptime_get_32();
 
-    if (!k_delayed_work_remaining_get(&rx->ack) &&
+    if (!k_delayed_work_remaining_get(&rx->ack_timer) &&
         !bt_mesh_lpn_established()) {
-        k_delayed_work_submit(&rx->ack, ack_timeout(rx));
+        k_delayed_work_submit(&rx->ack_timer, ack_timeout(rx));
     }
 
     /* Location in buffer can be calculated based on seg_o & rx->ctl */
@@ -1594,7 +1594,7 @@ found_rx:
 
     *pdu_type = BLE_MESH_FRIEND_PDU_COMPLETE;
 
-    k_delayed_work_cancel(&rx->ack);
+    k_delayed_work_cancel(&rx->ack_timer);
 
     send_ack(net_rx->sub, net_rx->ctx.recv_dst, net_rx->ctx.addr,
              net_rx->ctx.send_ttl, seq_auth, rx->block, rx->obo);
@@ -1754,11 +1754,11 @@ void bt_mesh_trans_init(void)
     bt_mesh_sar_init();
 
     for (i = 0; i < ARRAY_SIZE(seg_tx); i++) {
-        k_delayed_work_init(&seg_tx[i].retransmit, seg_retransmit);
+        k_delayed_work_init(&seg_tx[i].rtx_timer, seg_retransmit);
     }
 
     for (i = 0; i < ARRAY_SIZE(seg_rx); i++) {
-        k_delayed_work_init(&seg_rx[i].ack, seg_ack);
+        k_delayed_work_init(&seg_rx[i].ack_timer, seg_ack);
         seg_rx[i].buf.__buf = (seg_rx_buf_data +
                                (i * CONFIG_BLE_MESH_RX_SDU_MAX));
         seg_rx[i].buf.data = seg_rx[i].buf.__buf;
@@ -1778,11 +1778,11 @@ void bt_mesh_trans_deinit(bool erase)
     bt_mesh_rpl_reset(erase);
 
     for (i = 0; i < ARRAY_SIZE(seg_tx); i++) {
-        k_delayed_work_free(&seg_tx[i].retransmit);
+        k_delayed_work_free(&seg_tx[i].rtx_timer);
     }
 
     for (i = 0; i < ARRAY_SIZE(seg_rx); i++) {
-        k_delayed_work_free(&seg_rx[i].ack);
+        k_delayed_work_free(&seg_rx[i].ack_timer);
     }
 
     bt_mesh_mutex_free(&seg_tx_lock);

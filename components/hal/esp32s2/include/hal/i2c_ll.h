@@ -862,10 +862,12 @@ static inline void i2c_ll_slave_get_event(i2c_dev_t *hw, i2c_intr_event_t *event
 static inline void i2c_ll_master_init(i2c_dev_t *hw)
 {
     typeof(hw->ctr) ctrl_reg;
+    uint32_t ref_always_on = ctrl_reg.ref_always_on;
     ctrl_reg.val = 0;
     ctrl_reg.ms_mode = 1;
     ctrl_reg.sda_force_out = 1;
     ctrl_reg.scl_force_out = 1;
+    ctrl_reg.ref_always_on = ref_always_on;
     hw->ctr.val = ctrl_reg.val;
 }
 

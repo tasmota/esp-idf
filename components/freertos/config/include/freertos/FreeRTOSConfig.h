@@ -186,6 +186,10 @@
 #define configTIMER_TASK_STACK_DEPTH     CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH
 #define configTIMER_SERVICE_TASK_NAME    CONFIG_FREERTOS_TIMER_SERVICE_TASK_NAME
 
+/* ------------------------ List --------------------------- */
+
+#define configLIST_VOLATILE    volatile                     /* We define List elements as volatile to prevent the compiler from optimizing out essential code */
+
 /* -------------------- API Includes ----------------------- */
 
 #if CONFIG_FREERTOS_ENABLE_BACKWARD_COMPATIBILITY
@@ -246,6 +250,9 @@
         #endif
     #endif /* CONFIG_FREERTOS_SMP */
 #endif /* def __ASSEMBLER__ */
+
+/* -------------- List Data Integrity Checks --------------- */
+#define configUSE_LIST_DATA_INTEGRITY_CHECK_BYTES    CONFIG_FREERTOS_USE_LIST_DATA_INTEGRITY_CHECK_BYTES
 
 /* ----------------------------------------------- Amazon SMP FreeRTOS -------------------------------------------------
  * - All Amazon SMP FreeRTOS specific configurations

@@ -131,16 +131,14 @@ examples/peripherals/lcd/spi_lcd_touch:
     - if: SOC_GPSPI_SUPPORTED != 1
   depends_components:
     - esp_lcd
-  depends_filepatterns:
-    - components/driver/spi/**/*
+    - esp_driver_spi
 
 examples/peripherals/lcd/tjpgd:
   disable:
     - if: SOC_GPSPI_SUPPORTED != 1
   depends_components:
     - esp_lcd
-  depends_filepatterns:
-    - components/driver/spi/**/*
+    - esp_driver_spi
 
 examples/peripherals/ledc:
   disable:
@@ -153,10 +151,14 @@ examples/peripherals/ledc/ledc_gamma_curve_fade:
 examples/peripherals/mcpwm:
   disable:
     - if: SOC_MCPWM_SUPPORTED != 1
+  depends_components:
+    - esp_driver_mcpwm
 
 examples/peripherals/mcpwm/mcpwm_bdc_speed_control:
   disable:
     - if: SOC_MCPWM_SUPPORTED != 1
+  depends_components:
+    - esp_driver_mcpwm
   disable_test:
     - if: IDF_TARGET != "esp32s3"
       temporary: true
@@ -165,6 +167,8 @@ examples/peripherals/mcpwm/mcpwm_bdc_speed_control:
 examples/peripherals/mcpwm/mcpwm_bldc_hall_control:
   disable:
     - if: SOC_MCPWM_SUPPORTED != 1
+  depends_components:
+    - esp_driver_mcpwm
   disable_test:
     - if: IDF_TARGET != "esp32s3"
       temporary: true
@@ -173,6 +177,8 @@ examples/peripherals/mcpwm/mcpwm_bldc_hall_control:
 examples/peripherals/mcpwm/mcpwm_foc_svpwm_open_loop:
   disable:
     - if: SOC_MCPWM_SUPPORTED != 1
+  depends_components:
+    - esp_driver_mcpwm
   disable_test:
     - if: IDF_TARGET != "esp32s3"
       temporary: true
@@ -318,11 +324,11 @@ examples/peripherals/touch_sensor/touch_element:
 
 examples/peripherals/touch_sensor/touch_sensor_v1:
   disable:
-    - if: SOC_TOUCH_VERSION_1 != 1
+    - if: SOC_TOUCH_SENSOR_VERSION != 1
 
 examples/peripherals/touch_sensor/touch_sensor_v2:
   disable:
-    - if: SOC_TOUCH_VERSION_2 != 1
+    - if: SOC_TOUCH_SENSOR_VERSION != 2
 
 examples/peripherals/twai/twai_alert_and_recovery:
   disable:
@@ -354,4 +360,4 @@ examples/peripherals/uart/uart_echo_rs485:
 
 examples/peripherals/usb:
   disable:
-    - if: SOC_USB_PERIPH_NUM != 1
+    - if: SOC_USB_OTG_SUPPORTED != 1

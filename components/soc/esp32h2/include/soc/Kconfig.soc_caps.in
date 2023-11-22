@@ -281,7 +281,15 @@ config SOC_ADC_RTC_MAX_BITWIDTH
 
 config SOC_ADC_CALIBRATION_V1_SUPPORTED
     bool
-    default n
+    default y
+
+config SOC_ADC_SELF_HW_CALI_SUPPORTED
+    bool
+    default y
+
+config SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED
+    bool
+    default y
 
 config SOC_ADC_TEMPERATURE_SHARE_INTR
     bool
@@ -327,7 +335,7 @@ config SOC_CPU_WATCHPOINTS_NUM
     int
     default 4
 
-config SOC_CPU_WATCHPOINT_SIZE
+config SOC_CPU_WATCHPOINT_MAX_REGION_SIZE
     hex
     default 0x80000000
 
@@ -1000,6 +1008,10 @@ config SOC_EFUSE_DIS_ICACHE
     default y
 
 config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
+    bool
+    default y
+
+config SOC_EFUSE_ECDSA_USE_HARDWARE_K
     bool
     default y
 

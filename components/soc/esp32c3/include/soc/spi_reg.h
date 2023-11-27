@@ -14,11 +14,11 @@
 #ifndef _SOC_SPI_REG_H_
 #define _SOC_SPI_REG_H_
 
+#include "soc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include "soc.h"
 
 #define SPI_CMD_REG(i)          (REG_SPI_BASE(i) + 0x0)
 /* SPI_USR : R/W/SC ;bitpos:[24] ;default: 1'b0 ; */

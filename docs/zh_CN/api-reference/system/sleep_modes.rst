@@ -220,7 +220,7 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
     外部唤醒 (``ext1``)
     ^^^^^^^^^^^^^^^^^^^^^^
 
-    RTC 控制器中包含使用多个 RTC GPIO 触发唤醒的逻辑。从以下两个逻辑函数中任选其一，均可触发普通 ext1 唤醒：
+    RTC 控制器中包含使用多个 RTC GPIO 触发唤醒的逻辑。从以下两个逻辑函数中任选其一，均可触发 ext1 唤醒：
 
     .. only:: esp32
 
@@ -248,11 +248,13 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
         gpio_pullup_dis(gpio_num);
         gpio_pulldown_en(gpio_num);
 
-    可调用 :cpp:func:`esp_sleep_enable_ext1_wakeup` 函数来启用普通 ext1 唤醒。
+    可调用 :cpp:func:`esp_sleep_enable_ext1_wakeup_io` 函数可用于增加 ext1 唤醒 IO 并设置相应的唤醒电平。
+
+    可调用 :cpp:func:`esp_sleep_disable_ext1_wakeup_io` 函数可用于移除 ext1 唤醒 IO。
 
     .. only:: SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN
 
-        除了上述提到的普通 ext1 唤醒之外，当前的 RTC 控制器也包含更强大的逻辑，可以使用多个 RTC GPIO 并根据自定义的 RTC IO 唤醒电平位图来唤醒。这可以通过:cpp:func:`esp_sleep_enable_ext1_wakeup_with_level_mask` 函数来进行配置。
+        当前的 RTC 控制器也包含更强大的逻辑，允许配置的 IO 同时使用不同的唤醒电平。这可以通过:cpp:func:`esp_sleep_enable_ext1_wakeup_io` 函数来进行配置。
 
     .. warning::
 
@@ -437,7 +439,8 @@ UART 输出处理
     - :example:`wifi/power_save`：如何通过 Wi-Fi Modem-sleep 模式和自动 Light-sleep 模式保持 Wi-Fi 连接。
     :SOC_BT_SUPPORTED: - :example:`bluetooth/nimble/power_save`：如何通过 Bluetooth Modem-sleep 模式和自动 Light-sleep 模式保持 Bluetooth 连接。
     :SOC_ULP_SUPPORTED: - :example:`system/deep_sleep`：如何使用 Deep-sleep 唤醒触发器和 ULP 协处理器编程。
-    :not SOC_ULP_SUPPORTED: - :example:`system/deep_sleep`：如何通过定时器触发 Deep-sleep 唤醒。
+    :not SOC_ULP_SUPPORTED: - :example:`system/deep_sleep`：如何通过多种芯片支持的唤醒源，如 RTC 定时器, GPIO, EXT0, EXT1, 触摸传感器等，触发 Deep-sleep 唤醒。
+    - :example:`system/light_sleep`: 如何使用多种芯片支持的唤醒源，如定时器，GPIO，触摸传感器等，触发 Light-sleep 唤醒。
 
 
 API 参考

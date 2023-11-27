@@ -10,15 +10,10 @@ set(srcs)
 # Always included headers
 set(includes "include"
              "deprecated"
-             "analog_comparator/include"
-             "dac/include"
              "i2c/include"
-             "i2s/include"
              "ledc/include"
              "parlio/include"
              "rmt/include"
-             "sdio_slave/include"
-             "sdspi/include"
              "sigma_delta/include"
              "temperature_sensor/include"
              "touch_sensor/include"
@@ -38,22 +33,9 @@ if(CONFIG_SOC_ADC_DMA_SUPPORTED)
     list(APPEND srcs "deprecated/adc_dma_legacy.c")
 endif()
 
-# Analog comparator related source files
-if(CONFIG_SOC_ANA_CMPR_SUPPORTED)
-    list(APPEND srcs "analog_comparator/ana_cmpr.c")
-    if(CONFIG_SOC_ANA_CMPR_SUPPORT_ETM)
-        list(APPEND srcs "analog_comparator/ana_cmpr_etm.c")
-    endif()
-endif()
-
 # DAC related source files
 if(CONFIG_SOC_DAC_SUPPORTED)
-    list(APPEND srcs "dac/dac_oneshot.c"
-                     "dac/dac_cosine.c"
-                     "dac/dac_continuous.c"
-                     "dac/dac_common.c"
-                     "dac/${target}/dac_dma.c"
-                     "deprecated/dac_common_legacy.c"
+    list(APPEND srcs "deprecated/dac_common_legacy.c"
                      "deprecated/${target}/dac_legacy.c")
 endif()
 
@@ -82,16 +64,7 @@ endif()
 
 # I2S related source files
 if(CONFIG_SOC_I2S_SUPPORTED)
-    list(APPEND srcs "i2s/i2s_common.c"
-                     "i2s/i2s_platform.c"
-                     "i2s/i2s_std.c"
-                     "deprecated/i2s_legacy.c")
-    if(CONFIG_SOC_I2S_SUPPORTS_PDM)
-        list(APPEND srcs "i2s/i2s_pdm.c")
-    endif()
-    if(CONFIG_SOC_I2S_SUPPORTS_TDM)
-        list(APPEND srcs "i2s/i2s_tdm.c")
-    endif()
+    list(APPEND srcs "deprecated/i2s_legacy.c")
 endif()
 
 # LEDC related source files
@@ -121,24 +94,11 @@ if(CONFIG_SOC_RMT_SUPPORTED)
     list(APPEND ldfragments "rmt/linker.lf")
 endif()
 
-# SDIO Slave related source files
-if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)
-    list(APPEND srcs "sdio_slave/sdio_slave.c")
-endif()
-
 # Sigma-Delta Modulation related source files
 if(CONFIG_SOC_SDM_SUPPORTED)
     list(APPEND srcs "sigma_delta/sdm.c"
                      "deprecated/sigma_delta_legacy.c")
 endif()
-
-# SDSPI related source files
-if(CONFIG_SOC_GPSPI_SUPPORTED)
-    list(APPEND srcs "sdspi/sdspi_crc.c"
-                     "sdspi/sdspi_host.c"
-                     "sdspi/sdspi_transaction.c")
-endif()
-
 
 # Temperature Sensor related source files
 if(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
@@ -192,7 +152,8 @@ else()
                            # for backward compatibility, the driver component needs to
                            # have a public dependency on other "esp_driver_foo" components
                                     esp_driver_gpio esp_driver_pcnt esp_driver_gptimer esp_driver_spi esp_driver_mcpwm
-                                    esp_driver_sdmmc
+                                    esp_driver_ana_cmpr esp_driver_i2s esp_driver_sdmmc esp_driver_sdspi esp_driver_sdio
+                                    esp_driver_dac
                            LDFRAGMENTS ${ldfragments}
                           )
 endif()

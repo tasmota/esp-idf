@@ -8,7 +8,7 @@ Overview
 
 The SD/SDIO/MMC driver currently supports SD memory, SDIO cards, and eMMC chips. This is a protocol level driver built on top of SDMMC and SD SPI host drivers.
 
-SDMMC and SD SPI host drivers (:component_file:`esp_driver_sdmmc/include/driver/sdmmc_host.h` and :component_file:`driver/sdspi/include/driver/sdspi_host.h`) provide API functions for:
+SDMMC and SD SPI host drivers (:component_file:`esp_driver_sdmmc/include/driver/sdmmc_host.h` and :component_file:`esp_driver_sdspi/include/driver/sdspi_host.h`) provide API functions for:
 
 - Sending commands to slave devices
 - Sending and receiving data
@@ -45,8 +45,8 @@ Pin Configurations
 
     .. list::
 
-        - slot 0 pins are dedicated for UHS-I mode. This is not yet supported in the driver.
-        - slot 1 pins are routed via GPIO Matrix, and it's for non UHS-I usage. You will need to configure the pins in :cpp:type:`sdmmc_slot_config_t` to use the slot 1.
+        - Slot 0 pins are dedicated for UHS-I mode. This is not yet supported in the driver.
+        - Slot 1 pins are routed via GPIO Matrix, and it's for non UHS-I usage. You will need to configure the pins in :cpp:type:`sdmmc_slot_config_t` to use the slot 1.
 
 Application Example
 -------------------

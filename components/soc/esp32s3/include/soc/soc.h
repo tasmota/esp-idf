@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2010-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,14 +27,15 @@
 #define DR_REG_EXT_MEM_ENC                      0x600CC000
 
 
-#define REG_UHCI_BASE(i)         (DR_REG_UHCI0_BASE - (i) * 0x8000)
-#define REG_UART_BASE( i )  (DR_REG_UART_BASE + (i) * 0x10000 + ( (i) > 1 ? 0xe000 : 0 ) )
-#define REG_UART_AHB_BASE(i)  (0x60000000 + (i) * 0x10000 + ( (i) > 1 ? 0xe000 : 0 ) )
-#define UART_FIFO_AHB_REG(i)  (REG_UART_AHB_BASE(i) + 0x0)
-#define REG_I2S_BASE( i ) (DR_REG_I2S_BASE + (i) * 0x1E000)
-#define REG_TIMG_BASE(i)              (DR_REG_TIMERGROUP0_BASE + (i)*0x1000)
+#define REG_UHCI_BASE(i)        (DR_REG_UHCI0_BASE - (i) * 0x8000)
+#define REG_UART_BASE( i )      (DR_REG_UART_BASE + (i) * 0x10000 + ( (i) > 1 ? 0xe000 : 0 ) )
+#define REG_UART_AHB_BASE(i)    (0x60000000 + (i) * 0x10000 + ( (i) > 1 ? 0xe000 : 0 ) )
+#define UART_FIFO_AHB_REG(i)    (REG_UART_AHB_BASE(i) + 0x0)
+#define REG_I2S_BASE( i )       (DR_REG_I2S_BASE + (i) * 0x1E000)
+#define REG_TIMG_BASE(i)        (DR_REG_TIMERGROUP0_BASE + (i)*0x1000)
 #define REG_SPI_MEM_BASE(i)     (DR_REG_SPI0_BASE - (i) * 0x1000)
-#define REG_I2C_BASE(i)    (DR_REG_I2C_EXT_BASE + (i) * 0x14000 )
+#define REG_SPI_BASE(i)         (((i)==2) ? (DR_REG_SPI2_BASE) : (DR_REG_SPI0_BASE - ((i) * 0x1000)))  // GPSPI2 and GPSPI3
+#define REG_I2C_BASE(i)         (DR_REG_I2C_EXT_BASE + (i) * 0x14000 )
 
 //Convenient way to replace the register ops when ulp riscv projects
 //consume this file
@@ -155,6 +156,7 @@
 #define  CPU_CLK_FREQ_MHZ_BTLD                       (80)               // The cpu clock frequency (in MHz) to set at 2nd stage bootloader system clock configuration
 #define  CPU_CLK_FREQ                                APB_CLK_FREQ
 #define  APB_CLK_FREQ                                (80*1000000)
+#define  MODEM_REQUIRED_MIN_APB_CLK_FREQ             (80*1000000)
 #define  REF_CLK_FREQ                                (1000000)
 #define  XTAL_CLK_FREQ                               (40*1000000)
 #define  UART_CLK_FREQ                               APB_CLK_FREQ
@@ -186,7 +188,7 @@
 #define SOC_EXTRAM_DATA_LOW 0x3C000000
 #define SOC_EXTRAM_DATA_HIGH 0x3E000000
 #define SOC_IROM_MASK_LOW  0x40000000
-#define SOC_IROM_MASK_HIGH 0x4001A100
+#define SOC_IROM_MASK_HIGH 0x40060000
 
 #define SOC_EXTRAM_DATA_SIZE (SOC_EXTRAM_DATA_HIGH - SOC_EXTRAM_DATA_LOW)
 #define SOC_MAX_CONTIGUOUS_RAM_SIZE (SOC_EXTRAM_DATA_HIGH - SOC_EXTRAM_DATA_LOW) ///< Largest span of contiguous memory (DRAM or IRAM) in the address space

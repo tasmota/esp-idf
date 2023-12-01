@@ -51,6 +51,8 @@ components/driver/test_apps/legacy_pcnt_driver:
 components/driver/test_apps/legacy_rmt_driver:
   disable:
     - if: SOC_RMT_SUPPORTED != 1
+  depends_filepatterns:
+    - components/driver/deprecated/**/*rmt*
 
 components/driver/test_apps/legacy_rtc_temp_driver:
   disable:
@@ -78,10 +80,6 @@ components/driver/test_apps/parlio:
       temporary: true
       reason: lack of runner
 
-components/driver/test_apps/rmt:
-  disable:
-    - if: SOC_RMT_SUPPORTED != 1
-
 components/driver/test_apps/rs485:
   disable:
     - if: SOC_UART_SUPPORTED != 1
@@ -97,10 +95,6 @@ components/driver/test_apps/sigma_delta:
     - components/driver/sigma_delta/**/*
   depends_components:
     - esp_driver_gpio
-
-components/driver/test_apps/temperature_sensor:
-  disable:
-    - if: SOC_TEMP_SENSOR_SUPPORTED != 1
 
 components/driver/test_apps/touch_sensor_v1:
   disable:

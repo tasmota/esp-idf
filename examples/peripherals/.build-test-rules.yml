@@ -290,6 +290,8 @@ examples/peripherals/secure_element/atecc608_ecdsa:
 examples/peripherals/sigma_delta:
   disable:
     - if: SOC_SDM_SUPPORTED != 1
+  depends_components:
+    - esp_driver_sdm
 
 examples/peripherals/spi_master/hd_eeprom:
   disable:
@@ -397,3 +399,11 @@ examples/peripherals/uart/uart_echo_rs485:
 examples/peripherals/usb:
   disable:
     - if: SOC_USB_OTG_SUPPORTED != 1
+
+examples/peripherals/usb_serial_jtag/usb_serial_jtag_echo:
+  disable:
+    - if: SOC_USB_SERIAL_JTAG_SUPPORTED != 1
+  disable_test:
+    - if: IDF_TARGET not in ["esp32c6"]
+      temporary: true
+      reason: lack of runners. Hardware is similar, test on one target is enough currently.

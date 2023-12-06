@@ -215,6 +215,10 @@ else() # Regular app build
             rom_linker_script("eco3")
         endif()
 
+        if(CONFIG_ESP32C3_REV_MIN_FULL GREATER_EQUAL 101)
+            rom_linker_script("eco7")
+        endif()
+
     elseif(target STREQUAL "esp32c2")
         rom_linker_script("newlib")
         rom_linker_script("version")
@@ -288,5 +292,5 @@ else() # Regular app build
 endif()
 
 if(target STREQUAL "esp32s2")
-    target_sources(${COMPONENT_LIB} PRIVATE "esp32s2/usb_descriptors.c")
+    target_sources(${COMPONENT_LIB} PRIVATE "esp32s2/usb_patches.c")
 endif()

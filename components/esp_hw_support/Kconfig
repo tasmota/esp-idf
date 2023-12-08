@@ -50,6 +50,13 @@ menu "Hardware Settings"
                 If you have an invalid MAC CRC (ESP_ERR_INVALID_CRC) problem
                 and you still want to use this chip, you can enable this option to bypass such an error.
                 This applies to both MAC_FACTORY and CUSTOM_MAC efuses.
+
+        config ESP_MAC_USE_CUSTOM_MAC_AS_BASE_MAC
+            bool "Enable using custom mac as base mac"
+            default n
+            help
+                When this configuration is enabled, the user can invoke `esp_read_mac` to obtain the desired type of
+                MAC using a custom MAC as the base MAC.
     endmenu
 
     menu "Sleep Config"
@@ -340,6 +347,16 @@ menu "Hardware Settings"
             This option is only used for new chip bringup, when
             clock support isn't done yet. So with this option,
             we use xtal on FPGA as the clock source.
+
+    # Invisible bringup bypass options for esp_hw_support component
+    config ESP_BRINGUP_BYPASS_RANDOM_SETTING
+        bool
+        default y if !SOC_RNG_SUPPORTED
+        default n
+        help
+            This option is only used for new chip bringup, when
+            RNG isn't done yet. So with this option, we use 0x5A
+            to fill the random buffers
 
     config ESP_SPI_BUS_LOCK_ISR_FUNCS_IN_IRAM
         bool

@@ -82,6 +82,7 @@
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1
 // #define SOC_TOUCH_SENSOR_SUPPORTED      1  //TODO: IDF-7477
+// #define SOC_RNG_SUPPORTED               1  //TODO: IDF-6522
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -151,6 +152,7 @@
 #define SOC_CPU_HAS_FPU                 1
 #define SOC_CPU_HAS_FPU_EXT_ILL_BUG     1       // EXT_ILL CSR doesn't support FLW/FSW
 #define SOC_CPU_COPROC_NUM              2
+#define SOC_HP_CPU_HAS_MULTIPLE_CORES   1   // Convenience boolean macro used to determine if a target has multiple cores.
 
 #define SOC_CPU_BREAKPOINTS_NUM             3
 #define SOC_CPU_WATCHPOINTS_NUM             3
@@ -491,11 +493,12 @@
 #define SOC_TWAI_SUPPORTS_RX_STATUS     1
 
 /*-------------------------- eFuse CAPS----------------------------*/
-#define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 1
 #define SOC_EFUSE_DIS_PAD_JTAG 1
 #define SOC_EFUSE_DIS_USB_JTAG 1
 #define SOC_EFUSE_DIS_DIRECT_BOOT 1
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
+/* Capability to disable the MSPI access in download mode */
+#define SOC_EFUSE_DIS_DOWNLOAD_MSPI 1
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
 #define SOC_SECURE_BOOT_V2_RSA              1
@@ -507,7 +510,9 @@
 /*-------------------------- Flash Encryption CAPS----------------------------*/
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS 1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_256    1
 
 /*-------------------------- MEMPROT CAPS ------------------------------------*/
 

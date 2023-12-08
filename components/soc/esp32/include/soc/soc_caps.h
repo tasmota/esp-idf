@@ -99,6 +99,7 @@
 #define SOC_MPU_SUPPORTED           1
 #define SOC_WDT_SUPPORTED           1
 #define SOC_SPI_FLASH_SUPPORTED     1
+#define SOC_RNG_SUPPORTED           1
 
 #if SOC_CAPS_ECO_VER < 200
 #define SOC_DPORT_WORKAROUND                   1
@@ -152,6 +153,7 @@
 #define SOC_CPU_CORES_NUM               2
 #define SOC_CPU_INTR_NUM                32
 #define SOC_CPU_HAS_FPU                 1
+#define SOC_HP_CPU_HAS_MULTIPLE_CORES   1   // Convenience boolean macro used to determine if a target has multiple cores.
 
 #define SOC_CPU_BREAKPOINTS_NUM             2
 #define SOC_CPU_WATCHPOINTS_NUM             2

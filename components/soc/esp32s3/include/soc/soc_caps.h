@@ -74,6 +74,7 @@
 #define SOC_MPU_SUPPORTED               1
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1
+#define SOC_RNG_SUPPORTED               1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -133,6 +134,7 @@
 #define SOC_CPU_CORES_NUM               2
 #define SOC_CPU_INTR_NUM                32
 #define SOC_CPU_HAS_FPU                 1
+#define SOC_HP_CPU_HAS_MULTIPLE_CORES   1   // Convenience boolean macro used to determine if a target has multiple cores.
 
 #define SOC_CPU_BREAKPOINTS_NUM             2
 #define SOC_CPU_WATCHPOINTS_NUM             2

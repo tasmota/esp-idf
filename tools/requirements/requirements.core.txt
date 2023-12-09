@@ -12,6 +12,7 @@ pyelftools
 idf-component-manager
 esp-coredump
 esptool
+intelhex
 esp-idf-kconfig
 esp-idf-monitor
 esp-idf-size

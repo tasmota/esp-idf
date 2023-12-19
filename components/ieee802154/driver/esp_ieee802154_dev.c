@@ -31,7 +31,6 @@
 #include "esp_private/esp_clk.h"
 #include "esp_private/sleep_retention.h"
 #include "esp_private/sleep_modem.h"
-static bool s_rf_closed = false;
 #if SOC_PM_RETENTION_HAS_CLOCK_BUG
 #define IEEE802154_LINK_OWNER  ENTRY(3)
 #else
@@ -39,6 +38,7 @@ static bool s_rf_closed = false;
 #endif // SOC_PM_RETENTION_HAS_CLOCK_BUG
 #endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
 
+static bool s_rf_closed = true;
 #define CCA_DETECTION_TIME 8
 
 extern void bt_bb_set_zb_tx_on_delay(uint16_t time);
@@ -51,9 +51,9 @@ static uint8_t s_rx_index = 0;
 static uint8_t s_enh_ack_frame[128];
 static uint8_t s_recent_rx_frame_info_index;
 static portMUX_TYPE s_ieee802154_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static intr_handle_t s_ieee802154_isr_handle = NULL;
 
 static esp_err_t ieee802154_sleep_init(void);
-static void ieee802154_rf_enable(void);
 
 static IRAM_ATTR void event_end_process(void)
 {
@@ -455,7 +455,11 @@ static IRAM_ATTR void isr_handle_tx_abort(void)
         next_operation();
         break;
     case IEEE802154_TX_ABORT_BY_TX_COEX_BREAK:
+#if CONFIG_ESP_COEX_SW_COEXIST_ENABLE || CONFIG_EXTERNAL_COEX_ENABLE
+        esp_coex_ieee802154_coex_break_notify();
+#endif
         IEEE802154_ASSERT(s_ieee802154_state == IEEE802154_STATE_TX || s_ieee802154_state == IEEE802154_STATE_TX_CCA);
+        IEEE802154_TX_BREAK_COEX_NUMS_UPDATE();
         esp_ieee802154_transmit_failed(s_tx_frame, ESP_IEEE802154_TX_ERR_COEXIST);
         next_operation();
         break;
@@ -628,6 +632,7 @@ esp_err_t ieee802154_mac_init(void)
     esp_err_t ret = ESP_OK;
     modem_clock_module_mac_reset(PERIPH_IEEE802154_MODULE); // reset ieee802154 MAC
     ieee802154_pib_init();
+    IEEE802154_TXRX_STATISTIC_CLEAR();
 
     ieee802154_ll_enable_events(IEEE802154_EVENT_MASK);
 #if !CONFIG_IEEE802154_TEST
@@ -655,11 +660,21 @@ esp_err_t ieee802154_mac_init(void)
     ieee802154_set_state(IEEE802154_STATE_IDLE);
 
     // TODO: Add flags for IEEE802154 ISR allocating. TZ-102
-    ret = esp_intr_alloc(ieee802154_periph.irq_id, 0, ieee802154_isr, NULL, NULL);
+    ret = esp_intr_alloc(ieee802154_periph.irq_id, 0, ieee802154_isr, NULL, &s_ieee802154_isr_handle);
     ESP_RETURN_ON_FALSE(ret == ESP_OK, ESP_FAIL, IEEE802154_TAG, "IEEE802154 MAC init failed");
 
     ESP_RETURN_ON_FALSE(ieee802154_sleep_init() == ESP_OK, ESP_FAIL, IEEE802154_TAG, "IEEE802154 MAC sleep init failed");
 
+    return ret;
+}
+
+esp_err_t ieee802154_mac_deinit(void)
+{
+    esp_err_t ret = ESP_OK;
+    if (s_ieee802154_isr_handle) {
+        ret = esp_intr_free(s_ieee802154_isr_handle);
+        s_ieee802154_isr_handle = NULL;
+    }
     return ret;
 }
 
@@ -672,6 +687,7 @@ IEEE802154_STATIC void start_ed(uint32_t duration)
 
 IEEE802154_STATIC void tx_init(const uint8_t *frame)
 {
+    IEEE802154_TX_NUMS_UPDATE();
     s_tx_frame = (uint8_t *)frame;
     stop_current_operation();
     ieee802154_pib_update();
@@ -687,7 +703,7 @@ IEEE802154_STATIC void tx_init(const uint8_t *frame)
 
 esp_err_t ieee802154_transmit(const uint8_t *frame, bool cca)
 {
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
     ieee802154_enter_critical();
     tx_init(frame);
 
@@ -715,7 +731,7 @@ esp_err_t ieee802154_transmit_at(const uint8_t *frame, bool cca, uint32_t time)
 {
     uint32_t tx_target_time;
     uint32_t current_time;
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
     tx_init(frame);
     IEEE802154_SET_TXRX_PTI(IEEE802154_SCENE_TX_AT);
     if (cca) {
@@ -757,7 +773,7 @@ esp_err_t ieee802154_receive(void)
         // already in rx state, don't abort current rx operation
         return ESP_OK;
     }
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
 
     ieee802154_enter_critical();
     rx_init();
@@ -770,7 +786,7 @@ esp_err_t ieee802154_receive_at(uint32_t time)
 {
     uint32_t rx_target_time = time - IEEE802154_RX_RAMPUP_TIME_US;
     uint32_t current_time;
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
     rx_init();
     IEEE802154_SET_TXRX_PTI(IEEE802154_SCENE_RX_AT);
     set_next_rx_buffer();
@@ -804,24 +820,20 @@ static esp_err_t ieee802154_sleep_init(void)
     return err;
 }
 
-IRAM_ATTR static void ieee802154_rf_disable(void)
+IRAM_ATTR void ieee802154_rf_disable(void)
 {
-#if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
     if (s_rf_closed == false) {
         esp_phy_disable(PHY_MODEM_IEEE802154);
         s_rf_closed = true;
     }
-#endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
 }
 
-IRAM_ATTR static void ieee802154_rf_enable(void)
+IRAM_ATTR void ieee802154_rf_enable(void)
 {
-#if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
     if (s_rf_closed) {
         esp_phy_enable(PHY_MODEM_IEEE802154);
         s_rf_closed = false;
     }
-#endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
 }
 
 esp_err_t ieee802154_sleep(void)
@@ -831,14 +843,14 @@ esp_err_t ieee802154_sleep(void)
         stop_current_operation();
         ieee802154_set_state(IEEE802154_STATE_SLEEP);
         ieee802154_exit_critical();
-        ieee802154_rf_disable(); // colse rf
+        IEEE802154_RF_DISABLE();
     }
     return ESP_OK;
 }
 
 esp_err_t ieee802154_energy_detect(uint32_t duration)
 {
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
     ieee802154_enter_critical();
 
     stop_current_operation();
@@ -854,7 +866,7 @@ esp_err_t ieee802154_energy_detect(uint32_t duration)
 
 esp_err_t ieee802154_cca(void)
 {
-    ieee802154_rf_enable();
+    IEEE802154_RF_ENABLE();
     ieee802154_enter_critical();
 
     stop_current_operation();

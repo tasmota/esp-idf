@@ -24,6 +24,7 @@
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_AXI_GDMA_SUPPORTED          1
+#define SOC_DW_GDMA_SUPPORTED           1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_PCNT_SUPPORTED              1
 // #define SOC_LCDCAM_SUPPORTED            1 // TODO: IDF-7465
@@ -47,7 +48,7 @@
 #define SOC_SDM_SUPPORTED               1
 #define SOC_GPSPI_SUPPORTED             1
 #define SOC_LEDC_SUPPORTED              1
-#define SOC_I2C_SUPPORTED               1  //TODO: IDF-6507, TODO: IDF-7491
+#define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1
 // #define SOC_AES_SUPPORTED               1  //TODO: IDF-6519
 #define SOC_MPI_SUPPORTED               1
@@ -78,6 +79,7 @@
 #define SOC_SPI_FLASH_SUPPORTED         1
 // #define SOC_TOUCH_SENSOR_SUPPORTED      1  //TODO: IDF-7477
 // #define SOC_RNG_SUPPORTED               1  //TODO: IDF-6522
+#define SOC_MULTI_USAGE_LDO_SUPPORTED   1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -173,7 +175,7 @@
 #define SOC_GDMA_NUM_GROUPS_MAX         2
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
 #define SOC_AXI_GDMA_SUPPORT_PSRAM      1
-// #define SOC_GDMA_SUPPORT_ETM            1
+#define SOC_GDMA_SUPPORT_ETM            1
 
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups

@@ -41,6 +41,14 @@ menu "IEEE 802.15.4"
                 configure the CCA mode to Carrier sense AND energy above threshold
     endchoice
 
+    config IEEE802154_RECEIVE_DONE_HANDLER
+        bool "Enable the receive done handler feature"
+        default n
+        help
+             configure the receive done handler feature, when enabled, the user must call the
+             function `esp_ieee802154_receive_handle_done` to inform the 802.15.4 driver that
+             the received frame has been processed, so the frame space could be freed.
+
     config IEEE802154_CCA_MODE
         depends on IEEE802154_ENABLED
         int
@@ -166,4 +174,11 @@ menu "IEEE 802.15.4"
         default 10
         help
             set the record abort table size
+
+    config IEEE802154_TXRX_STATISTIC
+        bool "Enable record tx/rx packets information for debugging"
+        depends on IEEE802154_DEBUG
+        default n
+        help
+            Enabling this option to record the tx and rx
 endmenu  # IEEE 802.15.4

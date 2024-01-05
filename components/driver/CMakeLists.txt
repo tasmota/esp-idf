@@ -10,8 +10,6 @@ set(srcs)
 # Always included headers
 set(includes "deprecated"
              "i2c/include"
-             "ledc/include"
-             "parlio/include"
              "touch_sensor/include"
              "twai/include"
              "usb_serial_jtag/include")
@@ -34,11 +32,6 @@ if(CONFIG_SOC_DAC_SUPPORTED)
                      "deprecated/${target}/dac_legacy.c")
 endif()
 
-# Parallel IO related source files
-if(CONFIG_SOC_PARLIO_SUPPORTED)
-    list(APPEND srcs "parlio/parlio_common.c" "parlio/parlio_tx.c")
-endif()
-
 # GPTimer legacy driver
 if(CONFIG_SOC_GPTIMER_SUPPORTED)
     list(APPEND srcs "deprecated/timer_legacy.c")
@@ -52,13 +45,6 @@ endif()
 # I2S related source files
 if(CONFIG_SOC_I2S_SUPPORTED)
     list(APPEND srcs "deprecated/i2s_legacy.c")
-endif()
-
-# LEDC related source files
-if(CONFIG_SOC_LEDC_SUPPORTED)
-    list(APPEND srcs "ledc/ledc.c")
-
-    list(APPEND ldfragments "ledc/linker.lf")
 endif()
 
 # MCPWM legacy driver
@@ -127,7 +113,7 @@ else()
                                     esp_driver_gpio esp_driver_pcnt esp_driver_gptimer esp_driver_spi esp_driver_mcpwm
                                     esp_driver_ana_cmpr esp_driver_i2s esp_driver_sdmmc esp_driver_sdspi esp_driver_sdio
                                     esp_driver_dac esp_driver_rmt esp_driver_tsens esp_driver_sdm esp_driver_i2c
-                                    esp_driver_uart
+                                    esp_driver_uart esp_driver_ledc esp_driver_parlio
                            LDFRAGMENTS ${ldfragments}
                           )
 endif()

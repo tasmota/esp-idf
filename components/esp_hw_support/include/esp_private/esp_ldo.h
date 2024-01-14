@@ -9,15 +9,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "hal/ldo_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define ESP_LDO_ID_1    0    ///< See datasheet `VFB/VO1`
-#define ESP_LDO_ID_2    1    ///< See datasheet `VFB/VO2`
-#define ESP_LDO_ID_3    2    ///< See datasheet `VFB/VO3`
-#define ESP_LDO_ID_4    3    ///< See datasheet `VFB/VO4`
 
 /**
  * @brief Type of LDO unit handle
@@ -35,7 +31,7 @@ typedef struct {
  * @brief LDO driver initial configurations
  */
 typedef struct {
-    int unit_id;               ///< LDO unit
+    int unit_id;                    ///< LDO ID, this is aligned with datasheet, e.g. you should set this to 1, if using LDO ID 1
     esp_ldo_unit_cfg_t cfg;         ///< LDO unit configuration
     struct {
         uint32_t enable_unit: 1;    ///< Enable the LDO unit after it's initialised

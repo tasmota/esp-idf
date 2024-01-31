@@ -12,9 +12,6 @@ set -euo pipefail
 gen_configs() {
     # CONFIG_COMPILER_OPTIMIZATION_NONE with flag -O0
     echo "CONFIG_COMPILER_OPTIMIZATION_NONE=y" > esp-idf-template/sdkconfig.ci.O0
-    echo "CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_NONE=y" >> esp-idf-template/sdkconfig.ci.O0
-    # -O0 makes the bootloader too large to fit in the default space, otherwise(!)
-    echo "CONFIG_PARTITION_TABLE_OFFSET=0x10000" >> esp-idf-template/sdkconfig.ci.O0
 
     # CONFIG_COMPILER_OPTIMIZATION_SIZE with flag -Os
     echo "CONFIG_COMPILER_OPTIMIZATION_SIZE=y" > esp-idf-template/sdkconfig.ci.Os
@@ -63,6 +60,7 @@ build_stage2() {
         --build-dir ${BUILD_DIR} \
         --build-log ${BUILD_LOG_CMAKE} \
         --size-file size.json \
+        --keep-going \
         --collect-size-info size_info.txt \
         --default-build-targets esp32 esp32s2 esp32s3 esp32c2 esp32c3 esp32c6 esp32h2 esp32p4
 }

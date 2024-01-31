@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -25,15 +25,17 @@
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_AXI_GDMA_SUPPORTED          1
 #define SOC_DW_GDMA_SUPPORTED           1
+#define SOC_DMA2D_SUPPORTED             1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_PCNT_SUPPORTED              1
 // #define SOC_LCDCAM_SUPPORTED            1 // TODO: IDF-7465
-// #define SOC_MIPI_DSI_SUPPORTED          1 // TODO: IDF-7085
+#define SOC_MIPI_DSI_SUPPORTED          1
 #define SOC_MCPWM_SUPPORTED             1
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_ETM_SUPPORTED               1
 // #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
+#define SOC_EMAC_SUPPORTED              1
 // disable usb serial jtag for esp32p4, current image does not support
 // #define SOC_USB_SERIAL_JTAG_SUPPORTED   1  //TODO: IDF-7496
 #define SOC_TEMP_SENSOR_SUPPORTED       1
@@ -59,7 +61,7 @@
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_ECDSA_SUPPORTED             1
-// #define SOC_KEY_MANAGER_SUPPORTED       1  //TODO: IDF-7925
+#define SOC_KEY_MANAGER_SUPPORTED       1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
 // #define SOC_BOD_SUPPORTED               1  //TODO: IDF-7519
@@ -81,6 +83,7 @@
 // #define SOC_TOUCH_SENSOR_SUPPORTED      1  //TODO: IDF-7477
 // #define SOC_RNG_SUPPORTED               1  //TODO: IDF-6522
 #define SOC_MULTI_USAGE_LDO_SUPPORTED   1
+// #define SOC_PPA_SUPPORTED               1  //TODO: IDF-6878
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -178,6 +181,12 @@
 #define SOC_AXI_GDMA_SUPPORT_PSRAM      1
 #define SOC_GDMA_SUPPORT_ETM            1
 
+/*-------------------------- 2D-DMA CAPS -------------------------------------*/
+#define SOC_DMA2D_GROUPS                            (1U) // Number of 2D-DMA groups
+#define SOC_DMA2D_TX_CHANNELS_PER_GROUP             (3)  // Number of 2D-DMA TX (OUT) channels in each group
+#define SOC_DMA2D_RX_CHANNELS_PER_GROUP             (2)  // Number of 2D-DMA RX (IN) channels in each group
+// #define SOC_DMA2D_SUPPORT_ETM              (1)  // Support ETM submodule
+
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
 #define SOC_ETM_CHANNELS_PER_GROUP      50  // Number of ETM channels in the group
@@ -244,7 +253,7 @@
 #define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
 #define SOC_I2C_SUPPORT_SLAVE       (1)
 
-// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
+#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
 #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
 
 #define SOC_I2C_SUPPORT_XTAL        (1)
@@ -275,6 +284,7 @@
 #define SOC_ISP_AF_CTLR_NUMS            1U
 #define SOC_ISP_AF_ENV_DETECTOR_NUMS    1U
 #define SOC_ISP_AF_WINDOW_NUMS          3
+#define SOC_ISP_SHARE_CSI_BRG           1
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -424,10 +434,8 @@
 #define SOC_SPI_SUPPORT_CD_SIG              1
 #define SOC_SPI_SUPPORT_OCT                 1
 #define SOC_SPI_SUPPORT_CLK_XTAL            1
-// #define SOC_SPI_SUPPORT_CLK_RC_FAST         1    //bellow clks are waiting for clock tree
-// #define SOC_SPI_SUPPORT_CLK_SPLL_F480M      1    //super pll
-// #define SOC_SPI_SUPPORT_CLK_SDIO            1    //sdio pll
-// #define SOC_SPI_SUPPORT_CLK_APLL            1    //audio pll
+#define SOC_SPI_SUPPORT_CLK_RC_FAST         1
+#define SOC_SPI_SUPPORT_CLK_SPLL            1
 
 // Peripheral supports DIO, DOUT, QIO, or QOUT
 // host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
@@ -444,6 +452,8 @@
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
+#define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
+#define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
@@ -577,7 +587,10 @@
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_LP_PLL_SUPPORT                (1)
 #define SOC_TEMPERATURE_SENSOR_INTR_SUPPORT                  (1)
-#define SOC_TEMPERATURE_SENSOR_IS_INDEPENDENT_FROM_ADC       (1)  /*!< Temperature sensor is a separate module, not share regs with ADC */
+#define SOC_TSENS_IS_INDEPENDENT_FROM_ADC                    (1)  /*!< Temperature sensor is a separate module, not share regs with ADC */
 
 /*-------------------------- Memory CAPS --------------------------*/
 #define SOC_MEM_TCM_SUPPORTED    (1)
+
+/*--------------------------- EMAC --------------------------------*/
+#define SOC_EMAC_USE_IO_MUX                        (1) /*!< GPIO matrix is used to select GPIO pads */

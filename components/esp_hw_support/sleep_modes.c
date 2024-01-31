@@ -439,10 +439,10 @@ static void IRAM_ATTR flush_uarts(void)
 {
     for (int i = 0; i < SOC_UART_HP_NUM; ++i) {
 #ifdef CONFIG_IDF_TARGET_ESP32
-        esp_rom_uart_tx_wait_idle(i);
+        esp_rom_output_tx_wait_idle(i);
 #else
         if (uart_ll_is_enabled(i)) {
-            esp_rom_uart_tx_wait_idle(i);
+            esp_rom_output_tx_wait_idle(i);
         }
 #endif
     }
@@ -517,7 +517,7 @@ FORCE_INLINE_ATTR bool light_sleep_uart_prepare(uint32_t pd_flags, int64_t sleep
         } else {
             /* Only flush the uart_num configured to console, the transmission integrity of
                other uarts is guaranteed by the UART driver */
-            esp_rom_uart_tx_wait_idle(CONFIG_ESP_CONSOLE_UART_NUM);
+            esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
         }
     } else {
         suspend_uarts();
@@ -864,6 +864,12 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
             resume_cache();
         }
 
+#if CONFIG_ESP_SLEEP_SYSTIMER_STALL_WORKAROUND
+            if (!(pd_flags & RTC_SLEEP_PD_XTAL)) {
+                rtc_sleep_systimer_enable(true);
+            }
+#endif
+    }
 #if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
     if (pd_flags & RTC_SLEEP_PD_VDDSDIO) {
         /* Cache Suspend 2: If previous sleep powerdowned the flash, suspend cache here so that the
@@ -871,14 +877,6 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
         suspend_cache();
     }
 #endif
-
-#if CONFIG_ESP_SLEEP_SYSTIMER_STALL_WORKAROUND
-            if (!(pd_flags & RTC_SLEEP_PD_XTAL)) {
-                rtc_sleep_systimer_enable(true);
-            }
-#endif
-    }
-
     // Restore CPU frequency
 #if SOC_PM_SUPPORT_PMU_MODEM_STATE
     if (pmu_sleep_pll_already_enabled()) {

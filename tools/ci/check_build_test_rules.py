@@ -1,8 +1,6 @@
 #!/usr/bin/env python
-
-# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
 import argparse
 import inspect
 import os
@@ -10,9 +8,13 @@ import re
 import sys
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import yaml
+from idf_ci_utils import get_all_manifest_files
 from idf_ci_utils import IDF_PATH
 
 YES = u'\u2713'
@@ -94,7 +96,7 @@ def check_readme(
         if not _readme_path:
             return None, SUPPORTED_TARGETS
 
-        with open(_readme_path) as _fr:
+        with open(_readme_path, encoding='utf8') as _fr:
             _readme_str = _fr.read()
 
         support_string = SUPPORTED_TARGETS_TABLE_REGEX.findall(_readme_str)
@@ -148,9 +150,7 @@ def check_readme(
             'all',
             recursive=True,
             exclude_list=exclude_dirs or [],
-            manifest_files=[
-                str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')
-            ],
+            manifest_files=get_all_manifest_files(),
             default_build_targets=SUPPORTED_TARGETS + extra_default_build_targets,
         )
     )
@@ -304,9 +304,7 @@ def check_test_scripts(
             'all',
             recursive=True,
             exclude_list=exclude_dirs or [],
-            manifest_files=[
-                str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')
-            ],
+            manifest_files=get_all_manifest_files(),
             default_build_targets=SUPPORTED_TARGETS + extra_default_build_targets,
         )
     )
@@ -382,7 +380,7 @@ def sort_yaml(files: List[str]) -> None:
 def check_exist() -> None:
     exit_code = 0
 
-    config_files = [str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')]
+    config_files = get_all_manifest_files()
     for file in config_files:
         if 'managed_components' in Path(file).parts:
             continue

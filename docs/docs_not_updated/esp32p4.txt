@@ -1,4 +1,3 @@
-api-guides/core_dump_internals.rst
 api-guides/performance/speed.rst
 api-guides/performance/size.rst
 api-guides/performance/ram-usage.rst
@@ -37,7 +36,6 @@ api-guides/usb-otg-console.rst
 api-guides/wireshark-user-guide.rst
 api-guides/esp-wifi-mesh.rst
 api-guides/SYSVIEW_FreeRTOS.txt
-api-guides/core_dump.rst
 api-guides/dfu.rst
 api-guides/current-consumption-measurement-modules.rst
 api-guides/wifi-security.rst
@@ -111,7 +109,6 @@ api-reference/system/misc_system_api.rst
 api-reference/system/inc/power_management_esp32p4.rst
 api-reference/system/esp_https_ota.rst
 api-reference/system/ulp-risc-v.rst
-api-reference/system/intr_alloc.rst
 api-reference/index.rst
 api-reference/protocols/icmp_echo.rst
 api-reference/protocols/esp_serial_slave_link.rst

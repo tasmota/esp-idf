@@ -68,13 +68,19 @@
 #elif CONFIG_IDF_TARGET_ESP32P4
 #include "esp32p4/rtc.h"
 #include "soc/hp_sys_clkrst_reg.h"
-#include "soc/interrupt_core0_reg.h"
-#include "soc/interrupt_core1_reg.h"
-#include "soc/keymng_reg.h"
+#endif
+
+#if SOC_KEY_MANAGER_SUPPORTED
+#include "hal/key_mgr_hal.h"
 #endif
 
 #include "esp_private/rtc_clk.h"
 #include "esp_private/esp_ldo_psram.h"
+
+#if SOC_INT_CLIC_SUPPORTED
+#include "hal/interrupt_clic_ll.h"
+#endif // SOC_INT_CLIC_SUPPORTED
+
 #include "esp_private/esp_mmu_map_private.h"
 #if CONFIG_SPIRAM
 #include "esp_psram.h"
@@ -159,21 +165,17 @@ static void core_intr_matrix_clear(void)
     uint32_t core_id = esp_cpu_get_core_id();
 
     for (int i = 0; i < ETS_MAX_INTR_SOURCE; i++) {
-#if CONFIG_IDF_TARGET_ESP32P4
-        if (core_id == 0) {
-            REG_WRITE(INTERRUPT_CORE0_LP_RTC_INT_MAP_REG + 4 * i, ETS_INVALID_INUM);
-        } else {
-            REG_WRITE(INTERRUPT_CORE1_LP_RTC_INT_MAP_REG + 4 * i, ETS_INVALID_INUM);
-        }
+#if SOC_INT_CLIC_SUPPORTED
+        interrupt_clic_ll_route(core_id, i, ETS_INVALID_INUM);
 #else
         esp_rom_route_intr_matrix(core_id, i, ETS_INVALID_INUM);
-#endif  // CONFIG_IDF_TARGET_ESP32P4
+#endif  // SOC_INT_CLIC_SUPPORTED
     }
 
 #if SOC_INT_CLIC_SUPPORTED
     for (int i = 0; i < 32; i++) {
         /* Set all the CPU interrupt lines to vectored by default, as it is on other RISC-V targets */
-        esprv_intc_int_set_vectored(i, true);
+        esprv_int_set_vectored(i, true);
     }
 #endif // SOC_INT_CLIC_SUPPORTED
 
@@ -220,7 +222,7 @@ void IRAM_ATTR call_start_cpu1(void)
     esp_rom_install_channel_putc(2, NULL);
 #else // CONFIG_ESP_CONSOLE_NONE
     esp_rom_install_uart_printf();
-    esp_rom_uart_set_as_console(CONFIG_ESP_CONSOLE_UART_NUM);
+    esp_rom_output_set_as_console(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -306,11 +308,14 @@ static void start_other_core(void)
     if(REG_GET_BIT(HP_SYS_CLKRST_HP_RST_EN0_REG, HP_SYS_CLKRST_REG_RST_EN_CORE1_GLOBAL)){
         REG_CLR_BIT(HP_SYS_CLKRST_HP_RST_EN0_REG, HP_SYS_CLKRST_REG_RST_EN_CORE1_GLOBAL);
     }
+#endif
+
+#if SOC_KEY_MANAGER_SUPPORTED
     // The following operation makes the Key Manager to use eFuse key for ECDSA and XTS-AES operation by default
     // This is to keep the default behavior same as the other chips
     // If the Key Manager configuration is already locked then following operation does not have any effect
-    // TODO-IDF 7925 (Move this under SOC_KEY_MANAGER_SUPPORTED)
-    REG_SET_FIELD(KEYMNG_STATIC_REG, KEYMNG_USE_EFUSE_KEY, 3);
+    key_mgr_hal_set_key_usage(ESP_KEY_MGR_ECDSA_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+    key_mgr_hal_set_key_usage(ESP_KEY_MGR_XTS_AES_128_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
 #endif
     ets_set_appcpu_boot_addr((uint32_t)call_start_cpu1);
 
@@ -525,13 +530,6 @@ void IRAM_ATTR call_start_cpu0(void)
     }
 #endif
 
-#if SOC_CLK_MPLL_SUPPORTED
-#if SOC_PSRAM_VDD_POWER_MPLL
-    esp_ldo_vdd_psram_early_init();
-#endif
-    rtc_clk_mpll_enable();
-#endif
-
     esp_mspi_pin_init();
     // For Octal flash, it's hard to implement a read_id function in OPI mode for all vendors.
     // So we have to read it here in SPI mode, before entering the OPI mode.
@@ -691,11 +689,11 @@ void IRAM_ATTR call_start_cpu0(void)
 #if ESP_ROM_UART_CLK_IS_XTAL
     clock_hz = esp_clk_xtal_freq(); // From esp32-s3 on, UART clock source is selected to XTAL in ROM
 #endif
-    esp_rom_uart_tx_wait_idle(CONFIG_ESP_CONSOLE_UART_NUM);
+    esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
 
     // In a single thread mode, the freertos is not started yet. So don't have to use a critical section.
     int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused)); // To avoid build errors about spinlock's __DECLARE_RCC_ATOMIC_ENV
-    esp_rom_uart_set_clock_baudrate(CONFIG_ESP_CONSOLE_UART_NUM, clock_hz, CONFIG_ESP_CONSOLE_UART_BAUDRATE);
+    esp_rom_uart_set_clock_baudrate(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM, clock_hz, CONFIG_ESP_CONSOLE_UART_BAUDRATE);
 #endif
 #endif
 

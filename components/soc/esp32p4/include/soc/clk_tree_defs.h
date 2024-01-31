@@ -273,11 +273,7 @@ typedef enum {
 /**
  * @brief Array initializer for all supported clock sources of MCPWM Timer
  */
-#if SOC_CLK_TREE_SUPPORTED
 #define SOC_MCPWM_TIMER_CLKS {SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_XTAL}
-#else
-#define SOC_MCPWM_TIMER_CLKS {SOC_MOD_CLK_XTAL}
-#endif
 
 /**
  * @brief Type of MCPWM timer clock source
@@ -285,21 +281,13 @@ typedef enum {
 typedef enum {
     MCPWM_TIMER_CLK_SRC_PLL160M = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the source clock */
     MCPWM_TIMER_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as the source clock */
-#if SOC_CLK_TREE_SUPPORTED
     MCPWM_TIMER_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
-#else
-    MCPWM_TIMER_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,      /*!< Select XTAL as the default choice */
-#endif // SOC_CLK_TREE_SUPPORTED
 } soc_periph_mcpwm_timer_clk_src_t;
 
 /**
  * @brief Array initializer for all supported clock sources of MCPWM Capture Timer
  */
-#if SOC_CLK_TREE_SUPPORTED
 #define SOC_MCPWM_CAPTURE_CLKS {SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_XTAL}
-#else
-#define SOC_MCPWM_CAPTURE_CLKS {SOC_MOD_CLK_XTAL}
-#endif
 
 /**
  * @brief Type of MCPWM capture clock source
@@ -307,21 +295,13 @@ typedef enum {
 typedef enum {
     MCPWM_CAPTURE_CLK_SRC_PLL160M = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the source clock */
     MCPWM_CAPTURE_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as the source clock */
-#if SOC_CLK_TREE_SUPPORTED
     MCPWM_CAPTURE_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
-#else
-    MCPWM_CAPTURE_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,      /*!< Select XTAL as the default choice */
-#endif // SOC_CLK_TREE_SUPPORTED
 } soc_periph_mcpwm_capture_clk_src_t;
 
 /**
  * @brief Array initializer for all supported clock sources of MCPWM Carrier
  */
-#if SOC_CLK_TREE_SUPPORTED
 #define SOC_MCPWM_CARRIER_CLKS {SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_XTAL}
-#else
-#define SOC_MCPWM_CARRIER_CLKS {SOC_MOD_CLK_XTAL}
-#endif
 
 /**
  * @brief Type of MCPWM carrier clock source
@@ -329,11 +309,7 @@ typedef enum {
 typedef enum {
     MCPWM_CARRIER_CLK_SRC_PLL160M = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the source clock */
     MCPWM_CARRIER_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as the source clock */
-#if SOC_CLK_TREE_SUPPORTED
     MCPWM_CARRIER_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
-#else
-    MCPWM_CARRIER_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,      /*!< Select XTAL as the default choice */
-#endif // SOC_CLK_TREE_SUPPORTED
 } soc_periph_mcpwm_carrier_clk_src_t;
 
 ///////////////////////////////////////////////// I2S //////////////////////////////////////////////////////////////
@@ -399,7 +375,7 @@ typedef enum {
     MIPI_DSI_PHY_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,    /*!< Select RC_FAST as MIPI DSI PHY source clock */
     MIPI_DSI_PHY_CLK_SRC_PLL_F25M = SOC_MOD_CLK_PLL_F25M,  /*!< Select PLL_F25M as MIPI DSI PHY source clock */
     MIPI_DSI_PHY_CLK_SRC_PLL_F20M = SOC_MOD_CLK_PLL_F20M,  /*!< Select PLL_F20M as MIPI DSI PHY source clock */
-    MIPI_DSI_PHY_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F25M,   /*!< Select PLL_F25M as default clock */
+    MIPI_DSI_PHY_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F20M,   /*!< Select PLL_F20M as default clock */
 } soc_periph_mipi_dsi_phy_clk_src_t;
 
 /////////////////////////////////////////////////I2C////////////////////////////////////////////////////////////////////
@@ -427,14 +403,10 @@ typedef enum {
  * @brief Type of SPI clock source.
  */
 typedef enum {
-    SPI_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,            /*!< Select XTAL as SPI source clock */
-#if SOC_CLK_TREE_SUPPORTED
-    SPI_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,
-    SPI_CLK_SRC_SPLL_480 = SOC_MOD_CLK_SPLL,
-    SPI_CLK_SRC_DEFAULT = SPI_CLK_SRC_SPLL_480,     /*!< Select SPLL_480M as SPI source clock */
-#else
-    SPI_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as SPI source clock */
-#endif
+    SPI_CLK_SRC_XTAL     = SOC_MOD_CLK_XTAL,        /*!< Select XTAL as SPI source clock */
+    SPI_CLK_SRC_RC_FAST  = SOC_MOD_CLK_RC_FAST,     /*!< Select RC_FAST_20M as SPI source clock */
+    SPI_CLK_SRC_SPLL     = SOC_MOD_CLK_SPLL,        /*!< Select SPLL as SPI source clock */
+    SPI_CLK_SRC_DEFAULT  = SOC_MOD_CLK_SPLL,        /*!< Select SPLL as SPI source clock */
 } soc_periph_spi_clk_src_t;
 
 /////////////////////////////////////////////////PSRAM////////////////////////////////////////////////////////////////////

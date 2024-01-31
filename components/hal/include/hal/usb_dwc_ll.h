@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -32,75 +32,6 @@ extern "C" {
 
 #define USB_DWC_QTD_LIST_MEM_ALIGN              512
 #define USB_DWC_FRAME_LIST_MEM_ALIGN            512     // The frame list needs to be 512 bytes aligned (contrary to the databook)
-/*
-Although we have a 256 lines, only 200 lines are useable due to EPINFO_CTL.
-Todo: Check sizes again and express this macro in terms of DWC config options (IDF-7384)
-*/
-#define USB_DWC_FIFO_TOTAL_USABLE_LINES         200
-
-/* -----------------------------------------------------------------------------
------------------------------- DWC Configuration -------------------------------
------------------------------------------------------------------------------ */
-
-/**
- * @brief Default FIFO sizes (see 2.1.2.4 for programming guide)
- *
- * RXFIFO
- * - Recommended: ((LPS/4) * 2) + 2
- * - Actual: Whatever leftover size: USB_DWC_FIFO_TOTAL_USABLE_LINES(200) - 48 - 48 = 104
- * - Worst case can accommodate two packets of 204 bytes, or one packet of 408
- * NPTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Assume LPS is 64, and 3 packets: (64/4) * 3 = 48
- * - Worst case can accommodate three packets of 64 bytes or one packet of 192
- * PTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Assume LPS is 64, and 3 packets: (64/4) * 3 = 48
- * - Worst case can accommodate three packets of 64 bytes or one packet of 192
- */
-#define USB_DWC_FIFO_RX_LINES_DEFAULT    104
-#define USB_DWC_FIFO_NPTX_LINES_DEFAULT  48
-#define USB_DWC_FIFO_PTX_LINES_DEFAULT   48
-
-/**
- * @brief FIFO sizes that bias to giving RX FIFO more capacity
- *
- * RXFIFO
- * - Recommended: ((LPS/4) * 2) + 2
- * - Actual: Whatever leftover size: USB_DWC_FIFO_TOTAL_USABLE_LINES(200) - 32 - 16 = 152
- * - Worst case can accommodate two packets of 300 bytes or one packet of 600 bytes
- * NPTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Assume LPS is 64, and 1 packets: (64/4) * 1 = 16
- * - Worst case can accommodate one packet of 64 bytes
- * PTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Assume LPS is 64, and 3 packets: (64/4) * 2 = 32
- * - Worst case can accommodate two packets of 64 bytes or one packet of 128
- */
-#define USB_DWC_FIFO_RX_LINES_BIASRX     152
-#define USB_DWC_FIFO_NPTX_LINES_BIASRX   16
-#define USB_DWC_FIFO_PTX_LINES_BIASRX    32
-
-/**
- * @brief FIFO sizes that bias to giving Periodic TX FIFO more capacity (i.e., ISOC OUT)
- *
- * RXFIFO
- * - Recommended: ((LPS/4) * 2) + 2
- * - Actual: Assume LPS is 64, and 2 packets: ((64/4) * 2) + 2 = 34
- * - Worst case can accommodate two packets of 64 bytes or one packet of 128
- * NPTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Assume LPS is 64, and 1 packets: (64/4) * 1 = 16
- * - Worst case can accommodate one packet of 64 bytes
- * PTXFIFO
- * - Recommended: (LPS/4) * 2
- * - Actual: Whatever leftover size: USB_DWC_FIFO_TOTAL_USABLE_LINES(200) - 34 - 16 = 150
- * - Worst case can accommodate two packets of 300 bytes or one packet of 600 bytes
- */
-#define USB_DWC_FIFO_RX_LINES_BIASTX     34
-#define USB_DWC_FIFO_NPTX_LINES_BIASTX   16
-#define USB_DWC_FIFO_PTX_LINES_BIASTX    150
 
 /* -----------------------------------------------------------------------------
 ------------------------------- Global Registers -------------------------------
@@ -285,6 +216,20 @@ static inline void usb_dwc_ll_gusbcfg_dis_srp_cap(usb_dwc_dev_t *hw)
 {
     hw->gusbcfg_reg.srpcap = 0;
 }
+
+static inline void usb_dwc_ll_gusbcfg_set_timeout_cal(usb_dwc_dev_t *hw, uint8_t tout_cal)
+{
+    hw->gusbcfg_reg.toutcal = tout_cal;
+}
+
+#if (OTG_HSPHY_INTERFACE != 0)
+static inline void usb_dwc_ll_gusbcfg_set_utmi_phy(usb_dwc_dev_t *hw)
+{
+    hw->gusbcfg_reg.phyif = 1;       // 16 bits interface
+    hw->gusbcfg_reg.ulpiutmisel = 0; // UTMI+
+    hw->gusbcfg_reg.physel = 0;      // HS PHY
+}
+#endif // (OTG_HSPHY_INTERFACE != 0)
 
 // --------------------------- GRSTCTL Register --------------------------------
 
@@ -500,19 +445,20 @@ static inline void usb_dwc_ll_hcfg_set_fsls_pclk_sel(usb_dwc_dev_t *hw)
 /**
  * @brief Sets some default values to HCFG to operate in Host mode with scatter/gather DMA
  *
- * @param hw Start address of the DWC_OTG registers
- * @param speed Speed to initialize the host port at
+ * @param[in] hw    Start address of the DWC_OTG registers
+ * @param[in] speed Speed to initialize the host port at
  */
 static inline void usb_dwc_ll_hcfg_set_defaults(usb_dwc_dev_t *hw, usb_dwc_speed_t speed)
 {
     hw->hcfg_reg.descdma = 1;   //Enable scatt/gatt
-    hw->hcfg_reg.fslssupp = 1;  //FS/LS support only
+#if (OTG_HSPHY_INTERFACE == 0)
     /*
     Indicate to the OTG core what speed the PHY clock is at
-    Note: It seems like our PHY has an implicit 8 divider applied when in LS mode,
+    Note: It seems like S2/S3 PHY has an implicit 8 divider applied when in LS mode,
           so the values of FSLSPclkSel and FrInt have to be adjusted accordingly.
     */
     hw->hcfg_reg.fslspclksel = (speed == USB_DWC_SPEED_FULL) ? 1 : 2;  //PHY clock on esp32-sx for FS/LS-only
+#endif // (OTG_HSPHY_INTERFACE == 0)
     hw->hcfg_reg.perschedena = 0;   //Disable perio sched
 }
 
@@ -520,6 +466,7 @@ static inline void usb_dwc_ll_hcfg_set_defaults(usb_dwc_dev_t *hw, usb_dwc_speed
 
 static inline void usb_dwc_ll_hfir_set_defaults(usb_dwc_dev_t *hw, usb_dwc_speed_t speed)
 {
+#if (OTG_HSPHY_INTERFACE == 0)
     usb_dwc_hfir_reg_t hfir;
     hfir.val = hw->hfir_reg.val;
     hfir.hfirrldctrl = 0;       //Disable dynamic loading
@@ -530,6 +477,7 @@ static inline void usb_dwc_ll_hfir_set_defaults(usb_dwc_dev_t *hw, usb_dwc_speed
     */
     hfir.frint = (speed == USB_DWC_SPEED_FULL) ? 48000 : 6000; //esp32-sx targets only support FS or LS
     hw->hfir_reg.val = hfir.val;
+#endif // (OTG_HSPHY_INTERFACE == 0)
 }
 
 // ----------------------------- HFNUM Register --------------------------------

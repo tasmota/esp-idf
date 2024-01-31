@@ -245,6 +245,7 @@ menu "Hardware Settings"
     rsource "./dma/Kconfig.dma"
 
     menu "Main XTAL Config"
+        # TODO: IDF-8943
         choice XTAL_FREQ_SEL
             prompt "Main XTAL frequency"
             default XTAL_FREQ_48 if SOC_XTAL_SUPPORT_48M
@@ -347,7 +348,6 @@ menu "Hardware Settings"
             clock support isn't done yet. So with this option,
             we use xtal on FPGA as the clock source.
 
-    # Invisible bringup bypass options for esp_hw_support component
     config ESP_BRINGUP_BYPASS_RANDOM_SETTING
         bool
         default y if !SOC_RNG_SUPPORTED

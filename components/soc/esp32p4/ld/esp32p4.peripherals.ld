@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -59,6 +59,7 @@ PROVIDE ( SDM            = 0x500E0F00 );
 PROVIDE ( GLITCH_FILTER  = 0x500E0F30 );
 PROVIDE ( GPIO_ETM       = 0x500E0F60 );
 PROVIDE ( IOMUX          = 0x500E1000 );
+PROVIDE ( MSPI_IOMUX     = 0x500E1200 );
 
 PROVIDE ( HP_SYSTEM         = 0x500E5000 );
 PROVIDE ( HP_SYS_CLKRST     = 0x500E6000 );
@@ -99,10 +100,13 @@ PROVIDE ( I3C_MST            = 0x500DA000 );
 PROVIDE ( I3C_MST_MEM        = 0x500DA000 );
 PROVIDE ( I3C_SLV            = 0x500DB000 );
 
+PROVIDE ( JPEG               = 0x50086000 );
 PROVIDE ( PPA                = 0x50087000 );
 PROVIDE ( DMA2D              = 0x50088000 );
-PROVIDE ( JPEG               = 0x50086000 );
 
 PROVIDE ( USB_WRAP           = 0x50080000 );
 PROVIDE ( USB_DWC_HS         = 0x50000000 );
 PROVIDE ( USB_DWC_FS         = 0x50040000 );
+
+PROVIDE ( EMAC_MAC           = 0x50098000 );
+PROVIDE ( EMAC_DMA           = 0x50099000 );

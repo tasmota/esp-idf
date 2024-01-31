@@ -21,7 +21,6 @@
 #include "esp_rom_uart.h"
 #include "esp_private/esp_pmu.h"
 #include "hal/clk_tree_ll.h"
-// #include "hal/pmu_ll.h"
 #include "hal/modem_syscon_ll.h"
 #include "hal/modem_lpcon_ll.h"
 #include "soc/pmu_reg.h"
@@ -83,7 +82,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
     clk_ll_rc_fast_tick_conf();
 
     rtc_xtal_freq_t xtal_freq = cfg.xtal_freq;
-    esp_rom_uart_tx_wait_idle(0);
+    esp_rom_output_tx_wait_idle(0);
     rtc_clk_xtal_freq_update(xtal_freq);
 
     /* Set CPU frequency */

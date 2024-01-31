@@ -158,13 +158,13 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_http_server/include/esp_http_server.h \
     $(PROJECT_PATH)/components/esp_https_ota/include/esp_https_ota.h \
     $(PROJECT_PATH)/components/esp_https_server/include/esp_https_server.h \
+    $(PROJECT_PATH)/components/esp_hw_support/dma/include/esp_dma_utils.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_clk_tree.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_chip_info.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_cpu.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_crc.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_etm.h \
-    $(PROJECT_PATH)/components/esp_hw_support/include/esp_dma_utils.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_ds.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_hmac.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_intr_alloc.h \
@@ -174,7 +174,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_sleep.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_io.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_ops.h \
-    $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_rgb.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_vendor.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_dev.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_ssd1306.h \
@@ -257,6 +256,7 @@ INPUT = \
     $(PROJECT_PATH)/components/hal/include/hal/twai_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/uart_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/efuse_hal.h \
+    $(PROJECT_PATH)/components/hal/include/hal/eth_types.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps_init.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_trace.h \

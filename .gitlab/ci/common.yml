@@ -85,6 +85,7 @@ variables:
 ################################################
 .common_before_scripts: &common-before_scripts |
   source tools/ci/utils.sh
+
   is_based_on_commits $REQUIRED_ANCESTOR_COMMITS
 
   if [[ -n "$IDF_DONT_USE_MIRRORS" ]]; then
@@ -210,6 +211,10 @@ variables:
 .after_script:build:ccache:
   after_script:
     - *show_ccache_statistics
+
+.after_script:build:ccache:upload-when-fail:
+  after_script:
+    - *show_ccache_statistics
     - *upload_failed_job_log_artifacts
 
 ##############################
@@ -298,10 +303,9 @@ variables:
   before_script:
     - *git_init
     - *git_fetch_from_mirror_url_if_exists
-    - |
-      git fetch origin refs/tags/"${LATEST_GIT_TAG}":refs/tags/"${LATEST_GIT_TAG}" --depth=1
-      git repack -d
-      git fetch origin $CI_COMMIT_SHA --shallow-since=$(git log -1 --format=%as "${LATEST_GIT_TAG}")
+    - git fetch origin refs/tags/"${LATEST_GIT_TAG}":refs/tags/"${LATEST_GIT_TAG}" --depth=1
+    - git repack -d
+    - git fetch origin $PIPELINE_COMMIT_SHA --shallow-since=$(git log -1 --format=%as "${LATEST_GIT_TAG}")
     - *git_checkout_fetch_head
     - *common-before_scripts
     - *setup_tools_and_idf_python_venv
@@ -346,6 +350,9 @@ default:
     - *setup_tools_and_idf_python_venv
     - add_gitlab_ssh_keys
     - fetch_submodules
+  artifacts:
+    expire_in: 1 week
+    when: always
   retry:
     max: 2
     when:

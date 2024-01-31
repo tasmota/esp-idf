@@ -26,7 +26,7 @@ Most applications use the following workflow when working with ``esp_vfs_fat_`` 
 
 #. Call :cpp:func:`ff_diskio_register` to register the disk I/O driver for the drive number used in Step 1.
 
-#. To mount the filesystem using the same drive number which was passed to :cpp:func:`esp_vfs_fat_register`, call the FatFs function :cpp:func:`f_mount`. If the filesystem is not present on the target logical drive, :cpp:func:`f_mount` will fail with the ``FR_NO_FILESYSTEM`` error. In such case, call :cpp:func:`f_mkfs` to create a fresh FatFS structure on the drive first, and then call:cpp:func:`f_mount` again. Note that SD cards need to be partitioned with :cpp:func:`f_fdisk` prior to previously described steps. For more information, see `FatFs documentation <http://elm-chan.org/fsw/ff/doc/mount.html>`_.
+#. To mount the filesystem using the same drive number which was passed to :cpp:func:`esp_vfs_fat_register`, call the FatFs function :cpp:func:`f_mount`. If the filesystem is not present on the target logical drive, :cpp:func:`f_mount` will fail with the ``FR_NO_FILESYSTEM`` error. In such case, call :cpp:func:`f_mkfs` to create a fresh FatFS structure on the drive first, and then call :cpp:func:`f_mount` again. Note that SD cards need to be partitioned with :cpp:func:`f_fdisk` prior to previously described steps. For more information, see `FatFs documentation <http://elm-chan.org/fsw/ff/doc/mount.html>`_.
 
 #. Call the C standard library and POSIX API functions to perform such actions on files as open, read, write, erase, copy, etc. Use paths starting with the path prefix passed to :cpp:func:`esp_vfs_register` (for example, ``"/sdcard/hello.txt"``). The filesystem uses `8.3 filenames <https://en.wikipedia.org/wiki/8.3_filename>`_ format (SFN) by default. If you need to use long filenames (LFN), enable the :ref:`CONFIG_FATFS_LONG_FILENAMES` option. Please refer to `FatFs filenames <http://elm-chan.org/fsw/ff/doc/filename.html>`_ for more details.
 
@@ -126,6 +126,7 @@ The arguments of the function are as follows:
 
 #. flag ``PRESERVE_TIME`` - optionally, users can force preserving the timestamps from the source folder to the target image. Without preserving the time, every timestamp will be set to the FATFS default initial time (1st January 1980).
 
+#. flag ``ONE_FAT`` - optionally, users can still choose to generate a FATFS volume with a single FAT (file allocation table) instead of two. This makes the free space in the FATFS volume a bit larger (by ``number of sectors used by FAT * sector size``) but also more prone to corruption.
 
 For example::
 
@@ -147,7 +148,7 @@ Usage::
 
     ./fatfsparse.py [-h] [--wl-layer {detect,enabled,disabled}] [--verbose] fatfs_image.img
 
-Parameter --verbose prints detailed information from boot sector of the FatFs image to the terminal before folder structure is generated. 
+Parameter --verbose prints detailed information from boot sector of the FatFs image to the terminal before folder structure is generated.
 
 High-level API Reference
 ------------------------

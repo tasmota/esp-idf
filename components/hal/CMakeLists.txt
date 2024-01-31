@@ -26,6 +26,11 @@ if(CONFIG_SOC_WDT_SUPPORTED AND NOT CONFIG_HAL_WDT_USE_ROM_IMPL)
     list(APPEND srcs "wdt_hal_iram.c")
 endif()
 
+if(CONFIG_SOC_KEY_MANAGER_SUPPORTED)
+    list(APPEND srcs "key_mgr_hal.c")
+    list(APPEND srcs "huk_hal.c")
+endif()
+
 if(NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
     if(CONFIG_SOC_MMU_PERIPH_NUM)
         list(APPEND srcs "mmu_hal.c")
@@ -41,6 +46,7 @@ if(NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
 endif()
 
 if(NOT BOOTLOADER_BUILD)
+    list(APPEND srcs "color_hal.c")
 
     if(NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
         if(CONFIG_SOC_SPI_FLASH_SUPPORTED)
@@ -125,6 +131,10 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_DW_GDMA_SUPPORTED)
         list(APPEND srcs "dw_gdma_hal.c")
+    endif()
+
+    if(CONFIG_SOC_DMA2D_SUPPORTED)
+        list(APPEND srcs "dma2d_hal.c")
     endif()
 
     if(CONFIG_SOC_I2S_SUPPORTED)
@@ -237,14 +247,8 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "ds_hal.c")
     endif()
 
-    if(CONFIG_SOC_KEY_MANAGER_SUPPORTED)
-        list(APPEND srcs "key_mgr_hal.c")
-        list(APPEND srcs "huk_hal.c")
-    endif()
-
     if(CONFIG_SOC_USB_OTG_SUPPORTED)
         list(APPEND srcs
-                    "usb_hal.c"
                     "usb_dwc_hal.c"
                     "usb_fsls_phy_hal.c")
     endif()

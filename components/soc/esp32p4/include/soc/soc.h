@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -19,7 +19,7 @@
 #define REG_UHCI_BASE(i)                        (DR_REG_UHCI0_BASE)                      // only one UHCI on C6
 #define REG_UART_BASE(i)                        (DR_REG_UART_BASE + (i) * 0x1000)        // UART0 and UART1
 #define UART_FIFO_AHB_REG(i)                    (REG_UART_BASE(i) + 0x0)
-#define REG_I2S_BASE(i)                         (DR_REG_I2S_BASE + (i) * 0x1000)         // only one I2S on C6
+#define REG_I2S_BASE(i)                         (DR_REG_I2S_BASE + (i) * 0x1000)
 #define REG_TIMG_BASE(i)                        (DR_REG_TIMERGROUP0_BASE + (i) * 0x1000) // TIMERG0 and TIMERG1
 #define REG_SPI_MEM_BASE(i)                     (DR_REG_FLASH_SPI0_BASE + (i) * 0x1000)  // SPIMEM0 and SPIMEM1
 #define REG_SPI_BASE(i)                         (((i)>=2) ? (DR_REG_SPI2_BASE + (i-2) * 0x1000) : (0))    // GPSPI2 and GPSPI3
@@ -216,9 +216,9 @@
 #define SOC_LP_PERIPH_LOW  0x50110000
 #define SOC_LP_PERIPH_HIGH 0x50130000
 
-// Debug region, not used by software
-#define SOC_DEBUG_LOW 0x20000000
-#define SOC_DEBUG_HIGH 0x28000000
+// CPU sub-system region, contains interrupt config registers
+#define SOC_CPU_SUBSYSTEM_LOW 0x20000000
+#define SOC_CPU_SUBSYSTEM_HIGH 0x30000000
 
 // Start (highest address) of ROM boot stack, only relevant during early boot
 #define SOC_ROM_STACK_START         0x4ff3cfc0

@@ -13,7 +13,7 @@ The ULP RISC-V coprocessor code is written in C (assembly is also possible) and 
 If you have already set up ESP-IDF with CMake build system according to the :doc:`Getting Started Guide <../../../get-started/index>`, then the toolchain should already be installed.
 
 .. note::
-    
+
     In earlier versions of ESP-IDF, RISC-V toolchain had a different prefix: ``riscv-none-embed-gcc``.
 
 Compiling the ULP RISC-V Code
@@ -23,8 +23,8 @@ To compile the ULP RISC-V code as part of the component, the following steps mus
 
 1. The ULP RISC-V code, written in C or assembly (must use the ``.S`` extension), must be placed in a separate directory inside the component directory, for instance, ``ulp/``.
 
-.. note:: 
-    
+.. note::
+
     When registering the component (via ``idf_component_register``), this directory should not be added to the ``SRC_DIRS`` argument as it is currently done for the ULP FSM. See the step below for how to properly add ULP source files.
 
 2. Call ``ulp_embed_binary`` from the component CMakeLists.txt after registration. For example::
@@ -167,12 +167,12 @@ The RTC I2C controller provides I2C master functionality in the RTC domain. The 
 
 Once the RTC I2C controller is initialized, the I2C slave device address must be programmed via the :cpp:func:`ulp_riscv_i2c_master_set_slave_addr` API before any read or write operation is performed.
 
-.. note:: 
-    
+.. note::
+
     The RTC I2C peripheral always expects a slave sub-register address to be programmed via the :cpp:func:`ulp_riscv_i2c_master_set_slave_reg_addr` API. If it is not, the I2C peripheral uses the ``SENS_SAR_I2C_CTRL_REG[18:11]`` as the sub-register address for the subsequent read or write operations. This could make the RTC I2C peripheral incompatible with certain I2C devices or sensors which do not need any sub-register to be programmed.
 
-.. note:: 
-    
+.. note::
+
     There is no hardware atomicity protection in accessing the RTC I2C peripheral between the main CPU and the ULP RISC-V core. Therefore, care must be taken that both cores are not accessing the peripheral simultaneously.
 
 In case your RTC I2C based ULP RISC-V program is not working as expected, the following sanity checks can help in debugging the issue:
@@ -190,6 +190,37 @@ In case your RTC I2C based ULP RISC-V program is not working as expected, the fo
         * If the RTC I2C interrupt log does not report any error status, it could mean that the driver is not fast enough in receiving data from the I2C slave device. This could happen as the RTC I2C controller does not have a TX/RX FIFO to store multiple bytes of data but rather, it depends on single byte transmissions using an interrupt status polling mechanism. This could be mitigated to some extent by making sure that the SCL clock of the peripheral is running as fast as possible. This can be tweaked by configuring the SCL low period and SCL high period values in the initialization config parameters for the peripheral.
 
 * Other methods of debugging problems would be to ensure that the RTC I2C controller is operational **only** on the main CPU **without** any ULP RISC-V code interfering and **without** any sleep mode being activated. This is the basic configuration under which the RTC I2C peripheral must work. This way you can rule out any potential issues due to the ULP or sleep modes.
+
+ULP RISC-V Interrupt Handling
+------------------------------
+
+The ULP RISC-V core supports interrupt handling from certain internal and external events. By design, the ULP RISC-V core can handle interrupts from the following sources:
+
+.. list-table:: ULP RISC-V interrupt sources
+    :widths: 10 5 5
+    :header-rows: 1
+
+    * - Interrupt Source
+      - Type
+      - IRQ
+    * - Internal Timer Interrupt
+      - Internal
+      - 0
+    * - EBREAK or ECALL or Illegal Instruction
+      - Internal
+      - 1
+    * - Unalligned Memory Access
+      - Internal
+      - 2
+    * - RTC Peripheral Sources
+      - External
+      - 31
+
+Interrupt handling is enabled via special 32-bit registers q0-q3 and custom R-type instructions. For more information, see *{IDF_TARGET_NAME} Technical Reference Manual* > *ULP Coprocessor* > *ULP-RISC-V* > *ULP-RISC-V Interrupts* [`PDF <{IDF_TARGET_TRM_EN_URL}>`__].
+
+All interrupts are enabled globally during start up. When an interrupt occurs, the processor jumps to the IRQ vector. The IRQ vector performs the task of saving the register context and then calling the global interrupt dispatcher. The ULP RISC-V driver implements a *weak* interrupt dispatcher :cpp:func:`_ulp_riscv_interrupt_handler` which serves as the central point for handling all interrupts. This global dispatcher calls respective interrupt handlers which have been allocated via the :cpp:func:`ulp_riscv_intr_alloc`.
+
+Interrupt handling on the ULP RISC-V is not full featured yet. At present, interrupt handling for internal interrupt source is not supported. Support is provided for 2 RTC peripheral sources, viz., software triggered interrupt and RTC IO triggered interrupts. ULP RISC-V does not support nested interrupts. If users need custom interrupt handling then they may override the default global interrupt dispatcher by defining their own :cpp:func:`_ulp_riscv_interrupt_handler`.
 
 Debugging Your ULP RISC-V Program
 ----------------------------------
@@ -211,6 +242,7 @@ Application Examples
 * ULP RISC-V Coprocessor uses bit-banged UART driver to print: :example:`system/ulp/ulp_riscv/uart_print`.
 * ULP RISC-V Coprocessor reads external temperature sensor while main CPU is in deep sleep: :example:`system/ulp/ulp_riscv/ds18b20_onewire`.
 * ULP RISC-V Coprocessor reads external I2C temperature and humidity sensor (BMP180) while the main CPU is in Deep-sleep and wakes up the main CPU once a threshold is met: :example:`system/ulp/ulp_riscv/i2c`.
+* ULP RISC-V Coprocessor handles software interrupt and RTC IO interrupt: :example:`system/ulp/ulp_riscv/interrupts`.
 
 API Reference
 -------------

@@ -35,6 +35,10 @@ if(CONFIG_SOC_GDMA_SUPPORTED)
     list(APPEND srcs "${target}/gdma_periph.c")
 endif()
 
+if(CONFIG_SOC_DMA2D_SUPPORTED)
+    list(APPEND srcs "${target}/dma2d_periph.c")
+endif()
+
 if(CONFIG_SOC_GPSPI_SUPPORTED)
     list(APPEND srcs "${target}/spi_periph.c")
 endif()
@@ -75,6 +79,10 @@ if(CONFIG_SOC_LCDCAM_SUPPORTED OR CONFIG_SOC_LCD_I80_SUPPORTED)
     list(APPEND srcs "${target}/lcd_periph.c")
 endif()
 
+if(CONFIG_SOC_MIPI_DSI_SUPPORTED)
+    list(APPEND srcs "${target}/mipi_dsi_periph.c")
+endif()
+
 if(CONFIG_SOC_PARLIO_SUPPORTED)
     list(APPEND srcs "${target}/parlio_periph.c")
 endif()
@@ -107,7 +115,7 @@ endif()
 
 if(CONFIG_SOC_USB_OTG_SUPPORTED)
     list(APPEND srcs "${target}/usb_periph.c"
-                     "${target}/usb_otg_periph.c")
+                     "${target}/usb_dwc_periph.c")
 endif()
 
 if(CONFIG_SOC_DAC_SUPPORTED)
@@ -120,6 +128,10 @@ endif()
 
 if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)
     list(APPEND srcs "${target}/sdio_slave_periph.c")
+endif()
+
+if(CONFIG_SOC_PAU_SUPPORTED)
+    list(APPEND srcs "${target}/system_retention_periph.c")
 endif()
 
 idf_component_register(SRCS ${srcs}

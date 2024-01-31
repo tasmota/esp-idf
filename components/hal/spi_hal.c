@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -21,19 +21,11 @@ static const __attribute__((unused)) char SPI_HAL_TAG[] = "spi_hal";
         return (ret_val); \
     }
 
-void spi_hal_init(spi_hal_context_t *hal, uint32_t host_id, const spi_hal_config_t *config)
+void spi_hal_init(spi_hal_context_t *hal, uint32_t host_id)
 {
     memset(hal, 0, sizeof(spi_hal_context_t));
     spi_dev_t *hw = SPI_LL_GET_HW(host_id);
     hal->hw = hw;
-    hal->dma_in = config->dma_in;
-    hal->dma_out = config->dma_out;
-    hal->dma_enabled = config->dma_enabled;
-    hal->dmadesc_tx = config->dmadesc_tx;
-    hal->dmadesc_rx = config->dmadesc_rx;
-    hal->tx_dma_chan = config->tx_dma_chan;
-    hal->rx_dma_chan = config->rx_dma_chan;
-    hal->dmadesc_n = config->dmadesc_n;
 
 #if SPI_LL_MOSI_FREE_LEVEL
     // Change default data line level to low which same as esp32
@@ -60,7 +52,7 @@ void spi_hal_deinit(spi_hal_context_t *hal)
     }
 }
 
-esp_err_t spi_hal_cal_clock_conf(const spi_hal_timing_param_t *timing_param, int *out_freq, spi_hal_timing_conf_t *timing_conf)
+esp_err_t spi_hal_cal_clock_conf(const spi_hal_timing_param_t *timing_param, spi_hal_timing_conf_t *timing_conf)
 {
     spi_hal_timing_conf_t temp_conf = {};
 
@@ -81,11 +73,9 @@ Specify ``SPI_DEVICE_NO_DUMMY`` to ignore this checking. Then you can output dat
                   ESP_ERR_NOT_SUPPORTED, freq_limit / 1000. / 1000 );
 #endif
 
+    temp_conf.real_freq = eff_clk_n;
     if (timing_conf) {
         *timing_conf = temp_conf;
-    }
-    if (out_freq) {
-        *out_freq = eff_clk_n;
     }
     return ESP_OK;
 }

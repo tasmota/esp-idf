@@ -1,5 +1,10 @@
 # Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
 
+tools/test_apps/build_system/bootloader:
+  disable:
+    - if: IDF_TARGET == "linux"
+      reason: the test should run on all targets except linux
+
 tools/test_apps/build_system/custom_partition_subtypes:
   enable:
     - if: IDF_TARGET in ["esp32", "linux"]
@@ -17,6 +22,12 @@ tools/test_apps/linux_compatible/driver_mock:
 
 tools/test_apps/linux_compatible/linux_freertos:
   enable:
+    - if: IDF_TARGET == "linux"
+
+tools/test_apps/linux_compatible/wifi_build_test:
+  enable:
+    - if: IDF_TARGET == "linux"
+  disable_test:
     - if: IDF_TARGET == "linux"
 
 tools/test_apps/peripherals/i2c_wifi:
@@ -52,6 +63,16 @@ tools/test_apps/protocols/mqtt/publish_connect_test:
     - if: IDF_TARGET == "esp32s2" or IDF_TARGET == "esp32c3"
       temporary: true
       reason: lack of runners
+  depends_components:
+    - esp_eth
+  depends_filepatterns:
+    - tools/ci/python_packages/common_test_methods.py
+    - examples/common_components/**/*
+    - examples/protocols/**/*
+    - examples/system/ota/**/*
+    - examples/ethernet/iperf/**/*
+    - examples/network/vlan_support/**/*
+    - components/esp_netif/esp_netif_handlers.c
 
 tools/test_apps/protocols/netif_components:
   enable:

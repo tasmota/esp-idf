@@ -12,6 +12,7 @@ from pathlib import Path
 
 from _pytest.python import Function
 from idf_ci_utils import IDF_PATH
+from idf_ci_utils import idf_relpath
 from pytest_embedded.utils import to_list
 
 SUPPORTED_TARGETS = ['esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']
@@ -76,7 +77,7 @@ ENV_MARKERS = {
     'wifi_router': 'both the runner and dut connect to the same wifi router',
     'wifi_high_traffic': 'wifi high traffic runners',
     'wifi_wlan': 'wifi runner with a wireless NIC',
-    'Example_ShieldBox_Basic': 'basic configuration of the AP and ESP DUT placed in shielded box',
+    'wifi_iperf': 'the AP and ESP dut were placed in a shielded box - for iperf test',
     'Example_ShieldBox': 'multiple shielded APs connected to shielded ESP DUT via RF cable with programmable attenuator',
     'xtal_26mhz': 'runner with 26MHz xtal on board',
     'xtal_40mhz': 'runner with 40MHz xtal on board',
@@ -123,6 +124,8 @@ DEFAULT_FULL_BUILD_TEST_FILEPATTERNS = [
     # tools
     'tools/cmake/**/*',
     'tools/tools.json',
+    # ci
+    'tools/ci/ignore_build_warnings.txt',
     # components
     'components/cxx/**/*',
     'components/esp_common/**/*',
@@ -149,11 +152,14 @@ class CollectMode(str, Enum):
     ALL = 'all'
 
 
-@dataclass
 class PytestApp:
-    path: str
-    target: str
-    config: str
+    """
+    Pytest App with relative path to IDF_PATH
+    """
+    def __init__(self, path: str, target: str, config: str) -> None:
+        self.path = idf_relpath(path)
+        self.target = target
+        self.config = config
 
     def __hash__(self) -> int:
         return hash((self.path, self.target, self.config))
@@ -245,7 +251,7 @@ class PytestCase:
         if 'jtag' in self.env_markers or 'usb_serial_jtag' in self.env_markers:
             return True
 
-        if any('panic' in Path(app.path).resolve().parts for app in self.apps):
+        if any('panic' in Path(app.path).parts for app in self.apps):
             return True
 
         return False

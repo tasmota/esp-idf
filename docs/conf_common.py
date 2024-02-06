@@ -4,13 +4,9 @@
 #
 # This file is imported from a language-specific conf.py (ie en/conf.py or
 # zh_CN/conf.py)
-
 # type: ignore
 # pylint: disable=wildcard-import
 # pylint: disable=undefined-variable
-
-from __future__ import print_function, unicode_literals
-
 import os.path
 import re
 from pathlib import Path
@@ -71,6 +67,9 @@ WIFI_DOCS = ['api-guides/wifi.rst',
              'api-reference/provisioning/wifi_provisioning.rst',
              'migration-guides/release-5.x/5.2/wifi.rst']
 
+IEEE802154_DOCS = ['migration-guides/release-5.x/5.1/ieee802154.rst',
+                   'migration-guides/release-5.x/5.2/ieee802154.rst']
+
 NAN_DOCS = ['api-reference/network/esp_nan.rst']
 
 WIFI_MESH_DOCS = ['api-guides/esp-wifi-mesh.rst',
@@ -110,9 +109,12 @@ USB_DOCS = ['api-reference/peripherals/usb_device.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_arch.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_design.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_dwc_otg.rst',
-            'api-reference/peripherals/usb_host/usb_host_notes_index.rst',
-            'api-guides/usb-otg-console.rst',
-            'api-guides/dfu.rst']
+            'api-reference/peripherals/usb_host/usb_host_notes_index.rst']
+
+# TODO: Merge this back with `USB_DOCS` IDF-9919 IDF-9920 IDF-9133
+USB_OTG_DFU_DOCS = ['api-guides/dfu.rst']
+
+USB_OTG_CONSOLE_DOCS = ['api-guides/usb-otg-console.rst']
 
 FTDI_JTAG_DOCS = ['api-guides/jtag-debugging/configure-ft2232h-jtag.rst']
 
@@ -165,19 +167,21 @@ ESP32S2_DOCS = ['hw-reference/esp32s2/**',
                 'api-reference/peripherals/temp_sensor.rst',
                 'api-reference/system/async_memcpy.rst',
                 'api-reference/peripherals/touch_element.rst',
-                'api-guides/RF_calibration.rst'] + FTDI_JTAG_DOCS
+                'api-guides/RF_calibration.rst'] + FTDI_JTAG_DOCS + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
 
 ESP32S3_DOCS = ['hw-reference/esp32s3/**',
                 'api-reference/system/ipc.rst',
                 'api-guides/flash_psram_config.rst',
                 'api-reference/peripherals/sd_pullup_requirements.rst',
-                'api-guides/RF_calibration.rst']
+                'api-guides/RF_calibration.rst'] + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
 
 # No JTAG docs for this one as it gets gated on SOC_USB_SERIAL_JTAG_SUPPORTED down below.
 ESP32C3_DOCS = ['hw-reference/esp32c3/**',
                 'api-guides/RF_calibration.rst'] + QEMU_DOCS
 
 ESP32C2_DOCS = ['api-guides/RF_calibration.rst']
+
+ESP32C5_DOCS = ['']
 
 ESP32C6_DOCS = ['api-guides/RF_calibration.rst',
                 'api-reference/peripherals/sd_pullup_requirements.rst']
@@ -194,6 +198,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_BLUFI_SUPPORTED':BLUFI_DOCS,
                             'SOC_WIFI_SUPPORTED':WIFI_DOCS,
                             'SOC_BT_CLASSIC_SUPPORTED':CLASSIC_BT_DOCS,
+                            'SOC_IEEE802154_SUPPORTED':IEEE802154_DOCS,
                             'SOC_SUPPORT_COEXISTENCE':COEXISTENCE_DOCS,
                             'SOC_PSRAM_DMA_CAPABLE':MM_SYNC_DOCS,
                             'SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE':MM_SYNC_DOCS,
@@ -235,6 +240,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'esp32s3':ESP32S3_DOCS,
                             'esp32c2':ESP32C2_DOCS,
                             'esp32c3':ESP32C3_DOCS,
+                            'esp32c5':ESP32C5_DOCS,
                             'esp32c6':ESP32C6_DOCS,
                             'esp32h2':ESP32H2_DOCS,
                             'esp32p4':ESP32P4_DOCS}
@@ -265,11 +271,12 @@ github_repo = 'espressif/esp-idf'
 html_context['github_user'] = 'espressif'
 html_context['github_repo'] = 'esp-idf'
 
+
 # Extra options required by sphinx_idf_theme
 project_slug = 'esp-idf'
 versions_url = 'https://dl.espressif.com/dl/esp-idf/idf_versions.js'
 
-idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2', 'esp32c6', 'esp32p4']
+idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2', 'esp32c5', 'esp32c6', 'esp32p4']
 languages = ['en', 'zh_CN']
 
 google_analytics_id = os.environ.get('CI_GOOGLE_ANALYTICS_ID', None)
@@ -320,6 +327,8 @@ def conf_setup(app, config):
     except FileNotFoundError:
         # Not for all target
         pass
+
+    config.html_baseurl = f'https://docs.espressif.com/projects/esp-idf/{config.language}/stable/{config.idf_target}'
 
 
 user_setup_callback = conf_setup

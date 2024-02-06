@@ -37,8 +37,7 @@ else()
             "system_time.c"
             "stack_check.c"
             "ubsan.c"
-            "xt_wdt.c"
-            "debug_stubs.c")
+            "xt_wdt.c")
 
     if(CONFIG_ESP_TASK_WDT_EN)
         list(APPEND srcs "task_wdt/task_wdt.c")
@@ -86,7 +85,7 @@ else()
 
     # Disable stack protection in files which are involved in initialization of that feature
     set_source_files_properties(
-        "startup.c" "stack_check.c"
+        "startup.c" "stack_check.c" "port/cpu_start.c"
         PROPERTIES COMPILE_FLAGS
         -fno-stack-protector)
 

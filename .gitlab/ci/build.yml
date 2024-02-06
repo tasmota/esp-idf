@@ -103,6 +103,7 @@ fast_template_app:
     - .build_template_app_template
     - .rules:build:target_test
   stage: pre_check
+  tags: [fast_run, shiny]
   variables:
     BUILD_COMMAND_ARGS: "-p"
 #------------------------------------------------------------------------------
@@ -172,6 +173,7 @@ build_clang_test_apps_esp32c6:
   extends:
     - .build_template
     - .rules:build:check
+  dependencies: # set dependencies to null to avoid missing artifacts issue
   needs:
     - job: fast_template_app
       artifacts: false
@@ -179,10 +181,10 @@ build_clang_test_apps_esp32c6:
   script:
     - ${IDF_PATH}/tools/ci/test_configure_ci_environment.sh
     - cd ${IDF_PATH}/tools/test_build_system
-    - retry_failed git clone $KNOWN_FAILURE_CASES_REPO known_failure_cases
+    - python ${IDF_PATH}/tools/ci/get_known_failure_cases_file.py
     - pytest --parallel-count ${CI_NODE_TOTAL:-1} --parallel-index ${CI_NODE_INDEX:-1}
       --work-dir ${CI_PROJECT_DIR}/test_build_system --junitxml=${CI_PROJECT_DIR}/XUNIT_RESULT.xml
-      --ignore-result-files known_failure_cases/known_failure_cases.txt
+      --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
 
 pytest_build_system:
   extends: .test_build_system_template
@@ -203,37 +205,6 @@ pytest_build_system_macos:
   tags:
     - macos_shell
   parallel: 3
-  artifacts:
-    paths:
-      - XUNIT_RESULT.xml
-      - test_build_system
-    expire_in: 2 days
-    reports:
-      junit: XUNIT_RESULT.xml
-
-.test_build_system_template_win:
-  stage: host_test
-  variables:
-  # Enable ccache for all build jobs. See configure_ci_environment.sh for more ccache related settings.
-    IDF_CCACHE_ENABLE: "1"
-    PYTHONPATH: "$PYTHONPATH;$IDF_PATH\\tools;$IDF_PATH\\tools\\esp_app_trace;$IDF_PATH\\components\\partition_table;$IDF_PATH\\tools\\ci\\python_packages"
-  before_script: []
-  after_script: []
-  timeout: 4 hours
-  script:
-    - .\install.ps1 --enable-ci --enable-pytest
-    - . .\export.ps1
-    - python "${SUBMODULE_FETCH_TOOL}" -s "all"
-    - cd ${IDF_PATH}\tools\test_build_system
-    - pytest --junitxml=${CI_PROJECT_DIR}\XUNIT_RESULT.xml
-
-pytest_build_system_win:
-  extends:
-    - .test_build_system_template_win
-    - .rules:labels:windows_pytest_build_system
-  needs: []
-  tags:
-    - windows-target
   artifacts:
     paths:
       - XUNIT_RESULT.xml
@@ -272,6 +243,7 @@ build_template_app:
     - .build_template_app_template
     - .rules:build
   stage: host_test
+  dependencies: # set dependencies to null to avoid missing artifacts issue
   needs:
     - job: fast_template_app
       artifacts: false
@@ -282,9 +254,11 @@ build_template_app:
 generate_build_child_pipeline:
   extends:
     - .build_template
+  tags: [fast_run, shiny]
   dependencies: # set dependencies to null to avoid missing artifacts issue
   needs:
     - pipeline_variables
+    - check_test_cases_env_markers_and_required_runners
   artifacts:
     paths:
       - build_child_pipeline.yml

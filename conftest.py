@@ -11,8 +11,6 @@
 import os
 import sys
 
-import gitlab
-
 if os.path.join(os.path.dirname(__file__), 'tools', 'ci') not in sys.path:
     sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'ci'))
 
@@ -40,7 +38,7 @@ from artifacts_handler import ArtifactType
 from dynamic_pipelines.constants import TEST_RELATED_APPS_DOWNLOAD_URLS_FILENAME
 from idf_ci.app import import_apps_from_txt
 from idf_ci.uploader import AppDownloader, AppUploader
-from idf_ci_utils import IDF_PATH
+from idf_ci_utils import IDF_PATH, idf_relpath
 from idf_pytest.constants import DEFAULT_SDKCONFIG, ENV_MARKERS, SPECIAL_MARKERS, TARGET_MARKERS, PytestCase
 from idf_pytest.plugin import IDF_PYTEST_EMBEDDED_KEY, ITEM_PYTEST_CASE_KEY, IdfPytestEmbedded
 from idf_pytest.utils import format_case_id
@@ -161,22 +159,8 @@ def app_downloader(pipeline_id: t.Optional[str]) -> t.Optional[AppDownloader]:
 
     logging.info('Downloading build report from the build pipeline %s', pipeline_id)
     test_app_presigned_urls_file = None
-    try:
-        gl = gitlab_api.Gitlab(os.getenv('CI_PROJECT_ID', 'espressif/esp-idf'))
-    except gitlab.exceptions.GitlabAuthenticationError:
-        msg = """To download artifacts from gitlab, please create ~/.python-gitlab.cfg with the following content:
 
-[global]
-default = internal
-ssl_verify = true
-timeout = 5
-
-[internal]
-url = <OUR INTERNAL HTTPS SERVER URL>
-private_token = <YOUR PERSONAL ACCESS TOKEN>
-api_version = 4
-"""
-        raise SystemExit(msg)
+    gl = gitlab_api.Gitlab(os.getenv('CI_PROJECT_ID', 'espressif/esp-idf'))
 
     for child_pipeline in gl.project.pipelines.get(pipeline_id, lazy=True).bridges.list(iterator=True):
         if child_pipeline.name == 'build_child_pipeline':
@@ -219,7 +203,7 @@ def build_dir(
     case: PytestCase = request._pyfuncitem.stash[ITEM_PYTEST_CASE_KEY]
     if app_downloader:
         # somehow hardcoded...
-        app_build_path = os.path.join(os.path.relpath(app_path, IDF_PATH), f'build_{target}_{config}')
+        app_build_path = os.path.join(idf_relpath(app_path), f'build_{target}_{config}')
         if case.requires_elf_or_map:
             app_downloader.download_app(app_build_path)
         else:

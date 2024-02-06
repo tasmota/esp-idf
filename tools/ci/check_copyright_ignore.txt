@@ -450,7 +450,6 @@ components/esp_rom/esp32s3/ld/esp32s3.rom.version.ld
 components/esp_rom/include/esp32/rom/aes.h
 components/esp_rom/include/esp32/rom/bigint.h
 components/esp_rom/include/esp32/rom/crc.h
-components/esp_rom/include/esp32/rom/efuse.h
 components/esp_rom/include/esp32/rom/sha.h
 components/esp_rom/include/esp32/rom/tbconsole.h
 components/esp_rom/include/esp32/rom/tjpgd.h
@@ -484,8 +483,6 @@ components/esp_rom/linux/esp_rom_crc.c
 components/esp_rom/linux/esp_rom_md5.c
 components/esp_rom/patches/esp_rom_crc.c
 components/esp_system/ubsan.c
-components/esp_wifi/include/esp_private/esp_wifi_types_private.h
-components/esp_wifi/include/esp_private/wifi_types.h
 components/esp_wifi/src/mesh_event.c
 components/fatfs/diskio/diskio.c
 components/fatfs/diskio/diskio_impl.h
@@ -500,7 +497,6 @@ components/fatfs/src/ff.h
 components/fatfs/src/ffconf.h
 components/fatfs/src/ffsystem.c
 components/fatfs/src/ffunicode.c
-components/fatfs/vfs/vfs_fat_internal.h
 components/freertos/FreeRTOS-Kernel-SMP/croutine.c
 components/freertos/FreeRTOS-Kernel-SMP/event_groups.c
 components/freertos/FreeRTOS-Kernel-SMP/include/freertos/FreeRTOS.h

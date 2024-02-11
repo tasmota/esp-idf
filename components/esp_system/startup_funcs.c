@@ -41,16 +41,11 @@
 #include "esp_app_desc.h"
 #endif
 
-#if CONFIG_ESP_COREDUMP_ENABLE
-#include "esp_core_dump.h"
-#endif
-
 #if CONFIG_PM_ENABLE
 #include "esp_pm.h"
 #include "esp_private/pm_impl.h"
 #endif
 
-#include "esp_pthread.h"
 #include "esp_private/esp_clk.h"
 #include "esp_private/spi_flash_os.h"
 #include "esp_private/brownout.h"
@@ -161,11 +156,6 @@ ESP_SYSTEM_INIT_FN(init_newlib_time, CORE, BIT(0), 105)
     return ESP_OK;
 }
 
-ESP_SYSTEM_INIT_FN(init_pthread, CORE, BIT(0), 120)
-{
-    return esp_pthread_init();
-}
-
 #if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 ESP_SYSTEM_INIT_FN(init_flash, CORE, BIT(0), 130)
 {
@@ -200,6 +190,12 @@ ESP_SYSTEM_INIT_FN(init_virtual_efuse, CORE, BIT(0), 140)
 
 ESP_SYSTEM_INIT_FN(init_secure, CORE, BIT(0), 150)
 {
+#if CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
+    // For anti-rollback case, recheck security version before we boot-up the current application
+    const esp_app_desc_t *desc = esp_app_get_description();
+    ESP_RETURN_ON_FALSE(esp_efuse_check_secure_version(desc->secure_version), ESP_FAIL, TAG, "Incorrect secure version of app");
+#endif
+
 #ifdef CONFIG_SECURE_FLASH_ENC_ENABLED
     esp_flash_encryption_init_checks();
 #endif
@@ -278,14 +274,6 @@ ESP_SYSTEM_INIT_FN(init_pm, SECONDARY, BIT(0), 201)
     return ESP_OK;
 }
 #endif // CONFIG_PM_ENABLE
-
-#if CONFIG_ESP_COREDUMP_ENABLE
-ESP_SYSTEM_INIT_FN(init_coredump, SECONDARY, BIT(0), 202)
-{
-    esp_core_dump_init();
-    return ESP_OK;
-}
-#endif // CONFIG_ESP_COREDUMP_ENABLE
 
 #if SOC_APB_BACKUP_DMA
 ESP_SYSTEM_INIT_FN(init_apb_dma, SECONDARY, BIT(0), 203)

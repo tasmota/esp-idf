@@ -1,6 +1,7 @@
 idf_build_get_property(target IDF_TARGET)
 
 set(includes "include")
+set(ldfragments "linker.lf")
 
 set(priv_requires heap spi_flash esp_mm)
 if(${target} STREQUAL "esp32")
@@ -27,10 +28,10 @@ if(CONFIG_SPIRAM)
     endif()
 endif()
 
-idf_component_register(SRCS ${srcs}
-                       INCLUDE_DIRS ${includes}
-                       PRIV_REQUIRES ${priv_requires}
-                       LDFRAGMENTS linker.lf)
+idf_component_register(SRCS "${srcs}"
+                       INCLUDE_DIRS "${includes}"
+                       PRIV_REQUIRES "${priv_requires}"
+                       LDFRAGMENTS "${ldfragments}")
 
 if(CONFIG_IDF_TARGET_ESP32 AND CONFIG_SPIRAM_CACHE_WORKAROUND AND NOT BOOTLOADER_BUILD)
     # Note: Adding as a PUBLIC compile option here causes this option to propagate to all

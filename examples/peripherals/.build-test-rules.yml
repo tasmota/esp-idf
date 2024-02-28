@@ -121,8 +121,7 @@ examples/peripherals/lcd/i2c_oled:
     - if: SOC_I2C_SUPPORTED != 1
   depends_components:
     - esp_lcd
-  depends_filepatterns:
-    - components/driver/i2c/**/*
+    - esp_driver_i2c
 
 examples/peripherals/lcd/i80_controller:
   disable:
@@ -430,6 +429,7 @@ examples/peripherals/usb/device:
       reason: lack of runners with usb_device tag
   depends_components:
     - usb
+    - fatfs
   depends_filepatterns:
     - examples/peripherals/usb/device/**/*
 
@@ -455,6 +455,7 @@ examples/peripherals/usb/host:
       reason: lack of runners with usb_host_flash_disk tag
   depends_components:
     - usb
+    - fatfs
   depends_filepatterns:
     - components/hal/usb*.c
     - components/hal/include/hal/usb*.h

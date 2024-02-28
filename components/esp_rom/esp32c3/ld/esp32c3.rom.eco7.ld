@@ -6,7 +6,7 @@
 esf_buf_alloc = 0x400015bc;
 esf_buf_alloc_dynamic = 0x400015c0;
 esf_buf_recycle = 0x400015c4;
-hal_mac_tx_set_ppdu = 0x400015d4;
+/*hal_mac_tx_set_ppdu = 0x400015d4;*/
 ic_mac_deinit = 0x400015dc;
 lmacDiscardMSDU = 0x400015f4;
 /*lmacSetTxFrame = 0x40001628;*/
@@ -35,7 +35,7 @@ wDev_ProcessRxSucData = 0x400017f4;
 /*ppProcTxDone = 0x40001804;*/
 pm_tx_data_done_process = 0x40001808;
 ppMapWaitTxq = 0x40001810;
-ieee80211_encap_esfbuf = 0x4000185c;
+/*ieee80211_encap_esfbuf = 0x4000185c;*/
 /*sta_input = 0x40001870;*/
 ieee80211_crypto_decap = 0x4000189c;
 ieee80211_decap = 0x400018a0;

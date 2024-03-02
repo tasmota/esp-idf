@@ -230,16 +230,16 @@ menu "Example Ethernet Configuration"
             help
                 Set SPI Ethernet module polling period.
 
-        # Hidden variable to ensure that polling period option is visible only when interrupt is set disabled and
-        # it is set to known value (0) when interrupt is enabled at the same time.
         config EXAMPLE_ETH_SPI_POLLING0_MS
+            # Hidden variable to ensure that polling period option is visible only when interrupt is set disabled and
+            # it is set to known value (0) when interrupt is enabled at the same time.
             int
             default EXAMPLE_ETH_SPI_POLLING0_MS_VAL if EXAMPLE_ETH_SPI_POLLING0_MS_VAL > 0
             default 0
 
-        # Hidden variable to ensure that polling period option is visible only when interrupt is set disabled and
-        # it is set to known value (0) when interrupt is enabled at the same time.
         config EXAMPLE_ETH_SPI_POLLING1_MS
+            # Hidden variable to ensure that polling period option is visible only when interrupt is set disabled and
+            # it is set to known value (0) when interrupt is enabled at the same time.
             depends on EXAMPLE_SPI_ETHERNETS_NUM > 1
             int
             default EXAMPLE_ETH_SPI_POLLING1_MS_VAL if EXAMPLE_ETH_SPI_POLLING1_MS_VAL > 0

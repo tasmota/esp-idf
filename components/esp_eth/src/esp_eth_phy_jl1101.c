@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -14,6 +14,18 @@
 static const char *TAG = "jl1101";
 
 /***************Vendor Specific Register***************/
+
+/**
+ * @brief PSMR(Power Saving Mode Register)
+ *
+ */
+typedef union {
+    struct {
+        uint16_t reserved : 15;   /* Reserved */
+        uint16_t en_pwr_save : 1; /* Enable power saving mode */
+    };
+    uint16_t val;
+} psmr_reg_t;
 
 /**
  * @brief PSR(Page Select Register)
@@ -104,6 +116,33 @@ err:
     return ret;
 }
 
+static esp_err_t jl1101_autonego_ctrl(esp_eth_phy_t *phy, eth_phy_autoneg_cmd_t cmd, bool *autonego_en_stat)
+{
+    esp_err_t ret = ESP_OK;
+    phy_802_3_t *phy_802_3 = esp_eth_phy_into_phy_802_3(phy);
+    esp_eth_mediator_t *eth = phy_802_3->eth;
+    if (cmd == ESP_ETH_PHY_AUTONEGO_EN) {
+        bmcr_reg_t bmcr;
+        ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_BMCR_REG_ADDR, &(bmcr.val)), err, TAG, "read BMCR failed");
+        ESP_GOTO_ON_FALSE(bmcr.en_loopback == 0, ESP_ERR_INVALID_STATE, err, TAG, "Autonegotiation can't be enabled while in loopback operation");
+    }
+    return esp_eth_phy_802_3_autonego_ctrl(phy_802_3, cmd, autonego_en_stat);
+err:
+    return ret;
+}
+
+static esp_err_t jl1101_loopback(esp_eth_phy_t *phy, bool enable)
+{
+    esp_err_t ret = ESP_OK;
+    phy_802_3_t *phy_802_3 = esp_eth_phy_into_phy_802_3(phy);
+    bool auto_nego_en;
+    ESP_GOTO_ON_ERROR(jl1101_autonego_ctrl(phy, ESP_ETH_PHY_AUTONEGO_G_STAT, &auto_nego_en), err, TAG, "get status of autonegotiation failed");
+    ESP_GOTO_ON_FALSE(!(auto_nego_en && enable), ESP_ERR_INVALID_STATE, err, TAG, "Unable to set loopback while autonegotiation is enabled. Disable it to use loopback");
+    return esp_eth_phy_802_3_loopback(phy_802_3, enable);
+err:
+    return ret;
+}
+
 static esp_err_t jl1101_init(esp_eth_phy_t *phy)
 {
     esp_err_t ret = ESP_OK;
@@ -135,6 +174,8 @@ esp_eth_phy_t *esp_eth_phy_new_jl1101(const eth_phy_config_t *config)
     // redefine functions which need to be customized for sake of jl1101
     jl1101->phy_802_3.parent.init = jl1101_init;
     jl1101->phy_802_3.parent.get_link = jl1101_get_link;
+    jl1101->phy_802_3.parent.autonego_ctrl = jl1101_autonego_ctrl;
+    jl1101->phy_802_3.parent.loopback = jl1101_loopback;
 
     return &jl1101->phy_802_3.parent;
 err:

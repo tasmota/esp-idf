@@ -58,7 +58,6 @@ ENV_MARKERS = {
     'eth_dm9051': 'SPI Ethernet module with two DM9051',
     'quad_psram': 'runners with quad psram',
     'octal_psram': 'runners with octal psram',
-    'usb_host': 'usb host runners',
     'usb_host_flash_disk': 'usb host runners with USB flash disk attached',
     'usb_device': 'usb device runners',
     'ethernet_ota': 'ethernet OTA runners',
@@ -103,6 +102,7 @@ ENV_MARKERS = {
     'i2c_oled': 'Runner with ssd1306 I2C oled connected',
     'httpbin': 'runner for tests that need to access the httpbin service',
     'flash_4mb': 'C2 runners with 4 MB flash',
+    'jtag_re_enable': 'Runner to re-enable jtag which is softly disabled by burning bit SOFT_DIS_JTAG on eFuse',
     # multi-dut markers
     'multi_dut_modbus_rs485': 'a pair of runners connected by RS485 bus',
     'ieee802154': 'ieee802154 related tests should run on ieee802154 runners.',

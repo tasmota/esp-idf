@@ -82,14 +82,15 @@ static uint8_t bt_mesh_gatts_addr[6];
 
 #endif /* defined(CONFIG_BLE_MESH_NODE) && CONFIG_BLE_MESH_NODE */
 
+static bool g_host_init = false;
+
 int bt_mesh_host_init(void)
 {
-    static bool init = false;
     int rc;
 
-    if (init == true) {
+    if (g_host_init  == true) {
         BT_WARN("Already initialized host for mesh!");
-        return 0;
+        return -EALREADY;
     }
 
     rc = btc_init();
@@ -103,7 +104,30 @@ int bt_mesh_host_init(void)
     }
 
     osi_alarm_init();
-    init = true;
+    g_host_init  = true;
+
+    return 0;
+}
+
+int bt_mesh_host_deinit(void)
+{
+    int rc;
+
+    if (g_host_init == false) {
+        return -EALREADY;
+    }
+
+    osi_alarm_deinit();
+
+    rc = osi_alarm_delete_mux();
+    if (rc != 0) {
+        return -1;
+    }
+
+    btc_deinit();
+
+    g_host_init = false;
+
     return 0;
 }
 
@@ -897,7 +921,7 @@ int bt_mesh_ble_adv_start(const struct bt_mesh_ble_adv_param *param,
         break;
     case BLE_MESH_ADV_NONCONN_IND:
         adv_params.conn_mode = BLE_GAP_CONN_MODE_NON;
-        adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+        adv_params.disc_mode = BLE_GAP_DISC_MODE_NON;
         break;
     case BLE_MESH_ADV_DIRECT_IND_LOW_DUTY:
         adv_params.conn_mode = BLE_GAP_CONN_MODE_DIR;
@@ -1982,6 +2006,16 @@ int bt_mesh_update_exceptional_list(uint8_t sub_code, uint32_t type, void *info)
             BT_ERR("Invalid Provisioning Link ID");
             return -EINVAL;
         }
+
+        /* When removing an unused link (i.e., Link ID is 0), and since
+         * Controller has never added this Link ID, it will cause error
+         * log been wrongly reported.
+         * Therefore, add this check here to avoid such occurrences.
+         */
+        if (*(uint32_t*)info == 0) {
+            return 0;
+        }
+
         sys_memcpy_swap(value, info, sizeof(uint32_t));
     }
 

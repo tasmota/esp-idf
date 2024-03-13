@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1060,7 +1060,6 @@ r_ble_lll_adv_periodic_schedule_first = 0x40001448;
 r_ble_lll_adv_pri_schedule_tx_pdu = 0x40001458;
 r_ble_lll_adv_reschedule_event = 0x4000145c;
 r_ble_lll_adv_reschedule_periodic_event = 0x40001460;
-r_ble_lll_adv_sec_done = 0x40001468;
 r_ble_lll_adv_sec_event_done = 0x4000146c;
 r_ble_lll_adv_sec_schedule_next_aux = 0x40001470;
 r_ble_lll_adv_secondary_tx_start_cb = 0x40001474;
@@ -1157,7 +1156,6 @@ r_ble_lll_per_adv_coex_dpc_update = 0x40001634;
 r_ble_lll_per_adv_coex_dpc_update_on_data_updated = 0x40001638;
 r_ble_lll_per_adv_coex_dpc_update_on_scheduled = 0x4000163c;
 r_ble_lll_per_adv_coex_dpc_update_on_start = 0x40001640;
-r_ble_lll_reset = 0x40001644;
 r_ble_lll_rfmgmt_is_enabled = 0x40001660;
 r_ble_lll_rfmgmt_release = 0x40001664;
 r_ble_lll_rfmgmt_scan_changed = 0x40001670;
@@ -1168,7 +1166,6 @@ r_ble_lll_rx_pdu_in = 0x40001688;
 r_ble_lll_rx_pkt_in = 0x4000168c;
 r_ble_lll_rx_pkt_isr = 0x40001690;
 r_ble_lll_scan_abort_aux_sched = 0x40001694;
-r_ble_lll_scan_aux_data_free = 0x40001698;
 r_ble_lll_scan_chk_resume = 0x4000169c;
 r_ble_lll_scan_clean_cur_aux_data = 0x400016a0;
 r_ble_lll_scan_coex_event_cb = 0x400016a4;
@@ -1635,9 +1632,9 @@ hal_mac_set_txq_invalid = 0x40001d60;
 hal_mac_txq_disable = 0x40001d64;
 hal_mac_is_txq_enabled = 0x40001d68;
 hal_mac_get_txq_pmd = 0x40001d6c;
-lmacDiscardFrameExchangeSequence = 0x40001d70;
-lmacDisableTransmit = 0x40001d74;
-lmacProcessTxTimeout = 0x40001d78;
+/*lmacDiscardFrameExchangeSequence = 0x40001d70;*/
+/*lmacDisableTransmit = 0x40001d74;*/
+/*lmacProcessTxTimeout = 0x40001d78;*/
 /*lmacProcessTxSuccess = 0x40001d7c;*/
 lmacProcessCollision = 0x40001d80;
 lmacProcessTxRtsError = 0x40001d84;
@@ -1669,7 +1666,7 @@ mac_last_rxbuf_init = 0x40001de8;
 hal_attenna_init = 0x40001dec;
 hal_timer_update_by_rtc = 0x40001df0;
 hal_coex_pti_init = 0x40001df4;
-lmac_stop_hw_txq = 0x40001df8;
+/*lmac_stop_hw_txq = 0x40001df8;*/
 ppDirectRecycleAmpdu = 0x40001dfc;
 esp_wifi_internal_set_rts = 0x40001e00;
 esp_wifi_internal_get_rts = 0x40001e04;
@@ -1850,7 +1847,7 @@ ic_reset_rx_ba = 0x40001fa8;
 ieee80211_align_eb = 0x40001fac;
 ieee80211_ampdu_reorder = 0x40001fb0;
 ieee80211_ampdu_start_age_timer = 0x40001fb4;
-ieee80211_encap_esfbuf = 0x40001fb8;
+/*ieee80211_encap_esfbuf = 0x40001fb8;*/
 ieee80211_is_tx_allowed = 0x40001fbc;
 ieee80211_output_pending_eb = 0x40001fc0;
 /* ieee80211_output_process = 0x40001fc4; */
@@ -1860,7 +1857,7 @@ wifi_get_macaddr = 0x40001fd0;
 wifi_rf_phy_disable = 0x40001fd4;
 wifi_rf_phy_enable = 0x40001fd8;
 ic_ebuf_alloc = 0x40001fdc;
-ieee80211_classify = 0x40001fe0;
+/*ieee80211_classify = 0x40001fe0;*/
 ieee80211_copy_eb_header = 0x40001fe4;
 ieee80211_recycle_cache_eb = 0x40001fe8;
 ieee80211_search_node = 0x40001fec;

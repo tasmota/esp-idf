@@ -405,6 +405,21 @@ menu "Bootloader config"
             (The application and bootoloader must be compiled with the same option).
             The RTC FAST memory has access only through PRO_CPU.
 
+    config BOOTLOADER_CUSTOM_RESERVE_RTC_IN_CRC
+        bool "Include custom memory in the CRC calculation"
+        depends on BOOTLOADER_CUSTOM_RESERVE_RTC
+        default n
+        help
+            This option allows the customer to use the legacy bootloader behavior when the
+            RTC FAST memory CRC calculation takes place. When this option is enabled, the
+            allocated user custom data will be taken into account in the CRC calculcation.
+            This means that any change to the custom data would need a CRC update to prevent
+            the bootloader from marking this data as corrupted.
+            If this option is disabled, the custom data will not be taken into account when
+            calculating the RTC FAST memory CRC. The user custom data can be changed freely,
+            without the need to update the CRC.
+            THIS OPTION MUST BE THE SAME FOR BOTH THE BOOTLOADER AND THE APPLICATION BUILDS.
+
     config BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE
         hex "Size in bytes for custom purposes"
         default 0
@@ -1006,6 +1021,22 @@ menu "Security features"
                 DIS_FORCE_DOWNLOAD, DIS_USB_OTG, DIS_TWAI, DIS_APP_CPU, DIS_PAD_JTAG,
                 DIS_DOWNLOAD_MANUAL_ENCRYPT, DIS_USB_JTAG, DIS_USB_SERIAL_JTAG, STRAP_JTAG_SEL, USB_PHY_SEL.
     endmenu  # Potentially Insecure
+
+    config SECURE_FLASH_ENCRYPT_ONLY_IMAGE_LEN_IN_APP_PART
+        bool "Encrypt only the app image that is present in the partition of type app"
+        depends on SECURE_FLASH_ENC_ENABLED && !SECURE_FLASH_REQUIRE_ALREADY_ENABLED
+        default n
+        help
+            If set, optimise encryption time for the partition of type APP,
+            by only encrypting the app image that is present in the partition,
+            instead of the whole partition.
+            The image length used for encryption is derived from the image metadata, which
+            includes the size of the app image, checksum, hash and also the signature sector
+            when secure boot is enabled.
+
+            If not set (default), the whole partition of type APP would be encrypted,
+            which increases the encryption time but might be useful if there
+            is any custom data appended to the firmware image.
 
     config SECURE_FLASH_CHECK_ENC_EN_IN_APP
         bool "Check Flash Encryption enabled on app startup"

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,16 +13,24 @@
 #include "esp_core_dump_common.h"
 #include "esp_rom_sys.h"
 
-const static DRAM_ATTR char TAG[] __attribute__((unused)) = "esp_core_dump_uart";
+const static char TAG[] __attribute__((unused)) = "esp_core_dump_uart";
 
 #if CONFIG_ESP_COREDUMP_ENABLE_TO_UART
+
+void esp_core_dump_print_write_start(void) __attribute__((alias("esp_core_dump_uart_print_write_start")));
+void esp_core_dump_print_write_end(void) __attribute__((alias("esp_core_dump_uart_print_write_end")));
+esp_err_t esp_core_dump_write_init(void) __attribute__((alias("esp_core_dump_uart_hw_init")));
+esp_err_t esp_core_dump_write_prepare(core_dump_write_data_t *wr_data, uint32_t *data_len) __attribute__((alias("esp_core_dump_uart_write_prepare")));
+esp_err_t esp_core_dump_write_start(core_dump_write_data_t *wr_data) __attribute__((alias("esp_core_dump_uart_write_start")));
+esp_err_t esp_core_dump_write_end(core_dump_write_data_t *wr_data) __attribute__((alias("esp_core_dump_uart_write_end")));
+esp_err_t esp_core_dump_write_data(core_dump_write_data_t *wr_data, void *data, uint32_t data_len) __attribute__((alias("esp_core_dump_uart_write_data")));
 
 /* This function exists on every board, thus, we don't need to specify
  * explicitly the header for each board. */
 int esp_clk_cpu_freq(void);
 
 static void esp_core_dump_b64_encode(const uint8_t *src, uint32_t src_len, uint8_t *dst) {
-    const static DRAM_ATTR char b64[] =
+    const static char b64[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     int i, j, a, b, c;
 
@@ -46,52 +54,59 @@ static void esp_core_dump_b64_encode(const uint8_t *src, uint32_t src_len, uint8
     dst[j++] = '\0';
 }
 
-static esp_err_t esp_core_dump_uart_write_start(core_dump_write_data_t *priv)
+static void esp_core_dump_uart_print_write_start(void)
+{
+    ESP_COREDUMP_LOGI("Print core dump to uart...");
+}
+
+static void esp_core_dump_uart_print_write_end(void)
+{
+    ESP_COREDUMP_LOGI("Core dump has been written to uart.");
+}
+
+static esp_err_t esp_core_dump_uart_write_start(core_dump_write_data_t *wr_data)
 {
     esp_err_t err = ESP_OK;
-    core_dump_write_data_t *wr_data = (core_dump_write_data_t *)priv;
 
-    ESP_COREDUMP_ASSERT(priv != NULL);
+    ESP_COREDUMP_ASSERT(wr_data != NULL);
     esp_core_dump_checksum_init(&wr_data->checksum_ctx);
-    esp_rom_printf(DRAM_STR("================= CORE DUMP START =================\r\n"));
+    ESP_COREDUMP_PRINT("================= CORE DUMP START =================\r\n");
     return err;
 }
 
-static esp_err_t esp_core_dump_uart_write_prepare(core_dump_write_data_t *priv, uint32_t *data_len)
+static esp_err_t esp_core_dump_uart_write_prepare(core_dump_write_data_t *wr_data, uint32_t *data_len)
 {
     ESP_COREDUMP_ASSERT(data_len != NULL);
     *data_len += esp_core_dump_checksum_size();
     return ESP_OK;
 }
 
-static esp_err_t esp_core_dump_uart_write_end(core_dump_write_data_t *priv)
+static esp_err_t esp_core_dump_uart_write_end(core_dump_write_data_t *wr_data)
 {
     esp_err_t err = ESP_OK;
     char buf[64 + 4] = { 0 };
     core_dump_checksum_bytes cs_addr = NULL;
-    core_dump_write_data_t *wr_data = (core_dump_write_data_t *)priv;
     if (wr_data) {
-        size_t cs_len = esp_core_dump_checksum_finish(wr_data->checksum_ctx, &cs_addr);
+        size_t cs_len = esp_core_dump_checksum_finish(&wr_data->checksum_ctx, &cs_addr);
         wr_data->off += cs_len;
         esp_core_dump_b64_encode((const uint8_t *)cs_addr, cs_len, (uint8_t*)&buf[0]);
-        esp_rom_printf(DRAM_STR("%s\r\n"), buf);
+        ESP_COREDUMP_PRINT("%s\r\n", buf);
     }
-    esp_rom_printf(DRAM_STR("================= CORE DUMP END =================\r\n"));
+    ESP_COREDUMP_PRINT("================= CORE DUMP END =================\r\n");
 
     if (cs_addr) {
-        esp_core_dump_print_checksum(DRAM_STR("Coredump checksum"), cs_addr);
+        esp_core_dump_print_checksum("Coredump checksum", cs_addr);
     }
 
     return err;
 }
 
-static esp_err_t esp_core_dump_uart_write_data(core_dump_write_data_t *priv, void * data, uint32_t data_len)
+static esp_err_t esp_core_dump_uart_write_data(core_dump_write_data_t *wr_data, void * data, uint32_t data_len)
 {
     esp_err_t err = ESP_OK;
     char buf[64 + 4] = { 0 };
     char *addr = data;
     char *end = addr + data_len;
-    core_dump_write_data_t *wr_data = (core_dump_write_data_t *)priv;
 
     ESP_COREDUMP_ASSERT(data != NULL);
 
@@ -103,12 +118,12 @@ static esp_err_t esp_core_dump_uart_write_data(core_dump_write_data_t *priv, voi
         memcpy(tmp, addr, len);
         esp_core_dump_b64_encode((const uint8_t *)tmp, len, (uint8_t *)buf);
         addr += len;
-        esp_rom_printf(DRAM_STR("%s\r\n"), buf);
+        ESP_COREDUMP_PRINT("%s\r\n", buf);
     }
 
     if (wr_data) {
         wr_data->off += data_len;
-        esp_core_dump_checksum_update(wr_data->checksum_ctx, data, data_len);
+        esp_core_dump_checksum_update(&wr_data->checksum_ctx, data, data_len);
     }
     return err;
 }
@@ -122,16 +137,8 @@ static int esp_core_dump_uart_get_char(void) {
     return i;
 }
 
-void esp_core_dump_to_uart(panic_info_t *info)
+static esp_err_t esp_core_dump_uart_hw_init(void)
 {
-    core_dump_write_data_t wr_data = { 0 };
-    core_dump_write_config_t wr_cfg = {
-        .prepare = esp_core_dump_uart_write_prepare,
-        .start   = esp_core_dump_uart_write_start,
-        .end     = esp_core_dump_uart_write_end,
-        .write   = esp_core_dump_uart_write_data,
-        .priv    = (void*)&wr_data
-    };
     uint32_t tm_end = 0;
     uint32_t tm_cur = 0;
     int ch = 0;
@@ -154,9 +161,8 @@ void esp_core_dump_to_uart(panic_info_t *info)
         }
         ch = esp_core_dump_uart_get_char();
     }
-    ESP_COREDUMP_LOGI("Print core dump to uart...");
-    esp_core_dump_write(info, &wr_cfg);
-    ESP_COREDUMP_LOGI("Core dump has been written to uart.");
+
+    return ESP_OK;
 }
 
 void esp_core_dump_init(void)

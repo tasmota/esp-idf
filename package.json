@@ -11,6 +11,7 @@
     "esp32c3",
     "esp32c6",
     "esp32h2",
+    "esp32p4",
     "espressif"
   ],
   "homepage": "https://docs.espressif.com/projects/esp-idf/en/latest/esp32/",

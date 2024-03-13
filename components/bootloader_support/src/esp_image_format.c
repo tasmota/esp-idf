@@ -23,15 +23,6 @@
 #include "bootloader_memory_utils.h"
 #include "soc/soc_caps.h"
 #include "hal/cache_ll.h"
-#if CONFIG_IDF_TARGET_ESP32C2
-#include "esp32c2/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32C6
-#include "esp32c6/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
-#include "esp32p4/rom/rtc.h"
-#endif
 
 #define ALIGN_UP(num, align) (((num) + ((align) - 1)) & ~((align) - 1))
 
@@ -226,6 +217,8 @@ static esp_err_t image_load(esp_image_load_mode_t mode, const esp_partition_pos_
             }
         }
 #if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+        /* We have manipulated data over dcache that will be read over icache and need
+           to writeback, else the data read might be invalid */
         cache_ll_writeback_all(CACHE_LL_LEVEL_INT_MEM, CACHE_TYPE_DATA, CACHE_LL_ID_ALL);
 #endif
     }
@@ -673,6 +666,13 @@ static esp_err_t process_segment_data(int segment, intptr_t load_addr, uint32_t 
 
     if (checksum == NULL && sha_handle == NULL) {
         memcpy((void *)load_addr, data, data_len);
+#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+        if (esp_ptr_in_iram((uint32_t *)load_addr)) {
+            /* If we have manipulated data over dcache that will be read over icache then we need
+               to writeback, else the data read might be invalid */
+            cache_ll_writeback_all(CACHE_LL_LEVEL_INT_MEM, CACHE_TYPE_DATA, CACHE_LL_ID_ALL);
+        }
+#endif
         bootloader_munmap(data);
         return ESP_OK;
     }
@@ -728,7 +728,9 @@ static esp_err_t process_segment_data(int segment, intptr_t load_addr, uint32_t 
         }
     }
 #if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-    if (do_load && esp_ptr_in_diram_iram((uint32_t *)load_addr)) {
+    if (do_load && esp_ptr_in_iram((uint32_t *)load_addr)) {
+        /* If we have manipulated data over dcache that will be read over icache then we need
+           to writeback, else the data read might be invalid */
         cache_ll_writeback_all(CACHE_LL_LEVEL_INT_MEM, CACHE_TYPE_DATA, CACHE_LL_ID_ALL);
     }
 #endif

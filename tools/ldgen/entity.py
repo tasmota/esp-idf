@@ -192,7 +192,7 @@ class EntityDB():
 
     def _match_obj(self, archive, obj):
         objs = self.get_objects(archive)
-        match_objs = fnmatch.filter(objs, obj + '.o') + fnmatch.filter(objs, obj + '.*.obj') + fnmatch.filter(objs, obj + '.obj')
+        match_objs = fnmatch.filter(objs, obj + '.*.o') + fnmatch.filter(objs, obj + '.o') + fnmatch.filter(objs, obj + '.*.obj') + fnmatch.filter(objs, obj + '.obj')
 
         if len(match_objs) > 1:
             raise ValueError("Multiple matches for object: '%s: %s': %s" % (archive, obj, str(match_objs)))

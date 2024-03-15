@@ -718,7 +718,6 @@ components/nvs_flash/src/nvs_pagemanager.hpp
 components/nvs_flash/src/nvs_partition.cpp
 components/nvs_flash/src/nvs_partition_lookup.cpp
 components/nvs_flash/src/nvs_partition_lookup.hpp
-components/nvs_flash/src/nvs_platform.hpp
 components/nvs_flash/src/nvs_test_api.h
 components/nvs_flash/src/nvs_types.cpp
 components/nvs_flash/src/partition.hpp
@@ -990,7 +989,6 @@ components/spi_flash/sim/sdkconfig/sdkconfig.h
 components/spi_flash/sim/stubs/bsd/strlcpy.c
 components/spi_flash/spi_flash_chip_boya.c
 components/spi_flash/spi_flash_chip_issi.c
-components/spi_flash/spi_flash_chip_mxic.c
 components/spi_flash/spi_flash_chip_winbond.c
 components/spi_flash/test/test_esp_flash.c
 components/spi_flash/test/test_flash_encryption.c

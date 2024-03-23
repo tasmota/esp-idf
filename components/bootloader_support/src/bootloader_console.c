@@ -6,6 +6,7 @@
 
 #include "sdkconfig.h"
 #include "bootloader_console.h"
+#include "soc/soc_caps.h"
 #include "soc/uart_periph.h"
 #include "soc/uart_channel.h"
 #include "soc/io_mux_reg.h"
@@ -18,13 +19,16 @@
 #include "esp32s2/rom/usb/cdc_acm.h"
 #include "esp32s2/rom/usb/usb_common.h"
 #endif
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-#include "hal/usb_fsls_phy_ll.h"
+#if CONFIG_ESP_CONSOLE_USB_CDC
+#include "hal/usb_wrap_ll.h"
 #endif
 #include "esp_rom_gpio.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
 #include "esp_rom_caps.h"
+#if CONFIG_IDF_TARGET_ESP32C5
+#include "soc/pcr_reg.h"
+#endif
 
 #ifdef CONFIG_ESP_CONSOLE_NONE
 void bootloader_console_init(void)
@@ -85,6 +89,13 @@ void bootloader_console_init(void)
 #if ESP_ROM_UART_CLK_IS_XTAL
     clock_hz = (uint32_t)rtc_clk_xtal_freq_get() * MHZ; // From esp32-s3 on, UART clk source is selected to XTAL in ROM
 #endif
+#if CONFIG_IDF_TARGET_ESP32C5_MP_VERSION
+#if CONFIG_IDF_ENV_FPGA
+    clock_hz = CONFIG_XTAL_FREQ * MHZ;
+#else
+    clock_hz = REG_GET_FIELD(PCR_SYSCLK_CONF_REG, PCR_CLK_XTAL_FREQ) * MHZ;
+#endif  // CONFIG_IDF_ENV_FPGA
+#endif  // CONFIG_IDF_TARGET_ESP32C5_MP_VERSION
     esp_rom_uart_set_clock_baudrate(uart_num, clock_hz, CONFIG_ESP_CONSOLE_UART_BAUDRATE);
 }
 #endif // CONFIG_ESP_CONSOLE_UART
@@ -105,10 +116,9 @@ void bootloader_console_init(void)
     esp_rom_output_usb_acm_init(s_usb_cdc_buf, sizeof(s_usb_cdc_buf));
     esp_rom_output_set_as_console(ESP_ROM_USB_OTG_NUM);
     esp_rom_install_channel_putc(1, bootloader_console_write_char_usb);
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-    usb_fsls_phy_ll_usb_wrap_pad_enable(&USB_WRAP, true);
-    usb_fsls_phy_ll_int_otg_enable(&USB_WRAP);
-#endif
+    // Ensure that the USB FSLS PHY is mapped to the USB WRAP
+    usb_wrap_ll_phy_enable_pad(&USB_WRAP, true);
+    usb_wrap_ll_phy_enable_external(&USB_WRAP, false);
 }
 #endif //CONFIG_ESP_CONSOLE_USB_CDC
 

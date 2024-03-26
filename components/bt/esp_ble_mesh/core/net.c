@@ -1751,9 +1751,7 @@ static bool ignore_net_msg(uint16_t src, uint16_t dst)
     }
 
     if (IS_ENABLED(CONFIG_BLE_MESH_PROVISIONER) &&
-        bt_mesh_is_provisioner_en() &&
-        BLE_MESH_ADDR_IS_UNICAST(dst) &&
-        bt_mesh_elem_find(dst)) {
+        bt_mesh_is_provisioner_en()) {
         /* If the destination address of the message is the element
          * address of Provisioner, but Provisioner fails to find the
          * node in its provisioning database, then this message will
@@ -1810,7 +1808,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
                       bt_mesh_elem_find(rx.ctx.recv_dst));
 
     if (IS_ENABLED(CONFIG_BLE_MESH_GATT_PROXY_SERVER) &&
-        bt_mesh_private_gatt_proxy_state_get() == BLE_MESH_PRIVATE_GATT_PROXY_DISABLED &&
+        bt_mesh_private_gatt_proxy_state_get() != BLE_MESH_PRIVATE_GATT_PROXY_ENABLED &&
         net_if == BLE_MESH_NET_IF_PROXY) {
         bt_mesh_proxy_server_addr_add(data, rx.ctx.addr);
 

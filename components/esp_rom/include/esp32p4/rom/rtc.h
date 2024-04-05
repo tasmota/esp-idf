@@ -72,8 +72,8 @@ extern "C" {
  *     0 -- light sleep
  *     1 -- deep  sleep
  */
-#define LIGHT_SLEEP_WAKE_STUB_ADDR_REG LP_SYSTEM_REG_LP_STORE8_REG
-#define SLEEP_MODE_REG LP_SYSTEM_REG_LP_STORE8_REG
+#define RTC_SLEEP_WAKE_STUB_ADDR_REG  LP_SYSTEM_REG_LP_STORE8_REG
+#define RTC_SLEEP_MODE_REG            LP_SYSTEM_REG_LP_STORE8_REG
 
 typedef enum {
     AWAKE = 0,             //<CPU ON
@@ -195,8 +195,7 @@ static inline void rtc_suppress_rom_log(void)
      * you need to write to this register in the same format.
      * Namely, the upper 16 bits and lower should be the same.
      */
-    // REG_SET_BIT(LP_SYS_LP_STORE4_REG, RTC_DISABLE_ROM_LOG);
-  abort();
+    REG_SET_BIT(LP_SYSTEM_REG_LP_STORE4_REG, RTC_DISABLE_ROM_LOG);
 }
 
 /**

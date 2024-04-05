@@ -63,7 +63,6 @@ api-reference/peripherals/usb_host/usb_host_notes_dwc_otg.rst
 api-reference/peripherals/usb_host/usb_host_notes_design.rst
 api-reference/peripherals/usb_device.rst
 api-reference/peripherals/touch_element.rst
-api-reference/peripherals/lcd.rst
 api-reference/peripherals/ana_cmpr.rst
 api-reference/peripherals/temp_sensor.rst
 api-reference/peripherals/spi_flash/xip_from_psram.inc
@@ -78,7 +77,6 @@ api-reference/peripherals/touch_pad.rst
 api-reference/peripherals/adc_calibration.rst
 api-reference/peripherals/parlio.rst
 api-reference/peripherals/i2c.rst
-api-reference/peripherals/dedic_gpio.rst
 api-reference/peripherals/sd_pullup_requirements.rst
 api-reference/peripherals/index.rst
 api-reference/network/esp_openthread.rst
@@ -99,11 +97,6 @@ api-reference/index.rst
 api-reference/protocols/icmp_echo.rst
 api-reference/protocols/esp_serial_slave_link.rst
 api-reference/protocols/index.rst
-security/host-based-security-workflows.rst
-security/flash-encryption.rst
-security/security.rst
-security/esp32p4_log.inc
-security/index.rst
 get-started/establish-serial-connection.rst
 get-started/linux-macos-setup.rst
 get-started/linux-macos-start-project.rst

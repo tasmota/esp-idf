@@ -93,6 +93,8 @@
 #define REF_CLK_DIV_MIN 2
 #elif CONFIG_IDF_TARGET_ESP32C6
 #define REF_CLK_DIV_MIN 2
+#elif CONFIG_IDF_TARGET_ESP32C61
+#define REF_CLK_DIV_MIN 2
 #elif CONFIG_IDF_TARGET_ESP32C5
 #define REF_CLK_DIV_MIN 2
 #elif CONFIG_IDF_TARGET_ESP32H2
@@ -120,7 +122,7 @@ static uint32_t s_mode_mask;
 
 #define PERIPH_SKIP_LIGHT_SLEEP_NO 2
 
-/* Indicates if light sleep shoule be skipped by peripherals. */
+/* Indicates if light sleep should be skipped by peripherals. */
 static skip_light_sleep_cb_t s_periph_skip_light_sleep_cb[PERIPH_SKIP_LIGHT_SLEEP_NO];
 
 /* Indicates if light sleep entry was skipped in vApplicationSleep for given CPU.

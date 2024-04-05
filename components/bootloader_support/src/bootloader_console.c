@@ -13,7 +13,6 @@
 #include "soc/gpio_periph.h"
 #include "soc/gpio_sig_map.h"
 #include "soc/rtc.h"
-#include "hal/clk_gate_ll.h"
 #include "hal/gpio_hal.h"
 #if CONFIG_IDF_TARGET_ESP32S2
 #include "esp32s2/rom/usb/cdc_acm.h"
@@ -126,5 +125,12 @@ void bootloader_console_init(void)
 void bootloader_console_init(void)
 {
     esp_rom_output_switch_buffer(ESP_ROM_USB_SERIAL_DEVICE_NUM);
+
+    /* Switch console channel to avoid output on UART and allow  */
+    esp_rom_output_set_as_console(ESP_ROM_USB_SERIAL_DEVICE_NUM);
+
+    /* ROM printf by default also prints to USB-Serial-JTAG on channel 2
+       need to disable to not print twice */
+    esp_rom_install_channel_putc(2, NULL);
 }
 #endif //CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG

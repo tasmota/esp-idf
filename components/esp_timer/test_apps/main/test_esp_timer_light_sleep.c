@@ -8,6 +8,8 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/param.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_timer.h"
 #include "unity.h"
 #include "esp_rom_sys.h"
@@ -36,22 +38,25 @@ TEST_CASE("Test the periodic timer does not handle lost events during light slee
 
     int period_cb_ms = 10;
     int interval_ms = 50;
-    TEST_ESP_OK(esp_timer_start_periodic(periodic_timer, period_cb_ms * 1000));
-    TEST_ESP_OK(esp_sleep_enable_timer_wakeup(interval_ms * 1000));
     printf("Run light sleep\n");
     printf("count_calls should be around = %d\n", interval_ms / period_cb_ms);
+    TEST_ESP_OK(esp_sleep_enable_timer_wakeup(interval_ms * 1000));
+    TEST_ESP_OK(esp_timer_start_periodic(periodic_timer, period_cb_ms * 1000));
     for (int i = 0; i < 3; i++) {
-        count_calls = 0;
-        TEST_ESP_OK(esp_light_sleep_start());
+        do {
+            count_calls = 0;
+        } while (esp_light_sleep_start() != ESP_OK);
         esp_rom_delay_us(interval_ms * 1000);
-        printf("count_calls = %d\n", count_calls);
-        TEST_ASSERT_INT_WITHIN(2, interval_ms / period_cb_ms, count_calls);
+        int saved_count_calls = count_calls;
+        printf("count_calls = %d\n", saved_count_calls);
         TEST_ESP_OK(esp_timer_dump(stdout));
+        TEST_ASSERT_INT_WITHIN(2, interval_ms / period_cb_ms, saved_count_calls);
     }
     TEST_ESP_OK(esp_timer_stop(periodic_timer));
     // times_skipped is about 12 (4 from each sleep time).
     TEST_ESP_OK(esp_timer_dump(stdout));
     TEST_ESP_OK(esp_timer_delete(periodic_timer));
+    vTaskDelay(3); // wait for the esp_timer task to delete all timers
 }
 
-#endif // SOC_SLEEP_SUPPORTED
+#endif // SOC_LIGHT_SLEEP_SUPPORTED

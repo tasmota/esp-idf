@@ -26,11 +26,11 @@ if(NOT BOOTLOADER_BUILD)
                      "periph_ctrl.c"
                      "revision.c"
                      "rtc_module.c"
+                     "sleep_modem.c"
                      "sleep_modes.c"
                      "sleep_console.c"
                      "sleep_gpio.c"
                      "sleep_event.c"
-                     "sleep_modem.c"
                      "regi2c_ctrl.c"
                      "esp_gpio_reserve.c"
                      "sar_periph_ctrl_common.c"
@@ -49,7 +49,11 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "mipi_csi_share_hw_ctrl.c")
     endif()
     if(CONFIG_SOC_PAU_SUPPORTED)
-        list(APPEND srcs "sleep_retention.c"  "sleep_system_peripheral.c" "sleep_clock.c")
+        list(APPEND srcs "sleep_retention.c"
+                         "sleep_system_peripheral.c"
+                         "sleep_clock.c"
+                         "port/${target}/clock_retention_init.c"
+                         )
     endif()
 
     # [refactor-todo]
@@ -73,11 +77,8 @@ if(NOT BOOTLOADER_BUILD)
         endif()
     endif()
 
-    if(CONFIG_SOC_MULTI_USAGE_LDO_SUPPORTED)
-        list(APPEND srcs "ldo/esp_ldo.c")
-        if(CONFIG_SPIRAM OR CONFIG_SOC_CLK_MPLL_SUPPORTED)
-            list(APPEND srcs "ldo/esp_ldo_psram.c")
-        endif()
+    if(CONFIG_SOC_GP_LDO_SUPPORTED)
+        list(APPEND srcs "ldo/esp_ldo.c" "ldo/esp_ldo_regulator.c")
     endif()
 
     if(CONFIG_SOC_ASYNC_MEMCPY_SUPPORTED)
@@ -141,7 +142,7 @@ if(NOT BOOTLOADER_BUILD)
         endif()
     endif()
 
-    if(CONFIG_SOC_RTC_FAST_MEM_SUPPORTED)
+    if(CONFIG_SOC_RTC_FAST_MEM_SUPPORTED AND CONFIG_ESP_ROM_SUPPORT_DEEP_SLEEP_WAKEUP_STUB)
         list(APPEND srcs "sleep_wake_stub.c")
     endif()
 
@@ -149,11 +150,6 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "esp_clock_output.c")
     endif()
 
-    if(CONFIG_IDF_TARGET_ESP32P4)
-        list(REMOVE_ITEM srcs
-                "sleep_wake_stub.c"   # TODO: IDF-7529
-            )
-    endif()
     if(CONFIG_IDF_TARGET_ESP32C5)
         list(REMOVE_ITEM srcs
                 "sleep_modes.c"       # TODO: [ESP32C5] IDF-8638, IDF-8640
@@ -162,13 +158,23 @@ if(NOT BOOTLOADER_BUILD)
                 "port/esp_clk_tree_common.c"    # TODO: [ESP32C5] IDF-8638, IDF-8640
             )
     endif()
+    if(CONFIG_IDF_TARGET_ESP32C61)  # TODO: [ESP32C61] IDF-9245, IDF-9247, IDF-9248
+        list(REMOVE_ITEM srcs
+                "sleep_cpu.c"
+                "sleep_modem.c"
+                "sleep_modes.c"
+                "sleep_wake_stub.c"
+                "sleep_gpio.c"
+                "port/esp_clk_tree_common.c"
+            )
+    endif()
 else()
     # Requires "_esp_error_check_failed()" function
     list(APPEND priv_requires "esp_system")
 endif()
 
 idf_component_register(SRCS ${srcs}
-                       INCLUDE_DIRS include include/soc include/soc/${target} dma/include
+                       INCLUDE_DIRS include include/soc include/soc/${target} dma/include ldo/include
                        PRIV_INCLUDE_DIRS port/include include/esp_private
                        REQUIRES ${requires}
                        PRIV_REQUIRES "${priv_requires}"

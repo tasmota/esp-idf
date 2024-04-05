@@ -21,8 +21,11 @@
     :SOC_DIG_SIGN_SUPPORTED: ds
     i2c
     :SOC_I2S_SUPPORTED: i2s
-    lcd
+    :SOC_ISP_SUPPORTED: isp
+    lcd/index
+    :SOC_GP_LDO_SUPPORTED: ldo_regulator
     ledc
+    :SOC_MIPI_CSI_SUPPORTED: camera_driver
     :SOC_MCPWM_SUPPORTED: mcpwm
     :SOC_PARLIO_SUPPORTED: parlio
     :SOC_PCNT_SUPPORTED: pcnt

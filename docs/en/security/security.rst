@@ -79,7 +79,7 @@ Flash Encryption Best Practices
 
     .. only:: SOC_ECDSA_SUPPORTED
 
-        {IDF_TARGET_NAME} also supportes ECDSA peripheral for generating hardware-accelerated ECDSA digital signatures. ECDSA private key can be directly programmed in an eFuse block and marked as read protected from the software.
+        {IDF_TARGET_NAME} also supports ECDSA peripheral for generating hardware-accelerated ECDSA digital signatures. ECDSA private key can be directly programmed in an eFuse block and marked as read protected from the software.
 
     {IDF_TARGET_SIG_PERI} peripheral can help to establish the **Secure Device Identity** to the remote endpoint, e.g., in the case of TLS mutual authentication based on the {IDF_TARGET_CIPHER_SCHEME} cipher scheme.
 
@@ -268,7 +268,7 @@ Please refer to the :ref:`nvs_encryption` for detailed documentation on the work
 Secure Device Control
 ~~~~~~~~~~~~~~~~~~~~~
 
-ESP-IDF provides capability to control an ESP device over ``Wi-Fi + HTTP`` or ``BLE`` in a secure manner using ESP Local Control component.
+ESP-IDF provides capability to control an ESP device over ``Wi-Fi/Ethernet + HTTP`` or ``BLE`` in a secure manner using ESP Local Control component.
 
 Please refer to the :doc:`../api-reference/protocols/esp_local_ctrl` for detailed documentation about this feature.
 

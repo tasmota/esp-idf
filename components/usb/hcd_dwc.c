@@ -319,8 +319,7 @@ static inline void cache_sync_data_buffer(pipe_t *pipe, urb_t *urb, bool done)
     const bool is_in = pipe->ep_char.bEndpointAddress & USB_B_ENDPOINT_ADDRESS_EP_DIR_MASK;
     const bool is_ctrl = (pipe->ep_char.type == USB_DWC_XFER_TYPE_CTRL);
     if ((is_in == done) || is_ctrl) {
-        uint32_t flags = (done) ? ESP_CACHE_MSYNC_FLAG_DIR_M2C : 0;
-        flags |= ESP_CACHE_MSYNC_FLAG_UNALIGNED;
+        uint32_t flags = (done) ? ESP_CACHE_MSYNC_FLAG_DIR_M2C : ESP_CACHE_MSYNC_FLAG_UNALIGNED;
         esp_err_t ret = esp_cache_msync(urb->transfer.data_buffer, urb->transfer.data_buffer_size, flags);
         assert(ret == ESP_OK);
     }
@@ -1041,11 +1040,18 @@ static void port_obj_free(port_t *port)
 
 void *frame_list_alloc(size_t frame_list_len)
 {
-    void *frame_list = heap_caps_aligned_calloc(USB_DWC_FRAME_LIST_MEM_ALIGN, frame_list_len, sizeof(uint32_t), MALLOC_CAP_DMA);
+    esp_err_t ret;
+    void *frame_list = NULL;
+    size_t actual_size = 0;
+    esp_dma_mem_info_t dma_mem_info = {
+        .dma_alignment_bytes = USB_DWC_FRAME_LIST_MEM_ALIGN,
+    };
+    ret = esp_dma_capable_calloc(frame_list_len, sizeof(uint32_t), &dma_mem_info, &frame_list, &actual_size);
+    assert(ret == ESP_OK);
 
     // Both Frame List start address and size should be already cache aligned so this is only a sanity check
     if (frame_list) {
-        if (!esp_dma_is_buffer_aligned(frame_list, frame_list_len * sizeof(uint32_t), ESP_DMA_BUF_LOCATION_AUTO)) {
+        if (!esp_dma_is_buffer_alignment_satisfied(frame_list, actual_size, dma_mem_info)) {
             // This should never happen
             heap_caps_free(frame_list);
             frame_list = NULL;
@@ -1066,10 +1072,17 @@ void *transfer_descriptor_list_alloc(size_t list_len, size_t *list_len_bytes_out
     *list_len_bytes_out = list_len * sizeof(usb_dwc_ll_dma_qtd_t);
 #endif // SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 
-    void *qtd_list =  heap_caps_aligned_calloc(USB_DWC_QTD_LIST_MEM_ALIGN, *list_len_bytes_out, 1, MALLOC_CAP_DMA);
+    esp_err_t ret;
+    void *qtd_list = NULL;
+    size_t actual_size = 0;
+    esp_dma_mem_info_t dma_mem_info = {
+        .dma_alignment_bytes = USB_DWC_QTD_LIST_MEM_ALIGN,
+    };
+    ret = esp_dma_capable_calloc(*list_len_bytes_out, 1, &dma_mem_info, &qtd_list, &actual_size);
+    assert(ret == ESP_OK);
 
     if (qtd_list) {
-        if (!esp_dma_is_buffer_aligned(qtd_list, *list_len_bytes_out * sizeof(usb_dwc_ll_dma_qtd_t), ESP_DMA_BUF_LOCATION_AUTO)) {
+        if (!esp_dma_is_buffer_alignment_satisfied(qtd_list, actual_size, dma_mem_info)) {
             // This should never happen
             heap_caps_free(qtd_list);
             qtd_list = NULL;
@@ -1956,6 +1969,16 @@ err:
     free(chan_obj);
     free(pipe);
     return ret;
+}
+
+int hcd_pipe_get_mps(hcd_pipe_handle_t pipe_hdl)
+{
+    pipe_t *pipe = (pipe_t *)pipe_hdl;
+    int mps;
+    HCD_ENTER_CRITICAL();
+    mps = pipe->ep_char.mps;
+    HCD_EXIT_CRITICAL();
+    return mps;
 }
 
 esp_err_t hcd_pipe_free(hcd_pipe_handle_t pipe_hdl)

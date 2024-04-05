@@ -43,6 +43,10 @@ config SOC_TWAI_SUPPORTED
     bool
     default y
 
+config SOC_PHY_SUPPORTED
+    bool
+    default y
+
 config SOC_BT_SUPPORTED
     bool
     default y
@@ -1184,6 +1188,10 @@ config SOC_FLASH_ENCRYPTION_XTS_AES_128
     default y
 
 config SOC_CRYPTO_DPA_PROTECTION_SUPPORTED
+    bool
+    default y
+
+config SOC_ECDSA_USES_MPI
     bool
     default y
 

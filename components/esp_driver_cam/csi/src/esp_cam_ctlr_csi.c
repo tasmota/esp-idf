@@ -161,7 +161,7 @@ esp_err_t esp_cam_new_csi_ctlr(const esp_cam_ctlr_csi_config_t *config, esp_cam_
     mipi_csi_hal_config_t hal_config;
     hal_config.frame_height = config->h_res;
     hal_config.frame_width = config->v_res;
-    hal_config.clk_freq_hz = config->clk_freq_hz;
+    hal_config.lane_bit_rate_mbps = config->lane_bit_rate_mbps;
     hal_config.lanes_num = config->data_lane_num;
     hal_config.byte_swap_en = config->byte_swap_en;
     mipi_csi_hal_init(&ctlr->hal, &hal_config);
@@ -186,7 +186,7 @@ esp_err_t esp_cam_new_csi_ctlr(const esp_cam_ctlr_csi_config_t *config, esp_cam_
         .flow_controller = DW_GDMA_FLOW_CTRL_SRC,
         .chan_priority = 1,
     };
-    ESP_GOTO_ON_ERROR(dw_gdma_new_channel(&csi_dma_alloc_config, &csi_dma_chan), err, TAG, "failed to new dwgdma channle");
+    ESP_GOTO_ON_ERROR(dw_gdma_new_channel(&csi_dma_alloc_config, &csi_dma_chan), err, TAG, "failed to new dwgdma channel");
     ctlr->dma_chan = csi_dma_chan;
 
     size_t csi_transfer_size = ctlr->h_res * ctlr->v_res * ctlr->in_bpp / 64;
@@ -417,7 +417,7 @@ esp_err_t s_ctlr_csi_stop(esp_cam_ctlr_handle_t handle)
 {
     ESP_RETURN_ON_FALSE(handle, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     csi_controller_t *ctlr = __containerof(handle, csi_controller_t, base);
-    ESP_RETURN_ON_FALSE(ctlr->csi_fsm == CSI_FSM_ENABLED, ESP_ERR_INVALID_STATE, TAG, "driver isn't started");
+    ESP_RETURN_ON_FALSE(ctlr->csi_fsm == CSI_FSM_STARTED, ESP_ERR_INVALID_STATE, TAG, "driver isn't started");
 
     //disable CSI bridge
     mipi_csi_brg_ll_enable(ctlr->hal.bridge_dev, false);

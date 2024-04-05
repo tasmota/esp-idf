@@ -122,7 +122,7 @@ ESP32-P4   I2S 0~2    I2S 0     I2S 0    I2S 0~2    none       none
 Standard Mode
 ^^^^^^^^^^^^^
 
-In standard mode, there are always two sound channels, i.e., the left and right channels, which are called "slots". These slots support 8/16/24/32-bit width sample data. The communication format for the slots mainly includes the followings:
+In standard mode, there are always two sound channels, i.e., the left and right channels, which are called "slots". These slots support 8/16/24/32-bit width sample data. The communication format for the slots mainly includes the following:
 
 - **Philips Format**: Data signal has one-bit shift comparing to the WS signal, and the duty of WS signal is 50%.
 
@@ -197,7 +197,7 @@ In standard mode, there are always two sound channels, i.e., the left and right 
     LCD/Camera Mode
     ^^^^^^^^^^^^^^^
 
-    LCD/Camera mode is only supported on I2S0 over a parallel bus. For LCD mode, I2S0 should work at master TX mode. For camera mode, I2S0 should work at slave RX mode. These two modes are not implemented by the I2S driver. Please refer to :doc:`/api-reference/peripherals/lcd` for details about the LCD implementation. For more information, see **{IDF_TARGET_NAME} Technical Reference Manual** > **I2S Controller (I2S)** > LCD Mode [`PDF <{IDF_TARGET_TRM_EN_URL}#camlcdctrl>`__].
+    LCD/Camera mode is only supported on I2S0 over a parallel bus. For LCD mode, I2S0 should work at master TX mode. For camera mode, I2S0 should work at slave RX mode. These two modes are not implemented by the I2S driver. Please refer to :doc:`/api-reference/peripherals/lcd/i80_lcd` for details about the LCD implementation. For more information, see **{IDF_TARGET_NAME} Technical Reference Manual** > **I2S Controller (I2S)** > LCD Mode [`PDF <{IDF_TARGET_TRM_EN_URL}#camlcdctrl>`__].
 
 .. only:: SOC_I2S_SUPPORTS_ADC_DAC
 

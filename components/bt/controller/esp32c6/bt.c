@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -512,9 +512,10 @@ IRAM_ATTR void controller_wakeup_cb(void *arg)
 }
 
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-static esp_err_t sleep_modem_ble_mac_modem_state_init(uint8_t extra)
+static esp_err_t sleep_modem_ble_mac_retention_init(void *arg)
 {
     uint8_t size;
+    int extra = *(int *)arg;
     const sleep_retention_entries_config_t *ble_mac_modem_config = esp_ble_mac_retention_link_get(&size, extra);
     esp_err_t err = sleep_retention_entries_create(ble_mac_modem_config, size, REGDMA_LINK_PRI_BT_MAC_BB, SLEEP_RETENTION_MODULE_BLE_MAC);
     if (err == ESP_OK) {
@@ -523,9 +524,27 @@ static esp_err_t sleep_modem_ble_mac_modem_state_init(uint8_t extra)
     return err;
 }
 
+static esp_err_t sleep_modem_ble_mac_modem_state_init(uint8_t extra)
+{
+    int retention_args = extra;
+    sleep_retention_module_init_param_t init_param = {
+        .cbs     = { .create = { .handle = sleep_modem_ble_mac_retention_init, .arg = &retention_args } },
+        .depends = BIT(SLEEP_RETENTION_MODULE_BT_BB)
+    };
+    esp_err_t err = sleep_retention_module_init(SLEEP_RETENTION_MODULE_BLE_MAC, &init_param);
+    if (err == ESP_OK) {
+        err = sleep_retention_module_allocate(SLEEP_RETENTION_MODULE_BLE_MAC);
+    }
+    return err;
+}
+
 static void sleep_modem_ble_mac_modem_state_deinit(void)
 {
-    sleep_retention_entries_destroy(SLEEP_RETENTION_MODULE_BLE_MAC);
+    esp_err_t err = sleep_retention_module_free(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err == ESP_OK) {
+        err = sleep_retention_module_deinit(SLEEP_RETENTION_MODULE_BLE_MAC);
+        assert(err == ESP_OK);
+    }
 }
 
 void sleep_modem_light_sleep_overhead_set(uint32_t overhead)
@@ -780,13 +799,6 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     coex_init();
 #endif // CONFIG_SW_COEXIST_ENABLE
 
-    ret = ble_controller_init(cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_init failed %d", ret);
-        goto modem_deint;
-    }
-
-    ESP_LOGI(NIMBLE_PORT_LOG_TAG, "ble controller commit:[%s]", ble_controller_get_compile_version());
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     interface_func_t bt_controller_log_interface;
     bt_controller_log_interface = esp_bt_controller_log_interface;
@@ -804,10 +816,16 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 #endif // CONFIG_BT_CONTROLLER_LOG_DUMP
     if (ret != ESP_OK) {
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_log_init failed %d", ret);
-        goto controller_init_err;
+        goto modem_deint;
     }
 #endif // CONFIG_BT_CONTROLLER_LOG_ENABLED
+    ret = ble_controller_init(cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "ble_controller_init failed %d", ret);
+        goto modem_deint;
+    }
 
+    ESP_LOGI(NIMBLE_PORT_LOG_TAG, "ble controller commit:[%s]", ble_controller_get_compile_version());
     esp_ble_change_rtc_freq(slow_clk_freq);
 
     ble_controller_scan_duplicate_config();
@@ -835,13 +853,12 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 
 free_controller:
     controller_sleep_deinit();
-#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-controller_init_err:
-    r_ble_log_deinit_async();
-#endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     os_msys_deinit();
     ble_controller_deinit();
 modem_deint:
+#if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+    r_ble_log_deinit_async();
+#endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     esp_phy_modem_deinit();
     modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
     modem_clock_module_disable(PERIPH_BT_MODULE);
@@ -872,10 +889,10 @@ esp_err_t esp_bt_controller_deinit(void)
     modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
     modem_clock_module_disable(PERIPH_BT_MODULE);
 
+    ble_controller_deinit();
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     r_ble_log_deinit_async();
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-    ble_controller_deinit();
 
 #if CONFIG_BT_NIMBLE_ENABLED
     /* De-initialize default event queue */

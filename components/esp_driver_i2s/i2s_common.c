@@ -69,10 +69,15 @@
 static const char *TAG = "i2s_common";
 
 __attribute__((always_inline))
-inline void *i2s_dma_calloc(size_t num, size_t size, uint32_t caps, size_t *actual_size)
+inline void *i2s_dma_calloc(i2s_chan_handle_t handle, size_t num, size_t size, size_t *actual_size)
 {
     void *ptr = NULL;
-    esp_dma_calloc(num, size, caps, &ptr, actual_size);
+    esp_dma_mem_info_t dma_mem_info = {
+        .extra_heap_caps = I2S_DMA_ALLOC_CAPS,
+        .dma_alignment_bytes = 4,
+    };
+    //TODO: IDF-9636
+    esp_dma_capable_calloc(num, size, &dma_mem_info, &ptr, actual_size);
     return ptr;
 }
 
@@ -366,7 +371,7 @@ uint32_t i2s_get_buf_size(i2s_chan_handle_t handle, uint32_t data_bit_width, uin
         }
     }
     if (bufsize / bytes_per_frame != dma_frame_num) {
-        ESP_LOGW(TAG, "dma frame num is adjusted to %"PRIu32" to algin the dma buffer with %"PRIu32
+        ESP_LOGW(TAG, "dma frame num is adjusted to %"PRIu32" to align the dma buffer with %"PRIu32
                  ", bufsize = %"PRIu32, bufsize / bytes_per_frame, alignment, bufsize);
     }
 #endif
@@ -417,12 +422,12 @@ esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t num, uint32_t bu
 
     /* Descriptors must be in the internal RAM */
     handle->dma.desc = (lldesc_t **)heap_caps_calloc(num, sizeof(lldesc_t *), I2S_MEM_ALLOC_CAPS);
-    ESP_GOTO_ON_FALSE(handle->dma.desc, ESP_ERR_NO_MEM, err, TAG, "create I2S DMA decriptor array failed");
+    ESP_GOTO_ON_FALSE(handle->dma.desc, ESP_ERR_NO_MEM, err, TAG, "create I2S DMA descriptor array failed");
     handle->dma.bufs = (uint8_t **)heap_caps_calloc(num, sizeof(uint8_t *), I2S_MEM_ALLOC_CAPS);
     size_t desc_size = 0;
     for (int i = 0; i < num; i++) {
         /* Allocate DMA descriptor */
-        handle->dma.desc[i] = (lldesc_t *) i2s_dma_calloc(1, sizeof(lldesc_t), I2S_DMA_ALLOC_CAPS, &desc_size);
+        handle->dma.desc[i] = (lldesc_t *) i2s_dma_calloc(handle, 1, sizeof(lldesc_t), &desc_size);
         ESP_GOTO_ON_FALSE(handle->dma.desc[i], ESP_ERR_NO_MEM, err, TAG,  "allocate DMA description failed");
         handle->dma.desc[i]->owner = 1;
         handle->dma.desc[i]->eof = 1;
@@ -430,7 +435,7 @@ esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t num, uint32_t bu
         handle->dma.desc[i]->length = bufsize;
         handle->dma.desc[i]->size = bufsize;
         handle->dma.desc[i]->offset = 0;
-        handle->dma.bufs[i] = (uint8_t *) i2s_dma_calloc(1, bufsize * sizeof(uint8_t), I2S_DMA_ALLOC_CAPS, NULL);
+        handle->dma.bufs[i] = (uint8_t *) i2s_dma_calloc(handle, 1, bufsize * sizeof(uint8_t), NULL);
         ESP_GOTO_ON_FALSE(handle->dma.bufs[i], ESP_ERR_NO_MEM, err, TAG,  "allocate DMA buffer failed");
 #if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
         esp_cache_msync(handle->dma.bufs[i], bufsize * sizeof(uint8_t), ESP_CACHE_MSYNC_FLAG_DIR_C2M);
@@ -498,6 +503,10 @@ uint32_t i2s_get_source_clk_freq(i2s_clock_src_t clk_src, uint32_t mclk_freq_hz)
     return clk_freq;
 }
 
+/* Temporary ignore the deprecated warning of i2s_event_data_t::data */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #if SOC_GDMA_SUPPORTED
 static bool IRAM_ATTR i2s_dma_rx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_t *event_data, void *user_data)
 {
@@ -514,6 +523,7 @@ static bool IRAM_ATTR i2s_dma_rx_callback(gdma_channel_handle_t dma_chan, gdma_e
 #endif
     i2s_event_data_t evt = {
         .data = &(finish_desc->buf),
+        .dma_buf = (void *)finish_desc->buf,
         .size = handle->dma.buf_size,
     };
     if (handle->callbacks.on_recv) {
@@ -541,25 +551,36 @@ static bool IRAM_ATTR i2s_dma_tx_callback(gdma_channel_handle_t dma_chan, gdma_e
     uint32_t dummy;
 
     finish_desc = (lldesc_t *)event_data->tx_eof_desc_addr;
+    void *curr_buf = (void *)finish_desc->buf;
     i2s_event_data_t evt = {
         .data = &(finish_desc->buf),
+        .dma_buf = curr_buf,
         .size = handle->dma.buf_size,
     };
+    if (handle->dma.auto_clear_before_cb) {
+        memset(curr_buf, 0, handle->dma.buf_size);
+    }
     if (handle->callbacks.on_sent) {
         user_need_yield |= handle->callbacks.on_sent(handle, &evt, handle->user_data);
     }
+#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+    /* Sync buffer after the callback in case users update the buffer in the callback */
+    if (handle->dma.auto_clear_before_cb || handle->callbacks.on_sent) {
+        esp_cache_msync(curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+#endif
     if (xQueueIsQueueFullFromISR(handle->msg_queue)) {
         xQueueReceiveFromISR(handle->msg_queue, &dummy, &need_yield1);
         if (handle->callbacks.on_send_q_ovf) {
             evt.data = NULL;
+            evt.dma_buf = NULL;
             user_need_yield |= handle->callbacks.on_send_q_ovf(handle, &evt, handle->user_data);
         }
     }
-    if (handle->dma.auto_clear) {
-        uint8_t *sent_buf = (uint8_t *)finish_desc->buf;
-        memset(sent_buf, 0, handle->dma.buf_size);
+    if (handle->dma.auto_clear_after_cb) {
+        memset(curr_buf, 0, handle->dma.buf_size);
 #if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(sent_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        esp_cache_msync(curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
 #endif
     }
     xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
@@ -588,6 +609,7 @@ static void IRAM_ATTR i2s_dma_rx_callback(void *arg)
     if (handle && (status & I2S_LL_EVENT_RX_EOF)) {
         i2s_hal_get_in_eof_des_addr(&(handle->controller->hal), (uint32_t *)&finish_desc);
         evt.data = &(finish_desc->buf);
+        evt.dma_buf = (void *)finish_desc->buf;
         evt.size = handle->dma.buf_size;
         if (handle->callbacks.on_recv) {
             user_need_yield |= handle->callbacks.on_recv(handle, &evt, handle->user_data);
@@ -596,6 +618,7 @@ static void IRAM_ATTR i2s_dma_rx_callback(void *arg)
             xQueueReceiveFromISR(handle->msg_queue, &dummy, &need_yield1);
             if (handle->callbacks.on_recv_q_ovf) {
                 evt.data = NULL;
+                evt.dma_buf = NULL;
                 user_need_yield |= handle->callbacks.on_recv_q_ovf(handle, &evt, handle->user_data);
             }
         }
@@ -625,8 +648,14 @@ static void IRAM_ATTR i2s_dma_tx_callback(void *arg)
 
     if (handle && (status & I2S_LL_EVENT_TX_EOF)) {
         i2s_hal_get_out_eof_des_addr(&(handle->controller->hal), (uint32_t *)&finish_desc);
+        void *curr_buf = (void *)finish_desc->buf;
         evt.data = &(finish_desc->buf);
+        evt.dma_buf = curr_buf;
         evt.size = handle->dma.buf_size;
+        // Auto clear the dma buffer before data sent
+        if (handle->dma.auto_clear_before_cb) {
+            memset(curr_buf, 0, handle->dma.buf_size);
+        }
         if (handle->callbacks.on_sent) {
             user_need_yield |= handle->callbacks.on_sent(handle, &evt, handle->user_data);
         }
@@ -638,9 +667,8 @@ static void IRAM_ATTR i2s_dma_tx_callback(void *arg)
             }
         }
         // Auto clear the dma buffer after data sent
-        if (handle->dma.auto_clear) {
-            uint8_t *buff = (uint8_t *)finish_desc->buf;
-            memset(buff, 0, handle->dma.buf_size);
+        if (handle->dma.auto_clear_after_cb) {
+            memset(curr_buf, 0, handle->dma.buf_size);
         }
         xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
     }
@@ -650,6 +678,8 @@ static void IRAM_ATTR i2s_dma_tx_callback(void *arg)
     }
 }
 #endif
+
+#pragma GCC diagnostic pop
 
 /**
  * @brief   I2S DMA interrupt initialization
@@ -820,7 +850,8 @@ esp_err_t i2s_new_channel(const i2s_chan_config_t *chan_cfg, i2s_chan_handle_t *
                           err, TAG, "register I2S tx channel failed");
         i2s_obj->tx_chan->role = chan_cfg->role;
         i2s_obj->tx_chan->intr_prio_flags = chan_cfg->intr_priority ? BIT(chan_cfg->intr_priority) : ESP_INTR_FLAG_LOWMED;
-        i2s_obj->tx_chan->dma.auto_clear = chan_cfg->auto_clear;
+        i2s_obj->tx_chan->dma.auto_clear_after_cb = chan_cfg->auto_clear_after_cb;
+        i2s_obj->tx_chan->dma.auto_clear_before_cb = chan_cfg->auto_clear_before_cb;
         i2s_obj->tx_chan->dma.desc_num = chan_cfg->dma_desc_num;
         i2s_obj->tx_chan->dma.frame_num = chan_cfg->dma_frame_num;
         i2s_obj->tx_chan->start = i2s_tx_channel_start;

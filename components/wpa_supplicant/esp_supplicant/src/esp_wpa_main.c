@@ -39,12 +39,16 @@
 #include "ap/sta_info.h"
 #include "wps/wps_defs.h"
 #include "wps/wps.h"
+#if CONFIG_ESP_WIFI_ENABLE_ROAMING_APP
+#include "esp_roaming.h"
+#endif
 
 #ifdef CONFIG_DPP
 #include "common/dpp.h"
 #include "esp_dpp_i.h"
 #endif
 
+bool g_wpa_pmk_caching_disabled = 0;
 const wifi_osi_funcs_t *wifi_funcs;
 struct wpa_funcs *wpa_cb;
 
@@ -295,13 +299,16 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
             wpa_sm_notify_disassoc(&gWpaSm);
             break;
         default:
+            if (g_wpa_pmk_caching_disabled) {
+                wpa_sta_clear_curr_pmksa();
+            }
             break;
     }
 #ifdef CONFIG_OWE_STA
     owe_deinit();
 #endif /* CONFIG_OWE_STA */
 
-    supplicant_sta_disconn_handler();
+    supplicant_sta_disconn_handler(reason_code);
 }
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
@@ -329,7 +336,7 @@ static int check_n_add_wps_sta(struct hostapd_data *hapd, struct sta_info *sta_i
 
     if (sta_info->eapol_sm) {
         wpa_printf(MSG_DEBUG, "considering station " MACSTR " for WPS", MAC2STR(sta_info->addr));
-        if (esp_send_assoc_resp(hapd, sta_info, sta_info->addr, WLAN_STATUS_SUCCESS, true, subtype) != WLAN_STATUS_SUCCESS) {
+        if (esp_send_assoc_resp(hapd, sta_info->addr, WLAN_STATUS_SUCCESS, true, subtype) != WLAN_STATUS_SUCCESS) {
             wpa_printf(MSG_ERROR, "failed to send assoc response " MACSTR, MAC2STR(sta_info->addr));
             return -1;
         }
@@ -353,15 +360,18 @@ static bool hostap_sta_join(void **sta, u8 *bssid, u8 *wpa_ie, u8 wpa_ie_len,u8 
 #ifdef CONFIG_SAE
         if (old_sta->lock && os_semphr_take(old_sta->lock, 0) != TRUE) {
             wpa_printf(MSG_INFO, "Ignore assoc request as softap is busy with sae calculation for station "MACSTR, MAC2STR(bssid));
-            if (esp_send_assoc_resp(hapd, old_sta, bssid, WLAN_STATUS_ASSOC_REJECTED_TEMPORARILY, rsnxe ? false : true, subtype) != WLAN_STATUS_SUCCESS) {
+            if (esp_send_assoc_resp(hapd, bssid, WLAN_STATUS_ASSOC_REJECTED_TEMPORARILY, rsnxe ? false : true, subtype) != WLAN_STATUS_SUCCESS) {
                 goto fail;
             }
             return false;
         }
-#endif /* CONFIG_SAE */
         if (!esp_wifi_ap_is_sta_sae_reauth_node(bssid)) {
             ap_free_sta(hapd, old_sta);
+        } else if (old_sta && old_sta->lock) {
+            sta_info = old_sta;
+            goto process_old_sta;
         }
+#endif /* CONFIG_SAE */
     }
 
     sta_info = ap_get_sta(hapd, bssid);
@@ -371,12 +381,18 @@ static bool hostap_sta_join(void **sta, u8 *bssid, u8 *wpa_ie, u8 wpa_ie_len,u8 
             wpa_printf(MSG_ERROR, "failed to add station " MACSTR, MAC2STR(bssid));
             goto fail;
         }
-#ifdef CONFIG_SAE
-        if (sta_info->lock) {
-            os_semphr_take(sta_info->lock, 0);
-        }
-#endif /* CONFIG_SAE */
     }
+#ifdef CONFIG_SAE
+    if (sta_info->lock && os_semphr_take(sta_info->lock, 0) != TRUE) {
+        wpa_printf(MSG_INFO, "Ignore assoc request as softap is busy with sae calculation for station "MACSTR, MAC2STR(bssid));
+        if (esp_send_assoc_resp(hapd, bssid, WLAN_STATUS_ASSOC_REJECTED_TEMPORARILY, rsnxe ? false : true, subtype) != WLAN_STATUS_SUCCESS) {
+            goto fail;
+        }
+        return false;
+    }
+#endif /* CONFIG_SAE */
+
+process_old_sta:
 
 #ifdef CONFIG_WPS_REGISTRAR
     if (check_n_add_wps_sta(hapd, sta_info, wpa_ie, wpa_ie_len, pmf_enable, subtype) == 0) {
@@ -469,6 +485,10 @@ int esp_supplicant_init(void)
     ret =  esp_wifi_internal_wapi_init();
 #endif
 
+#if CONFIG_ESP_WIFI_ENABLE_ROAMING_APP
+    init_roaming_app();
+#endif
+
     return ret;
 }
 
@@ -479,4 +499,10 @@ int esp_supplicant_deinit(void)
     eloop_destroy();
     wpa_cb = NULL;
     return esp_wifi_unregister_wpa_cb_internal();
+}
+
+esp_err_t esp_supplicant_disable_pmk_caching(bool disable)
+{
+    g_wpa_pmk_caching_disabled = disable;
+    return ESP_OK;
 }

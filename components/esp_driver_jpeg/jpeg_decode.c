@@ -36,8 +36,6 @@
 
 static const char *TAG = "jpeg.decoder";
 
-#define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-
 static void s_decoder_error_log_print(uint32_t status);
 static esp_err_t jpeg_dec_config_dma_descriptor(jpeg_decoder_handle_t decoder_engine);
 static esp_err_t jpeg_parse_marker(jpeg_decoder_handle_t decoder_engine, const uint8_t *in_buf, uint32_t inbuf_len);
@@ -77,7 +75,7 @@ esp_err_t jpeg_new_decoder_engine(const jpeg_decode_engine_cfg_t *dec_eng_cfg, j
 
     uint32_t cache_line_size = cache_hal_get_cache_line_size(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_DATA);
     uint32_t alignment = cache_line_size;
-    size_t dma_desc_mem_size = ALIGN_UP(sizeof(dma2d_descriptor_t), cache_line_size);
+    size_t dma_desc_mem_size = JPEG_ALIGN_UP(sizeof(dma2d_descriptor_t), cache_line_size);
 
     decoder_engine->rxlink = (dma2d_descriptor_t*)heap_caps_aligned_calloc(alignment, 1, dma_desc_mem_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | JPEG_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(decoder_engine->rxlink, ESP_ERR_NO_MEM, err, TAG, "no memory for jpeg decode rxlink");
@@ -95,7 +93,7 @@ esp_err_t jpeg_new_decoder_engine(const jpeg_decode_engine_cfg_t *dec_eng_cfg, j
     /// init jpeg interrupt.
     jpeg_ll_clear_intr_mask(hal->dev, JPEG_LL_DECODER_EVENT_INTR);
 
-    ESP_GOTO_ON_ERROR(jpeg_check_intr_priority(decoder_engine->codec_base, dec_eng_cfg->intr_priority), err, TAG, "set group intrrupt priority failed");
+    ESP_GOTO_ON_ERROR(jpeg_check_intr_priority(decoder_engine->codec_base, dec_eng_cfg->intr_priority), err, TAG, "set group interrupt priority failed");
     if (dec_eng_cfg->intr_priority) {
         ESP_RETURN_ON_FALSE(1 << (dec_eng_cfg->intr_priority) & JPEG_ALLOW_INTR_PRIORITY_MASK, ESP_ERR_INVALID_ARG, TAG, "invalid interrupt priority:%d", dec_eng_cfg->intr_priority);
     }
@@ -159,7 +157,7 @@ esp_err_t jpeg_decoder_get_info(const uint8_t *in_buf, uint32_t inbuf_len, jpeg_
             width = jpeg_get_bytes(header_info, 2);
             break;
         }
-        // This function only used for get width and hight. So only read SOF marker is enough.
+        // This function only used for get width and height. So only read SOF marker is enough.
         // Can be extended if picture information is extended.
         if (marker == JPEG_M_SOF0) {
             break;
@@ -178,7 +176,11 @@ esp_err_t jpeg_decoder_process(jpeg_decoder_handle_t decoder_engine, const jpeg_
     ESP_RETURN_ON_FALSE(decoder_engine, ESP_ERR_INVALID_ARG, TAG, "jpeg decode handle is null");
     ESP_RETURN_ON_FALSE(decode_cfg, ESP_ERR_INVALID_ARG, TAG, "jpeg decode config is null");
     ESP_RETURN_ON_FALSE(decode_outbuf, ESP_ERR_INVALID_ARG, TAG, "jpeg decode picture buffer is null");
-    ESP_RETURN_ON_FALSE(esp_dma_is_buffer_aligned(decode_outbuf, outbuf_size, ESP_DMA_BUF_LOCATION_PSRAM), ESP_ERR_INVALID_ARG, TAG, "jpeg decode decode_outbuf or out_buffer size is not aligned, please use jpeg_alloc_decoder_mem to malloc your buffer");
+    esp_dma_mem_info_t dma_mem_info = {
+        .dma_alignment_bytes = 4,
+    };
+    //TODO: IDF-9637
+    ESP_RETURN_ON_FALSE(esp_dma_is_buffer_alignment_satisfied(decode_outbuf, outbuf_size, dma_mem_info), ESP_ERR_INVALID_ARG, TAG, "jpeg decode decode_outbuf or out_buffer size is not aligned, please use jpeg_alloc_decoder_mem to malloc your buffer");
 
     esp_err_t ret = ESP_OK;
 
@@ -201,7 +203,7 @@ esp_err_t jpeg_decoder_process(jpeg_decoder_handle_t decoder_engine, const jpeg_
     ESP_GOTO_ON_ERROR(jpeg_dec_config_dma_descriptor(decoder_engine), err, TAG, "config dma descriptor failed");
 
     *out_size = decoder_engine->header_info->process_h * decoder_engine->header_info->process_v * decoder_engine->pixel;
-    ESP_GOTO_ON_FALSE((*out_size <= outbuf_size), ESP_ERR_INVALID_ARG, err, TAG, "Given buffer size % " PRId32 " is smaller than actual jpeg decode output size % " PRId32 "the hight and width of output picture size will be adjusted to 16 bytes aligned automatically", outbuf_size, *out_size);
+    ESP_GOTO_ON_FALSE((*out_size <= outbuf_size), ESP_ERR_INVALID_ARG, err, TAG, "Given buffer size % " PRId32 " is smaller than actual jpeg decode output size % " PRId32 "the height and width of output picture size will be adjusted to 16 bytes aligned automatically", outbuf_size, *out_size);
 
     dma2d_trans_config_t trans_desc = {
         .tx_channel_num = 1,
@@ -279,7 +281,7 @@ esp_err_t jpeg_del_decoder_engine(jpeg_decoder_handle_t decoder_engine)
     return ESP_OK;
 }
 
-void *jpeg_alloc_decoder_mem(size_t size, jpeg_decode_memory_alloc_cfg_t *mem_cfg, size_t *allocated_size)
+void *jpeg_alloc_decoder_mem(size_t size, const jpeg_decode_memory_alloc_cfg_t *mem_cfg, size_t *allocated_size)
 {
     /*
        Principle of buffer align.
@@ -289,7 +291,7 @@ void *jpeg_alloc_decoder_mem(size_t size, jpeg_decode_memory_alloc_cfg_t *mem_cf
     size_t cache_align = 0;
     esp_cache_get_alignment(ESP_CACHE_MALLOC_FLAG_PSRAM, &cache_align);
     if (mem_cfg->buffer_direction == JPEG_DEC_ALLOC_OUTPUT_BUFFER) {
-        size = ALIGN_UP(size, cache_align);
+        size = JPEG_ALIGN_UP(size, cache_align);
         *allocated_size = size;
         return heap_caps_aligned_calloc(cache_align, 1, size, MALLOC_CAP_SPIRAM);
     } else {
@@ -682,7 +684,7 @@ static void s_decoder_error_log_print(uint32_t status)
     if (status & JPEG_LL_INTR_MARKER_ERR_OTHER) {
         ESP_LOGE(TAG, "there is an error in the non-first SCAN header information parsed by the decoder.");
     }
-    if (status & JPEG_LL_INTR_UNDET) {
+    if (status & JPEG_LL_INTR_UNDETECT) {
         ESP_LOGE(TAG, "the bitstream of a image is completely read from 2D DMA but the SOS marker is not read");
     }
     if (status & JPEG_LL_INTR_DECODE_TIMEOUT) {

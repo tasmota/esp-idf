@@ -29,10 +29,10 @@
 // #define SOC_USB_SERIAL_JTAG_SUPPORTED   1    //TODO: [ESP32C61] IDF-9319
 // #define SOC_TEMP_SENSOR_SUPPORTED       1    //TODO: [ESP32C61] IDF-9322
 // #define SOC_WIFI_SUPPORTED              1
-// #define SOC_SUPPORTS_SECURE_DL_MODE     1
+#define SOC_SUPPORTS_SECURE_DL_MODE     1
 // #define SOC_ULP_SUPPORTED               1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1
-#define SOC_EFUSE_SUPPORTED             1       //TODO: [ESP32C61] IDF-9282
+#define SOC_EFUSE_SUPPORTED             1
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1       //TODO: [ESP32C61] IDF-9274
 // #define SOC_I2S_SUPPORTED               1    //TODO: [ESP32C61] IDF-9312, IDF-9313
@@ -51,7 +51,7 @@
 // #define SOC_SECURE_BOOT_SUPPORTED       1    //TODO: [ESP32C61] IDF-9233
 // #define SOC_BOD_SUPPORTED               1    //TODO: [ESP32C61] IDF-9254
 // #define SOC_APM_SUPPORTED               1    //TODO: [ESP32C61] IDF-9230
-// #define SOC_PMU_SUPPORTED               1
+// #define SOC_PMU_SUPPORTED               1    //TODO: [ESP32C61] IDf-9250
 // #define SOC_LP_TIMER_SUPPORTED          1    //TODO: [ESP32C61] IDF-9244
 // #define SOC_LP_AON_SUPPORTED            1
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1
@@ -88,45 +88,46 @@
 #define SOC_AES_SUPPORT_AES_128 (1)
 #define SOC_AES_SUPPORT_AES_256 (1)
 
+//TODO: [ESP32C61] IDF-9302, IDF-9303, IDF-9304
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
-#define SOC_ADC_DIG_CTRL_SUPPORTED              1
-#define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
-#define SOC_ADC_MONITOR_SUPPORTED               1
-#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
-#define SOC_ADC_DMA_SUPPORTED                   1
+// #define SOC_ADC_DIG_CTRL_SUPPORTED              1
+// #define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
+// #define SOC_ADC_MONITOR_SUPPORTED               1
+// #define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
+// #define SOC_ADC_DMA_SUPPORTED                   1
 #define SOC_ADC_PERIPH_NUM                      (1U)
-#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (7)
 #define SOC_ADC_MAX_CHANNEL_NUM                 (7)
-#define SOC_ADC_ATTEN_NUM                       (4)
+// #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (7)
+// #define SOC_ADC_ATTEN_NUM                       (4)
 
-/*!< Digital */
-#define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
-#define SOC_ADC_PATT_LEN_MAX                    (8) /*!< Two pattern tables, each contains 4 items. Each item takes 1 byte */
-#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
-#define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
-#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
-#define SOC_ADC_DIGI_MONITOR_NUM                (2)
-#define SOC_ADC_DIGI_RESULT_BYTES               (4)
-#define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-/*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
+// /*!< Digital */
+// #define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
+// #define SOC_ADC_PATT_LEN_MAX                    (8) /*!< Two pattern tables, each contains 4 items. Each item takes 1 byte */
+// #define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
+// #define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
+// #define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
+// #define SOC_ADC_DIGI_MONITOR_NUM                (2)
+// #define SOC_ADC_DIGI_RESULT_BYTES               (4)
+// #define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
+// /*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
+// #define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
+// #define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
 
-/*!< RTC */
-#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
-#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
+// /*!< RTC */
+// #define SOC_ADC_RTC_MIN_BITWIDTH                (12)
+// #define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
-/*!< Calibration */
-#define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
-#define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
-#define SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED (1) /*!< support channel compensation to the HW offset calibration */
+// /*!< Calibration */  // TODO: [ESP32C61] IDF-9303
+// #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
+// #define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
+// #define SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED (1) /*!< support channel compensation to the HW offset calibration */
 
 /*!< Interrupt */
 #define SOC_ADC_TEMPERATURE_SHARE_INTR          (1)
 
 /*!< ADC power control is shared by PWDET */
-#define SOC_ADC_SHARED_POWER                    1
+// #define SOC_ADC_SHARED_POWER                    1
 
 /*-------------------------- APB BACKUP DMA CAPS -------------------------------*/
 #define SOC_APB_BACKUP_DMA              (0)
@@ -166,11 +167,12 @@
     See TRM DS chapter for more details */
 #define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
 
+//TODO: [ESP32C61] IDF-9310
 /*-------------------------- GDMA CAPS -------------------------------------*/
-#define SOC_AHB_GDMA_VERSION            1U
-#define SOC_GDMA_NUM_GROUPS_MAX         1U
-#define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
-#define SOC_GDMA_SUPPORT_ETM            1  // Support ETM submodule
+// #define SOC_AHB_GDMA_VERSION            1U
+// #define SOC_GDMA_NUM_GROUPS_MAX         1U
+// #define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
+// #define SOC_GDMA_SUPPORT_ETM            1  // Support ETM submodule
 
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
@@ -179,7 +181,7 @@
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-C61 has 1 GPIO peripheral
 #define SOC_GPIO_PORT                      1U
-#define SOC_GPIO_PIN_COUNT                 31
+#define SOC_GPIO_PIN_COUNT                 25
 // #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1 //TODO: [ESP32C61] IDF-9340
 // #define SOC_GPIO_FLEX_GLITCH_FILTER_NUM    8 //TODO: [ESP32C61] IDF-9340
 
@@ -197,8 +199,8 @@
 #define SOC_GPIO_VALID_GPIO_MASK        ((1U<<SOC_GPIO_PIN_COUNT) - 1)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
 
-#define SOC_GPIO_IN_RANGE_MAX           30
-#define SOC_GPIO_OUT_RANGE_MAX          30
+#define SOC_GPIO_IN_RANGE_MAX           21
+#define SOC_GPIO_OUT_RANGE_MAX          21
 
 #define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6 | BIT7)
 
@@ -210,7 +212,7 @@
 // Support to hold a single digital I/O when the digital domain is powered off
 #define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  (1)
 
-// The Clock Out singnal is route to the pin by GPIO matrix
+// The Clock Out signal is route to the pin by GPIO matrix
 #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX    (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
@@ -443,11 +445,11 @@
 
 
 /*-------------------------- eFuse CAPS----------------------------*/
-#define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 1
+#define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 0
 #define SOC_EFUSE_DIS_PAD_JTAG 1
 #define SOC_EFUSE_DIS_USB_JTAG 1
 #define SOC_EFUSE_DIS_DIRECT_BOOT 1
-#define SOC_EFUSE_SOFT_DIS_JTAG 1
+#define SOC_EFUSE_SOFT_DIS_JTAG 0
 #define SOC_EFUSE_DIS_ICACHE 1
 #define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // XTS-AES key purpose not supported for this block
 
@@ -467,10 +469,10 @@
 #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
 
 /*-------------------------- UART CAPS ---------------------------------------*/
-// ESP32-C61 has 3 UARTs (2 HP UART, and 1 LP UART)
+// ESP32-C61 has 3 UARTs (3 HP UART)
 #define SOC_UART_NUM                    (3)
-#define SOC_UART_HP_NUM                 (2)
-#define SOC_UART_LP_NUM                 (1U)
+#define SOC_UART_HP_NUM                 (3)
+// #define SOC_UART_LP_NUM                 (1U) //TODO: IDF-9341
 #define SOC_UART_FIFO_LEN               (128)       /*!< The UART hardware FIFO length */
 #define SOC_LP_UART_FIFO_LEN            (16)        /*!< The LP UART hardware FIFO length */
 #define SOC_UART_BITRATE_MAX            (5000000)   /*!< Max bit rate supported by UART */
@@ -503,7 +505,7 @@
 #define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
 #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
-#define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configue the EXT1 trigger level */
+#define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configure the EXT1 trigger level */
 // #define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_MODEM_PD         (1)
 #define SOC_PM_SUPPORT_XTAL32K_PD       (1)

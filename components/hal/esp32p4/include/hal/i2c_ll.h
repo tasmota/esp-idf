@@ -17,6 +17,7 @@
 #include "hal/i2c_types.h"
 #include "soc/clk_tree_defs.h"
 #include "soc/hp_sys_clkrst_struct.h"
+#include "soc/lpperi_struct.h"
 #include "hal/misc.h"
 
 #ifdef __cplusplus
@@ -79,6 +80,7 @@ typedef enum {
 #define I2C_LL_SLAVE_RX_EVENT_INTR  (I2C_TRANS_COMPLETE_INT_ENA_M | I2C_RXFIFO_WM_INT_ENA_M | I2C_SLAVE_STRETCH_INT_ENA_M)
 #define I2C_LL_SLAVE_TX_EVENT_INTR  (I2C_TXFIFO_WM_INT_ENA_M)
 #define I2C_LL_RESET_SLV_SCL_PULSE_NUM_DEFAULT   (9)
+#define I2C_LL_SCL_WAIT_US_VAL_DEFAULT   (2000)  // Approximate value for SCL timeout regs (in us).
 
 /**
  * @brief  Calculate I2C bus frequency
@@ -797,6 +799,65 @@ static inline void i2c_ll_set_source_clk(i2c_dev_t *hw, i2c_clock_source_t src_c
 #define i2c_ll_set_source_clk(...) do {(void)__DECLARE_RCC_ATOMIC_ENV; i2c_ll_set_source_clk(__VA_ARGS__);} while(0)
 
 /**
+ * @brief Set LP I2C source clock
+ *
+ * @param  hw Address offset of the LP I2C peripheral registers
+ * @param  src_clk Source clock for the LP I2C peripheral
+ */
+static inline void lp_i2c_ll_set_source_clk(i2c_dev_t *hw, soc_periph_lp_i2c_clk_src_t src_clk)
+{
+    (void)hw;
+    // src_clk : (0) for LP_FAST_CLK (RTC Fast), (1) for XTAL_D2_CLK, (2) for LP_PLL
+    switch (src_clk) {
+    case LP_I2C_SCLK_LP_FAST:
+        LPPERI.core_clk_sel.lp_i2c_clk_sel = 0;
+        break;
+    case LP_I2C_SCLK_XTAL_D2:
+        LPPERI.core_clk_sel.lp_i2c_clk_sel = 1;
+        break;
+    // case LP_I2C_SCLK_LP_PLL:
+    //     LPPERI.core_clk_sel.lp_i2c_clk_sel = 2;
+    //     break;
+    default:
+        // Invalid source clock selected
+        HAL_ASSERT(false);
+    }
+}
+
+/// LP_AON_CLKRST.lpperi is a shared register, so this function must be used in an atomic way
+#define lp_i2c_ll_set_source_clk(...) (void)__DECLARE_RCC_ATOMIC_ENV; lp_i2c_ll_set_source_clk(__VA_ARGS__)
+
+/**
+ * @brief Enable bus clock for the LP I2C module
+ *
+ * @param hw_id LP I2C instance ID
+ * @param enable True to enable, False to disable
+ */
+static inline void _lp_i2c_ll_enable_bus_clock(int hw_id, bool enable)
+{
+    (void)hw_id;
+    LPPERI.clk_en.ck_en_lp_i2c = enable ? 1 : 0;
+}
+
+/// LPPERI.clk_en is a shared register, so this function must be used in an atomic way
+#define lp_i2c_ll_enable_bus_clock(...) (void)__DECLARE_RCC_ATOMIC_ENV; _lp_i2c_ll_enable_bus_clock(__VA_ARGS__)
+
+/**
+ * @brief Reset LP I2C module
+ *
+ * @param hw_id LP I2C instance ID
+ */
+static inline void lp_i2c_ll_reset_register(int hw_id)
+{
+    (void)hw_id;
+    LPPERI.reset_en.rst_en_lp_i2c = 1;
+    LPPERI.reset_en.rst_en_lp_i2c = 0;
+}
+
+/// LPPERI.reset_en is a shared register, so this function must be used in an atomic way
+#define lp_i2c_ll_reset_register(...) (void)__DECLARE_RCC_ATOMIC_ENV; lp_i2c_ll_reset_register(__VA_ARGS__)
+
+/**
  * @brief Enable I2C peripheral controller clock
  *
  * @param dev Peripheral instance address
@@ -903,6 +964,19 @@ __attribute__((always_inline))
 static inline bool i2c_ll_master_is_cmd_done(i2c_dev_t *hw, int cmd_idx)
 {
     return hw->command[cmd_idx].command_done;
+}
+
+/**
+ * @brief Calculate SCL timeout us to reg value
+ *
+ * @param timeout_us timeout value in us
+ * @param src_clk_hz source clock frequency
+ * @return uint32_t reg value
+ */
+static inline uint32_t i2c_ll_calculate_timeout_us_to_reg_val(uint32_t src_clk_hz, uint32_t timeout_us)
+{
+    uint32_t clk_cycle_num_per_us = src_clk_hz / (1 * 1000 * 1000);
+    return 31 - __builtin_clz(clk_cycle_num_per_us * timeout_us);
 }
 
 //////////////////////////////////////////Deprecated Functions//////////////////////////////////////////////////////////

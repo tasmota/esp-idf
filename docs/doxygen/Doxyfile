@@ -173,6 +173,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_mac.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_random.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_sleep.h \
+    $(PROJECT_PATH)/components/esp_hw_support/ldo/include/esp_ldo_regulator.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_io.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_ops.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_vendor.h \
@@ -218,7 +219,7 @@ INPUT = \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_rrm.h \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_wnm.h \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_wps.h \
-    $(PROJECT_PATH)/components/esp_wifi/wifi_apps/include/esp_nan.h \
+    $(PROJECT_PATH)/components/esp_wifi/wifi_apps/nan_app/include/esp_nan.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls_errors.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_impl.h \
@@ -309,7 +310,7 @@ INPUT = \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_dpp.h \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_supplicant_utils.h \
 
-## Target specific headers are in seperate Doxyfile files
+## Target specific headers are in separate Doxyfile files
 @INCLUDE = $(PROJECT_PATH)/docs/doxygen/Doxyfile_$(IDF_TARGET)
 
 ## Get warnings for functions that have no documentation for their parameters or return value

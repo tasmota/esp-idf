@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-// TODO: [ESP32C61] IDF-9282, inherit from c6
-
 /**
  * @brief get chip version
  */

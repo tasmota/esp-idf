@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define GDMA_CH_RETENTION_GET_MODULE_ID(group_id, pair_id) (SLEEP_RETENTION_MODULE_GDMA_CH0 << (SOC_GDMA_PAIRS_PER_GROUP_MAX * group_id) << pair_id)
+#define GDMA_CH_RETENTION_GET_MODULE_ID(group_id, pair_id) (SLEEP_RETENTION_MODULE_GDMA_CH0 + (SOC_GDMA_PAIRS_PER_GROUP_MAX * group_id) + pair_id)
 
 #define GDMA_LL_GET_HW(id) (((id) == 0) ? (&GDMA) : NULL)
 
@@ -49,6 +49,8 @@ extern "C" {
 #define GDMA_LL_AHB_GROUP_START_ID    0 // AHB GDMA group ID starts from 0
 #define GDMA_LL_AHB_NUM_GROUPS        1 // Number of AHB GDMA groups
 #define GDMA_LL_AHB_PAIRS_PER_GROUP   3 // Number of GDMA pairs in each AHB group
+
+#define GDMA_LL_AHB_DESC_ALIGNMENT    4
 
 #define GDMA_LL_TX_ETM_EVENT_TABLE(group, chan, event)                                     \
     (uint32_t[1][3][GDMA_ETM_EVENT_MAX]){{{                                                \

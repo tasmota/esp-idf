@@ -104,6 +104,8 @@ I2C master device requires the configuration that specified by :cpp:type:`i2c_de
 - :cpp:member:`i2c_device_config_t::dev_addr_length` configure the address bit length of the slave device. User can choose from enumerator :cpp:enumerator:`I2C_ADDR_BIT_LEN_7` or :cpp:enumerator:`I2C_ADDR_BIT_LEN_10` (if supported).
 - :cpp:member:`i2c_device_config_t::device_address` I2C device raw address. Please parse the device address to this member directly. For example, the device address is 0x28, then parse 0x28 to :cpp:member:`i2c_device_config_t::device_address`, don't carry a write/read bit.
 - :cpp:member:`i2c_device_config_t::scl_speed_hz` set the scl line frequency of this device.
+- :cpp:member:`i2c_device_config_t::scl_wait_us`. SCL await time (in us). Usually this value should not be very small because slave stretch will happen in pretty long time. (It's possible even stretch for 12ms). Set 0 means use default reg value.
+
 
 Once the :cpp:type:`i2c_device_config_t` structure is populated with mandatory parameters, users can call :cpp:func:`i2c_master_bus_add_device` to allocate an I2C device instance and mounted to the master bus then. This function will return an I2C device handle if it runs correctly. Specifically, when the I2C bus is not initialized properly, calling this function will result in a :c:macro:`ESP_ERR_INVALID_ARG` error.
 
@@ -153,7 +155,7 @@ I2C slave requires the configuration that specified by :cpp:type:`i2c_slave_conf
     - :cpp:member:`i2c_master_bus_config_t::intr_priority` Set the priority of the interrupt. If set to ``0`` , then the driver will use a interrupt with low or medium priority (priority level may be one of 1,2 or 3), otherwise use the priority indicated by :cpp:member:`i2c_master_bus_config_t::intr_priority` Please use the number form (1,2,3) , not the bitmask form ((1<<1),(1<<2),(1<<3)). Please pay attention that once the interrupt priority is set, it cannot be changed until :cpp:func:`i2c_del_master_bus` is called.
     - :cpp:member:`i2c_slave_config_t::addr_bit_len` sets true if you need the slave to have a 10-bit address.
     :SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE: - :cpp:member:`i2c_slave_config_t::stretch_en` Set true if you want the slave controller stretch works, please refer to [`TRM <{IDF_TARGET_TRM_EN_URL}#i2c>`__] to learn how I2C stretch works.
-    :SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE: - :cpp:member:`i2c_slave_config_t::broadcast_en` Set true to enable the slave broadcase. When the slave receives the general call address 0x00 from the master and the R/W bit followed is 0, it responds to the master regardless of its own address.
+    :SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE: - :cpp:member:`i2c_slave_config_t::broadcast_en` Set true to enable the slave broadcast. When the slave receives the general call address 0x00 from the master and the R/W bit followed is 0, it responds to the master regardless of its own address.
     :SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS: - :cpp:member:`i2c_slave_config_t::access_ram_en` Set true to enable the non-fifo mode. Thus the I2C data fifo can be used as RAM, and double addressing will be synchronised opened.
     :SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH: - :cpp:member:`i2c_slave_config_t::slave_unmatch_en` Set true to enable the slave unmatch interrupt. If master send command address cannot match the slave address, and unmatch interrupt will be triggered.
 

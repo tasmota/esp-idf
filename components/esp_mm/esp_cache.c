@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -58,6 +58,10 @@ esp_err_t esp_cache_msync(void *addr, size_t size, int flags)
 
     if (flags & ESP_CACHE_MSYNC_FLAG_DIR_M2C) {
         ESP_EARLY_LOGV(TAG, "M2C DIR");
+
+        if (flags & ESP_CACHE_MSYNC_FLAG_UNALIGNED) {
+            ESP_RETURN_ON_FALSE_ISR(false, ESP_ERR_INVALID_ARG, TAG, "M2C direction doesn't allow ESP_CACHE_MSYNC_FLAG_UNALIGNED");
+        }
 
         esp_os_enter_critical_safe(&s_spinlock);
         //Add preload feature / flag here, IDF-7800
@@ -126,6 +130,28 @@ esp_err_t esp_cache_aligned_malloc(size_t size, uint32_t flags, void **out_ptr, 
     return ESP_OK;
 }
 
+esp_err_t esp_cache_aligned_malloc_prefer(size_t size, void **out_ptr, size_t *actual_size, size_t flag_nums, ...)
+{
+    ESP_RETURN_ON_FALSE_ISR(out_ptr, ESP_ERR_INVALID_ARG, TAG, "null pointer");
+
+    esp_err_t ret = ESP_FAIL;
+    va_list argp;
+    uint32_t flags = 0;
+    va_start(argp, flag_nums);
+    *out_ptr = NULL;
+
+    while (flag_nums--) {
+        flags = va_arg(argp, uint32_t);
+        ret = esp_cache_aligned_malloc(size, flags, out_ptr, actual_size);
+        if (ret == ESP_OK) {
+            break;
+        }
+    }
+
+    va_end(argp);
+    return ret;
+}
+
 esp_err_t esp_cache_aligned_calloc(size_t n, size_t size, uint32_t flags, void **out_ptr, size_t *actual_size)
 {
     ESP_RETURN_ON_FALSE_ISR(out_ptr, ESP_ERR_INVALID_ARG, TAG, "null pointer");
@@ -147,6 +173,39 @@ esp_err_t esp_cache_aligned_calloc(size_t n, size_t size, uint32_t flags, void *
     return ret;
 }
 
+esp_err_t esp_cache_aligned_calloc_prefer(size_t n, size_t size, void **out_ptr, size_t *actual_size, size_t flag_nums, ...)
+{
+    ESP_RETURN_ON_FALSE_ISR(out_ptr, ESP_ERR_INVALID_ARG, TAG, "null pointer");
+
+    esp_err_t ret = ESP_FAIL;
+    size_t size_bytes = 0;
+    bool ovf = false;
+
+    *out_ptr = NULL;
+    ovf = __builtin_mul_overflow(n, size, &size_bytes);
+    ESP_RETURN_ON_FALSE_ISR(!ovf, ESP_ERR_INVALID_ARG, TAG, "wrong size, total size overflow");
+
+    void *ptr = NULL;
+    va_list argp;
+    va_start(argp, flag_nums);
+    int arg;
+    for (int i = 0; i < flag_nums; i++) {
+        arg = va_arg(argp, int);
+        ret = esp_cache_aligned_malloc_prefer(size_bytes, &ptr, actual_size, flag_nums, arg);
+        if (ret == ESP_OK) {
+            memset(ptr, 0, size_bytes);
+            *out_ptr = ptr;
+
+            arg = va_arg(argp, int);
+            break;
+        }
+
+    }
+    va_end(argp);
+
+    return ret;
+}
+
 esp_err_t esp_cache_get_alignment(uint32_t flags, size_t *out_alignment)
 {
     ESP_RETURN_ON_FALSE(out_alignment, ESP_ERR_INVALID_ARG, TAG, "null pointer");
@@ -159,10 +218,6 @@ esp_err_t esp_cache_get_alignment(uint32_t flags, size_t *out_alignment)
     }
 
     data_cache_line_size = cache_hal_get_cache_line_size(cache_level, CACHE_TYPE_DATA);
-    if (data_cache_line_size == 0) {
-        //default alignment
-        data_cache_line_size = 4;
-    }
 
     *out_alignment = data_cache_line_size;
 

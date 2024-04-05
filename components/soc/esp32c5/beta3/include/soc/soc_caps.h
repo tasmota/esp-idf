@@ -32,12 +32,13 @@
 // #define SOC_USB_SERIAL_JTAG_SUPPORTED   1  // TODO: [ESP32C5] IDF-8721
 // #define SOC_TEMP_SENSOR_SUPPORTED       1  // TODO: [ESP32C5] IDF-8727
 // #define SOC_WIFI_SUPPORTED              1  // TODO: [ESP32C5] IDF-8851
-// #define SOC_SUPPORTS_SECURE_DL_MODE     1  // TODO: [ESP32C5] IDF-8622, IDF-8674
+#define SOC_SUPPORTS_SECURE_DL_MODE     1
 // #define SOC_LP_CORE_SUPPORTED           1  // TODO: [ESP32C5] IDF-8637
-#define SOC_EFUSE_KEY_PURPOSE_FIELD     1     // TODO: [ESP32C5] IDF-8674, need check
-#define SOC_EFUSE_SUPPORTED             1     // TODO: [ESP32C5] IDF-8674
+#define SOC_EFUSE_KEY_PURPOSE_FIELD     1
+#define SOC_EFUSE_SUPPORTED             1
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
+#define SOC_IEEE802154_SUPPORTED        1
 // #define SOC_I2S_SUPPORTED               1  // TODO: [ESP32C5] IDF-8713, IDF-8714
 #define SOC_RMT_SUPPORTED               1
 // #define SOC_SDM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8687
@@ -45,10 +46,10 @@
 // #define SOC_LEDC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8684
 #define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1     // TODO: [ESP32C5] IDF-8707
-// #define SOC_AES_SUPPORTED               1  // TODO: [ESP32C5] IDF-8627
-// #define SOC_MPI_SUPPORTED               1
-// #define SOC_SHA_SUPPORTED               1  // TODO: [ESP32C5] IDF-8624
-// #define SOC_RSA_SUPPORTED               1  // TODO: [ESP32C5] IDF-8620
+#define SOC_AES_SUPPORTED               1
+#define SOC_MPI_SUPPORTED               1
+#define SOC_SHA_SUPPORTED               1
+#define SOC_RSA_SUPPORTED               1
 // #define SOC_HMAC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8616
 // #define SOC_DIG_SIGN_SUPPORTED          1  // TODO: [ESP32C5] IDF-8619
 #define SOC_ECC_SUPPORTED               1
@@ -83,13 +84,13 @@
 #define SOC_XTAL_SUPPORT_48M            1
 
 /*-------------------------- AES CAPS -----------------------------------------*/
-// #define SOC_AES_SUPPORT_DMA     (1)
+#define SOC_AES_SUPPORT_DMA     (1)
 
 /* Has a centralized DMA, which is shared with all peripherals */
-// #define SOC_AES_GDMA            (1)
+#define SOC_AES_GDMA            (1)
 
-// #define SOC_AES_SUPPORT_AES_128 (1)
-// #define SOC_AES_SUPPORT_AES_256 (1)
+#define SOC_AES_SUPPORT_AES_128 (1)
+#define SOC_AES_SUPPORT_AES_256 (1)
 
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
@@ -214,7 +215,7 @@
 // Support to hold a single digital I/O when the digital domain is powered off
 #define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  (1)
 
-// The Clock Out singnal is route to the pin by GPIO matrix
+// The Clock Out signal is route to the pin by GPIO matrix
 // #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX    (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
@@ -341,8 +342,8 @@
 // #define SOC_PARLIO_TX_RX_SHARE_INTERRUPT     1   /*!< TX and RX unit share the same interrupt source number */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
-// #define SOC_MPI_MEM_BLOCKS_NUM (4)
-// #define SOC_MPI_OPERATIONS_NUM (3)
+#define SOC_MPI_MEM_BLOCKS_NUM (4)
+#define SOC_MPI_OPERATIONS_NUM (3)
 
 /*--------------------------- RSA CAPS ---------------------------------------*/
 #define SOC_RSA_MAX_BIT_LEN    (3072)
@@ -353,19 +354,19 @@
    for SHA this means that the biggest safe amount of bytes is
    31 blocks of 128 bytes = 3968
 */
-// #define SOC_SHA_DMA_MAX_BUFFER_SIZE     (3968)
-// #define SOC_SHA_SUPPORT_DMA             (1)
+#define SOC_SHA_DMA_MAX_BUFFER_SIZE     (3968)
+#define SOC_SHA_SUPPORT_DMA             (1)
 
 /* The SHA engine is able to resume hashing from a user */
-// #define SOC_SHA_SUPPORT_RESUME          (1)
+#define SOC_SHA_SUPPORT_RESUME          (1)
 
 /* Has a centralized DMA, which is shared with all peripherals */
-// #define SOC_SHA_GDMA             (1)
+#define SOC_SHA_GDMA             (1)
 
 /* Supported HW algorithms */
-// #define SOC_SHA_SUPPORT_SHA1            (1)
-// #define SOC_SHA_SUPPORT_SHA224          (1)
-// #define SOC_SHA_SUPPORT_SHA256          (1)
+#define SOC_SHA_SUPPORT_SHA1            (1)
+#define SOC_SHA_SUPPORT_SHA224          (1)
+#define SOC_SHA_SUPPORT_SHA256          (1)
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 // #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
@@ -460,7 +461,7 @@
 /*-------------------------- Secure Boot CAPS----------------------------*/
 // #define SOC_SECURE_BOOT_V2_RSA              1
 // #define SOC_SECURE_BOOT_V2_ECC              1
-#define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3  // TODO: [ESP32C5] IDF-8674
+#define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
 // #define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1
 // #define SOC_SUPPORT_SECURE_BOOT_REVOKE_KEY  1
 
@@ -507,7 +508,7 @@
 // #define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
 // #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 // #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
-// #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configue the EXT1 trigger level */
+// #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configure the EXT1 trigger level */
 #define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_MODEM_PD         (1)
 #define SOC_PM_SUPPORT_XTAL32K_PD       (1)

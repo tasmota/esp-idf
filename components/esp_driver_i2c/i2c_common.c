@@ -41,7 +41,18 @@ typedef struct i2c_platform_t {
 
 static i2c_platform_t s_i2c_platform = {}; // singleton platform
 
-static esp_err_t s_i2c_bus_handle_aquire(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_new_bus, i2c_bus_mode_t mode)
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+static esp_err_t s_i2c_sleep_retention_init(void *arg)
+{
+    i2c_bus_t *bus = (i2c_bus_t *)arg;
+    i2c_port_num_t port_num = bus->port_num;
+    esp_err_t ret = sleep_retention_entries_create(i2c_regs_retention[port_num].link_list, i2c_regs_retention[port_num].link_num, REGDMA_LINK_PRI_7, I2C_SLEEP_RETENTION_MODULE(port_num));
+    ESP_RETURN_ON_ERROR(ret, TAG, "failed to allocate mem for sleep retention");
+    return ret;
+}
+#endif
+
+static esp_err_t s_i2c_bus_handle_acquire(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_new_bus, i2c_bus_mode_t mode)
 {
 #if CONFIG_I2C_ENABLE_DEBUG_LOG
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
@@ -59,9 +70,14 @@ static esp_err_t s_i2c_bus_handle_aquire(i2c_port_num_t port_num, i2c_bus_handle
             bus->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
             bus->bus_mode = mode;
 
-#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
-            ret = sleep_retention_entries_create(i2c_regs_retention[port_num].link_list, i2c_regs_retention[port_num].link_num, REGDMA_LINK_PRI_7, I2C_SLEEP_RETENTION_MODULE(port_num));
-            ESP_RETURN_ON_ERROR(ret, TAG, "failed to allocate mem for sleep retention");
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && !CONFIG_IDF_TARGET_ESP32P4 // TODO: IDF-9353
+            sleep_retention_module_init_param_t init_param = {
+                .cbs = { .create = { .handle = s_i2c_sleep_retention_init, .arg = (void *)bus } }
+            };
+            ret = sleep_retention_module_init(I2C_SLEEP_RETENTION_MODULE(port_num), &init_param);
+            if (ret == ESP_OK) {
+                sleep_retention_module_allocate(I2C_SLEEP_RETENTION_MODULE(port_num));
+            }
 #endif
 
             // Enable the I2C module
@@ -104,7 +120,7 @@ esp_err_t i2c_acquire_bus_handle(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_
         for (int i = 0; i < SOC_I2C_NUM; i++) {
             bus_occupied = i2c_bus_occupied(i);
             if (bus_occupied == false) {
-                ret = s_i2c_bus_handle_aquire(i, i2c_new_bus, mode);
+                ret = s_i2c_bus_handle_acquire(i, i2c_new_bus, mode);
                 if (ret != ESP_OK) {
                     ESP_LOGE(TAG, "acquire bus failed");
                     _lock_release(&s_i2c_platform.mutex);
@@ -117,7 +133,7 @@ esp_err_t i2c_acquire_bus_handle(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_
         }
         ESP_RETURN_ON_FALSE((bus_found == true), ESP_ERR_NOT_FOUND, TAG, "acquire bus failed, no free bus");
     } else {
-        ret = s_i2c_bus_handle_aquire(port_num, i2c_new_bus, mode);
+        ret = s_i2c_bus_handle_acquire(port_num, i2c_new_bus, mode);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "acquire bus failed");
         }
@@ -137,8 +153,11 @@ esp_err_t i2c_release_bus_handle(i2c_bus_handle_t i2c_bus)
         if (s_i2c_platform.count[port_num] == 0) {
             do_deinitialize = true;
             s_i2c_platform.buses[port_num] = NULL;
-#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
-            sleep_retention_entries_destroy(I2C_SLEEP_RETENTION_MODULE(port_num));
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && !CONFIG_IDF_TARGET_ESP32P4 // TODO: IDF-9353
+            esp_err_t err = sleep_retention_module_free(I2C_SLEEP_RETENTION_MODULE(port_num));
+            if (err == ESP_OK) {
+                err = sleep_retention_module_deinit(I2C_SLEEP_RETENTION_MODULE(port_num));
+            }
 #endif
             if (i2c_bus->intr_handle) {
                 ESP_RETURN_ON_ERROR(esp_intr_free(i2c_bus->intr_handle), TAG, "delete interrupt service failed");

@@ -39,6 +39,12 @@ menu "Hardware Settings"
         config ESP_MAC_UNIVERSAL_MAC_ADDRESSES_FOUR
             bool
 
+        config ESP_MAC_UNIVERSAL_MAC_ADDRESSES
+            int
+            default 1 if ESP_MAC_UNIVERSAL_MAC_ADDRESSES_ONE
+            default 2 if ESP_MAC_UNIVERSAL_MAC_ADDRESSES_TWO
+            default 4 if ESP_MAC_UNIVERSAL_MAC_ADDRESSES_FOUR
+
             # Insert chip-specific MAC config
         orsource "./port/$IDF_TARGET/Kconfig.mac"
 
@@ -239,7 +245,7 @@ menu "Hardware Settings"
             bool "Enable debug log"
             default n
             help
-                Wether to enable the debug log message for ETM core driver.
+                whether to enable the debug log message for ETM core driver.
                 Note that, this option only controls the ETM related driver log, won't affect other drivers.
     endmenu # ETM Configuration
 
@@ -331,10 +337,7 @@ menu "Hardware Settings"
 
     endmenu
 
-    menu "LDO Config"
-        depends on SOC_MULTI_USAGE_LDO_SUPPORTED
-        orsource "./port/$IDF_TARGET/Kconfig.ldo"
-    endmenu
+    orsource "./port/$IDF_TARGET/Kconfig.ldo"
 
     # Invisible bringup bypass options for esp_hw_support component
     config ESP_BRINGUP_BYPASS_CPU_CLK_SETTING

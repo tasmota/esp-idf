@@ -134,9 +134,7 @@ tools/test_apps/storage/sdmmc_console:
 
 tools/test_apps/system/bootloader_sections:
   disable:
-    - if: IDF_TARGET == "esp32c2"
-      temporary: true
-      reason: target esp32c2 is not supported yet
+    - if: CONFIG_NAME == "rtc_retain" and SOC_RTC_FAST_MEM_SUPPORTED != 1
 
 tools/test_apps/system/build_test:
   disable:
@@ -165,7 +163,7 @@ tools/test_apps/system/eh_frame:
 
 tools/test_apps/system/g0_components:
   enable:
-    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4", "esp32c5"] # preview targets
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4", "esp32c5", "esp32c61"] # preview targets
 
 tools/test_apps/system/g1_components:
 

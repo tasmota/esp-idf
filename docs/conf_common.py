@@ -79,6 +79,8 @@ COEXISTENCE_DOCS = ['api-guides/coexist.rst']
 
 MM_SYNC_DOCS = ['api-reference/system/mm_sync.rst']
 
+CAMERA_DOCS = ['api-reference/peripherals/camera_driver.rst']
+
 CLK_TREE_DOCS = ['api-reference/peripherals/clk_tree.rst']
 
 UART_DOCS = ['api-reference/peripherals/uart.rst']
@@ -102,6 +104,8 @@ DAC_DOCS = ['api-reference/peripherals/dac.rst']
 
 ETM_DOCS = ['api-reference/peripherals/etm.rst']
 
+LDO_DOCS = ['api-reference/peripherals/ldo_regulator.rst']
+
 TEMP_SENSOR_DOCS = ['api-reference/peripherals/temp_sensor.rst']
 
 TOUCH_SENSOR_DOCS = ['api-reference/peripherals/touch_pad.rst']
@@ -114,6 +118,10 @@ USB_DOCS = ['api-reference/peripherals/usb_device.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_design.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_dwc_otg.rst',
             'api-reference/peripherals/usb_host/usb_host_notes_index.rst']
+
+I80_LCD_DOCS = ['api-reference/peripherals/lcd/i80_lcd.rst']
+RGB_LCD_DOCS = ['api-reference/peripherals/lcd/rgb_lcd.rst']
+DSI_LCD_DOCS = ['api-reference/peripherals/lcd/dsi_lcd.rst']
 
 # TODO: Merge this back with `USB_DOCS` IDF-9919 IDF-9920 IDF-9133
 USB_OTG_DFU_DOCS = ['api-guides/dfu.rst']
@@ -144,6 +152,8 @@ SDM_DOCS = ['api-reference/peripherals/sdm.rst']
 
 I2S_DOCS = ['api-reference/peripherals/i2s.rst']
 
+ISP_DOCS = ['api-reference/peripherals/isp.rst']
+
 RTC_MEM_DOCS = ['api-guides/deep-sleep-stub.rst']
 
 ADC_DOCS = ['api-reference/peripherals/adc_oneshot.rst',
@@ -165,7 +175,8 @@ ESP32_DOCS = ['api-reference/system/himem.rst',
               'api-reference/peripherals/dac.rst',
               'api-reference/peripherals/sd_pullup_requirements.rst',
               'hw-reference/esp32/**',
-              'api-guides/RF_calibration.rst'] + FTDI_JTAG_DOCS + QEMU_DOCS
+              'api-guides/RF_calibration.rst',
+              'api-guides/phy.rst'] + FTDI_JTAG_DOCS + QEMU_DOCS
 
 ESP32S2_DOCS = ['hw-reference/esp32s2/**',
                 'api-guides/usb-console.rst',
@@ -173,26 +184,32 @@ ESP32S2_DOCS = ['hw-reference/esp32s2/**',
                 'api-reference/peripherals/temp_sensor.rst',
                 'api-reference/system/async_memcpy.rst',
                 'api-reference/peripherals/touch_element.rst',
-                'api-guides/RF_calibration.rst'] + FTDI_JTAG_DOCS + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
+                'api-guides/RF_calibration.rst',
+                'api-guides/phy.rst'] + FTDI_JTAG_DOCS + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
 
 ESP32S3_DOCS = ['hw-reference/esp32s3/**',
                 'api-reference/system/ipc.rst',
                 'api-guides/flash_psram_config.rst',
                 'api-reference/peripherals/sd_pullup_requirements.rst',
-                'api-guides/RF_calibration.rst'] + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
+                'api-guides/RF_calibration.rst',
+                'api-guides/phy.rst'] + USB_OTG_DFU_DOCS + USB_OTG_CONSOLE_DOCS
 
 # No JTAG docs for this one as it gets gated on SOC_USB_SERIAL_JTAG_SUPPORTED down below.
 ESP32C3_DOCS = ['hw-reference/esp32c3/**',
-                'api-guides/RF_calibration.rst'] + QEMU_DOCS
+                'api-guides/RF_calibration.rst',
+                'api-guides/phy.rst'] + QEMU_DOCS
 
-ESP32C2_DOCS = ['api-guides/RF_calibration.rst']
+ESP32C2_DOCS = ['api-guides/RF_calibration.rst',
+                'api-guides/phy.rst']
 
 ESP32C5_DOCS = ['']
 
 ESP32C6_DOCS = ['api-guides/RF_calibration.rst',
-                'api-reference/peripherals/sd_pullup_requirements.rst']
+                'api-reference/peripherals/sd_pullup_requirements.rst',
+                'api-guides/phy.rst']
 
-ESP32H2_DOCS = ['api-guides/RF_calibration.rst']
+ESP32H2_DOCS = ['api-guides/RF_calibration.rst',
+                'api-guides/phy.rst']
 
 ESP32P4_DOCS = ['api-reference/system/ipc.rst',
                 'api-reference/peripherals/sd_pullup_requirements.rst']
@@ -216,6 +233,9 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_USB_OTG_SUPPORTED':USB_DOCS,
                             'SOC_USB_SERIAL_JTAG_SUPPORTED':USB_SERIAL_JTAG_DOCS,
                             'SOC_DEDICATED_GPIO_SUPPORTED':DEDIC_GPIO_DOCS,
+                            'SOC_LCD_I80_SUPPORTED':I80_LCD_DOCS,
+                            'SOC_LCD_RGB_SUPPORTED':RGB_LCD_DOCS,
+                            'SOC_MIPI_DSI_SUPPORTED':DSI_LCD_DOCS,
                             'SOC_SPIRAM_SUPPORTED':SPIRAM_DOCS,
                             'SOC_PARLIO_SUPPORTED':PARLIO_DOCS,
                             'SOC_PCNT_SUPPORTED':PCNT_DOCS,
@@ -235,15 +255,18 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_TEMP_SENSOR_SUPPORTED':TEMP_SENSOR_DOCS,
                             'SOC_TWAI_SUPPORTED':TWAI_DOCS,
                             'SOC_I2S_SUPPORTED':I2S_DOCS,
+                            'SOC_ISP_SUPPORTED':ISP_DOCS,
                             'SOC_RTC_MEM_SUPPORTED': RTC_MEM_DOCS,
                             'SOC_ADC_SUPPORTED':ADC_DOCS,
                             'SOC_ADC_DMA_SUPPORTED':ADC_DMA_DOCS,
                             'SOC_ANA_CMPR_SUPPORTED': ANA_CMPR_DOCS,
                             'SOC_SDM_SUPPORTED':SDM_DOCS,
                             'SOC_WIFI_MESH_SUPPORT':WIFI_MESH_DOCS,
+                            'SOC_MIPI_CSI_SUPPORTED':CAMERA_DOCS,
                             'SOC_SPI_SUPPORT_SLAVE_HD_VER2':SPI_SLAVE_HD_DOCS,
                             'SOC_WIFI_NAN_SUPPORT':NAN_DOCS,
                             'SOC_JPEG_CODEC_SUPPORTED':JPEG_DOCS,
+                            'SOC_GP_LDO_SUPPORTED':LDO_DOCS,
                             'esp32':ESP32_DOCS,
                             'esp32s2':ESP32S2_DOCS,
                             'esp32s3':ESP32S3_DOCS,
@@ -268,7 +291,7 @@ extensions += ['sphinx_copybutton',
                'esp_docs.esp_extensions.run_doxygen',
                ]
 
-# Use wavedrompy as backend, insted of wavedrom-cli
+# Use wavedrompy as backend, instead of wavedrom-cli
 render_using_wavedrompy = True
 
 smartquotes = False

@@ -122,7 +122,9 @@ __attribute__((weak)) void esp_clk_init(void)
 
     // Wait for UART TX to finish, otherwise some UART output will be lost
     // when switching APB frequency
-    esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
+    if (CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM != -1) {
+        esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
+    }
 
     if (res)  {
         rtc_clk_cpu_freq_set_config(&new_config);
@@ -244,9 +246,12 @@ __attribute__((weak)) void esp_perip_clk_init(void)
                            SYSTEM_WIFI_CLK_UNUSED_BIT12;
 
 #if !CONFIG_USJ_ENABLE_USB_SERIAL_JTAG && !CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED
+        /* This function only called on startup thus is thread safe. To avoid build errors/warnings
+         * declare __DECLARE_RCC_ATOMIC_ENV here. */
+        int __DECLARE_RCC_ATOMIC_ENV __attribute__((unused));
         // Disable USB-Serial-JTAG clock and it's pad if not used
         usb_serial_jtag_ll_phy_enable_pad(false);
-        _usb_serial_jtag_ll_enable_bus_clock(false);
+        usb_serial_jtag_ll_enable_bus_clock(false);
 #endif
     }
 

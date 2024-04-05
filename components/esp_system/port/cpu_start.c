@@ -76,7 +76,6 @@
 #endif
 
 #include "esp_private/rtc_clk.h"
-#include "esp_private/esp_ldo_psram.h"
 
 #if SOC_INT_CLIC_SUPPORTED
 #include "hal/interrupt_clic_ll.h"
@@ -104,7 +103,6 @@
 #include "soc/periph_defs.h"
 #include "esp_cpu.h"
 #include "esp_private/esp_clk.h"
-#include "spi_flash_mmap.h"
 
 #if CONFIG_ESP32_TRAX || CONFIG_ESP32S2_TRAX || CONFIG_ESP32S3_TRAX
 #include "esp_private/trax.h"
@@ -463,11 +461,19 @@ void IRAM_ATTR call_start_cpu0(void)
 #endif  //#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 #endif  //#if CONFIG_APP_BUILD_TYPE_RAM
 
+#if CONFIG_IDF_TARGET_ESP32P4
+#define RWDT_RESET           RESET_REASON_CORE_RWDT
+#define MWDT_RESET           RESET_REASON_CORE_MWDT
+#else
+#define RWDT_RESET           RESET_REASON_CORE_RTC_WDT
+#define MWDT_RESET           RESET_REASON_CORE_MWDT0
+#endif
+
 #ifndef CONFIG_BOOTLOADER_WDT_ENABLE
     // from panic handler we can be reset by RWDT or TG0WDT
-    if (rst_reas[0] == RESET_REASON_CORE_RTC_WDT || rst_reas[0] == RESET_REASON_CORE_MWDT0
+    if (rst_reas[0] == RWDT_RESET || rst_reas[0] == MWDT_RESET
 #if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
-            || rst_reas[1] == RESET_REASON_CORE_RTC_WDT || rst_reas[1] == RESET_REASON_CORE_MWDT0
+            || rst_reas[1] == RWDT_RESET || rst_reas[1] == MWDT_RESET
 #endif
        ) {
         wdt_hal_context_t rtc_wdt_ctx = RWDT_HAL_CONTEXT_DEFAULT();
@@ -597,7 +603,7 @@ void IRAM_ATTR call_start_cpu0(void)
 #elif CONFIG_IDF_TARGET_ESP32S3
     REG_CLR_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_CLKGATE_EN);
 #if SOC_APPCPU_HAS_CLOCK_GATING_BUG
-    /* The clock gating signal of the App core is invalid. We use RUNSTALL and RESETING
+    /* The clock gating signal of the App core is invalid. We use RUNSTALL and RESETTING
        signals to ensure that the App core stops running in single-core mode. */
     REG_SET_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_RUNSTALL);
     REG_CLR_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_RESETING);
@@ -704,7 +710,7 @@ void IRAM_ATTR call_start_cpu0(void)
 #endif
 #endif
 
-#if SOC_DEEP_SLEEP_SUPPORTED //TODO: IDF-7529, IDF-8638, IDF-9245
+#if SOC_DEEP_SLEEP_SUPPORTED //TODO: IDF-8638, IDF-9245
     // Need to unhold the IOs that were hold right before entering deep sleep, which are used as wakeup pins
     if (rst_reas[0] == RESET_REASON_CORE_DEEP_SLEEP) {
         esp_deep_sleep_wakeup_io_reset();

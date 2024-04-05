@@ -9,7 +9,8 @@
 #pragma once
 
 #include "soc/soc_caps.h"
-#if SOC_MODEM_CLOCK_IS_INDEPENDENT
+#include "sdkconfig.h"
+#if SOC_MODEM_CLOCK_IS_INDEPENDENT && SOC_MODEM_CLOCK_SUPPORTED
 #include "hal/modem_syscon_ll.h"
 #include "hal/modem_lpcon_ll.h"
 #include "hal/modem_clock_types.h"
@@ -18,12 +19,14 @@
 extern "C" {
 #endif
 
+#if !CONFIG_IDF_TARGET_ESP32C5_MP_VERSION
 typedef struct {
     modem_syscon_dev_t *syscon_dev;
     modem_lpcon_dev_t  *lpcon_dev;
 } modem_clock_hal_context_t;
+#endif
 
-#if MAC_SUPPORT_PMU_MODEM_STATE
+#if !CONFIG_IDF_TARGET_ESP32H2 //TODO: PM-92
 void modem_clock_hal_set_clock_domain_icg_bitmap(modem_clock_hal_context_t *hal, modem_clock_domain_t domain, uint32_t bitmap);
 uint32_t modem_clock_hal_get_clock_domain_icg_bitmap(modem_clock_hal_context_t *hal, modem_clock_domain_t domain);
 #endif
@@ -51,4 +54,4 @@ void modem_clock_hal_enable_wifipwr_clock(modem_clock_hal_context_t *hal, bool e
 }
 #endif
 
-#endif  // SOC_MODEM_CLOCK_IS_INDEPENDENT
+#endif  // SOC_MODEM_CLOCK_IS_INDEPENDENT && SOC_MODEM_CLOCK_SUPPORTED

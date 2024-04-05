@@ -108,7 +108,7 @@ struct i2c_bus_t {
     int scl_num; // SCL pin number
     bool pull_up_enable; // Enable pull-ups
     intr_handle_t intr_handle; // I2C interrupt handle
-    esp_pm_lock_handle_t pm_lock; // power manange lock
+    esp_pm_lock_handle_t pm_lock; // power manage lock
 #if CONFIG_PM_ENABLE
     char pm_lock_name[I2C_PM_LOCK_NAME_LEN_MAX]; // pm lock name
 #endif
@@ -141,7 +141,7 @@ struct i2c_master_bus_t {
     bool ack_check_disable;                                          // Disable ACK check
     volatile bool trans_done;                                                 // transaction command finish
     SLIST_HEAD(i2c_master_device_list_head, i2c_master_device_list) device_list;      // I2C device (instance) list
-    // asnyc trans members
+    // async trans members
     bool async_break;                                                // break transaction loop flag.
     i2c_addr_bit_len_t addr_10bits_bus;                              // Slave address is 10 bits.
     size_t queue_size;                                               // I2C transaction queue size.
@@ -165,6 +165,7 @@ struct i2c_master_dev_t {
     i2c_master_bus_t *master_bus;         // I2C master bus base class
     uint16_t device_address;              // I2C device address
     uint32_t scl_speed_hz;                // SCL clock frequency
+    uint32_t scl_wait_us;                // SCL await time (unit:us)
     i2c_addr_bit_len_t addr_10bits;       // Whether I2C device is a 10-bits address device.
     bool ack_check_disable;               // Disable ACK check
     i2c_master_callback_t on_trans_done;  // I2C master transaction done callback.

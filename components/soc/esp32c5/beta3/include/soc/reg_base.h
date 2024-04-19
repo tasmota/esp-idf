@@ -57,7 +57,7 @@
 #define DR_REG_GPIO_BASE                          0x60091000
 #define DR_REG_MEM_MONITOR_BASE                   0x60092000
 #define DR_REG_PAU_BASE                           0x60093000
-#define DR_REG_HP_SYSTEM_BASE                     0x60095000
+#define DR_REG_HP_SYS_BASE                        0x60095000
 #define DR_REG_PCR_BASE                           0x60096000
 #define DR_REG_TEE_BASE                           0x60098000
 #define DR_REG_HP_APM_BASE                        0x60099000
@@ -72,6 +72,7 @@
 #define DR_REG_MODEM_PWR_BASE                     0x600AD000
 #define DR_REG_I2C_ANA_MST_BASE                   0x600AF800
 
+#define PWDET_CONF_REG                            0x600A0810
 /**
  * @brief LP System (RTC) Modules
  *
@@ -101,3 +102,4 @@
 #define DR_REG_ASSIST_DEBUG_BASE                  0x600C2000
 #define DR_REG_INTPRI_BASE                        0x600C5000
 #define DR_REG_CACHE_BASE                         0x600C8000  // CACHE_CONFIG/EXTMEM
+#define DR_REG_CLINT_M_BASE                       0x20000000

@@ -55,7 +55,7 @@ TEST_CASE("I2C bus install-uninstall test", "[i2c]")
     };
     i2c_master_bus_handle_t i2c_mst_handle1;
 
-#if SOC_I2C_NUM > 1
+#if SOC_HP_I2C_NUM > 1
     i2c_master_bus_config_t i2c_mst_config_2 = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .i2c_port = 1,
@@ -68,7 +68,7 @@ TEST_CASE("I2C bus install-uninstall test", "[i2c]")
     // Install master bus 0
     ESP_LOGI(TAG, "Initialize bus0");
     TEST_ESP_OK(i2c_new_master_bus(&i2c_mst_config_1, &i2c_mst_handle1));
-#if SOC_I2C_NUM > 1
+#if SOC_HP_I2C_NUM > 1
     // Install master bus 1
     ESP_LOGI(TAG, "Initialize bus1");
     TEST_ESP_OK(i2c_new_master_bus(&i2c_mst_config_2, &i2c_mst_handle2));
@@ -78,7 +78,7 @@ TEST_CASE("I2C bus install-uninstall test", "[i2c]")
     TEST_ESP_ERR(ESP_ERR_INVALID_STATE, i2c_new_master_bus(&i2c_mst_config_1, &i2c_mst_handle1));
     ESP_LOGI(TAG, "Delete bus0");
     TEST_ESP_OK(i2c_del_master_bus(i2c_mst_handle1));
-#if SOC_I2C_NUM > 1
+#if SOC_HP_I2C_NUM > 1
     ESP_LOGI(TAG, "Delete bus1");
     TEST_ESP_OK(i2c_del_master_bus(i2c_mst_handle2));
 #endif
@@ -164,6 +164,41 @@ TEST_CASE("I2C master probe device test", "[i2c]")
     TEST_ESP_ERR(ESP_ERR_NOT_FOUND, i2c_master_probe(bus_handle, 0x33, -1));
     TEST_ESP_ERR(ESP_ERR_NOT_FOUND, i2c_master_probe(bus_handle, 0x44, -1));
     TEST_ESP_ERR(ESP_ERR_NOT_FOUND, i2c_master_probe(bus_handle, 0x55, -1));
+    TEST_ESP_OK(i2c_del_master_bus(bus_handle));
+}
+
+TEST_CASE("probe test after general call (0x00 0x06)", "[i2c]")
+{
+    uint8_t data_wr[1] = { 0x06 };
+
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = TEST_I2C_PORT,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .flags.enable_internal_pullup = true,
+    };
+    i2c_master_bus_handle_t bus_handle;
+
+    TEST_ESP_OK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+
+    i2c_device_config_t dev_cfg1 = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = 0x00,
+        .scl_speed_hz = 100000,
+    };
+
+    i2c_master_dev_handle_t dev_handle1;
+    TEST_ESP_OK(i2c_master_bus_add_device(bus_handle, &dev_cfg1, &dev_handle1));
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_STATE, i2c_master_transmit(dev_handle1, data_wr, 1, 200));
+
+    for (int i = 1; i < 0x7f; i++) {
+        TEST_ESP_ERR(ESP_ERR_NOT_FOUND, i2c_master_probe(bus_handle, i, 800));
+    }
+
+    TEST_ESP_OK(i2c_master_bus_rm_device(dev_handle1));
+
     TEST_ESP_OK(i2c_del_master_bus(bus_handle));
 }
 

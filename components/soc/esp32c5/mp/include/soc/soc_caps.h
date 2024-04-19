@@ -22,7 +22,7 @@
 #define SOC_UART_SUPPORTED              1     // TODO: [ESP32C5] IDF-8722
 // #define SOC_GDMA_SUPPORTED              1  // TODO: [ESP32C5] IDF-8710
 // #define SOC_AHB_GDMA_SUPPORTED          1  // TODO: [ESP32C5] IDF-8710
-// #define SOC_GPTIMER_SUPPORTED           1  // TODO: [ESP32C5] IDF-8705
+#define SOC_GPTIMER_SUPPORTED           1
 // #define SOC_PCNT_SUPPORTED              1  // TODO: [ESP32C5] IDF-8683
 // #define SOC_MCPWM_SUPPORTED             1  // TODO: [ESP32C5] IDF-8709
 // #define SOC_TWAI_SUPPORTED              1  // TODO: [ESP32C5] IDF-8691
@@ -57,9 +57,9 @@
 // #define SOC_BOD_SUPPORTED               1  // TODO: [ESP32C5] IDF-8647
 // #define SOC_APM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8614
 // #define SOC_PMU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8667
-// #define SOC_PAU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8638, IDF-8640
+// #define SOC_PAU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8638
 // #define SOC_LP_TIMER_SUPPORTED          1  // TODO: [ESP32C5] IDF-8636
-// #define SOC_LP_AON_SUPPORTED            1  // TODO: [ESP32C5] IDF-8638, IDF-8640
+// #define SOC_LP_AON_SUPPORTED            1  // TODO: [ESP32C5] IDF-8638
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1  // TODO: [ESP32C5] IDF-8695, IDF-8723, IDF-8719
 // #define SOC_LP_I2C_SUPPORTED            1  // TODO: [ESP32C5] IDF-8634
 // #define SOC_ULP_LP_UART_SUPPORTED       1  // TODO: [ESP32C5] IDF-8633
@@ -208,7 +208,7 @@
 // Support to hold a single digital I/O when the digital domain is powered off
 #define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  (1)
 
-// The Clock Out singnal is route to the pin by GPIO matrix
+// The Clock Out signal is route to the pin by GPIO matrix
 // #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX    (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
@@ -227,7 +227,8 @@
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-C5 has 1 I2C
-#define SOC_I2C_NUM                 (1UL)
+#define SOC_I2C_NUM                 (1U)
+#define SOC_HP_I2C_NUM              (1U)
 
 // #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
 // #define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
@@ -243,6 +244,8 @@
 // #define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
 // #define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
 // #define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
+
+// #define SOC_I2C_SUPPORT_SLEEP_RETENTION (1) // TODO: IDF-9693
 
 /*-------------------------- LP_I2C CAPS -------------------------------------*/
 // ESP32-C5 has 1 LP_I2C
@@ -427,10 +430,10 @@
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 #define SOC_TIMER_GROUPS                  (2)
 #define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (1U)
-// #define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
-// #define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
+#define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
+#define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
 // #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
-// #define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
+#define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
 // #define SOC_TIMER_SUPPORT_ETM             (1)
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
@@ -501,8 +504,8 @@
 // #define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
 // #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 // #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
-// #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configue the EXT1 trigger level */
-#define SOC_PM_SUPPORT_CPU_PD           (1)
+// #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configure the EXT1 trigger level */
+// #define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_MODEM_PD         (1)
 #define SOC_PM_SUPPORT_XTAL32K_PD       (1)
 #define SOC_PM_SUPPORT_RC32K_PD         (1)

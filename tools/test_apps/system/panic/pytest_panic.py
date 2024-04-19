@@ -9,37 +9,50 @@ import pexpect
 import pytest
 from test_panic_util import PanicTestDut
 
-# Markers for all the targets this test currently runs on
-TARGETS_TESTED = [
-    pytest.mark.esp32,
+TARGETS_XTENSA_SINGLE_CORE = [
     pytest.mark.esp32s2,
-    pytest.mark.esp32c3,
+]
+
+TARGETS_XTENSA_DUAL_CORE = [
+    pytest.mark.esp32,
     pytest.mark.esp32s3,
+]
+
+TARGETS_XTENSA = TARGETS_XTENSA_SINGLE_CORE + TARGETS_XTENSA_DUAL_CORE
+
+TARGETS_RISCV_SINGLE_CORE = [
     pytest.mark.esp32c2,
+    pytest.mark.esp32c3,
     pytest.mark.esp32c6,
     pytest.mark.esp32h2,
+]
+
+TARGETS_RISCV_DUAL_CORE = [
     pytest.mark.esp32p4,
 ]
+
+TARGETS_RISCV = TARGETS_RISCV_SINGLE_CORE + TARGETS_RISCV_DUAL_CORE
+
+# Markers for all the targets this test currently runs on
+TARGETS_ALL = TARGETS_XTENSA + TARGETS_RISCV
+
+# Some tests only run on dual-core targets, they use the config below.
+TARGETS_DUAL_CORE = TARGETS_XTENSA_DUAL_CORE + TARGETS_RISCV_DUAL_CORE
 
 # Most tests run on all targets and with all configs.
 # This list is passed to @pytest.mark.parametrize for each of the test cases.
 # It creates an outer product of the sets: [configs] x [targets],
 # with some exceptions.
 CONFIGS = [
-    pytest.param('coredump_flash_bin_crc', marks=TARGETS_TESTED),
-    pytest.param('coredump_flash_elf_sha', marks=TARGETS_TESTED),
-    pytest.param('coredump_uart_bin_crc', marks=TARGETS_TESTED),
-    pytest.param('coredump_uart_elf_crc', marks=TARGETS_TESTED),
-    pytest.param('gdbstub', marks=TARGETS_TESTED),
-    pytest.param('panic', marks=TARGETS_TESTED),
+    pytest.param('coredump_flash_bin_crc', marks=TARGETS_ALL),
+    pytest.param('coredump_flash_elf_sha', marks=TARGETS_ALL),
+    pytest.param('coredump_uart_bin_crc', marks=TARGETS_ALL),
+    pytest.param('coredump_uart_elf_crc', marks=TARGETS_ALL),
+    pytest.param('coredump_flash_custom_stack', marks=TARGETS_RISCV),
+    pytest.param('gdbstub', marks=TARGETS_ALL),
+    pytest.param('panic', marks=TARGETS_ALL),
 ]
 
-# Some tests only run on dual-core targets, they use the config below.
-TARGETS_DUAL_CORE = [
-    pytest.mark.esp32,
-    pytest.mark.esp32s3,
-    pytest.mark.esp32p4,
-]
 CONFIGS_DUAL_CORE = [
     pytest.param('coredump_flash_bin_crc', marks=TARGETS_DUAL_CORE),
     pytest.param('coredump_flash_elf_sha', marks=TARGETS_DUAL_CORE),
@@ -55,31 +68,25 @@ TARGETS_DUAL_CORE_NAMES = [x.mark.name for x in TARGETS_DUAL_CORE]
 
 # The tests which panic on external stack require PSRAM capable runners
 CONFIGS_EXTRAM_STACK = [
-    pytest.param('coredump_extram_stack', marks=[pytest.mark.esp32, pytest.mark.esp32s2, pytest.mark.psram, pytest.mark.esp32s3, pytest.mark.quad_psram])
-]
-
-TARGETS_HW_STACK_GUARD = [
-    pytest.mark.esp32c2,
-    pytest.mark.esp32c3,
-    pytest.mark.esp32c6,
-    pytest.mark.esp32h2,
-    pytest.mark.esp32p4,
+    pytest.param('coredump_extram_stack', marks=[pytest.mark.esp32, pytest.mark.psram]),
+    pytest.param('coredump_extram_stack', marks=[pytest.mark.esp32s2, pytest.mark.generic]),
+    pytest.param('coredump_extram_stack', marks=[pytest.mark.esp32s3, pytest.mark.quad_psram]),
 ]
 
 CONFIGS_HW_STACK_GUARD = [
-    pytest.param('coredump_flash_bin_crc', marks=TARGETS_HW_STACK_GUARD),
-    pytest.param('coredump_uart_bin_crc', marks=TARGETS_HW_STACK_GUARD),
-    pytest.param('coredump_uart_elf_crc', marks=TARGETS_HW_STACK_GUARD),
-    pytest.param('gdbstub', marks=TARGETS_HW_STACK_GUARD),
-    pytest.param('panic', marks=TARGETS_HW_STACK_GUARD),
+    pytest.param('coredump_flash_bin_crc', marks=TARGETS_RISCV),
+    pytest.param('coredump_uart_bin_crc', marks=TARGETS_RISCV),
+    pytest.param('coredump_uart_elf_crc', marks=TARGETS_RISCV),
+    pytest.param('gdbstub', marks=TARGETS_RISCV),
+    pytest.param('panic', marks=TARGETS_RISCV),
 ]
 
 CONFIGS_HW_STACK_GUARD_DUAL_CORE = [
-    pytest.param('coredump_flash_bin_crc', marks=[pytest.mark.esp32p4]),
-    pytest.param('coredump_uart_bin_crc', marks=[pytest.mark.esp32p4]),
-    pytest.param('coredump_uart_elf_crc', marks=[pytest.mark.esp32p4]),
-    pytest.param('gdbstub', marks=[pytest.mark.esp32p4]),
-    pytest.param('panic', marks=[pytest.mark.esp32p4]),
+    pytest.param('coredump_flash_bin_crc', marks=TARGETS_RISCV_DUAL_CORE),
+    pytest.param('coredump_uart_bin_crc', marks=TARGETS_RISCV_DUAL_CORE),
+    pytest.param('coredump_uart_elf_crc', marks=TARGETS_RISCV_DUAL_CORE),
+    pytest.param('gdbstub', marks=TARGETS_RISCV_DUAL_CORE),
+    pytest.param('panic', marks=TARGETS_RISCV_DUAL_CORE),
 ]
 
 # Panic abort information will start with this string.
@@ -517,6 +524,7 @@ def test_assert_cache_disabled(
 
 
 @pytest.mark.esp32
+@pytest.mark.generic
 @pytest.mark.parametrize('config', ['panic_delay'], indirect=True)
 def test_panic_delay(dut: PanicTestDut) -> None:
     dut.run_test_func('test_storeprohibited')
@@ -544,7 +552,8 @@ CONFIGS_MEMPROT_IDRAM = [
     pytest.param('memprot_esp32c3', marks=[pytest.mark.esp32c3]),
     pytest.param('memprot_esp32c2', marks=[pytest.mark.esp32c2]),
     pytest.param('memprot_esp32c6', marks=[pytest.mark.esp32c6]),
-    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2])
+    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2]),
+    pytest.param('memprot_esp32p4', marks=[pytest.mark.esp32p4])
 ]
 
 CONFIGS_MEMPROT_DCACHE = [
@@ -555,7 +564,8 @@ CONFIGS_MEMPROT_RTC_FAST_MEM = [
     pytest.param('memprot_esp32s2', marks=[pytest.mark.esp32s2]),
     pytest.param('memprot_esp32c3', marks=[pytest.mark.esp32c3]),
     pytest.param('memprot_esp32c6', marks=[pytest.mark.esp32c6]),
-    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2])
+    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2]),
+    pytest.param('memprot_esp32p4', marks=[pytest.mark.esp32p4])
 ]
 
 CONFIGS_MEMPROT_RTC_SLOW_MEM = [
@@ -564,7 +574,8 @@ CONFIGS_MEMPROT_RTC_SLOW_MEM = [
 
 CONFIGS_MEMPROT_FLASH_IDROM = [
     pytest.param('memprot_esp32c6', marks=[pytest.mark.esp32c6]),
-    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2])
+    pytest.param('memprot_esp32h2', marks=[pytest.mark.esp32h2]),
+    pytest.param('memprot_esp32p4', marks=[pytest.mark.esp32p4])
 ]
 
 
@@ -601,7 +612,7 @@ def test_iram_reg1_write_violation(dut: PanicTestDut, test_func_name: str) -> No
         dut.expect_backtrace()
     elif dut.target == 'esp32c3':
         dut.expect_exact(r'Test error: Test function has returned')
-    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Store access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -626,7 +637,7 @@ def test_iram_reg2_write_violation(dut: PanicTestDut, test_func_name: str) -> No
         dut.expect(r'  operation type: (\S+)')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
-    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Store access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -651,7 +662,7 @@ def test_iram_reg3_write_violation(dut: PanicTestDut, test_func_name: str) -> No
         dut.expect(r'  operation type: (\S+)')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
-    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Store access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -698,7 +709,7 @@ def test_dram_reg1_execute_violation(dut: PanicTestDut, test_func_name: str) -> 
         dut.expect(r'Unknown operation at address [0-9xa-f]+ not permitted \((\S+)\)')
         dut.expect_reg_dump(0)
         dut.expect_corrupted_backtrace()
-    elif dut.target in ['esp32c3', 'esp32c2', 'esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c3', 'esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Instruction access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -717,7 +728,7 @@ def test_dram_reg2_execute_violation(dut: PanicTestDut, test_func_name: str) -> 
         dut.expect_gme('InstructionFetchError')
         dut.expect_reg_dump(0)
         dut.expect_corrupted_backtrace()
-    elif dut.target in ['esp32c3', 'esp32c2', 'esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c3', 'esp32c2', 'esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Instruction access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -735,7 +746,7 @@ def test_rtc_fast_reg1_execute_violation(dut: PanicTestDut, test_func_name: str)
 
 @pytest.mark.parametrize('config', CONFIGS_MEMPROT_RTC_FAST_MEM, indirect=True)
 @pytest.mark.generic
-@pytest.mark.skipif('config.getvalue("target") in ["esp32c6", "esp32h2"]', reason='Not a violation condition because it does not have PMS peripheral')
+@pytest.mark.skipif('config.getvalue("target") in ["esp32c6", "esp32h2", "esp32p4"]', reason='Not a violation condition, no PMS peripheral case')
 def test_rtc_fast_reg2_execute_violation(dut: PanicTestDut, test_func_name: str) -> None:
     dut.run_test_func(test_func_name)
     dut.expect_gme('Memory protection fault')
@@ -773,7 +784,7 @@ def test_rtc_fast_reg3_execute_violation(dut: PanicTestDut, test_func_name: str)
         dut.expect(r'  operation type: (\S+)')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
-    elif dut.target in ['esp32c6', 'esp32h2']:
+    elif dut.target in ['esp32c6', 'esp32h2', 'esp32p4']:
         dut.expect_gme('Instruction access fault')
         dut.expect_reg_dump(0)
         dut.expect_stack_dump()
@@ -831,6 +842,7 @@ def test_drom_reg_execute_violation(dut: PanicTestDut, test_func_name: str) -> N
 
 
 @pytest.mark.esp32
+@pytest.mark.generic
 @pytest.mark.parametrize('config', ['gdbstub_coredump'], indirect=True)
 def test_gdbstub_coredump(dut: PanicTestDut) -> None:
     test_func_name = 'test_storeprohibited'

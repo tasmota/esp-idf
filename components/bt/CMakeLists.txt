@@ -24,12 +24,16 @@ elseif(CONFIG_IDF_TARGET_ESP32C6)
 
 elseif(CONFIG_IDF_TARGET_ESP32H2)
     set(target_specific_include_dirs include/esp32h2/include)
+
+elseif(CONFIG_IDF_TARGET_ESP32C5)
+    set(target_specific_include_dirs include/esp32c5/include)
 endif()
 
 set(common_include_dirs
     common/api/include/api
     common/btc/profile/esp/blufi/include
     common/btc/profile/esp/include
+    common/hci_log/include
 )
 
 set(ble_mesh_include_dirs
@@ -66,37 +70,44 @@ if(CONFIG_IDF_DOC_BUILD)
          ${nimble_hci_include_dirs})
 endif()
 
-
 if(CONFIG_BT_ENABLED)
 
     set(srcs "")
     set(include_dirs "")
-    set(ldfragments "linker.lf")
+    set(ldscripts "linker_common.lf")
     if(CONFIG_BT_CONTROLLER_ENABLED)
         if(CONFIG_IDF_TARGET_ESP32)
             list(APPEND srcs "controller/esp32/bt.c"
                              "controller/esp32/hli_api.c"
                              "controller/esp32/hli_vectors.S")
+            list(APPEND ldscripts "linker_rw_bt_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32C3)
             list(APPEND srcs "controller/esp32c3/bt.c")
+            list(APPEND ldscripts "linker_rw_bt_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32S3)
             list(APPEND srcs "controller/esp32c3/bt.c")
+            list(APPEND ldscripts "linker_rw_bt_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32C2)
-            set(ldfragments "linker.lf.esp32c2")
             list(APPEND srcs "controller/esp32c2/bt.c")
+            set(ldscripts "linker_esp32c2.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32C6)
             list(APPEND srcs "controller/esp32c6/bt.c")
+            list(APPEND ldscripts "linker_esp_ble_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32H2)
             list(APPEND srcs "controller/esp32h2/bt.c")
+            list(APPEND ldscripts "linker_esp_ble_controller.lf")
+
+        elseif(CONFIG_IDF_TARGET_ESP32C5)
+            list(APPEND srcs "controller/esp32c5/bt.c")
+            list(APPEND ldscripts "linker_esp_ble_controller.lf")
         endif()
 
         list(APPEND include_dirs ${target_specific_include_dirs})
-
     endif()
 
     # Common
@@ -111,6 +122,7 @@ if(CONFIG_BT_ENABLED)
 
     list(APPEND srcs "common/btc/core/btc_alarm.c"
          "common/api/esp_blufi_api.c"
+         "common/hci_log/bt_hci_log.c"
          "common/btc/core/btc_manage.c"
          "common/btc/core/btc_task.c"
          "common/btc/profile/esp/blufi/blufi_prf.c"
@@ -818,7 +830,7 @@ idf_component_register(SRCS "${srcs}"
                        PRIV_INCLUDE_DIRS "${priv_include_dirs}"
                        REQUIRES esp_timer esp_wifi
                        PRIV_REQUIRES nvs_flash soc esp_pm esp_phy esp_coex mbedtls esp_driver_uart vfs esp_ringbuf
-                       LDFRAGMENTS "${ldfragments}")
+                       LDFRAGMENTS "${ldscripts}")
 
 if(CONFIG_BT_ENABLED)
     target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-implicit-fallthrough -Wno-unused-const-variable)
@@ -835,14 +847,17 @@ if(CONFIG_BT_ENABLED)
         target_link_directories(${COMPONENT_LIB} INTERFACE
                 "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c3_family/esp32s3")
         target_link_libraries(${COMPONENT_LIB} PUBLIC btdm_app)
-    elseif(CONFIG_IDF_TARGET_ESP32C2)
+    elseif(CONFIG_IDF_TARGET_ESP32C2 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32c2/esp32c2-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
-    elseif(CONFIG_IDF_TARGET_ESP32C6)
+    elseif(CONFIG_IDF_TARGET_ESP32C6 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32c6/esp32c6-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
-    elseif(CONFIG_IDF_TARGET_ESP32H2)
+    elseif(CONFIG_IDF_TARGET_ESP32H2 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32h2/esp32h2-bt-lib/libble_app.a")
+        target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
+    elseif(CONFIG_IDF_TARGET_ESP32C5 AND CONFIG_BT_CONTROLLER_ENABLED)
+        add_prebuilt_library(libble_app "controller/lib_esp32c5/esp32c5-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
     endif()
 
@@ -871,6 +886,9 @@ if(CONFIG_BLE_MESH)
         target_link_libraries(${COMPONENT_LIB} PRIVATE ble_mesh)
     elseif(CONFIG_IDF_TARGET_ESP32H2)
         add_prebuilt_library(ble_mesh "esp_ble_mesh/lib/lib/esp32h2/libble_mesh.a")
+        target_link_libraries(${COMPONENT_LIB} PRIVATE ble_mesh)
+    elseif(CONFIG_IDF_TARGET_ESP32C5)
+        add_prebuilt_library(ble_mesh "esp_ble_mesh/lib/lib/esp32C5/libble_mesh.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE ble_mesh)
     endif()
 endif()

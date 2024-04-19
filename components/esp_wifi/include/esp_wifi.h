@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /*               Notes about WiFi Programming
  *
  *  WiFi programming model can be depicted as following picture:
@@ -119,6 +118,8 @@ typedef struct {
     uint64_t               feature_caps;           /**< Enables additional WiFi features and capabilities */
     bool                   sta_disconnected_pm;    /**< WiFi Power Management for station at disconnected status */
     int                    espnow_max_encrypt_num; /**< Maximum encrypt number of peers supported by espnow */
+    int                    tx_hetb_queue_num;      /**< WiFi TX HE TB QUEUE number for STA HE TB PPDU transmission */
+    bool                   dump_hesigb_enable;     /**< enable dump sigb field */
     int                    magic;                  /**< WiFi init magic number, it should be the last field */
 } wifi_init_config_t;
 
@@ -241,7 +242,19 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
 #define WIFI_FTM_RESPONDER 0
 #endif
 
-#define CONFIG_FEATURE_WPA3_SAE_BIT (1<<0)
+#if CONFIG_ESP_WIFI_ENABLE_DUMP_HESIGB && !WIFI_CSI_ENABLED
+#define WIFI_DUMP_HESIGB_ENABLED  true
+#else
+#define WIFI_DUMP_HESIGB_ENABLED  false
+#endif
+
+#if CONFIG_ESP_WIFI_TX_HETB_QUEUE_NUM
+#define WIFI_TX_HETB_QUEUE_NUM CONFIG_ESP_WIFI_TX_HETB_QUEUE_NUM
+#else
+#define WIFI_TX_HETB_QUEUE_NUM 1
+#endif
+
+#define CONFIG_FEATURE_WPA3_SAE_BIT     (1<<0)
 #define CONFIG_FEATURE_CACHE_TX_BUF_BIT (1<<1)
 #define CONFIG_FEATURE_FTM_INITIATOR_BIT (1<<2)
 #define CONFIG_FEATURE_FTM_RESPONDER_BIT (1<<3)
@@ -276,6 +289,8 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
     .feature_caps = WIFI_FEATURE_CAPS, \
     .sta_disconnected_pm = WIFI_STA_DISCONNECTED_PM_ENABLED,  \
     .espnow_max_encrypt_num = CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, \
+    .tx_hetb_queue_num = WIFI_TX_HETB_QUEUE_NUM, \
+    .dump_hesigb_enable = WIFI_DUMP_HESIGB_ENABLED, \
     .magic = WIFI_INIT_CONFIG_MAGIC\
 }
 
@@ -545,7 +560,6 @@ esp_err_t esp_wifi_scan_get_ap_record(wifi_ap_record_t *ap_record);
   */
 esp_err_t esp_wifi_clear_ap_list(void);
 
-
 /**
   * @brief     Get information of AP to which the device is associated with
   *
@@ -588,9 +602,11 @@ esp_err_t esp_wifi_get_ps(wifi_ps_type_t *type);
 /**
   * @brief     Set protocol type of specified interface
   *            The default protocol is (WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N).
-  *            if CONFIG_SOC_WIFI_HE_SUPPORT, the default protocol is (WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_11AX).
+  *            if CONFIG_SOC_WIFI_HE_SUPPORT and band is 2.4G, the default protocol is (WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_11AX).
+  *            if CONFIG_SOC_WIFI_HE_SUPPORT and band is 5G, the default protocol is (WIFI_PROTOCOL_11A|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_11AC|WIFI_PROTOCOL_11AX).
   *
-  * @attention Support 802.11b or 802.11bg or 802.11bgn or 802.11bgnax or LR mode
+  * @attention 2.4G: Support 802.11b or 802.11bg or 802.11bgn or 802.11bgnax or LR mode
+  *            5G: Support 802.11a or 802.11an or 802.11anac or 802.11anacax
   *
   * @param     ifx  interfaces
   * @param     protocol_bitmap  WiFi protocol bitmap
@@ -730,7 +746,6 @@ esp_err_t esp_wifi_set_country(const wifi_country_t *country);
   *    - ESP_ERR_INVALID_ARG: invalid argument
   */
 esp_err_t esp_wifi_get_country(wifi_country_t *country);
-
 
 /**
   * @brief     Set MAC address of WiFi station, soft-AP or NAN interface.
@@ -965,7 +980,7 @@ esp_err_t esp_wifi_set_storage(wifi_storage_t storage);
   * @param     vnd_ie Pointer to the vendor specific element data received.
   * @param     rssi Received signal strength indication.
   */
-typedef void (*esp_vendor_ie_cb_t) (void *ctx, wifi_vendor_ie_type_t type, const uint8_t sa[6], const vendor_ie_data_t *vnd_ie, int rssi);
+typedef void (*esp_vendor_ie_cb_t)(void *ctx, wifi_vendor_ie_type_t type, const uint8_t sa[6], const vendor_ie_data_t *vnd_ie, int rssi);
 
 /**
   * @brief     Set 802.11 Vendor-Specific Information Element
@@ -1097,7 +1112,6 @@ esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, b
   */
 typedef void (* wifi_csi_cb_t)(void *ctx, wifi_csi_info_t *data);
 
-
 /**
   * @brief Register the RX callback function of CSI data.
   *
@@ -1125,6 +1139,19 @@ esp_err_t esp_wifi_set_csi_rx_cb(wifi_csi_cb_t cb, void *ctx);
   *    - ESP_ERR_INVALID_ARG: invalid argument
   */
 esp_err_t esp_wifi_set_csi_config(const wifi_csi_config_t *config);
+
+/**
+  * @brief Get CSI data configuration
+  *
+  * @param config configuration
+  *
+  * return
+  *    - ESP_OK: succeed
+  *    - ESP_ERR_WIFI_NOT_INIT: WiFi is not initialized by esp_wifi_init
+  *    - ESP_ERR_WIFI_NOT_STARTED: WiFi is not started by esp_wifi_start or promiscuous mode is not enabled
+  *    - ESP_ERR_INVALID_ARG: invalid argument
+  */
+esp_err_t esp_wifi_get_csi_config(wifi_csi_config_t *config);
 
 /**
   * @brief Enable or disable CSI
@@ -1162,7 +1189,6 @@ esp_err_t esp_wifi_set_ant_gpio(const wifi_ant_gpio_config_t *config) __attribut
   *    - ESP_ERR_INVALID_ARG: invalid argument, e.g. parameter is NULL
   */
 esp_err_t esp_wifi_get_ant_gpio(wifi_ant_gpio_config_t *config) __attribute__((deprecated("Please use esp_phy_get_ant_gpio instead")));
-
 
 /**
   * @brief     Set antenna configuration
@@ -1501,6 +1527,32 @@ esp_err_t esp_wifi_set_dynamic_cs(bool enabled);
   *    - ESP_FAIL: failed
   */
 esp_err_t esp_wifi_sta_get_rssi(int *rssi);
+
+#if SOC_WIFI_HE_SUPPORT_5G
+/**
+  * @brief     Set wifi band.
+  *
+  * @param[in]    band wifi band 2.4G / 5G / 2.4G + 5G
+  *
+    * @return
+  *    - ESP_OK: succeed
+  *    - ESP_ERR_WIFI_NOT_INIT: WiFi is not initialized by esp_wifi_init
+  *    - ESP_ERR_INVALID_ARG: invalid argument
+  */
+esp_err_t esp_wifi_set_band(wifi_band_t band);
+
+/**
+  * @brief     Get wifi band.
+  *
+  * @param[in]    band store band of wifi
+  *
+    * @return
+  *    - ESP_OK: succeed
+  *    - ESP_ERR_WIFI_NOT_INIT: WiFi is not initialized by esp_wifi_init
+  *    - ESP_ERR_INVALID_ARG: invalid argument
+  */
+esp_err_t esp_wifi_get_band(wifi_band_t* band);
+#endif /* SOC_WIFI_HE_SUPPORT_5G */
 
 #ifdef __cplusplus
 }

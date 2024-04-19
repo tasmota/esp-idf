@@ -40,6 +40,12 @@ static const char *TAG = "i2c.master";
 #define I2C_ADDRESS_TRANS_WRITE(device_address)    (((device_address) << 1) | 0)
 #define I2C_ADDRESS_TRANS_READ(device_address)    (((device_address) << 1) | 1)
 
+#if SOC_LP_I2C_SUPPORTED
+#define I2C_FIFO_LEN(port_num) (((port_num) < SOC_HP_I2C_NUM) ? SOC_I2C_FIFO_LEN : SOC_LP_I2C_FIFO_LEN)
+#else
+#define I2C_FIFO_LEN(port_num) (SOC_I2C_FIFO_LEN)
+#endif
+
 static esp_err_t s_i2c_master_clear_bus(i2c_bus_handle_t handle)
 {
 #if !SOC_I2C_SUPPORT_HW_CLR_BUS
@@ -108,6 +114,18 @@ static esp_err_t s_i2c_hw_fsm_reset(i2c_master_bus_handle_t i2c_master)
     return ESP_OK;
 }
 
+static void s_i2c_err_log_print(i2c_master_event_t event, bool bypass_nack_log)
+{
+    if (event == I2C_EVENT_TIMEOUT) {
+        ESP_LOGE(TAG, "I2C transaction timeout detected");
+    }
+    if (bypass_nack_log != true) {
+        if (event == I2C_EVENT_NACK) {
+            ESP_LOGE(TAG, "I2C transaction unexpected nack detected");
+        }
+    }
+}
+
 //////////////////////////////////////I2C operation functions////////////////////////////////////////////
 /**
  * @brief This function is used to send I2C write command, which is divided in two parts.
@@ -136,7 +154,7 @@ static bool s_i2c_write_command(i2c_master_bus_handle_t i2c_master, i2c_operatio
     uint8_t data_fill = 0;
 
     // data_fill refers to the length to fill the data
-    data_fill = MIN(remaining_bytes, SOC_I2C_FIFO_LEN - *address_fill);
+    data_fill = MIN(remaining_bytes, I2C_FIFO_LEN(i2c_master->base->port_num) - *address_fill);
     write_pr = i2c_operation->data + i2c_operation->bytes_used;
     i2c_operation->bytes_used += data_fill;
     hw_cmd.byte_num = data_fill + *address_fill;
@@ -216,13 +234,13 @@ static bool s_i2c_read_command(i2c_master_bus_handle_t i2c_master, i2c_operation
     i2c_bus_handle_t handle = i2c_master->base;
     i2c_ll_hw_cmd_t hw_cmd = i2c_operation->hw_cmd;
 
-    *fifo_fill = MIN(remaining_bytes, SOC_I2C_FIFO_LEN - i2c_master->read_len_static);
+    *fifo_fill = MIN(remaining_bytes, I2C_FIFO_LEN(i2c_master->base->port_num) - i2c_master->read_len_static);
     i2c_master->rx_cnt = *fifo_fill;
     hw_cmd.byte_num = *fifo_fill;
 
     i2c_master->contains_read = true;
 #if !SOC_I2C_STOP_INDEPENDENT
-    if (remaining_bytes < SOC_I2C_FIFO_LEN - 1) {
+    if (remaining_bytes < I2C_FIFO_LEN(i2c_master->base->port_num) - 1) {
         if (i2c_operation->hw_cmd.ack_val == ACK_VAL) {
             if (remaining_bytes != 0) {
                 i2c_ll_master_write_cmd_reg(hal->dev, hw_cmd, i2c_master->cmd_idx);
@@ -406,6 +424,7 @@ static void s_i2c_send_commands(i2c_master_bus_handle_t i2c_master, TickType_t t
             // Software timeout, clear the command link and finish this transaction.
             i2c_master->cmd_idx = 0;
             i2c_master->trans_idx = 0;
+            atomic_store(&i2c_master->status, I2C_STATUS_TIMEOUT);
             return;
         }
 
@@ -425,7 +444,9 @@ static void s_i2c_send_commands(i2c_master_bus_handle_t i2c_master, TickType_t t
             };
             i2c_ll_master_write_cmd_reg(hal->dev, hw_stop_cmd, 0);
             i2c_hal_master_trans_start(hal);
-            return;
+            // The master trans start would start a transaction.
+            // Queue wait for the event instead of return directly.
+            break;
         }
 
         i2c_operation_t *i2c_operation = &i2c_master->i2c_trans.ops[i2c_master->trans_idx];
@@ -447,6 +468,7 @@ static void s_i2c_send_commands(i2c_master_bus_handle_t i2c_master, TickType_t t
         if (event == I2C_EVENT_DONE) {
             atomic_store(&i2c_master->status, I2C_STATUS_DONE);
         }
+        s_i2c_err_log_print(event, i2c_master->bypass_nack_log);
     } else {
         i2c_master->cmd_idx = 0;
         i2c_master->trans_idx = 0;
@@ -531,8 +553,20 @@ static esp_err_t s_i2c_transaction_start(i2c_master_dev_handle_t i2c_dev, int xf
     i2c_master->read_len_static = 0;
 
     i2c_hal_master_set_scl_timeout_val(hal, i2c_dev->scl_wait_us, i2c_master->base->clk_src_freq_hz);
+
+    if (!i2c_master->base->is_lp_i2c) {
+        I2C_CLOCK_SRC_ATOMIC() {
+            i2c_ll_set_source_clk(hal->dev, i2c_master->base->clk_src);
+        }
+    }
+#if SOC_LP_I2C_SUPPORTED
+    else {
+        LP_I2C_SRC_CLK_ATOMIC() {
+            lp_i2c_ll_set_source_clk(hal->dev, i2c_master->base->clk_src);
+        }
+    }
+#endif
     I2C_CLOCK_SRC_ATOMIC() {
-        i2c_ll_set_source_clk(hal->dev, i2c_master->base->clk_src);
         i2c_hal_set_bus_timing(hal, i2c_dev->scl_speed_hz, i2c_master->base->clk_src, i2c_master->base->clk_src_freq_hz);
     }
     i2c_ll_master_set_fractional_divider(hal->dev, 0, 0);
@@ -566,7 +600,7 @@ static esp_err_t s_i2c_transaction_start(i2c_master_dev_handle_t i2c_dev, int xf
 IRAM_ATTR static void i2c_isr_receive_handler(i2c_master_bus_t *i2c_master)
 {
     i2c_hal_context_t *hal = &i2c_master->base->hal;
-    while (i2c_ll_is_bus_busy(hal->dev)) {}
+
     if (i2c_master->status == I2C_STATUS_READ) {
         i2c_operation_t *i2c_operation = &i2c_master->i2c_trans.ops[i2c_master->trans_idx];
         portENTER_CRITICAL_ISR(&i2c_master->base->spinlock);
@@ -627,7 +661,9 @@ static void IRAM_ATTR i2c_master_isr_handler_default(void *arg)
         xQueueSendFromISR(i2c_master->event_queue, (void *)&i2c_master->event, &HPTaskAwoken);
     }
     if (i2c_master->contains_read == true) {
-        i2c_isr_receive_handler(i2c_master);
+        if (int_mask & I2C_LL_INTR_MST_COMPLETE || int_mask & I2C_LL_INTR_END_DETECT) {
+            i2c_isr_receive_handler(i2c_master);
+        }
     }
 
     if (i2c_master->async_trans) {
@@ -692,7 +728,8 @@ static esp_err_t i2c_param_master_config(i2c_bus_handle_t handle, const i2c_mast
     i2c_hal_context_t *hal = &handle->hal;
 
     ESP_RETURN_ON_ERROR(i2c_common_set_pins(handle), TAG, "i2c master set pin failed");
-    ESP_RETURN_ON_ERROR(i2c_select_periph_clock(handle, i2c_conf->clk_source), TAG, "i2c select clock failed");
+    soc_module_clk_t clk_source = i2c_conf->clk_source;
+    ESP_RETURN_ON_ERROR(i2c_select_periph_clock(handle, clk_source), TAG, "i2c select clock failed");
     handle->clk_src = i2c_conf->clk_source;
     portENTER_CRITICAL(&handle->spinlock);
     i2c_hal_master_init(hal);
@@ -1094,6 +1131,8 @@ esp_err_t i2c_master_probe(i2c_master_bus_handle_t bus_handle, uint16_t address,
     bus_handle->cmd_idx = 0;
     bus_handle->trans_idx = 0;
     bus_handle->trans_done = false;
+    bus_handle->status = I2C_STATUS_IDLE;
+    bus_handle->bypass_nack_log = true;
     i2c_hal_context_t *hal = &bus_handle->base->hal;
     i2c_operation_t i2c_ops[] = {
         {.hw_cmd = I2C_TRANS_START_COMMAND},
@@ -1126,6 +1165,7 @@ esp_err_t i2c_master_probe(i2c_master_bus_handle_t bus_handle, uint16_t address,
 
     // Reset the status to done, in order not influence next time transaction.
     bus_handle->status = I2C_STATUS_DONE;
+    bus_handle->bypass_nack_log = false;
     i2c_ll_disable_intr_mask(hal->dev, I2C_LL_MASTER_EVENT_INTR);
     xSemaphoreGive(bus_handle->bus_lock_mux);
     return ret;

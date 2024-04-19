@@ -20,10 +20,6 @@ tools/test_apps/build_system/ld_non_contiguous_memory:
   disable:
     - if: SOC_MEM_NON_CONTIGUOUS_SRAM != 1
 
-tools/test_apps/linux_compatible/driver_mock:
-  enable:
-    - if: IDF_TARGET == "linux"
-
 tools/test_apps/linux_compatible/generic_build_test:
   enable:
     - if: IDF_TARGET in ["esp32", "esp32c3", "linux"]
@@ -34,10 +30,8 @@ tools/test_apps/linux_compatible/linux_freertos:
   enable:
     - if: IDF_TARGET == "linux"
 
-tools/test_apps/linux_compatible/wifi_build_test:
+tools/test_apps/linux_compatible/mock_build_test:
   enable:
-    - if: IDF_TARGET == "linux"
-  disable_test:
     - if: IDF_TARGET == "linux"
 
 tools/test_apps/peripherals/i2c_wifi:
@@ -210,6 +204,10 @@ tools/test_apps/system/panic:
     - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4"] # preview targets
 
 tools/test_apps/system/ram_loadable_app:
+  disable:
+    - if: IDF_TARGET == "esp32c5"
+      temporary: true
+      reason: not supported  # TODO: [ESP32C5] IDF-8644
   disable_test:
     - if: IDF_TARGET in ["esp32p4"]
       temporary: true

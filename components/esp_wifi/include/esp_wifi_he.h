@@ -15,7 +15,6 @@
 extern "C" {
 #endif
 
-
 /**
   * @brief     Set up an individual TWT agreement (NegotiationType=0) or change TWT parameters of the existing TWT agreement
   *            - TWT Wake Interval = TWT Wake Interval Mantissa * (2 ^ TWT Wake Interval Exponent), unit: us
@@ -142,7 +141,6 @@ esp_err_t esp_wifi_enable_rx_statistics(bool rx_stats, bool rx_mu_stats);
   *    - ESP_ERR_NO_MEM: out of memory
   */
 esp_err_t esp_wifi_enable_tx_statistics(esp_wifi_aci_t aci, bool tx_stats);
-
 
 #ifdef __cplusplus
 }

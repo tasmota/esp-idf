@@ -149,7 +149,7 @@ esp_err_t esp_cam_new_csi_ctlr(const esp_cam_ctlr_csi_config_t *config, esp_cam_
 
     size_t dma_alignment = 4;  //TODO: IDF-9126, replace with dwgdma alignment API
     size_t cache_alignment = 1;
-    ESP_GOTO_ON_ERROR(esp_cache_get_alignment(ESP_CACHE_MALLOC_FLAG_PSRAM | ESP_CACHE_MALLOC_FLAG_DMA, &cache_alignment), err, TAG, "failed to get cache alignment");
+    ESP_GOTO_ON_ERROR(esp_cache_get_alignment(MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA, &cache_alignment), err, TAG, "failed to get cache alignment");
     size_t alignment = MAX(cache_alignment, dma_alignment);
     ESP_LOGD(TAG, "alignment: 0x%x\n", alignment);
 
@@ -280,16 +280,25 @@ static bool csi_dma_trans_done_callback(dw_gdma_channel_handle_t chan, const dw_
 
     if (ctlr->cbs.on_get_new_trans) {
         need_yield = ctlr->cbs.on_get_new_trans(&(ctlr->base), &new_trans, ctlr->cbs_user_data);
-        assert(new_trans.buflen >= ctlr->fb_size_in_bytes);
-        csi_dma_transfer_config.dst.addr = (uint32_t)(new_trans.buffer);
+        if (!(new_trans.buffer) || new_trans.buflen < ctlr->fb_size_in_bytes) {
+            use_backup = true;
+        } else {
+            csi_dma_transfer_config.dst.addr = (uint32_t)(new_trans.buffer);
+        }
     } else if (xQueueReceiveFromISR(ctlr->trans_que, &new_trans, &high_task_woken) == pdTRUE) {
-        assert(new_trans.buflen >= ctlr->fb_size_in_bytes);
-        csi_dma_transfer_config.dst.addr = (uint32_t)(new_trans.buffer);
+        if (!(new_trans.buffer) || new_trans.buflen < ctlr->fb_size_in_bytes) {
+            use_backup = true;
+        } else {
+            csi_dma_transfer_config.dst.addr = (uint32_t)(new_trans.buffer);
+        }
     } else {
         use_backup = true;
+    }
+
+    if (use_backup) {
         new_trans.buffer = ctlr->backup_buffer;
         new_trans.buflen = ctlr->fb_size_in_bytes;
-        ESP_EARLY_LOGD(TAG, "no new buffer, use driver internal buffer");
+        ESP_EARLY_LOGD(TAG, "no new buffer or no long enough new buffer, use driver internal buffer");
         csi_dma_transfer_config.dst.addr = (uint32_t)ctlr->backup_buffer;
     }
 
@@ -297,7 +306,7 @@ static bool csi_dma_trans_done_callback(dw_gdma_channel_handle_t chan, const dw_
     dw_gdma_channel_config_transfer(chan, &csi_dma_transfer_config);
     dw_gdma_channel_enable_ctrl(chan, true);
 
-    if (!use_backup) {
+    if (ctlr->trans.buffer != ctlr->backup_buffer) {
         esp_err_t ret = esp_cache_msync((void *)(ctlr->trans.buffer), ctlr->trans.received_size, ESP_CACHE_MSYNC_FLAG_INVALIDATE);
         assert(ret == ESP_OK);
         assert(ctlr->cbs.on_trans_finished);

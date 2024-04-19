@@ -78,7 +78,7 @@ if(NOT BOOTLOADER_BUILD)
     endif()
 
     if(CONFIG_SOC_GP_LDO_SUPPORTED)
-        list(APPEND srcs "ldo/esp_ldo.c" "ldo/esp_ldo_regulator.c")
+        list(APPEND srcs "ldo/esp_ldo_regulator.c")
     endif()
 
     if(CONFIG_SOC_ASYNC_MEMCPY_SUPPORTED)
@@ -150,12 +150,19 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "esp_clock_output.c")
     endif()
 
-    if(CONFIG_IDF_TARGET_ESP32C5)
+    if(CONFIG_IDF_TARGET_ESP32C5_BETA3_VERSION)
         list(REMOVE_ITEM srcs
-                "sleep_modes.c"       # TODO: [ESP32C5] IDF-8638, IDF-8640
-                "sleep_wake_stub.c"   # TODO: [ESP32C5] IDF-8638, IDF-8640
-                "sleep_gpio.c"        # TODO: [ESP32C5] IDF-8638, IDF-8640
-                "port/esp_clk_tree_common.c"    # TODO: [ESP32C5] IDF-8638, IDF-8640
+                "sleep_gpio.c"        # TODO: [ESP32C5] IDF-8638
+                "port/esp_clk_tree_common.c"    # TODO: [ESP32C5] IDF-8638
+            )
+    endif()
+    if(CONFIG_IDF_TARGET_ESP32C5_MP_VERSION)
+        list(REMOVE_ITEM srcs
+                "sleep_modes.c"       # TODO: [ESP32C5] IDF-8638
+                "sleep_modem.c"       # TODO: [ESP32C5] IDF-8638
+                "sleep_wake_stub.c"   # TODO: [ESP32C5] IDF-8638
+                "sleep_gpio.c"        # TODO: [ESP32C5] IDF-8638
+                "port/esp_clk_tree_common.c"    # TODO: [ESP32C5] IDF-8638
             )
     endif()
     if(CONFIG_IDF_TARGET_ESP32C61)  # TODO: [ESP32C61] IDF-9245, IDF-9247, IDF-9248

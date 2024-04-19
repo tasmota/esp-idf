@@ -294,7 +294,7 @@ void *jpeg_alloc_encoder_mem(size_t size, const jpeg_encode_memory_alloc_cfg_t *
        For input buffer(for decoder is PSRAM write to 2DDMA), no restriction for any align (both cache writeback and requirement from 2DDMA).
     */
     size_t cache_align = 0;
-    esp_cache_get_alignment(ESP_CACHE_MALLOC_FLAG_PSRAM, &cache_align);
+    esp_cache_get_alignment(MALLOC_CAP_SPIRAM, &cache_align);
     if (mem_cfg->buffer_direction == JPEG_ENC_ALLOC_OUTPUT_BUFFER) {
         size = JPEG_ALIGN_UP(size, cache_align);
         *allocated_size = size;
@@ -441,7 +441,7 @@ static void s_jpeg_enc_config_picture_color_space(jpeg_encoder_handle_t encoder_
 {
     jpeg_hal_context_t *hal = &encoder_engine->codec_base->hal;
     color_space_pixel_format_t picture_format;
-    jpeg_ll_config_picture_color_space(hal->dev, encoder_engine->color_space);
+    jpeg_ll_config_picture_pixel_format(hal->dev, encoder_engine->color_space);
     picture_format.color_type_id = encoder_engine->picture_format;
     encoder_engine->bytes_per_pixel = color_hal_pixel_format_get_bit_depth(picture_format);
     if (encoder_engine->color_space == JPEG_ENC_SRC_GRAY) {

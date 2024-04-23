@@ -231,6 +231,11 @@
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_16~GPIO_NUM_54)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x007FFFFFFFFF0000ULL
 
+// The Clock Out signal is route to the pin by GPIO matrix
+#define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX         (1)
+#define SOC_GPIO_CLOCKOUT_CHANNEL_NUM            (2)
+#define SOC_CLOCKOUT_SUPPORT_CHANNEL_DIVIDER     (1)
+
 // Support to force hold all IOs
 #define SOC_GPIO_SUPPORT_FORCE_HOLD              (1)
 // Support to hold a single digital I/O when the digital domain is powered off
@@ -410,6 +415,7 @@
 /* Supported host clock delay phase number */
 #define SOC_SDMMC_DELAY_PHASE_NUM    4
 #define SOC_SDMMC_IO_POWER_EXTERNAL  1    ///< SDMMC IO power controlled by external power supply
+#define SOC_SDMMC_PSRAM_DMA_CAPABLE  1    ///< SDMMC peripheral can do DMA transfer to/from PSRAM
 
 // TODO: IDF-5353 (Copy from esp32c3, need check)
 /*--------------------------- SHA CAPS ---------------------------------------*/
@@ -623,6 +629,7 @@
 /*-------------------------- Memory CAPS --------------------------*/
 #define SOC_MEM_TCM_SUPPORTED                      (1)
 #define SOC_MEM_NON_CONTIGUOUS_SRAM                (1)
+#define SOC_ASYNCHRONOUS_BUS_ERROR_MODE            (1)
 /*--------------------------- EMAC --------------------------------*/
 #define SOC_EMAC_USE_IO_MUX                        (1) /*!< GPIO matrix is used to select GPIO pads */
 

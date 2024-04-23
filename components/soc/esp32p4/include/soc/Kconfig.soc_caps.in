@@ -555,6 +555,18 @@ config SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK
     hex
     default 0x007FFFFFFFFF0000
 
+config SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX
+    bool
+    default y
+
+config SOC_GPIO_CLOCKOUT_CHANNEL_NUM
+    int
+    default 2
+
+config SOC_CLOCKOUT_SUPPORT_CHANNEL_DIVIDER
+    bool
+    default y
+
 config SOC_GPIO_SUPPORT_FORCE_HOLD
     bool
     default y
@@ -1012,6 +1024,10 @@ config SOC_SDMMC_DELAY_PHASE_NUM
     default 4
 
 config SOC_SDMMC_IO_POWER_EXTERNAL
+    bool
+    default y
+
+config SOC_SDMMC_PSRAM_DMA_CAPABLE
     bool
     default y
 
@@ -1532,6 +1548,10 @@ config SOC_MEM_TCM_SUPPORTED
     default y
 
 config SOC_MEM_NON_CONTIGUOUS_SRAM
+    bool
+    default y
+
+config SOC_ASYNCHRONOUS_BUS_ERROR_MODE
     bool
     default y
 

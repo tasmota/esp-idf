@@ -39,7 +39,7 @@ variables:
   GIT_FETCH_EXTRA_FLAGS: "--no-recurse-submodules --prune --prune-tags"
   # we're using .cache folder for caches
   GIT_CLEAN_FLAGS: -ffdx -e .cache/
-  LATEST_GIT_TAG: v5.3-dev
+  LATEST_GIT_TAG: v5.4-dev
 
   SUBMODULE_FETCH_TOOL: "tools/ci/ci_fetch_submodule.py"
   # by default we will fetch all submodules
@@ -52,12 +52,11 @@ variables:
   IDF_PATH: "$CI_PROJECT_DIR"
   V: "0"
   CHECKOUT_REF_SCRIPT: "$CI_PROJECT_DIR/tools/ci/checkout_project_ref.py"
-  PYTHON_VER: 3.8.17
 
   # Docker images
-  ESP_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/esp-env-v5.3:1"
-  ESP_IDF_DOC_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/esp-idf-doc-env-v5.3:1-1"
-  TARGET_TEST_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/target-test-env-v5.3:1"
+  ESP_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/esp-env-v5.4:1"
+  ESP_IDF_DOC_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/esp-idf-doc-env-v5.4:1-1"
+  TARGET_TEST_ENV_IMAGE: "${CI_DOCKER_REGISTRY}/target-test-env-v5.4:1"
   SONARQUBE_SCANNER_IMAGE: "${CI_DOCKER_REGISTRY}/sonarqube-scanner:5"
   PRE_COMMIT_IMAGE: "${CI_DOCKER_REGISTRY}/esp-idf-pre-commit:1"
 
@@ -73,7 +72,7 @@ variables:
   CI_PYTHON_CONSTRAINT_BRANCH: ""
 
   # Update the filename for a specific ESP-IDF release. It is used only with CI_PYTHON_CONSTRAINT_BRANCH.
-  CI_PYTHON_CONSTRAINT_FILE: "espidf.constraints.v5.3.txt"
+  CI_PYTHON_CONSTRAINT_FILE: "espidf.constraints.v5.4.txt"
 
   # Set this variable to repository name of a Python tool you wish to install and test in the context of ESP-IDF CI.
   # Keep the variable empty when not used.
@@ -208,6 +207,10 @@ variables:
 
 .before_script:build:macos:
   before_script:
+    # macos is running shell executor, which means it would use
+    # the system installed /usr/local/bin/python3 by default.
+    # Ensure pyenv and PYENV_VERSION installed
+    - eval "$(pyenv init -)"
     - *common-before_scripts
     # On macOS, these tools need to be installed
     - export IDF_TOOLS_PATH="${HOME}/.espressif_runner_${CI_RUNNER_ID}_${CI_CONCURRENT_ID}"
@@ -215,6 +218,14 @@ variables:
     # This adds tools (compilers) and the version-specific Python environment to PATH
     - *setup_tools_and_idf_python_venv
     - fetch_submodules
+
+.after_script:build:macos:upload-when-fail:
+  after_script:
+    # macos is running shell executor, which means it would use
+    # the system installed /usr/local/bin/python3 by default.
+    # Ensure pyenv and PYENV_VERSION installed
+    - eval "$(pyenv init -)"
+    - *upload_failed_job_log_artifacts
 
 .before_script:build:
   before_script:

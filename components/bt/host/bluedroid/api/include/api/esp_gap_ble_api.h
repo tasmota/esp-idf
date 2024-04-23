@@ -104,6 +104,7 @@ typedef uint8_t   esp_ble_auth_req_t;         /*!< combination of the above bit 
 #define ESP_BLE_APPEARANCE_CYCLING_CADENCE         0x0483 /*!< relate to BTM_BLE_APPEARANCE_CYCLING_CADENCE in stack/btm_ble_api.h */
 #define ESP_BLE_APPEARANCE_CYCLING_POWER           0x0484 /*!< relate to BTM_BLE_APPEARANCE_CYCLING_POWER in stack/btm_ble_api.h */
 #define ESP_BLE_APPEARANCE_CYCLING_SPEED_CADENCE   0x0485 /*!< relate to BTM_BLE_APPEARANCE_CYCLING_SPEED_CADENCE in stack/btm_ble_api.h */
+#define ESP_BLE_APPEARANCE_STANDALONE_SPEAKER      0x0841 /*!< relate to BTM_BLE_APPEARANCE_STANDALONE_SPEAKER in stack/btm_ble_api.h */
 #define ESP_BLE_APPEARANCE_GENERIC_PULSE_OXIMETER  0x0C40 /*!< relate to BTM_BLE_APPEARANCE_GENERIC_PULSE_OXIMETER in stack/btm_ble_api.h */
 #define ESP_BLE_APPEARANCE_PULSE_OXIMETER_FINGERTIP 0x0C41 /*!< relate to BTM_BLE_APPEARANCE_PULSE_OXIMETER_FINGERTIP in stack/btm_ble_api.h */
 #define ESP_BLE_APPEARANCE_PULSE_OXIMETER_WRIST    0x0C42 /*!< relate to BTM_BLE_APPEARANCE_PULSE_OXIMETER_WRIST in stack/btm_ble_api.h */
@@ -1813,7 +1814,7 @@ esp_err_t esp_ble_gap_set_prefer_conn_params(esp_bd_addr_t bd_addr,
  *                  - other  : failed
  *
  */
-esp_err_t esp_ble_gap_set_device_name(const char *name) __attribute__((deprecated("Please use esp_bt_dev_set_device_name")));
+esp_err_t esp_ble_gap_set_device_name(const char *name);
 
 /**
  * @brief           Get device name of the local device
@@ -1823,7 +1824,7 @@ esp_err_t esp_ble_gap_set_device_name(const char *name) __attribute__((deprecate
  *                  - other  : failed
  *
  */
-esp_err_t esp_ble_gap_get_device_name(void) __attribute__((deprecated("Please use esp_bt_dev_get_device_name")));
+esp_err_t esp_ble_gap_get_device_name(void);
 
 /**
  * @brief          This function is called to get local used address and address type.

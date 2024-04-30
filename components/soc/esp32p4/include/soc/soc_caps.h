@@ -211,8 +211,6 @@
 
 // GPIO peripheral has the ETM extension
 #define SOC_GPIO_SUPPORT_ETM          1
-#define SOC_GPIO_ETM_EVENTS_PER_GROUP 8
-#define SOC_GPIO_ETM_TASKS_PER_GROUP  8
 
 // Target has the full LP IO subsystem
 // On ESP32-P4, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
@@ -603,6 +601,7 @@
 
 #define SOC_PM_PAU_LINK_NUM             (4)
 #define SOC_PAU_IN_TOP_DOMAIN           (1)
+#define SOC_CPU_IN_TOP_DOMAIN           (1)
 
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)

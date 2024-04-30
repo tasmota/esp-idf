@@ -54,13 +54,14 @@ class AppUploader(AppDownloader):
             'flasher_args.json',
             'flash_project_args',
             'config/sdkconfig.json',
+            'sdkconfig',
             'project_description.json',
         ],
         ArtifactType.LOGS: [
             DEFAULT_BUILD_LOG_FILENAME,
         ],
         ArtifactType.SIZE_REPORTS: [
-            '**/build*/size.json',
+            'size.json',
         ],
     }
 

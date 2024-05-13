@@ -599,7 +599,7 @@ static int provisioner_start_prov_pb_adv(const uint8_t uuid[16], const bt_mesh_a
 
     if (is_unprov_dev_being_provision(uuid)) {
         bt_mesh_pb_adv_unlock();
-        return -EALREADY;
+        return 0;
     }
 
     for (i = 0; i < CONFIG_BLE_MESH_PBA_SAME_TIME; i++) {
@@ -660,7 +660,7 @@ static int provisioner_start_prov_pb_gatt(const uint8_t uuid[16], const bt_mesh_
 
     if (is_unprov_dev_being_provision(uuid)) {
         bt_mesh_pb_gatt_unlock();
-        return -EALREADY;
+        return 0;
     }
 
     for (i = CONFIG_BLE_MESH_PBA_SAME_TIME; i < BLE_MESH_PROV_SAME_TIME; i++) {
@@ -1702,7 +1702,7 @@ static void prov_capabilities(const uint8_t idx, const uint8_t *data)
 
     algorithms = sys_get_be16(&data[1]);
     BT_INFO("Algorithms:        0x%04x", algorithms);
-    if (algorithms != BIT(PROV_ALG_P256)) {
+    if (!(algorithms & BIT(PROV_ALG_P256))) {
         BT_ERR("Invalid algorithms 0x%04x", algorithms);
         goto fail;
     }

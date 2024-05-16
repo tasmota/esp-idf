@@ -59,6 +59,20 @@ static inline void axi_dma_ll_reset_fsm(axi_dma_dev_t *dev)
     dev->misc_conf.axim_rst_wr_inter = 0;
 }
 
+/**
+ * @brief Preset valid memory range for AXI-DMA
+ *
+ * @param dev DMA register base address
+ */
+static inline void axi_dma_ll_set_default_memory_range(axi_dma_dev_t *dev)
+{
+    // AXI-DMA can access L2MEM, L2ROM, MSPI Flash, MSPI PSRAM
+    dev->intr_mem_start_addr.val = 0x4FC00000;
+    dev->intr_mem_end_addr.val = 0x4FFC0000;
+    dev->extr_mem_start_addr.val = 0x40000000;
+    dev->extr_mem_end_addr.val = 0x4C000000;
+}
+
 ///////////////////////////////////// RX /////////////////////////////////////////
 /**
  * @brief Get DMA RX channel interrupt status word
@@ -259,6 +273,14 @@ static inline void axi_dma_ll_rx_enable_etm_task(axi_dma_dev_t *dev, uint32_t ch
     dev->in[channel].conf.in_conf0.in_etm_en_chn = enable;
 }
 
+/**
+ * @brief Whether to enable the mean access ecc or aes domain
+ */
+static inline void axi_dma_ll_rx_enable_ext_mem_ecc_aes_access(axi_dma_dev_t *dev, uint32_t channel, bool enable)
+{
+    dev->in[channel].conf.in_conf0.in_ecc_aec_en_chn = enable;
+}
+
 ///////////////////////////////////// TX /////////////////////////////////////////
 /**
  * @brief Get DMA TX channel interrupt status word
@@ -455,6 +477,14 @@ static inline void axi_dma_ll_tx_disconnect_from_periph(axi_dma_dev_t *dev, uint
 static inline void axi_dma_ll_tx_enable_etm_task(axi_dma_dev_t *dev, uint32_t channel, bool enable)
 {
     dev->out[channel].conf.out_conf0.out_etm_en_chn = enable;
+}
+
+/**
+ * @brief Whether to enable the mean access ecc or aes domain
+ */
+static inline void axi_dma_ll_tx_enable_ext_mem_ecc_aes_access(axi_dma_dev_t *dev, uint32_t channel, bool enable)
+{
+    dev->out[channel].conf.out_conf0.out_ecc_aec_en_chn = enable;
 }
 
 ///////////////////////////////////// CRC-TX /////////////////////////////////////////

@@ -227,6 +227,10 @@ config SOC_MODEM_CLOCK_SUPPORTED
     bool
     default y
 
+config SOC_PM_SUPPORTED
+    bool
+    default y
+
 config SOC_XTAL_SUPPORT_32M
     bool
     default y
@@ -1160,6 +1164,10 @@ config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
     default y
 
 config SOC_EFUSE_ECDSA_USE_HARDWARE_K
+    bool
+    default y
+
+config SOC_EFUSE_ECDSA_KEY
     bool
     default y
 

@@ -79,10 +79,6 @@ examples/system/freertos:
     - freertos
 
 examples/system/gcov:
-  disable:
-    - if: IDF_TARGET == "esp32c5"
-      temporary: true
-      reason: not supported yet #TODO: IDF-8717
   disable_test:
     - if: IDF_TARGET != "esp32"
       temporary: true
@@ -259,6 +255,12 @@ examples/system/task_watchdog:
     - esp_system
 
 examples/system/ulp/lp_core/gpio:
+  enable:
+    - if: SOC_LP_CORE_SUPPORTED == 1
+  depends_components:
+    - ulp
+
+examples/system/ulp/lp_core/interrupt:
   enable:
     - if: SOC_LP_CORE_SUPPORTED == 1
   depends_components:

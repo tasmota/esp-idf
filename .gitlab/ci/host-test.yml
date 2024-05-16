@@ -133,7 +133,7 @@ test_cli_installer:
   script:
     # Tools must be downloaded for testing
     # We could use "idf_tools.py download all", but we don't want to install clang because of its huge size
-    - python3 ${IDF_PATH}/tools/idf_tools.py download required qemu-riscv32 qemu-xtensa
+    - python3 ${IDF_PATH}/tools/idf_tools.py download required qemu-riscv32 qemu-xtensa cmake
     - cd ${IDF_PATH}/tools/test_idf_tools
     - python3 -m pip install jsonschema
     - python3 ./test_idf_tools.py -v
@@ -228,6 +228,8 @@ test_tools:
     - pytest --noconftest test_idf_qemu.py     --junitxml=${IDF_PATH}/XUNIT_IDF_PY_QEMU.xml               || stat=1
     - cd ${IDF_PATH}/tools/test_mkdfu
     - pytest --noconftest test_mkdfu.py        --junitxml=${IDF_PATH}/XUNIT_MKDFU.xml                     || stat=1
+    - cd ${IDF_PATH}/tools/test_idf_size
+    - pytest --noconftest test_idf_size.py     --junitxml=${IDF_PATH}/XUNIT_IDF_SIZE.xml                  || stat=1
     - cd ${IDF_PATH}
     - shellcheck -s sh tools/detect_python.sh                                                             || stat=1
     - shellcheck -s bash tools/detect_python.sh                                                           || stat=1
@@ -296,7 +298,7 @@ test_pytest_qemu:
   artifacts:
     paths:
       - XUNIT_RESULT.xml
-      - pytest_embedded_log/
+      - pytest-embedded/
     reports:
       junit: XUNIT_RESULT.xml
   allow_failure: true # IDFCI-1752
@@ -330,7 +332,7 @@ test_pytest_linux:
   artifacts:
     paths:
       - XUNIT_RESULT.xml
-      - pytest_embedded_log/
+      - pytest-embedded/
       - "**/build*/build_log.txt"
     reports:
       junit: XUNIT_RESULT.xml

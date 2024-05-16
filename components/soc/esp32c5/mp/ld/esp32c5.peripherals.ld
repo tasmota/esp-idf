@@ -39,7 +39,7 @@ PROVIDE ( ECC                 = 0x6008B000 );
 PROVIDE ( DS                  = 0x6008C000 );
 PROVIDE ( HMAC                = 0x6008D000 );
 PROVIDE ( ECDSA               = 0x6008E000 );
-PROVIDE ( IOMUX               = 0x60090000 );
+PROVIDE ( IO_MUX              = 0x60090000 );
 PROVIDE ( GPIO                = 0x60091000 );
 PROVIDE ( GPIO_EXT            = 0x60091f00 );
 PROVIDE ( MEM_MONITOR         = 0x60092000 );
@@ -48,6 +48,7 @@ PROVIDE ( HP_SYSTEM           = 0x60095000 );
 PROVIDE ( PCR                 = 0x60096000 );
 PROVIDE ( TEE                 = 0x60098000 );
 PROVIDE ( HP_APM              = 0x60099000 );
+PROVIDE ( LP_APM0             = 0x60099800 );
 PROVIDE ( MISC                = 0x6009F000 );
 
 /* TODO: [ESP32C5] IDF-8845 Check the address */

@@ -34,13 +34,12 @@
 #define SOC_MCPWM_SUPPORTED             1
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_ETM_SUPPORTED               1
-// #define SOC_PARLIO_SUPPORTED            1  //TODO: IDF-7471
+#define SOC_PARLIO_SUPPORTED            1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_EMAC_SUPPORTED              1
 #define SOC_USB_OTG_SUPPORTED           1
 #define SOC_WIRELESS_HOST_SUPPORTED     1
-// disable usb serial jtag for esp32p4, current image does not support
-// #define SOC_USB_SERIAL_JTAG_SUPPORTED   1  //TODO: IDF-7496
+#define SOC_USB_SERIAL_JTAG_SUPPORTED   1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 #define SOC_ULP_SUPPORTED               1
@@ -92,6 +91,7 @@
 // #define SOC_PPA_SUPPORTED               1  //TODO: IDF-6878
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
 #define SOC_DEEP_SLEEP_SUPPORTED        1
+#define SOC_PM_SUPPORTED                1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -182,6 +182,9 @@
     See TRM DS chapter for more details */
 #define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
 
+/*-------------------------- DMA Common CAPS ----------------------------------------*/
+#define SOC_DMA_CAN_ACCESS_MSPI_MEM 1 /*!< DMA can access MSPI memory (e.g. Flash, PSRAM) */
+
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION                2
 #define SOC_GDMA_SUPPORT_CRC                1
@@ -190,6 +193,7 @@
 #define SOC_AXI_GDMA_SUPPORT_PSRAM          1
 #define SOC_GDMA_SUPPORT_ETM                1
 // #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
+#define SOC_AXI_DMA_EXT_MEM_ENC_ALIGNMENT   (16)
 
 /*-------------------------- 2D-DMA CAPS -------------------------------------*/
 #define SOC_DMA2D_GROUPS                            (1U) // Number of 2D-DMA groups
@@ -391,6 +395,7 @@
 #define SOC_PARLIO_RX_UNITS_PER_GROUP        1U  /*!< number of RX units in each group */
 #define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the TX unit */
 #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the RX unit */
+#define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
 #define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
@@ -481,7 +486,7 @@
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
-#define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
+// #define SOC_SPI_MEM_SUPPORT_WRAP                          (1) // IDFCI-2073 The feature cannot be treated as supported on P4
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
 
@@ -537,6 +542,7 @@
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
 /* Capability to disable the MSPI access in download mode */
 #define SOC_EFUSE_DIS_DOWNLOAD_MSPI 1
+#define SOC_EFUSE_ECDSA_KEY 1
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
 #define SOC_SECURE_BOOT_V2_RSA              1
@@ -630,7 +636,9 @@
 #define SOC_MEM_NON_CONTIGUOUS_SRAM                (1)
 #define SOC_ASYNCHRONOUS_BUS_ERROR_MODE            (1)
 /*--------------------------- EMAC --------------------------------*/
-#define SOC_EMAC_USE_IO_MUX                        (1) /*!< GPIO matrix is used to select GPIO pads */
+#define SOC_EMAC_IEEE_1588_SUPPORT                 (1)      /*!< EMAC Supports IEEE1588 time stamping */
+#define SOC_EMAC_USE_MULTI_IO_MUX                  (1)      /*!< Multiple GPIO pad options exist to connect EMAC signal via IO_MUX */
+#define SOC_EMAC_MII_USE_GPIO_MATRIX               (1)      /*!< EMAC MII signals are connected to GPIO pads via GPIO Matrix */
 
 /*--------------------------- JPEG --------------------------------*/
 #define SOC_JPEG_CODEC_SUPPORTED                  (1)

@@ -7,10 +7,13 @@
 #include <unistd.h>
 #include <assert.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "esp_partition.h"
 #include "esp_flash.h"
 #include "esp_system.h"
+#include "spi_flash_mmap.h"
+#include "esp_core_dump.h"
 
 #include "esp_private/cache_utils.h"
 #include "esp_memory_utils.h"
@@ -20,6 +23,7 @@
 #include "freertos/task.h"
 
 #include "hal/mpu_hal.h"
+#include "rom/cache.h"
 
 /* Test utility function */
 
@@ -177,6 +181,46 @@ void IRAM_ATTR test_assert_cache_disabled(void)
     assert(0);
 }
 
+const char TEST_STR[] = "my_tag";
+void test_assert_cache_write_back_error_can_print_backtrace(void)
+{
+    printf("1) %p\n", TEST_STR);
+    *(uint32_t*)TEST_STR = 3; // We changed the rodata string.
+    // All chips except ESP32S3 stop execution here and raise a LoadStore error on the line above.
+#if CONFIG_IDF_TARGET_ESP32S3
+    // On the ESP32S3, the error occurs later when the cache writeback is triggered
+    // (in this test, a direct call to Cache_WriteBack_All).
+    Cache_WriteBack_All(); // Cache writeback triggers the invalid cache access interrupt.
+#endif
+    // We are testing that the backtrace is printed instead of TG1WDT.
+    printf("2) %p\n", TEST_STR); // never get to this place.
+}
+
+void test_assert_cache_write_back_error_can_print_backtrace2(void)
+{
+    printf("1) %p\n", TEST_STR);
+    *(uint32_t*)TEST_STR = 3; // We changed the rodata string.
+    // All chips except ESP32S3 stop execution here and raise a LoadStore error on the line above.
+    // On the ESP32S3, the error occurs later when the cache writeback is triggered
+    // (in this test, a large range of DRAM is mapped and read, causing an error).
+    uint8_t temp = 0;
+    size_t map_size = SPI_FLASH_SEC_SIZE * 512;
+    const void *map;
+    spi_flash_mmap_handle_t out_handle;
+    esp_err_t err = spi_flash_mmap(0, map_size, SPI_FLASH_MMAP_DATA, &map, &out_handle);
+    if (err != ESP_OK) {
+        printf("spi_flash_mmap failed %x\n", err);
+        return;
+    }
+    const uint8_t *rodata = map;
+    for (size_t i = 0; i < map_size; i++) {
+        temp = rodata[i];
+    }
+    // Cache writeback triggers the invalid cache access interrupt.
+    // We are testing that the backtrace is printed instead of TG1WDT.
+    printf("2) %p 0x%" PRIx8 " \n", TEST_STR, temp); // never get to this place.
+}
+
 /**
  * This function overwrites the stack beginning from the valid area continuously towards and beyond
  * the end of the stack (stack base) of the current task.
@@ -224,6 +268,38 @@ void test_ub(void)
     uint8_t stuff[1] = {rand()};
     printf("%d\n", stuff[rand()]);
 }
+
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+void test_setup_coredump_summary(void)
+{
+    if (esp_core_dump_image_erase() != ESP_OK)
+        die("Coredump image can not be erased!");
+    assert(0);
+}
+
+void test_coredump_summary(void)
+{
+    esp_core_dump_summary_t *summary = malloc(sizeof(esp_core_dump_summary_t));
+    if (summary) {
+        esp_err_t err = esp_core_dump_get_summary(summary);
+        if (err == ESP_OK) {
+            printf("App ELF file SHA256: %s\n", (char *)summary->app_elf_sha256);
+            printf("Crashed task: %s\n", summary->exc_task);
+#if __XTENSA__
+            printf("Exception cause: %ld\n", summary->ex_info.exc_cause);
+#else
+            printf("Exception cause: %ld\n", summary->ex_info.mcause);
+#endif
+            char panic_reason[200];
+            err = esp_core_dump_get_panic_reason(panic_reason, sizeof(panic_reason));
+            if (err == ESP_OK) {
+                printf("Panic reason: %s\n", panic_reason);
+            }
+        }
+        free(summary);
+    }
+}
+#endif
 
 /* NOTE: The following test verifies the behaviour for the
  * Xtensa-specific MPU instructions (Refer WDTLB, DSYNC, WDTIB, ISYNC)

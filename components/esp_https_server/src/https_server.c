@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2018-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2018-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -25,9 +25,16 @@ typedef struct httpd_ssl_transport_ctx {
 
 ESP_EVENT_DEFINE_BASE(ESP_HTTPS_SERVER_EVENT);
 
+#if CONFIG_ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT == -1
+#define ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT portMAX_DELAY
+#else
+#define ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT pdMS_TO_TICKS(CONFIG_ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT)
+#endif
+
+
 static void http_dispatch_event_to_event_loop(int32_t event_id, const void* event_data, size_t event_data_size)
 {
-    esp_err_t err = esp_event_post(ESP_HTTPS_SERVER_EVENT, event_id, event_data, event_data_size, portMAX_DELAY);
+    esp_err_t err = esp_event_post(ESP_HTTPS_SERVER_EVENT, event_id, event_data, event_data_size, ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to post http_client event: %"PRId32", error: %s", event_id, esp_err_to_name(err));
     }
@@ -366,7 +373,6 @@ exit:
         free((void *) cfg->cacert_buf);
     }
     free(cfg);
-    free(*ssl_ctx);
     return ret;
 }
 
@@ -379,14 +385,17 @@ esp_err_t httpd_ssl_start(httpd_handle_t *pHandle, struct httpd_ssl_config *conf
     ESP_LOGI(TAG, "Starting server");
 
     esp_err_t ret = ESP_OK;
+    httpd_ssl_ctx_t *ssl_ctx = NULL;
+
     if (HTTPD_SSL_TRANSPORT_SECURE == config->transport_mode) {
-        httpd_ssl_ctx_t *ssl_ctx = calloc(1, sizeof(httpd_ssl_ctx_t));
+        ssl_ctx = calloc(1, sizeof(httpd_ssl_ctx_t));
         if (!ssl_ctx) {
             return ESP_ERR_NO_MEM;
         }
 
         ret = create_secure_context(config, &ssl_ctx);
         if (ret != ESP_OK) {
+            free(ssl_ctx);
             return ret;
         }
 
@@ -411,7 +420,11 @@ esp_err_t httpd_ssl_start(httpd_handle_t *pHandle, struct httpd_ssl_config *conf
     httpd_handle_t handle = NULL;
 
     ret = httpd_start(&handle, &config->httpd);
-    if (ret != ESP_OK) return ret;
+    if (ret != ESP_OK) {
+        free(ssl_ctx);
+        ssl_ctx = NULL;
+        return ret;
+    }
 
     *pHandle = handle;
 

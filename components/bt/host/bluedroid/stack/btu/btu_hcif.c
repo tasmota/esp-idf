@@ -1252,6 +1252,9 @@ static void btu_hcif_command_complete_evt(BT_HDR *response, void *context)
 static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_cmd,
         void *p_vsc_status_cback)
 {
+    if (status != HCI_SUCCESS){
+        HCI_TRACE_WARNING("%s,opcode:0x%04x,status:0x%02x", __func__, opcode,status);
+    }
     BD_ADDR         bd_addr;
     UINT16          handle;
 #if BTM_SCO_INCLUDED == TRUE
@@ -1373,6 +1376,9 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
                 break;
 
 #if BLE_INCLUDED == TRUE
+#if (BLE_50_FEATURE_SUPPORT == TRUE)
+            case HCI_BLE_EXT_CREATE_CONN:
+#endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
             case HCI_BLE_CREATE_LL_CONN:
                 btm_ble_create_ll_conn_complete(status);
                 break;
@@ -1465,7 +1471,6 @@ static void btu_hcif_command_status_evt(uint8_t status, BT_HDR *command, void *c
     hack->context = context;
 
     event->event = BTU_POST_TO_TASK_NO_GOOD_HORRIBLE_HACK;
-
     if (btu_task_post(SIG_BTU_HCI_MSG, event, OSI_THREAD_MAX_TIMEOUT) == false) {
         osi_free(event);
     }

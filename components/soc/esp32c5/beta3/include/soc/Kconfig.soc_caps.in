@@ -143,6 +143,10 @@ config SOC_BT_SUPPORTED
     bool
     default y
 
+config SOC_PM_SUPPORTED
+    bool
+    default y
+
 config SOC_XTAL_SUPPORT_40M
     bool
     default y
@@ -566,6 +570,10 @@ config SOC_TIMER_GROUP_SUPPORT_XTAL
 config SOC_TIMER_GROUP_TOTAL_TIMERS
     int
     default 2
+
+config SOC_EFUSE_ECDSA_KEY
+    bool
+    default y
 
 config SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS
     int

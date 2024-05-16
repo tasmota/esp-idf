@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -34,6 +34,11 @@ static const char *TAG = "HTTP_CLIENT";
 ESP_STATIC_ASSERT((int)ESP_HTTP_CLIENT_TLS_VER_ANY == (int)ESP_TLS_VER_ANY, "Enum mismatch in esp_http_client and esp-tls");
 ESP_STATIC_ASSERT((int)ESP_HTTP_CLIENT_TLS_VER_MAX <= (int)ESP_TLS_VER_TLS_MAX, "HTTP client supported TLS is not supported in esp-tls");
 
+#if CONFIG_ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT == -1
+#define ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT portMAX_DELAY
+#else
+#define ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT pdMS_TO_TICKS(CONFIG_ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT)
+#endif
 /**
  * HTTP Buffer
  */
@@ -202,7 +207,7 @@ static esp_err_t http_dispatch_event(esp_http_client_t *client, esp_http_client_
 
 static void http_dispatch_event_to_event_loop(int32_t event_id, const void* event_data, size_t event_data_size)
 {
-    esp_err_t err = esp_event_post(ESP_HTTP_CLIENT_EVENT, event_id, event_data, event_data_size, portMAX_DELAY);
+    esp_err_t err = esp_event_post(ESP_HTTP_CLIENT_EVENT, event_id, event_data, event_data_size, ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to post http_client event: %"PRId32", error: %s", event_id, esp_err_to_name(err));
     }
@@ -957,9 +962,19 @@ esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client)
     return err;
 }
 
+esp_err_t esp_http_client_reset_redirect_counter(esp_http_client_handle_t client)
+{
+    if (client == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    client->redirect_counter = 0;
+    return ESP_OK;
+}
+
 static esp_err_t esp_http_check_response(esp_http_client_handle_t client)
 {
     if (client->response->status_code >= HttpStatus_Ok && client->response->status_code < HttpStatus_MultipleChoices) {
+        client->redirect_counter = 0;
         return ESP_OK;
     }
     if (client->redirect_counter >= client->max_redirection_count) {

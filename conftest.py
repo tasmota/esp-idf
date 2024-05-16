@@ -25,7 +25,7 @@ import re
 import typing as t
 import zipfile
 from copy import deepcopy
-from datetime import datetime
+from urllib.parse import quote
 
 import common_test_methods  # noqa: F401
 import gitlab_api
@@ -39,7 +39,8 @@ from dynamic_pipelines.constants import TEST_RELATED_APPS_DOWNLOAD_URLS_FILENAME
 from idf_ci.app import import_apps_from_txt
 from idf_ci.uploader import AppDownloader, AppUploader
 from idf_ci_utils import IDF_PATH, idf_relpath
-from idf_pytest.constants import DEFAULT_SDKCONFIG, ENV_MARKERS, SPECIAL_MARKERS, TARGET_MARKERS, PytestCase
+from idf_pytest.constants import DEFAULT_SDKCONFIG, ENV_MARKERS, SPECIAL_MARKERS, TARGET_MARKERS, PytestCase, \
+    DEFAULT_LOGDIR
 from idf_pytest.plugin import IDF_PYTEST_EMBEDDED_KEY, ITEM_PYTEST_CASE_KEY, IdfPytestEmbedded
 from idf_pytest.utils import format_case_id
 from pytest_embedded.plugin import multi_dut_argument, multi_dut_fixture
@@ -55,15 +56,10 @@ def idf_path() -> str:
     return os.path.dirname(__file__)
 
 
-@pytest.fixture(scope='session', autouse=True)
-def session_tempdir() -> str:
-    _tmpdir = os.path.join(
-        os.path.dirname(__file__),
-        'pytest_embedded_log',
-        datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
-    )
-    os.makedirs(_tmpdir, exist_ok=True)
-    return _tmpdir
+@pytest.fixture(scope='session')
+def session_root_logdir(idf_path: str) -> str:
+    """Session scoped log dir for pytest-embedded"""
+    return idf_path
 
 
 @pytest.fixture
@@ -211,6 +207,9 @@ def build_dir(
         check_dirs = [f'build_{target}_{config}']
     else:
         check_dirs = []
+        build_dir_arg = request.config.getoption('build_dir', None)
+        if build_dir_arg:
+            check_dirs.append(build_dir_arg)
         if target is not None and config is not None:
             check_dirs.append(f'build_{target}_{config}')
         if target is not None:
@@ -465,11 +464,12 @@ def pytest_runtest_makereport(item, call):  # type: ignore
 
         job_id = os.getenv('CI_JOB_ID', 0)
         url = os.getenv('CI_PAGES_URL', '').replace('esp-idf', '-/esp-idf')
-        template = f'{url}/-/jobs/{job_id}/artifacts/pytest_embedded_log/{{}}'
+        template = f'{url}/-/jobs/{job_id}/artifacts/{DEFAULT_LOGDIR}/{{}}'
         logs_files = []
 
         def get_path(x: str) -> str:
-            return x.split('pytest_embedded_log/', 1)[1]
+            return x.split(f'{DEFAULT_LOGDIR}/', 1)[1]
+
         if isinstance(_dut, list):
             logs_files.extend([template.format(get_path(d.logfile)) for d in _dut])
             dut_artifacts_url.append('{}:'.format(_dut[0].test_case_name))
@@ -478,7 +478,7 @@ def pytest_runtest_makereport(item, call):  # type: ignore
             dut_artifacts_url.append('{}:'.format(_dut.test_case_name))
 
         for file in logs_files:
-            dut_artifacts_url.append('    - {}'.format(file))
+            dut_artifacts_url.append('    - {}'.format(quote(file, safe=':/')))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: ignore

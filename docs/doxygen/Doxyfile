@@ -149,6 +149,8 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_com.h \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_driver.h \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_mac.h \
+    $(PROJECT_PATH)/components/esp_eth/include/esp_eth_mac_esp.h \
+    $(PROJECT_PATH)/components/esp_eth/include/esp_eth_mac_spi.h \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_netif_glue.h \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_phy_802_3.h \
     $(PROJECT_PATH)/components/esp_eth/include/esp_eth_phy.h \
@@ -267,6 +269,8 @@ INPUT = \
     $(PROJECT_PATH)/components/ieee802154/include/esp_ieee802154_types.h \
     $(PROJECT_PATH)/components/ieee802154/include/esp_ieee802154.h \
     $(PROJECT_PATH)/components/log/include/esp_log.h \
+    $(PROJECT_PATH)/components/log/include/esp_log_level.h \
+    $(PROJECT_PATH)/components/log/include/esp_log_buffer.h \
     $(PROJECT_PATH)/components/lwip/include/apps/esp_sntp.h \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \

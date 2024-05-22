@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -54,12 +54,8 @@ static void switch_freq(int mhz)
         .min_freq_mhz = MIN(mhz, xtal_freq_mhz),
     };
     ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
-    printf("Waiting for frequency to be set to %d MHz...\n", mhz);
-    while (esp_clk_cpu_freq() / MHZ != mhz)
-    {
-        vTaskDelay(pdMS_TO_TICKS(200));
-        printf("Frequency is %d MHz\n", esp_clk_cpu_freq() / MHZ);
-    }
+    TEST_ASSERT_EQUAL_UINT32(mhz, esp_clk_cpu_freq() / MHZ);
+    printf("Frequency is %d MHz\n", esp_clk_cpu_freq() / MHZ);
 }
 
 #if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C6
@@ -182,7 +178,7 @@ TEST_CASE("Can wake up from automatic light sleep by GPIO", "[pm][ignore]")
     rtc_gpio_set_level(ext1_wakeup_gpio, 0);
 
     /* Enable wakeup */
-    TEST_ESP_OK(esp_sleep_enable_ext1_wakeup(1ULL << ext1_wakeup_gpio, ESP_EXT1_WAKEUP_ANY_HIGH));
+    TEST_ESP_OK(esp_sleep_enable_ext1_wakeup_io(1ULL << ext1_wakeup_gpio, ESP_EXT1_WAKEUP_ANY_HIGH));
 
     /* To simplify test environment, we'll use a ULP program to set GPIO high */
     ulp_insn_t ulp_code[] = {

@@ -254,6 +254,7 @@ typedef UINT8 BLE_SIGNATURE[BTM_BLE_AUTH_SIGN_LEN];         /* Device address */
 #define BTM_BLE_APPEARANCE_CYCLING_CADENCE         0x0483
 #define BTM_BLE_APPEARANCE_CYCLING_POWER           0x0484
 #define BTM_BLE_APPEARANCE_CYCLING_SPEED_CADENCE   0x0485
+#define BTM_BLE_APPEARANCE_STANDALONE_SPEAKER      0x0841
 #define BTM_BLE_APPEARANCE_GENERIC_PULSE_OXIMETER  0x0C40
 #define BTM_BLE_APPEARANCE_PULSE_OXIMETER_FINGERTIP 0x0C41
 #define BTM_BLE_APPEARANCE_PULSE_OXIMETER_WRIST    0x0C42
@@ -2704,6 +2705,11 @@ tBTM_STATUS BTM_BleSetExtendedScanParams(tBTM_BLE_EXT_SCAN_PARAMS *params);
 tBTM_STATUS BTM_BleExtendedScan(BOOLEAN enable, UINT16 duration, UINT16 period);
 
 void BTM_BleSetPreferExtenedConnParams(BD_ADDR bd_addr, tBTM_EXT_CONN_PARAMS *params);
+
+void BTM_BleEnhancedReceiverTest(UINT8 rx_freq, UINT8 phy, UINT8 modulation_index, tBTM_CMPL_CB *p_cmd_cmpl_cback);
+
+void BTM_BleEnhancedTransmitterTest(UINT8 tx_freq, UINT8 test_data_len, UINT8 packet_payload, UINT8 phy, tBTM_CMPL_CB *p_cmd_cmpl_cback);
+
 #endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
 
 #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)

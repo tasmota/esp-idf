@@ -55,9 +55,9 @@ void app_main(void)
     example_dsi_resource_alloc(&ili9881c_ctrl_panel, &mipi_dpi_panel, &frame_buffer);
 
     //---------------Necessary variable config------------------//
-    frame_buffer_size = EXAMPLE_MIPI_CSI_DISP_HSIZE * EXAMPLE_MIPI_DSI_IMAGE_VSIZE * EXAMPLE_RGB565_BITS_PER_PIXEL / 8;
+    frame_buffer_size = CONFIG_EXAMPLE_MIPI_CSI_DISP_HRES * EXAMPLE_MIPI_DSI_IMAGE_VSIZE * EXAMPLE_RGB565_BITS_PER_PIXEL / 8;
 
-    ESP_LOGD(TAG, "EXAMPLE_MIPI_CSI_DISP_HSIZE: %d, EXAMPLE_MIPI_DSI_IMAGE_VSIZE: %d, bits per pixel: %d", EXAMPLE_MIPI_CSI_DISP_HSIZE, EXAMPLE_MIPI_DSI_IMAGE_VSIZE, 8);
+    ESP_LOGD(TAG, "CONFIG_EXAMPLE_MIPI_CSI_DISP_HRES: %d, EXAMPLE_MIPI_DSI_IMAGE_VSIZE: %d, bits per pixel: %d", CONFIG_EXAMPLE_MIPI_CSI_DISP_HRES, EXAMPLE_MIPI_DSI_IMAGE_VSIZE, 8);
     ESP_LOGD(TAG, "frame_buffer_size: %zu", frame_buffer_size);
     ESP_LOGD(TAG, "frame_buffer: %p", frame_buffer);
 
@@ -89,12 +89,8 @@ void app_main(void)
     //---------------CSI Init------------------//
     esp_cam_ctlr_csi_config_t csi_config = {
         .ctlr_id = 0,
-        .h_res = EXAMPLE_MIPI_CSI_DISP_HSIZE,
-#if CONFIG_EXAMPLE_MIPI_CSI_VRES_640
-        .v_res = EXAMPLE_MIPI_CSI_DISP_VSIZE_640P,
-#else
-        .v_res = EXAMPLE_MIPI_CSI_DISP_VSIZE_1280P,
-#endif
+        .h_res = CONFIG_EXAMPLE_MIPI_CSI_DISP_HRES,
+        .v_res = CONFIG_EXAMPLE_MIPI_CSI_DISP_VRES,
         .lane_bit_rate_mbps = EXAMPLE_MIPI_CSI_LANE_BITRATE_MBPS,
         .input_data_color_type = MIPI_CSI_COLOR_RAW8,
         .output_data_color_type = MIPI_CSI_COLOR_RGB565,
@@ -129,12 +125,8 @@ void app_main(void)
         .output_data_color_type = ISP_COLOR_RGB565,
         .has_line_start_packet = false,
         .has_line_end_packet = false,
-        .h_res = EXAMPLE_MIPI_CSI_DISP_HSIZE,
-#if CONFIG_EXAMPLE_MIPI_CSI_VRES_640
-        .v_res = EXAMPLE_MIPI_CSI_DISP_VSIZE_640P,
-#else
-        .v_res = EXAMPLE_MIPI_CSI_DISP_VSIZE_1280P,
-#endif
+        .h_res = CONFIG_EXAMPLE_MIPI_CSI_DISP_HRES,
+        .v_res = CONFIG_EXAMPLE_MIPI_CSI_DISP_VRES,
     };
     ESP_ERROR_CHECK(esp_isp_new_processor(&isp_config, &isp_proc));
     ESP_ERROR_CHECK(esp_isp_enable(isp_proc));
@@ -174,7 +166,6 @@ void app_main(void)
 
     esp_cam_sensor_format_t *cam_cur_fmt = NULL;
     for (int i = 0; i < cam_fmt_array.count; i++) {
-
 #if CONFIG_EXAMPLE_MIPI_CSI_VRES_640
         if (!strcmp(parray[i].name, "MIPI_2lane_24Minput_RAW8_800x640_50fps")) {
             cam_cur_fmt = (esp_cam_sensor_format_t *) & (parray[i].name);

@@ -17,7 +17,7 @@ The subsections below give only absolutely necessary information. For full steps
 
 This example requires:
 
-- OV5647 camera sensor with VCM (Voice Coil Motor). The VCM used in this example is DW9714.
+- OV5647 camera sensor
 - ILI9881C LCD screen
 - ESP32P4 devkit
 

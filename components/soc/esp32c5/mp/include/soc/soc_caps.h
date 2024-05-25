@@ -23,7 +23,7 @@
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
-// #define SOC_PCNT_SUPPORTED              1  // TODO: [ESP32C5] IDF-8683
+#define SOC_PCNT_SUPPORTED              1
 // #define SOC_MCPWM_SUPPORTED             1  // TODO: [ESP32C5] IDF-8709
 // #define SOC_TWAI_SUPPORTED              1  // TODO: [ESP32C5] IDF-8691
 // #define SOC_ETM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8693
@@ -38,17 +38,17 @@
 #define SOC_EFUSE_SUPPORTED             1
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
-// #define SOC_I2S_SUPPORTED               1  // TODO: [ESP32C5] IDF-8713, IDF-8714
-// #define SOC_RMT_SUPPORTED               1  // TODO: [ESP32C5] IDF-8726
+#define SOC_I2S_SUPPORTED               1
+#define SOC_RMT_SUPPORTED               1
 // #define SOC_SDM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8687
-// #define SOC_GPSPI_SUPPORTED             1  // TODO: [ESP32C5] IDF-8698, IDF-8699
+#define SOC_GPSPI_SUPPORTED             1
 // #define SOC_LEDC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8684
 // #define SOC_I2C_SUPPORTED               1  // TODO: [ESP32C5] IDF-8694, IDF-8696
 #define SOC_SYSTIMER_SUPPORTED          1     // TODO: [ESP32C5] IDF-8707
 // #define SOC_AES_SUPPORTED               1  // TODO: [ESP32C5] IDF-8627
-// #define SOC_MPI_SUPPORTED               1
+#define SOC_MPI_SUPPORTED               1
 // #define SOC_SHA_SUPPORTED               1  // TODO: [ESP32C5] IDF-8624
-// #define SOC_RSA_SUPPORTED               1  // TODO: [ESP32C5] IDF-8620
+#define SOC_RSA_SUPPORTED               1
 // #define SOC_HMAC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8616
 // #define SOC_DIG_SIGN_SUPPORTED          1  // TODO: [ESP32C5] IDF-8619
 #define SOC_ECC_SUPPORTED               1
@@ -259,15 +259,19 @@
 // #define SOC_LP_I2C_FIFO_LEN         (16) /*!< LP_I2C hardware FIFO depth */
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
-// #define SOC_I2S_NUM                 (1U)
-// #define SOC_I2S_HW_VERSION_2        (1)
-// #define SOC_I2S_SUPPORTS_XTAL       (1)
-// #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
-// #define SOC_I2S_SUPPORTS_PCM        (1)
-// #define SOC_I2S_SUPPORTS_PDM        (1)
-// #define SOC_I2S_SUPPORTS_PDM_TX     (1)
-// #define SOC_I2S_PDM_MAX_TX_LINES    (2)
-// #define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_NUM                 (1U)
+#define SOC_I2S_HW_VERSION_2        (1)
+#define SOC_I2S_SUPPORTS_TX_SYNC_CNT (1)
+// #define SOC_I2S_SUPPORTS_RX_RECOMB  (1) //TODO[C5] IDF-9966
+#define SOC_I2S_SUPPORTS_XTAL       (1)
+#define SOC_I2S_SUPPORTS_PLL_F160M  (1)
+#define SOC_I2S_SUPPORTS_PLL_F240M  (1)
+#define SOC_I2S_SUPPORTS_PCM        (1)
+#define SOC_I2S_SUPPORTS_PDM        (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+#define SOC_I2S_PDM_MAX_TX_LINES    (2)
+#define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 // TODO: [ESP32C5] 8684
@@ -295,11 +299,13 @@
 // #define SOC_MPU_REGION_WO_SUPPORTED               0
 
 /*-------------------------- PCNT CAPS ---------------------------------------*/
-// #define SOC_PCNT_GROUPS                       1U
-// #define SOC_PCNT_UNITS_PER_GROUP              4
-// #define SOC_PCNT_CHANNELS_PER_UNIT            2
-// #define SOC_PCNT_THRES_POINT_PER_UNIT         2
-// #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
+#define SOC_PCNT_GROUPS                       1U
+#define SOC_PCNT_UNITS_PER_GROUP              4
+#define SOC_PCNT_CHANNELS_PER_UNIT            2
+#define SOC_PCNT_THRES_POINT_PER_UNIT         2
+#define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
+#define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1
+// #define SOC_PCNT_SUPPORT_STEP_NOTIFY          1 // IDF-7984
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -344,8 +350,8 @@
 // #define SOC_PARLIO_TX_RX_SHARE_INTERRUPT     1   /*!< TX and RX unit share the same interrupt source number */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
-// #define SOC_MPI_MEM_BLOCKS_NUM (4)
-// #define SOC_MPI_OPERATIONS_NUM (3)
+#define SOC_MPI_MEM_BLOCKS_NUM (4)
+#define SOC_MPI_OPERATIONS_NUM (3)
 
 /*--------------------------- RSA CAPS ---------------------------------------*/
 #define SOC_RSA_MAX_BIT_LEN    (3072)
@@ -383,15 +389,14 @@
 #define SOC_SPI_PERIPH_NUM          2
 #define SOC_SPI_PERIPH_CS_NUM(i)    6
 #define SOC_SPI_MAX_CS_NUM          6
+#define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
 
-// #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
-
-// #define SOC_SPI_SUPPORT_DDRCLK              1
-// #define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
-// #define SOC_SPI_SUPPORT_CD_SIG              1
-// #define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
-// #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
-// #define SOC_SPI_SUPPORT_CLK_XTAL            1
+#define SOC_SPI_SUPPORT_DDRCLK              1
+#define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
+#define SOC_SPI_SUPPORT_CD_SIG              1
+#define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
+#define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
+#define SOC_SPI_SUPPORT_CLK_XTAL            1
 // #define SOC_SPI_SUPPORT_CLK_PLL_F80M        1
 // #define SOC_SPI_SUPPORT_CLK_RC_FAST         1
 
@@ -399,8 +404,8 @@
 // host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
 #define SOC_SPI_PERIPH_SUPPORT_MULTILINE_MODE(host_id)  ({(void)host_id; 1;})
 
-// #define SOC_MEMSPI_IS_INDEPENDENT 1
-// #define SOC_SPI_MAX_PRE_DIVIDER 16
+#define SOC_MEMSPI_IS_INDEPENDENT 1
+#define SOC_SPI_MAX_PRE_DIVIDER 16
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 // #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)

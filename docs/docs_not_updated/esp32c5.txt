@@ -6,10 +6,6 @@ contribute/style-guide.rst
 contribute/copyright-guide.rst
 contribute/install-pre-commit-hook.rst
 contribute/index.rst
-api-guides/performance/speed.rst
-api-guides/performance/size.rst
-api-guides/performance/ram-usage.rst
-api-guides/performance/index.rst
 api-guides/jtag-debugging/debugging-examples.rst
 api-guides/jtag-debugging/configure-ft2232h-jtag.rst
 api-guides/jtag-debugging/tips-and-quirks.rst
@@ -115,9 +111,7 @@ api-reference/peripherals/usb_device.rst
 api-reference/peripherals/sdspi_host.rst
 api-reference/peripherals/spi_slave.rst
 api-reference/peripherals/etm.rst
-api-reference/peripherals/i2s.rst
 api-reference/peripherals/gptimer.rst
-api-reference/peripherals/pcnt.rst
 api-reference/peripherals/touch_element.rst
 api-reference/peripherals/lcd.rst
 api-reference/peripherals/mcpwm.rst
@@ -144,7 +138,6 @@ api-reference/peripherals/spi_master.rst
 api-reference/peripherals/index.rst
 api-reference/peripherals/sdmmc_host.rst
 api-reference/peripherals/ecdsa.rst
-api-reference/peripherals/rmt.rst
 api-reference/kconfig.rst
 api-reference/network/esp_openthread.rst
 api-reference/network/esp_eth.rst
@@ -166,10 +159,8 @@ api-reference/system/efuse.rst
 api-reference/system/chip_revision.rst
 api-reference/system/async_memcpy.rst
 api-reference/system/random.rst
-api-reference/system/esp_timer.rst
 api-reference/system/esp_event.rst
 api-reference/system/freertos.rst
-api-reference/system/system_time.rst
 api-reference/system/log.rst
 api-reference/system/soc_caps.rst
 api-reference/system/internal-unstable.rst

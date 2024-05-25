@@ -19,6 +19,10 @@ config SOC_GPTIMER_SUPPORTED
     bool
     default y
 
+config SOC_PCNT_SUPPORTED
+    bool
+    default y
+
 config SOC_ASYNC_MEMCPY_SUPPORTED
     bool
     default y
@@ -43,7 +47,27 @@ config SOC_RTC_MEM_SUPPORTED
     bool
     default y
 
+config SOC_I2S_SUPPORTED
+    bool
+    default y
+
+config SOC_RMT_SUPPORTED
+    bool
+    default y
+
+config SOC_GPSPI_SUPPORTED
+    bool
+    default y
+
 config SOC_SYSTIMER_SUPPORTED
+    bool
+    default y
+
+config SOC_MPI_SUPPORTED
+    bool
+    default y
+
+config SOC_RSA_SUPPORTED
     bool
     default y
 
@@ -203,6 +227,54 @@ config SOC_HP_I2C_NUM
     int
     default 1
 
+config SOC_I2S_NUM
+    int
+    default 1
+
+config SOC_I2S_HW_VERSION_2
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_TX_SYNC_CNT
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_XTAL
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_PLL_F160M
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_PLL_F240M
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_PCM
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_PDM
+    bool
+    default y
+
+config SOC_I2S_SUPPORTS_PDM_TX
+    bool
+    default y
+
+config SOC_I2S_PDM_MAX_TX_LINES
+    int
+    default 2
+
+config SOC_I2S_SUPPORTS_TDM
+    bool
+    default y
+
+config SOC_I2S_TDM_FULL_DATA_WIDTH
+    bool
+    default y
+
 config SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
     bool
     default y
@@ -224,6 +296,30 @@ config SOC_MMU_LINEAR_ADDRESS_REGION_NUM
     default 1
 
 config SOC_MMU_DI_VADDR_SHARED
+    bool
+    default y
+
+config SOC_PCNT_GROUPS
+    int
+    default 1
+
+config SOC_PCNT_UNITS_PER_GROUP
+    int
+    default 4
+
+config SOC_PCNT_CHANNELS_PER_UNIT
+    int
+    default 2
+
+config SOC_PCNT_THRES_POINT_PER_UNIT
+    int
+    default 2
+
+config SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_CLEAR_SIGNAL
     bool
     default y
 
@@ -279,6 +375,14 @@ config SOC_RMT_SUPPORT_XTAL
     bool
     default y
 
+config SOC_MPI_MEM_BLOCKS_NUM
+    int
+    default 4
+
+config SOC_MPI_OPERATIONS_NUM
+    int
+    default 3
+
 config SOC_RSA_MAX_BIT_LEN
     int
     default 3072
@@ -290,6 +394,42 @@ config SOC_SPI_PERIPH_NUM
 config SOC_SPI_MAX_CS_NUM
     int
     default 6
+
+config SOC_SPI_MAXIMUM_BUFFER_SIZE
+    int
+    default 64
+
+config SOC_SPI_SUPPORT_DDRCLK
+    bool
+    default y
+
+config SOC_SPI_SLAVE_SUPPORT_SEG_TRANS
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_CD_SIG
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_CONTINUOUS_TRANS
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_SLAVE_HD_VER2
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_CLK_XTAL
+    bool
+    default y
+
+config SOC_MEMSPI_IS_INDEPENDENT
+    bool
+    default y
+
+config SOC_SPI_MAX_PRE_DIVIDER
+    int
+    default 16
 
 config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
     bool

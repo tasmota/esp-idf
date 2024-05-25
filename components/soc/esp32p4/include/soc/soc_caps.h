@@ -67,7 +67,7 @@
 #define SOC_KEY_MANAGER_SUPPORTED       1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
-// #define SOC_BOD_SUPPORTED               1  //TODO: IDF-7519
+#define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1  //TODO: IDF-7542
 #define SOC_PMU_SUPPORTED               1
 #define SOC_DCDC_SUPPORTED              1
@@ -88,7 +88,7 @@
 // #define SOC_TOUCH_SENSOR_SUPPORTED      1  //TODO: IDF-7477
 #define SOC_RNG_SUPPORTED               1
 #define SOC_GP_LDO_SUPPORTED            1 // General purpose LDO
-// #define SOC_PPA_SUPPORTED               1  //TODO: IDF-6878
+#define SOC_PPA_SUPPORTED               1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
 #define SOC_DEEP_SLEEP_SUPPORTED        1
 #define SOC_PM_SUPPORTED                1
@@ -158,9 +158,15 @@
 #define SOC_INT_CLIC_SUPPORTED          1
 #define SOC_INT_HW_NESTED_SUPPORTED     1       // Support for hardware interrupts nesting
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
+#define SOC_CPU_COPROC_NUM              3
 #define SOC_CPU_HAS_FPU                 1
 #define SOC_CPU_HAS_FPU_EXT_ILL_BUG     1       // EXT_ILL CSR doesn't support FLW/FSW
-#define SOC_CPU_COPROC_NUM              2
+#define SOC_CPU_HAS_HWLOOP              1
+/* PIE coprocessor assembly is only supported with GCC compiler  */
+#ifndef __clang__
+#define SOC_CPU_HAS_PIE                 1
+#endif
+
 #define SOC_HP_CPU_HAS_MULTIPLE_CORES   1   // Convenience boolean macro used to determine if a target has multiple cores.
 
 #define SOC_CPU_BREAKPOINTS_NUM             3
@@ -306,10 +312,14 @@
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 
 /*-------------------------- ISP CAPS ----------------------------------------*/
+#define SOC_ISP_BF_SUPPORTED            1
+
 #define SOC_ISP_NUMS                    1U
 #define SOC_ISP_AF_CTLR_NUMS            1U
 #define SOC_ISP_AF_WINDOW_NUMS          3
 #define SOC_ISP_SHARE_CSI_BRG           1
+#define SOC_ISP_BF_TEMPLATE_X_NUMS      3
+#define SOC_ISP_BF_TEMPLATE_Y_NUMS      3
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -326,6 +336,7 @@
 #define SOC_MMU_PERIPH_NUM                    (2U)
 #define SOC_MMU_LINEAR_ADDRESS_REGION_NUM     (2U)
 #define SOC_MMU_DI_VADDR_SHARED               (1) /*!< D/I vaddr are shared */
+#define SOC_MMU_PER_EXT_MEM_TARGET            (1) /*!< MMU is per physical external memory target (flash, psram) */
 
 /*-------------------------- MPU CAPS ----------------------------------------*/
 #define SOC_MPU_CONFIGURABLE_REGIONS_SUPPORTED    0

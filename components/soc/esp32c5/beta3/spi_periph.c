@@ -12,7 +12,7 @@
 */
 const spi_signal_conn_t spi_periph_signal[SOC_SPI_PERIPH_NUM] = {
     {
-        // MSPI on P4 has dedicated iomux pins
+        // MSPI has dedicated iomux pins
         .spiclk_out = -1,
         .spiclk_in = -1,
         .spid_out = -1,

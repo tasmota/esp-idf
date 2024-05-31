@@ -51,8 +51,8 @@
 #define SOC_MPI_SUPPORTED               1
 #define SOC_SHA_SUPPORTED               1
 #define SOC_RSA_SUPPORTED               1
-// #define SOC_HMAC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8616
-// #define SOC_DIG_SIGN_SUPPORTED          1  // TODO: [ESP32C5] IDF-8619
+#define SOC_HMAC_SUPPORTED              1
+#define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1     // TODO: [ESP32C5] IDF-8622
@@ -164,14 +164,14 @@
 
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
-// #define SOC_DS_SIGNATURE_MAX_BIT_LEN (3072)
+#define SOC_DS_SIGNATURE_MAX_BIT_LEN (3072)
 
 /** Initialization vector (IV) length for the RSA key parameter message digest (MD) in bytes. */
-// #define SOC_DS_KEY_PARAM_MD_IV_LENGTH (16)
+#define SOC_DS_KEY_PARAM_MD_IV_LENGTH (16)
 
 /** Maximum wait time for DS parameter decryption key. If overdue, then key error.
     See TRM DS chapter for more details */
-// #define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
+#define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
 
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION                1U
@@ -445,6 +445,7 @@
 // #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
 // #define SOC_TIMER_SUPPORT_ETM             (1)
+// #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
 // #define SOC_MWDT_SUPPORT_XTAL              (1)

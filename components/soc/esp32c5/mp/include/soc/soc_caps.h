@@ -24,7 +24,7 @@
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_PCNT_SUPPORTED              1
-// #define SOC_MCPWM_SUPPORTED             1  // TODO: [ESP32C5] IDF-8709
+#define SOC_MCPWM_SUPPORTED             1
 // #define SOC_TWAI_SUPPORTED              1  // TODO: [ESP32C5] IDF-8691
 // #define SOC_ETM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8693
 // #define SOC_PARLIO_SUPPORTED            1  // TODO: [ESP32C5] IDF-8685, IDF-8686
@@ -42,15 +42,15 @@
 #define SOC_RMT_SUPPORTED               1
 // #define SOC_SDM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8687
 #define SOC_GPSPI_SUPPORTED             1
-// #define SOC_LEDC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8684
+#define SOC_LEDC_SUPPORTED              1
 // #define SOC_I2C_SUPPORTED               1  // TODO: [ESP32C5] IDF-8694, IDF-8696
 #define SOC_SYSTIMER_SUPPORTED          1     // TODO: [ESP32C5] IDF-8707
-// #define SOC_AES_SUPPORTED               1  // TODO: [ESP32C5] IDF-8627
+#define SOC_AES_SUPPORTED               1
 #define SOC_MPI_SUPPORTED               1
-// #define SOC_SHA_SUPPORTED               1  // TODO: [ESP32C5] IDF-8624
+#define SOC_SHA_SUPPORTED               1
 #define SOC_RSA_SUPPORTED               1
-// #define SOC_HMAC_SUPPORTED              1  // TODO: [ESP32C5] IDF-8616
-// #define SOC_DIG_SIGN_SUPPORTED          1  // TODO: [ESP32C5] IDF-8619
+#define SOC_HMAC_SUPPORTED              1
+#define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1     // TODO: [ESP32C5] IDF-8622
@@ -80,13 +80,13 @@
 #define SOC_XTAL_SUPPORT_48M            1
 
 /*-------------------------- AES CAPS -----------------------------------------*/
-// #define SOC_AES_SUPPORT_DMA     (1)
+#define SOC_AES_SUPPORT_DMA     (1)
 
 /* Has a centralized DMA, which is shared with all peripherals */
-// #define SOC_AES_GDMA            (1)
+#define SOC_AES_GDMA            (1)
 
-// #define SOC_AES_SUPPORT_AES_128 (1)
-// #define SOC_AES_SUPPORT_AES_256 (1)
+#define SOC_AES_SUPPORT_AES_128 (1)
+#define SOC_AES_SUPPORT_AES_256 (1)
 
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
@@ -156,17 +156,17 @@
 
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
-// #define SOC_DS_SIGNATURE_MAX_BIT_LEN (3072)
+#define SOC_DS_SIGNATURE_MAX_BIT_LEN (3072)
 
 /** Initialization vector (IV) length for the RSA key parameter message digest (MD) in bytes. */
-// #define SOC_DS_KEY_PARAM_MD_IV_LENGTH (16)
+#define SOC_DS_KEY_PARAM_MD_IV_LENGTH (16)
 
 /** Maximum wait time for DS parameter decryption key. If overdue, then key error.
     See TRM DS chapter for more details */
-// #define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
+#define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
 
 /*-------------------------- DMA Common CAPS ----------------------------------------*/
-#define SOC_DMA_CAN_ACCESS_MSPI_MEM 1 /*!< DMA can access MSPI memory (e.g. Flash, PSRAM) */
+#define SOC_DMA_CAN_ACCESS_FLASH 1 /*!< DMA can access Flash memory */
 
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION            2
@@ -274,15 +274,14 @@
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
-// TODO: [ESP32C5] 8684
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
 #define SOC_LEDC_SUPPORT_XTAL_CLOCK         (1)
 #define SOC_LEDC_CHANNEL_NUM                (6)
-// #define SOC_LEDC_TIMER_BIT_WIDTH            (20)
-// #define SOC_LEDC_SUPPORT_FADE_STOP          (1)
-// #define SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED (1)
-// #define SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX (16)
-// #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
+#define SOC_LEDC_TIMER_BIT_WIDTH            (20)
+#define SOC_LEDC_SUPPORT_FADE_STOP          (1)
+#define SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED (1)
+#define SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX (16)
+#define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
 // TODO: [ESP32C5] IDF-8658
@@ -324,19 +323,21 @@
 // #define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST as the RMT clock source */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
-// #define SOC_MCPWM_GROUPS                     (1U)   ///< 1 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
-// #define SOC_MCPWM_TIMERS_PER_GROUP           (3)    ///< The number of timers that each group has
-// #define SOC_MCPWM_OPERATORS_PER_GROUP        (3)    ///< The number of operators that each group has
-// #define SOC_MCPWM_COMPARATORS_PER_OPERATOR   (2)    ///< The number of comparators that each operator has
-// #define SOC_MCPWM_GENERATORS_PER_OPERATOR    (2)    ///< The number of generators that each operator has
-// #define SOC_MCPWM_TRIGGERS_PER_OPERATOR      (2)    ///< The number of triggers that each operator has
-// #define SOC_MCPWM_GPIO_FAULTS_PER_GROUP      (3)    ///< The number of fault signal detectors that each group has
-// #define SOC_MCPWM_CAPTURE_TIMERS_PER_GROUP   (1)    ///< The number of capture timers that each group has
-// #define SOC_MCPWM_CAPTURE_CHANNELS_PER_TIMER (3)    ///< The number of capture channels that each capture timer has
-// #define SOC_MCPWM_GPIO_SYNCHROS_PER_GROUP    (3)    ///< The number of GPIO synchros that each group has
-// #define SOC_MCPWM_SWSYNC_CAN_PROPAGATE       (1)    ///< Software sync event can be routed to its output
-// #define SOC_MCPWM_SUPPORT_ETM                (1)    ///< Support ETM (Event Task Matrix)
-// #define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP     (1)    ///< Capture timer shares clock with other PWM timers
+#define SOC_MCPWM_GROUPS                         1U ///< 1 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
+#define SOC_MCPWM_TIMERS_PER_GROUP               3  ///< The number of timers that each group has
+#define SOC_MCPWM_OPERATORS_PER_GROUP            3  ///< The number of operators that each group has
+#define SOC_MCPWM_COMPARATORS_PER_OPERATOR       2  ///< The number of comparators that each operator has
+#define SOC_MCPWM_GENERATORS_PER_OPERATOR        2  ///< The number of generators that each operator has
+#define SOC_MCPWM_EVENT_COMPARATORS_PER_OPERATOR 2  ///< The number of event comparators that each operator has
+#define SOC_MCPWM_TRIGGERS_PER_OPERATOR          2  ///< The number of triggers that each operator has
+#define SOC_MCPWM_GPIO_FAULTS_PER_GROUP          3  ///< The number of fault signal detectors that each group has
+#define SOC_MCPWM_CAPTURE_TIMERS_PER_GROUP       1  ///< The number of capture timers that each group has
+#define SOC_MCPWM_CAPTURE_CHANNELS_PER_TIMER     3  ///< The number of capture channels that each capture timer has
+#define SOC_MCPWM_GPIO_SYNCHROS_PER_GROUP        3  ///< The number of GPIO synchros that each group has
+#define SOC_MCPWM_SWSYNC_CAN_PROPAGATE           1  ///< Software sync event can be routed to its output
+// #define SOC_MCPWM_SUPPORT_ETM                    1  ///< Support ETM (Event Task Matrix)
+#define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR       1  ///< Support event comparator (based on ETM)
+#define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP         1  ///< Capture timer shares clock with other PWM timers
 
 /*------------------------ USB SERIAL JTAG CAPS ------------------------------*/
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
@@ -362,19 +363,19 @@
    for SHA this means that the biggest safe amount of bytes is
    31 blocks of 128 bytes = 3968
 */
-// #define SOC_SHA_DMA_MAX_BUFFER_SIZE     (3968)
-// #define SOC_SHA_SUPPORT_DMA             (1)
+#define SOC_SHA_DMA_MAX_BUFFER_SIZE     (3968)
+#define SOC_SHA_SUPPORT_DMA             (1)
 
 /* The SHA engine is able to resume hashing from a user */
-// #define SOC_SHA_SUPPORT_RESUME          (1)
+#define SOC_SHA_SUPPORT_RESUME          (1)
 
 /* Has a centralized DMA, which is shared with all peripherals */
-// #define SOC_SHA_GDMA             (1)
+#define SOC_SHA_GDMA             (1)
 
 /* Supported HW algorithms */
-// #define SOC_SHA_SUPPORT_SHA1            (1)
-// #define SOC_SHA_SUPPORT_SHA224          (1)
-// #define SOC_SHA_SUPPORT_SHA256          (1)
+#define SOC_SHA_SUPPORT_SHA1            (1)
+#define SOC_SHA_SUPPORT_SHA224          (1)
+#define SOC_SHA_SUPPORT_SHA256          (1)
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 // #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
@@ -445,6 +446,7 @@
 // #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
 // #define SOC_TIMER_SUPPORT_ETM             (1)
+// #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
 // #define SOC_MWDT_SUPPORT_XTAL              (1)
@@ -530,7 +532,6 @@
 /* macro redefine for pass esp_wifi headers md5sum check */
 // #define MAC_SUPPORT_PMU_MODEM_STATE     SOC_PM_SUPPORT_PMU_MODEM_STATE
 
-
 // #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 
 // #define SOC_PM_CPU_RETENTION_BY_SW          (1)
@@ -540,7 +541,7 @@
 // #define SOC_PM_PAU_LINK_NUM             (4)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
-#define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
+// #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1) // TODO: IDF-8642
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */

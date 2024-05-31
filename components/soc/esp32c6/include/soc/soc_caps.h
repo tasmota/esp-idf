@@ -441,6 +441,7 @@
 #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
 #define SOC_TIMER_SUPPORT_ETM             (1)
+#define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
 #define SOC_MWDT_SUPPORT_XTAL              (1)
@@ -585,3 +586,7 @@
 
 /*------------------------------------- No Reset CAPS -------------------------------------*/
 #define SOC_CAPS_NO_RESET_BY_ANA_BOD           (1)
+
+
+/*------------------------------------- ULP CAPS -------------------------------------*/
+#define SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR   (1) /*!< LP Core interrupts all map to a single entry in vector table */

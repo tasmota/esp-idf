@@ -189,7 +189,7 @@
 #define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
 
 /*-------------------------- DMA Common CAPS ----------------------------------------*/
-#define SOC_DMA_CAN_ACCESS_MSPI_MEM 1 /*!< DMA can access MSPI memory (e.g. Flash, PSRAM) */
+#define SOC_DMA_CAN_ACCESS_FLASH 1 /*!< DMA can access Flash memory */
 
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION                2
@@ -492,7 +492,7 @@
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
-//#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                (1) //TODO: IDF-7518
+#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
 #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
@@ -500,6 +500,9 @@
 // #define SOC_SPI_MEM_SUPPORT_WRAP                          (1) // IDFCI-2073 The feature cannot be treated as supported on P4
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
+#define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+
+#define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
@@ -528,6 +531,7 @@
 #define SOC_TIMER_GROUP_SUPPORT_RC_FAST   1
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      4
 #define SOC_TIMER_SUPPORT_ETM             1
+#define SOC_TIMER_SUPPORT_SLEEP_RETENTION 1
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
 #define SOC_MWDT_SUPPORT_XTAL              (1)

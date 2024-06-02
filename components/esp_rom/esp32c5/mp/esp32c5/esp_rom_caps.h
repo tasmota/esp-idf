@@ -22,9 +22,8 @@
 #define ESP_ROM_HAS_REGI2C_BUG              (1) // ROM has the regi2c bug
 #define ESP_ROM_HAS_NEWLIB                  (1) // ROM has newlib (at least parts of it) functions included
 #define ESP_ROM_HAS_NEWLIB_NORMAL_FORMAT    (1) // ROM has the newlib normal/full version of formatting functions (as opposed to the nano versions)
-// TODO: [ESP32C5] IDF-8618
-// #define ESP_ROM_REV0_HAS_NO_ECDSA_INTERFACE (1) // ECO 0 does not have ets_ecdsa_verify symbol, future revision will have it
 #define ESP_ROM_WDT_INIT_PATCH              (1) // ROM version does not configure the clock
 #define ESP_ROM_RAM_APP_NEEDS_MMU_INIT      (1) // ROM doesn't init cache MMU when it's a RAM APP, needs MMU hal to init
 #define ESP_ROM_HAS_VERSION                 (1) // ROM has version/eco information
 #define ESP_ROM_SUPPORT_DEEP_SLEEP_WAKEUP_STUB  (1) // ROM supports the HP core to jump to the RTC memory to execute stub code after waking up from deepsleep.
+#define ESP_ROM_HAS_OUTPUT_PUTC_FUNC        (1) // ROM has esp_rom_output_putc (or ets_write_char_uart)

@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "soc/soc.h"
 #include "soc/clk_tree_defs.h"
+#include "sdkconfig.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -134,9 +135,7 @@ typedef enum {
     RTC_CAL_RC32K = SOC_RTC_SLOW_CLK_SRC_RC32K,            //!< Internal 32kHz RC oscillator, as one type of 32k clock
     RTC_CAL_32K_XTAL = SOC_RTC_SLOW_CLK_SRC_XTAL32K,       //!< External 32kHz XTAL, as one type of 32k clock
     RTC_CAL_32K_OSC_SLOW = SOC_RTC_SLOW_CLK_SRC_OSC_SLOW,  //!< External slow clock signal input by lp_pad_gpio0, as one type of 32k clock
-#if CONFIG_IDF_TARGET_ESP32C5_MP_VERSION
     RTC_CAL_RC_FAST                                        //!< Internal 20MHz RC oscillator
-#endif
 } rtc_cal_sel_t;
 
 /**
@@ -186,15 +185,6 @@ void rtc_clk_init(rtc_clk_config_t cfg);
  */
 soc_xtal_freq_t rtc_clk_xtal_freq_get(void);
 
-/**
- * @brief Update XTAL frequency
- *
- * Updates the XTAL value stored in RTC_XTAL_FREQ_REG. Usually this value is ignored
- * after startup.
- *
- * @param xtal_freq New frequency value
- */
-void rtc_clk_xtal_freq_update(soc_xtal_freq_t xtal_freq);
 
 /**
  * @brief Enable or disable 32 kHz XTAL oscillator
@@ -451,17 +441,6 @@ bool rtc_dig_8m_enabled(void);
  * @return Frequency of the clock in Hz
  */
 uint32_t rtc_clk_freq_cal(uint32_t cal_val);
-
-
-// -------------------------- CLOCK TREE DEFS ALIAS ----------------------------
-// **WARNING**: The following are only for backwards compatibility.
-// Please use the declarations in soc/clk_tree_defs.h instead.
-/**
- * @brief Possible main XTAL frequency values. TODO: To be removed!
- */
-typedef soc_xtal_freq_t rtc_xtal_freq_t;
-#define RTC_XTAL_FREQ_40M SOC_XTAL_FREQ_40M                 //!< 40 MHz XTAL
-#define RTC_XTAL_FREQ_48M SOC_XTAL_FREQ_48M                 //!< 48 MHz XTAL
 
 #ifdef __cplusplus
 }

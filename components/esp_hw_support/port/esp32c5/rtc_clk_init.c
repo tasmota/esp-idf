@@ -84,9 +84,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
 
     clk_ll_rc_fast_tick_conf(); // TODO: IDF-8642 Unnecessary or not?
 
-    soc_xtal_freq_t xtal_freq = cfg.xtal_freq;
-    esp_rom_output_tx_wait_idle(0);
-    rtc_clk_xtal_freq_update(xtal_freq);
+    // XTAL freq determined by efuse, and can be directly informed from register field PCR_CLK_XTAL_FREQ
 
     /* Set CPU frequency */
     rtc_clk_cpu_freq_get_config(&old_config);

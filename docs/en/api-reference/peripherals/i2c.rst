@@ -362,7 +362,7 @@ Some I2C device needs write configurations before reading data from it. Therefor
 
     I2C master write to slave and read from slave
 
-Simple example for writing and reading from slave:
+Please note that no STOP condition bit is inserted between the write and read operations; therefore, this function is suited to read a register from an I2C device. A simple example for writing and reading from a slave device:
 
 .. code:: c
 
@@ -624,6 +624,14 @@ Kconfig Options
 
 - :ref:`CONFIG_I2C_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see also `IRAM Safe <#iram-safe>`__ for more information.
 - :ref:`CONFIG_I2C_ENABLE_DEBUG_LOG` is used to enable the debug log at the cost of increased firmware binary size.
+
+Application Examples
+--------------------
+
+.. list::
+
+    - :example:`peripherals/i2c/i2c_eeprom` demonstrates the basic usage of I2C driver by reading and writing from an I2C connected EEPROM.
+    - :example:`peripherals/i2c/i2c_tools` implements some basic features of I2C tools based on the ESP32 console component.
 
 API Reference
 -------------

@@ -77,7 +77,16 @@ examples/system/flash_suspend:
       temporary: true
       reason: the other targets are not tested yet
 
-examples/system/freertos:
+examples/system/freertos/basic_freertos_smp_usage:
+  enable:
+    - if: IDF_TARGET == "esp32c3" or IDF_TARGET == "esp32s3"
+      reason: no target specific functionality, testing on a single core target and a multiple core target is sufficient
+  depends_components:
+    - freertos
+    - console
+    - esp_timer
+
+examples/system/freertos/real_time_stats:
   disable:
     - if: IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")
       reason: no target specific functionality, testing on a single target is sufficient
@@ -259,13 +268,14 @@ examples/system/task_watchdog:
 
 examples/system/ulp/lp_core/gpio:
   enable:
-    - if: SOC_LP_CORE_SUPPORTED == 1
+    - if: (SOC_LP_CORE_SUPPORTED == 1) and (SOC_RTCIO_PIN_COUNT > 0)
+
   depends_components:
     - ulp
 
 examples/system/ulp/lp_core/gpio_intr_pulse_counter:
   enable:
-    - if: SOC_LP_CORE_SUPPORTED == 1
+    - if: (SOC_LP_CORE_SUPPORTED == 1) and (SOC_ULP_LP_UART_SUPPORTED == 1)
   depends_components:
     - ulp
 

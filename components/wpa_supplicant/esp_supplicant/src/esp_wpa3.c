@@ -555,6 +555,7 @@ int wpa3_hostap_auth_init(void *data)
                     &g_wpa3_hostap_task_hdl) != pdPASS) {
         wpa_printf(MSG_ERROR, "wpa3_hostap_auth_init: failed to create task");
         os_queue_delete(g_wpa3_hostap_evt_queue);
+        g_wpa3_hostap_evt_queue = NULL;
         return ESP_FAIL;
     }
 
@@ -624,7 +625,7 @@ int esp_send_sae_auth_reply(struct hostapd_data *hapd,
     os_memcpy(&((uint16_t *)req->data)[3], ies, ies_len - 3 * sizeof(uint16_t));
 
     req->ifx = WIFI_IF_AP;
-    req->subtype = WLAN_FC_STYPE_AUTH;
+    req->subtype = (WLAN_FC_STYPE_AUTH << 4);
     req->data_len = ies_len;
     os_memcpy(req->da, bssid, ETH_ALEN);
 

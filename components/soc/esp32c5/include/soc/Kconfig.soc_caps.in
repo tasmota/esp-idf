@@ -131,11 +131,23 @@ config SOC_SECURE_BOOT_SUPPORTED
     bool
     default y
 
+config SOC_PMU_SUPPORTED
+    bool
+    default y
+
 config SOC_LP_TIMER_SUPPORTED
     bool
     default y
 
 config SOC_LP_PERIPHERALS_SUPPORTED
+    bool
+    default y
+
+config SOC_CLK_TREE_SUPPORTED
+    bool
+    default y
+
+config SOC_WDT_SUPPORTED
     bool
     default y
 
@@ -235,6 +247,10 @@ config SOC_CPU_IDRAM_SPLIT_USING_PMP
     bool
     default y
 
+config SOC_CPU_PMP_REGION_GRANULARITY
+    int
+    default 128
+
 config SOC_DS_SIGNATURE_MAX_BIT_LEN
     int
     default 3072
@@ -279,6 +295,14 @@ config SOC_GPIO_SUPPORT_RTC_INDEPENDENT
     bool
     default y
 
+config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    bool
+    default y
+
+config SOC_LP_IO_CLOCK_IS_INDEPENDENT
+    bool
+    default y
+
 config SOC_GPIO_IN_RANGE_MAX
     int
     default 28
@@ -309,7 +333,19 @@ config SOC_GPIO_CLOCKOUT_CHANNEL_NUM
 
 config SOC_RTCIO_PIN_COUNT
     int
-    default 0
+    default 8
+
+config SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_HOLD_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_WAKE_SUPPORTED
+    bool
+    default y
 
 config SOC_I2C_NUM
     int
@@ -476,6 +512,10 @@ config SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE
     default y
 
 config SOC_PCNT_SUPPORT_CLEAR_SIGNAL
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_STEP_NOTIFY
     bool
     default y
 
@@ -823,6 +863,10 @@ config SOC_FLASH_ENCRYPTION_XTS_AES_128
     bool
     default y
 
+config SOC_CRYPTO_DPA_PROTECTION_SUPPORTED
+    bool
+    default y
+
 config SOC_UART_NUM
     int
     default 3
@@ -846,6 +890,14 @@ config SOC_LP_UART_FIFO_LEN
 config SOC_UART_BITRATE_MAX
     int
     default 5000000
+
+config SOC_UART_SUPPORT_PLL_F80M_CLK
+    bool
+    default y
+
+config SOC_UART_SUPPORT_RTC_CLK
+    bool
+    default y
 
 config SOC_UART_SUPPORT_XTAL_CLK
     bool
@@ -895,6 +947,10 @@ config SOC_PM_SUPPORT_RTC_PERIPH_PD
     bool
     default y
 
+config SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
+    bool
+    default y
+
 config SOC_MODEM_CLOCK_IS_INDEPENDENT
     bool
     default y
@@ -908,6 +964,10 @@ config SOC_CLK_OSC_SLOW_SUPPORTED
     default y
 
 config SOC_CLK_RC32K_SUPPORTED
+    bool
+    default y
+
+config SOC_CLK_LP_FAST_SUPPORT_XTAL
     bool
     default y
 

@@ -64,8 +64,8 @@
 #define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
-#define SOC_ECDSA_SUPPORTED             1
-#define SOC_KEY_MANAGER_SUPPORTED       1
+#define SOC_ECDSA_SUPPORTED             0
+#define SOC_KEY_MANAGER_SUPPORTED       0
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
 #define SOC_BOD_SUPPORTED               1
@@ -78,6 +78,7 @@
 #define SOC_LP_GPIO_MATRIX_SUPPORTED    1
 #define SOC_LP_PERIPHERALS_SUPPORTED    1
 #define SOC_LP_I2C_SUPPORTED            1
+#define SOC_LP_SPI_SUPPORTED            1
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_PSRAM_DMA_CAPABLE           1
 // #define SOC_ULP_SUPPORTED               1  //TODO: IDF-7534
@@ -503,6 +504,12 @@
 
 #define SOC_MEMSPI_IS_INDEPENDENT   1
 #define SOC_SPI_MAX_PRE_DIVIDER     16
+
+/*-------------------------- LP SPI CAPS ----------------------------------------*/
+#define SOC_LP_SPI_PERIPH_NUM              1
+#define SOC_LP_SPI_MAXIMUM_BUFFER_SIZE     64
+/*-------------------------- SPIRAM CAPS ----------------------------------------*/
+#define SOC_SPIRAM_XIP_SUPPORTED        1
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)

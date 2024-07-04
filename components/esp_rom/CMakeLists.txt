@@ -3,7 +3,8 @@ idf_build_get_property(target IDF_TARGET)
 set(target_folder "${target}")
 
 set(include_dirs "include"
-                 "include/${target_folder}"
+                 "${target_folder}/include"
+                 "${target_folder}/include/${target_folder}"
                  "${target_folder}")
 
 set(private_required_comp "")
@@ -17,9 +18,6 @@ if(target STREQUAL "linux")
                         "${target}/esp_rom_md5.c"
                         "${target}/esp_rom_efuse.c")
 else()
-    if(CONFIG_IDF_TARGET_ESP32C5)
-        list(APPEND include_dirs "include/${target_folder}/..")
-    endif()
     list(APPEND sources "patches/esp_rom_crc.c"
                         "patches/esp_rom_uart.c"
                         "patches/esp_rom_spiflash.c"
@@ -129,10 +127,6 @@ if(BOOTLOADER_BUILD)
 
     elseif(target STREQUAL "esp32s2")
         rom_linker_script("spiflash_legacy")
-
-    elseif(target STREQUAL "esp32c6")
-        # The linking of the bootloader needs to use the rom_i2c_writeReg_Mask in esp32c6.rom.phy.ld
-        rom_linker_script("phy")
     endif()
 
     if(CONFIG_ESP_ROM_HAS_NEWLIB)

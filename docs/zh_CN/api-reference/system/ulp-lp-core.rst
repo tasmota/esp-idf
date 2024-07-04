@@ -101,6 +101,10 @@ ULP LP-Core 代码会与 ESP-IDF 项目共同编译，生成一个单独的二�
         ulp_measurement_count = 64;
     }
 
+.. note::
+
+    LP-Core 程序全局变量存储在二进制文件的 ``.bss`` 或者 ``.data`` 部分。这些部分在加载和执行 LP-Core 二进制文件时被初始化。在首次运行 LP-Core 之前，从 HP-Core 主程序访问这些变量可能会导致未定义行为。
+
 
 启动 ULP LP-Core 程序
 --------------------------------
@@ -164,6 +168,7 @@ ULP LP-Core 支持的外设
     * LP IO
     * LP I2C
     * LP UART
+    :SOC_LP_SPI_SUPPORTED: * LP SPI
 
 .. only:: CONFIG_ESP_ROM_HAS_LP_ROM
 
@@ -236,6 +241,10 @@ API 参考
 .. include-build-file:: inc/lp_core_i2c.inc
 .. include-build-file:: inc/lp_core_uart.inc
 
+.. only:: CONFIG_SOC_LP_SPI_SUPPORTED
+
+    .. include-build-file:: inc/lp_core_spi.inc
+
 LP 内核 API 参考
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -245,5 +254,9 @@ LP 内核 API 参考
 .. include-build-file:: inc/ulp_lp_core_uart.inc
 .. include-build-file:: inc/ulp_lp_core_print.inc
 .. include-build-file:: inc/ulp_lp_core_interrupts.inc
+
+.. only:: CONFIG_SOC_LP_SPI_SUPPORTED
+
+    .. include-build-file:: inc/ulp_lp_core_spi.inc
 
 .. _esp-idf-monitor: https://github.com/espressif/esp-idf-monitor

@@ -58,21 +58,23 @@
 #define SOC_SECURE_BOOT_SUPPORTED       1
 // #define SOC_BOD_SUPPORTED               1  // TODO: [ESP32C5] IDF-8647
 // #define SOC_APM_SUPPORTED               1  // TODO: [ESP32C5] IDF-8614, IDF-8615
-// #define SOC_PMU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8667
+#define SOC_PMU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8667
 // #define SOC_PAU_SUPPORTED               1  // TODO: [ESP32C5] IDF-8638
 #define SOC_LP_TIMER_SUPPORTED          1
 // #define SOC_LP_AON_SUPPORTED            1  // TODO: [ESP32C5] IDF-8638
 #define SOC_LP_PERIPHERALS_SUPPORTED    1
 // #define SOC_LP_I2C_SUPPORTED            1  // TODO: [ESP32C5] IDF-8634
 // #define SOC_ULP_LP_UART_SUPPORTED       1  // TODO: [ESP32C5] IDF-8633
-// #define SOC_CLK_TREE_SUPPORTED          1  // TODO: [ESP32C5] IDF-8642
+#define SOC_CLK_TREE_SUPPORTED          1
 // #define SOC_ASSIST_DEBUG_SUPPORTED      1  // TODO: [ESP32C5] IDF-8663
-// #define SOC_WDT_SUPPORTED               1  // TODO: [ESP32C5] IDF-8650
+#define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1     // TODO: [ESP32C5] IDF-8715
 // #define SOC_BITSCRAMBLER_SUPPORTED      1  // TODO: [ESP32C5] IDF-8711
 #define SOC_ECDSA_SUPPORTED             1
 // #define SOC_KEY_MANAGER_SUPPORTED       1  // TODO: [ESP32C5] IDF-8621
 // #define SOC_HUK_SUPPORTED               1  // TODO: [ESP32C5] IDF-8617
+// #define SOC_LIGHT_SLEEP_SUPPORTED       1  // TODO: [ESP32C5] IDF-8640
+// #define SOC_DEEP_SLEEP_SUPPORTED        1  // TODO: [ESP32C5] IDF-8638
 #define SOC_MODEM_CLOCK_SUPPORTED       1
 // #define SOC_PM_SUPPORTED                1  // TODO: [ESP32C5] IDF-8643
 
@@ -154,6 +156,7 @@
 
 #define SOC_CPU_HAS_PMA                 1
 #define SOC_CPU_IDRAM_SPLIT_USING_PMP   1
+#define SOC_CPU_PMP_REGION_GRANULARITY  128
 
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
@@ -195,7 +198,9 @@
 // On ESP32-C5, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
 #define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    (1)
 // GPIO0~7 on ESP32C5 can support chip deep sleep wakeup
-// #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)  // TODO: [ESP32C5] IDF-8719
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
+// LP IO peripherals have independent clock gating to manage
+#define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
 
 #define SOC_GPIO_VALID_GPIO_MASK        ((1U<<SOC_GPIO_PIN_COUNT) - 1)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
@@ -218,13 +223,13 @@
 #define SOC_GPIO_CLOCKOUT_CHANNEL_NUM           (3)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
-#define SOC_RTCIO_PIN_COUNT                 0UL
-// #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED 1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
-                                            //  * so it supports unique IOMUX configuration (including IE, OE, PU, PD, DRV etc.)
-                                            //  * when the pins are switched to RTC function.
-                                            //  */
-// #define SOC_RTCIO_HOLD_SUPPORTED            1
-// #define SOC_RTCIO_WAKE_SUPPORTED            1
+#define SOC_RTCIO_PIN_COUNT                 8
+#define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
+                                                * so it supports unique IOMUX configuration (including IE, OE, PU, PD, DRV etc.)
+                                                * when the pins are switched to RTC function.
+                                                */
+#define SOC_RTCIO_HOLD_SUPPORTED            1
+#define SOC_RTCIO_WAKE_SUPPORTED            1
 
 /*-------------------------- Dedicated GPIO CAPS -----------------------------*/
 // #define SOC_DEDIC_GPIO_OUT_CHANNELS_NUM (8) /*!< 8 outward channels on each CPU core */
@@ -283,8 +288,6 @@
 #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
-// TODO: [ESP32C5] IDF-8658
-// #define SOC_MMU_PAGE_SIZE_CONFIGURABLE        (1)
 #define SOC_MMU_PERIPH_NUM                    (1U)
 #define SOC_MMU_LINEAR_ADDRESS_REGION_NUM     (1U)
 #define SOC_MMU_DI_VADDR_SHARED               (1) /*!< D/I vaddr are shared */
@@ -303,7 +306,7 @@
 #define SOC_PCNT_THRES_POINT_PER_UNIT         2
 #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
 #define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1
-// #define SOC_PCNT_SUPPORT_STEP_NOTIFY          1 // IDF-7984
+#define SOC_PCNT_SUPPORT_STEP_NOTIFY          1
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -483,7 +486,7 @@
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
 
 /*------------------------ Anti DPA (Security) CAPS --------------------------*/
-// #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
+#define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
 
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-C5 has 3 UARTs (2 HP UART, and 1 LP UART)
@@ -493,8 +496,8 @@
 #define SOC_UART_FIFO_LEN               (128)       /*!< The UART hardware FIFO length */
 #define SOC_LP_UART_FIFO_LEN            (16)        /*!< The LP UART hardware FIFO length */
 #define SOC_UART_BITRATE_MAX            (5000000)   /*!< Max bit rate supported by UART */
-// #define SOC_UART_SUPPORT_PLL_F80M_CLK   (1)         /*!< Support PLL_F80M as the clock source */
-// #define SOC_UART_SUPPORT_RTC_CLK        (1)         /*!< Support RTC clock as the clock source */ // TODO: [ESP32C5] IDF-8642
+#define SOC_UART_SUPPORT_PLL_F80M_CLK   (1)         /*!< Support PLL_F80M as the clock source */
+#define SOC_UART_SUPPORT_RTC_CLK        (1)         /*!< Support RTC clock as the clock source */
 #define SOC_UART_SUPPORT_XTAL_CLK       (1)         /*!< Support XTAL clock as the clock source */
 #define SOC_UART_SUPPORT_WAKEUP_INT     (1)         /*!< Support UART wakeup interrupt */
 #define SOC_UART_HAS_LP_UART            (1)         /*!< Support LP UART */
@@ -545,12 +548,13 @@
 // #define SOC_PM_PAU_LINK_NUM             (4)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
-// #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1) // TODO: IDF-8642
+#define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
+#define SOC_CLK_LP_FAST_SUPPORT_XTAL              (1)     /*!< Support XTAL clock as the LP_FAST clock source */
 
 #define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control is independent, thanks to the PCR registers */
 

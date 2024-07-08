@@ -500,6 +500,7 @@ FORCE_INLINE_ATTR void uart_ll_set_baudrate(uart_dev_t *hw, uint32_t baud, uint3
 }
 #if !BOOTLOADER_BUILD
 //HP_SYS_CLKRST.peri_clk_ctrlxxx are shared registers, so this function must be used in an atomic way
+int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused)); // To avoid build errors/warnings about __DECLARE_RCC_ATOMIC_ENV
 #define uart_ll_set_baudrate(...) (void)__DECLARE_RCC_ATOMIC_ENV; uart_ll_set_baudrate(__VA_ARGS__)
 #endif
 

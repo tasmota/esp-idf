@@ -803,6 +803,10 @@ config SOC_ISP_BF_SUPPORTED
     bool
     default y
 
+config SOC_ISP_CCM_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_DVP_SUPPORTED
     bool
     default y
@@ -832,6 +836,10 @@ config SOC_ISP_BF_TEMPLATE_X_NUMS
     default 3
 
 config SOC_ISP_BF_TEMPLATE_Y_NUMS
+    int
+    default 3
+
+config SOC_ISP_CCM_DIMENSION
     int
     default 3
 
@@ -1555,6 +1563,10 @@ config SOC_UART_HAS_LP_UART
     bool
     default y
 
+config SOC_UART_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
     bool
     default y
@@ -1734,3 +1746,7 @@ config SOC_LCDCAM_CAM_PERIPH_NUM
 config SOC_LCDCAM_CAM_DATA_WIDTH_MAX
     int
     default 16
+
+config SOC_LP_CORE_SUPPORT_ETM
+    bool
+    default y

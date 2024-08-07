@@ -120,13 +120,14 @@ esp_err_t ulp_lp_core_run(ulp_lp_core_cfg_t* cfg)
             ESP_LOGI(TAG, "LP timer specified as wakeup source, but no sleep duration set. ULP will only wake-up once unless it calls ulp_lp_core_lp_timer_set_wakeup_time()");
         }
         shared_mem->sleep_duration_us = cfg->lp_timer_sleep_duration_us;
+        shared_mem->sleep_duration_ticks = ulp_lp_core_lp_timer_calculate_sleep_ticks(cfg->lp_timer_sleep_duration_us);
 
         /* Set first wakeup alarm */
         ulp_lp_core_lp_timer_set_wakeup_time(cfg->lp_timer_sleep_duration_us);
     }
 #endif
 
-    if (cfg->wakeup_source & (ULP_LP_CORE_WAKEUP_SOURCE_LP_UART | ULP_LP_CORE_WAKEUP_SOURCE_LP_IO | ULP_LP_CORE_WAKEUP_SOURCE_ETM)) {
+    if (cfg->wakeup_source & (ULP_LP_CORE_WAKEUP_SOURCE_LP_UART | ULP_LP_CORE_WAKEUP_SOURCE_LP_IO)) {
         ESP_LOGE(TAG, "Wake-up source not yet supported");
         return ESP_ERR_INVALID_ARG;
     }

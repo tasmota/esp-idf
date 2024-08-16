@@ -12,6 +12,7 @@ stages:
   - test_deploy
   - deploy
   - post_deploy
+  - retry_failed_jobs
 
 variables:
 # System environment
@@ -101,6 +102,8 @@ variables:
   # host mapping volume to share ccache between runner concurrent jobs
   CCACHE_DIR: "/cache/idf_ccache"
   CCACHE_MAXSIZE: "50G"
+
+  FF_USE_NEW_BASH_EVAL_STRATEGY: "true"
 
 ################################################
 # `before_script` and `after_script` Templates #

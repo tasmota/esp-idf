@@ -21,7 +21,6 @@ api-guides/deep-sleep-stub.rst
 api-guides/blufi.rst
 api-guides/lwip.rst
 api-guides/coexist.rst
-api-guides/flash_psram_config.rst
 api-guides/wifi.rst
 api-guides/bluetooth.rst
 api-guides/wireshark-user-guide.rst
@@ -79,11 +78,9 @@ api-reference/peripherals/spi_flash/spi_flash_override_driver.rst
 api-reference/peripherals/spi_flash/spi_flash_optional_feature.rst
 api-reference/peripherals/spi_flash/spi_flash_idf_vs_rom.rst
 api-reference/peripherals/spi_flash/index.rst
-api-reference/peripherals/sdm.rst
 api-reference/peripherals/touch_pad.rst
 api-reference/peripherals/adc_calibration.rst
 api-reference/peripherals/spi_slave_hd.rst
-api-reference/peripherals/dedic_gpio.rst
 api-reference/peripherals/sd_pullup_requirements.rst
 api-reference/peripherals/spi_master.rst
 api-reference/peripherals/index.rst

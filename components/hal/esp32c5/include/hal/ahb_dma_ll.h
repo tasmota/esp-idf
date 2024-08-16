@@ -136,7 +136,7 @@ static inline void ahb_dma_ll_reset_fsm(ahb_dma_dev_t *dev)
  */
 static inline void ahb_dma_ll_set_default_memory_range(ahb_dma_dev_t *dev)
 {
-    // AHB-DMA can access L2MEM, L2ROM, MSPI Flash, MSPI PSRAM
+    // AHB-DMA can access SRAM, ROM, MSPI Flash, MSPI PSRAM
     dev->intr_mem_start_addr.val = 0x40800000;
     dev->intr_mem_end_addr.val = 0x44000000;
 }

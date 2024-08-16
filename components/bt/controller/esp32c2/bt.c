@@ -420,18 +420,19 @@ static void esp_bt_controller_log_interface(uint32_t len, const uint8_t *addr, b
 
 void esp_ble_controller_log_dump_all(bool output)
 {
+   if (log_output_mode == LOG_STORAGE_TO_FLASH) {
 #if CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
-    esp_bt_read_ctrl_log_from_flash(output);
-#else
-    portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
-
-    portENTER_CRITICAL_SAFE(&spinlock);
-    esp_panic_handler_reconfigure_wdts(5000);
-    BT_ASSERT_PRINT("\r\n[DUMP_START:");
-    ble_log_async_output_dump_all(output);
-    BT_ASSERT_PRINT(":DUMP_END]\r\n");
-    portEXIT_CRITICAL_SAFE(&spinlock);
+        esp_bt_read_ctrl_log_from_flash(output);
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
+    } else {
+        portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
+        portENTER_CRITICAL_SAFE(&spinlock);
+        esp_panic_handler_reconfigure_wdts(5000);
+        BT_ASSERT_PRINT("\r\n[DUMP_START:");
+        ble_log_async_output_dump_all(output);
+        BT_ASSERT_PRINT(":DUMP_END]\r\n");
+        portEXIT_CRITICAL_SAFE(&spinlock);
+    }
 }
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
 
@@ -814,6 +815,9 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_read_mac((uint8_t *)mac, ESP_MAC_BT));
+
+    ESP_LOGI(NIMBLE_PORT_LOG_TAG, "Bluetooth MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     swap_in_place(mac, 6);
 

@@ -202,7 +202,7 @@ The following options will reduce IRAM usage of some ESP-IDF features:
 
    To use this option, ESP-IDF should be able to recognize that the new SRAM1 area is also a valid load address for an image segment. If the software bootloader was compiled before this option existed, then the bootloader will not be able to load the app that has code placed in this new extended IRAM area. This would typically happen if you are doing an OTA update, where only the app would be updated.
 
-   If the IRAM section were to be placed in an invalid area, then this would be detected during the bootup process, and result in a failed boot:
+   If the IRAM section were to be placed in an invalid area, then this would be detected during the boot-up process, and result in a failed boot:
 
    .. code-block:: text
 

@@ -204,11 +204,11 @@ Next, to allocate a capture channel, you can call the :cpp:func:`mcpwm_new_captu
 - :cpp:member:`mcpwm_capture_channel_config_t::intr_priority` sets the priority of the interrupt. If it is set to ``0``, the driver will allocate an interrupt with a default priority. Otherwise, the driver will use the given priority.
 - :cpp:member:`mcpwm_capture_channel_config_t::gpio_num` sets the GPIO number used by the capture channel.
 - :cpp:member:`mcpwm_capture_channel_config_t::prescale` sets the prescaler of the input signal.
-- :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::pos_edge` and :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::neg_edge` set whether to capture on the positive and/or falling edge of the input signal.
-- :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::pull_up` and :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::pull_down` set whether to pull up and/or pull down the GPIO internally.
-- :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::invert_cap_signal` sets whether to invert the capture signal.
-- :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::io_loop_back` sets whether to enable the Loop-back mode. It is for debugging purposes only. It enables both the GPIO's input and output ability through the GPIO matrix peripheral.
-- :cpp:member:`mcpwm_capture_channel_config_t::extra_flags::keep_io_conf_at_exit` sets whether to keep the GPIO configuration when the capture channel is deleted.
+- :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::pos_edge` and :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::neg_edge` set whether to capture on the positive and/or falling edge of the input signal.
+- :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::pull_up` and :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::pull_down` set whether to pull up and/or pull down the GPIO internally.
+- :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::invert_cap_signal` sets whether to invert the capture signal.
+- :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::io_loop_back` sets whether to enable the Loop-back mode. It is for debugging purposes only. It enables both the GPIO's input and output ability through the GPIO matrix peripheral.
+- :cpp:member:`mcpwm_capture_channel_config_t::extra_capture_channel_flags::keep_io_conf_at_exit` sets whether to keep the GPIO configuration when the capture channel is deleted.
 
 The :cpp:func:`mcpwm_new_capture_channel` will return a pointer to the allocated capture channel object if the allocation succeeds. Otherwise, it will return an error code. Specifically, when there is no free capture channel left in the capture timer, this function will return the :c:macro:`ESP_ERR_NOT_FOUND` error.
 
@@ -1031,11 +1031,12 @@ Kconfig Options
 Application Examples
 --------------------
 
-* Brushed DC motor speed control by PID algorithm: :example:`peripherals/mcpwm/mcpwm_bdc_speed_control`
-* BLDC motor control with hall sensor feedback: :example:`peripherals/mcpwm/mcpwm_bldc_hall_control`
-* Ultrasonic sensor (HC-SR04) distance measurement: :example:`peripherals/mcpwm/mcpwm_capture_hc_sr04`
-* Servo motor angle control: :example:`peripherals/mcpwm/mcpwm_servo_control`
-* MCPWM synchronization between timers: :example:`peripherals/mcpwm/mcpwm_sync`
+* :example:`peripherals/mcpwm/mcpwm_bdc_speed_control` demonstrates how to drive a brushed DC motor using two specific PWM signals, measure the motor speed with a photoelectric encoder, and maintain a stable motor speed using a simple PID algorithm.
+* :example:`peripherals/mcpwm/mcpwm_bldc_hall_control` demonstrates how to use the MCPWM peripheral to control a BLDC motor using a six-step commutation scheme, with the motor's spin direction and speed being adjusted based on the readings from a Hall sensor.
+* :example:`peripherals/mcpwm/mcpwm_capture_hc_sr04` demonstrates how to use the MCPWM peripheral's capture module to decode the pulse width signals from an HC-SR04 sonar sensor, which can measure distance based on the width of the pulse.
+* :example:`peripherals/mcpwm/mcpwm_foc_svpwm_open_loop` demonstrates how to use the MCPWM peripheral to generate three pairs of PWM signals for Field-Oriented Control (FOC), which can be used to drive a BLDC or PMSM motor, or a three-phase power inverter, using an open-loop FOC algorithm.
+* :example:`peripherals/mcpwm/mcpwm_servo_control` demonstrates how to control a typical RC Servo by sending a PWM signal using the MCPWM driver, with the servo rotating from -60° to 60° and then turning back again.
+* :example:`peripherals/mcpwm/mcpwm_sync` demonstrates how to generate three PWMs in perfect synchronization using MCPWM timers, with options to synchronize the timers via GPIO, Timer TEZ, or software.
 
 
 API Reference

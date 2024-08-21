@@ -56,12 +56,6 @@ static inline void modem_syscon_ll_enable_clk_pwdet_adc_inv(modem_syscon_dev_t *
 }
 
 __attribute__((always_inline))
-static inline void modem_syscon_ll_enable_clk_i2c_mst_sel_160m(modem_syscon_dev_t *hw, bool en)
-{
-    hw->clk_conf.clk_i2c_mst_sel_160m = en;
-}
-
-__attribute__((always_inline))
 static inline void modem_syscon_ll_enable_data_dump_mux_clock(modem_syscon_dev_t *hw, bool en)
 {
     hw->clk_conf.clk_data_dump_mux = en;

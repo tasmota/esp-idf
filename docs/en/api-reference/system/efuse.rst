@@ -566,5 +566,17 @@ Part of the functionality of this tool is also provided directly by ``idf.py`` c
 
 .. include:: inc/espefuse_summary_{IDF_TARGET_NAME}.rst
 
+To get a dump for all eFuse registers.
+
+.. include:: inc/espefuse_summary_{IDF_TARGET_NAME}_dump.rst
+
+Application Examples
+--------------------
+
+- :example:`system/efuse` demonstrates how to use the eFuse API on {IDF_TARGET_NAME}, showing read and write operations with fields from the common and custom eFuse tables, and explaining the use of virtual eFuses for debugging purposes.
+
+API Reference
+-------------
+
 .. include-build-file:: inc/esp_efuse_chip.inc
 .. include-build-file:: inc/esp_efuse.inc

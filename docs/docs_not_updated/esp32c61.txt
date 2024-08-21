@@ -97,7 +97,6 @@ api-reference/peripherals/touch_element.rst
 api-reference/peripherals/ppa.rst
 api-reference/peripherals/ana_cmpr.rst
 api-reference/peripherals/camera_driver.rst
-api-reference/peripherals/ledc.rst
 api-reference/peripherals/temp_sensor.rst
 api-reference/peripherals/spi_features.rst
 api-reference/peripherals/sdio_slave.rst
@@ -109,7 +108,6 @@ api-reference/peripherals/spi_flash/index.rst
 api-reference/peripherals/touch_pad.rst
 api-reference/peripherals/lcd/i80_lcd.rst
 api-reference/peripherals/lcd/spi_lcd.rst
-api-reference/peripherals/lcd/i2c_lcd.rst
 api-reference/peripherals/lcd/dsi_lcd.rst
 api-reference/peripherals/lcd/index.rst
 api-reference/peripherals/lcd/rgb_lcd.rst
@@ -117,7 +115,6 @@ api-reference/peripherals/adc_calibration.rst
 api-reference/peripherals/spi_slave_hd.rst
 api-reference/peripherals/parlio.rst
 api-reference/peripherals/ds.rst
-api-reference/peripherals/i2c.rst
 api-reference/peripherals/sd_pullup_requirements.rst
 api-reference/peripherals/spi_master.rst
 api-reference/peripherals/index.rst
@@ -152,13 +149,8 @@ api-reference/system/esp_timer.rst
 api-reference/system/system_time.rst
 api-reference/system/power_management.rst
 api-reference/system/inc/show-efuse-table_ESP32-C61.rst
-api-reference/system/inc/espefuse_summary_ESP32-P4.rst
 api-reference/system/inc/power_management_esp32.rst
-api-reference/system/inc/espefuse_summary_ESP32-H2.rst
-api-reference/system/inc/espefuse_summary_ESP32-S2.rst
 api-reference/system/inc/power_management_esp32c61.rst
-api-reference/system/inc/espefuse_summary_ESP32-C2.rst
-api-reference/system/inc/espefuse_summary_ESP32-C3.rst
 api-reference/system/inc/show-efuse-table_ESP32-C5.rst
 api-reference/system/inc/revisions_ESP32-H2.rst
 api-reference/system/inc/revisions_ESP32-C6.rst

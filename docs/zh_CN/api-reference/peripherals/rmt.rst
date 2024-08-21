@@ -221,7 +221,7 @@ RMT 发射器可以生成载波信号，并将其调制到消息信号上。载�
 
 - :cpp:member:`rmt_rx_done_event_data_t::received_symbols` 指向接收到的 RMT 符号，这些符号存储在 :cpp:func:`rmt_receive` 函数的 ``buffer`` 参数中，在回调函数返回前不应释放此接收缓冲区。如果你还启用了部分接收的功能，则这个用户缓冲区会被用作“二级缓冲区”，其中的内容可以被随后传入的数据覆盖。在这种情况下，如果你想要保存或者稍后处理一些数据，则需要将接收到的数据复制到其他位置。
 - :cpp:member:`rmt_rx_done_event_data_t::num_symbols` 表示接收到的 RMT 符号数量，该值不会超过 :cpp:func:`rmt_receive` 函数的 ``buffer_size`` 参数。如果 ``buffer_size`` 不足以容纳所有接收到的 RMT 符号，驱动程序将只保存缓冲区能够容纳的最大数量的符号，并丢弃或忽略多余的符号。
-- :cpp:member:`rmt_rx_done_event_data_t::is_last` 指示收到的数据包是否是当前的接收任务中的最后一个。这个标志在你使能 :cpp:member:`rmt_receive_config_t::extra_flags::en_partial_rx` 部分接收功能时非常有用。
+- :cpp:member:`rmt_rx_done_event_data_t::is_last` 指示收到的数据包是否是当前的接收任务中的最后一个。这个标志在你使能 :cpp:member:`rmt_receive_config_t::extra_rmt_receive_flags::en_partial_rx` 部分接收功能时非常有用。
 
 .. _rmt-enable-and-disable-channel:
 
@@ -333,7 +333,7 @@ RMT 是一种特殊的通信外设，无法像 SPI 和 I2C 那样发送原始字
 
 - :cpp:member:`rmt_receive_config_t::signal_range_min_ns` 指定高电平或低电平有效脉冲的最小持续时间。如果脉冲宽度小于指定值，硬件会将其视作干扰信号并忽略。
 - :cpp:member:`rmt_receive_config_t::signal_range_max_ns` 指定高电平或低电平有效脉冲的最大持续时间。如果脉冲宽度大于指定值，接收器会将其视作 **停止信号**，并立即生成接收完成事件。
-- 如果传入的数据包很长，无法一次性保存在用户缓冲区中，可以通过将 :cpp:member:`rmt_receive_config_t::extra_flags::en_partial_rx` 设置为 ``true`` 来开启部分接收功能。在这种情况下，当用户缓冲区快满的时候，驱动会多次调用 :cpp:member:`rmt_rx_event_callbacks_t::on_recv_done` 回调函数来通知用户去处理已经收到的数据。你可以检查 :cpp:member::`rmt_rx_done_event_data_t::is_last` 的值来了解当前事务是否已经结束。请注意，并不是所有 ESP 系列芯片都支持这个功能，它依赖硬件提供的 “ping-pong 接收” 或者 “DMA 接收” 的能力。
+- 如果传入的数据包很长，无法一次性保存在用户缓冲区中，可以通过将 :cpp:member:`rmt_receive_config_t::extra_rmt_receive_flags::en_partial_rx` 设置为 ``true`` 来开启部分接收功能。在这种情况下，当用户缓冲区快满的时候，驱动会多次调用 :cpp:member:`rmt_rx_event_callbacks_t::on_recv_done` 回调函数来通知用户去处理已经收到的数据。你可以检查 :cpp:member::`rmt_rx_done_event_data_t::is_last` 的值来了解当前事务是否已经结束。请注意，并不是所有 ESP 系列芯片都支持这个功能，它依赖硬件提供的 “ping-pong 接收” 或者 “DMA 接收” 的能力。
 
 根据以上配置调用 :cpp:func:`rmt_receive` 后，RMT 接收器会启动 RX 机制。注意，以上配置均针对特定事务存在，也就是说，要开启新一轮的接收时，需要再次设置 :cpp:type:`rmt_receive_config_t` 选项。接收器会将传入信号以 :cpp:type:`rmt_symbol_word_t` 的格式保存在内部内存块或 DMA 缓冲区中。
 
@@ -600,12 +600,16 @@ Kconfig 选项
 应用示例
 --------------------
 
-* 基于 RMT 的 RGB LED 灯带自定义编码器：:example:`peripherals/rmt/led_strip`
-* RMT 红外 NEC 协议的编码与解码：:example:`peripherals/rmt/ir_nec_transceiver`
-* 队列中的 RMT 事务：:example:`peripherals/rmt/musical_buzzer`
-* 基于 RMT 的步进电机与 S 曲线算法：: :example:`peripherals/rmt/stepper_motor`
-* 用于驱动 DShot ESC 的 RMT 无限循环：:example:`peripherals/rmt/dshot_esc`
-* 模拟 1-wire 协议的 RMT 实现（以 DS18B20 为例）：:example:`peripherals/rmt/onewire`
+.. list::
+
+    - :example:`peripherals/rmt/led_strip` 演示了如何使用 RMT 外设来驱动 WS2812 LED 灯带，支持设置 LED 的数量和追踪灯效。
+    - :example:`peripherals/rmt/led_strip_simple_encoder` 演示了如何使用 RMT 外设，通过编写回调函数将 RGB 像素转换为硬件可识别的格式，用于控制 WS2812 LED 灯带。
+    - :example:`peripherals/rmt/ir_nec_transceiver` 演示了如何使用 RMT 外设实现红外遥控 NEC 协议的编解码。
+    - :example:`peripherals/rmt/dshot_esc` 演示了如何使用 RMT 外设的 TX 通道实现无限循环发送功能，自定义了 RMT 编码器 实现了 DShot 数字协议。该协议主要用于飞控器和电调之间的通信，比传统的模拟协议更能抵抗电噪声。
+    - :example:`peripherals/rmt/onewire` 演示了如何使用 `onewire_bus` 库模拟 1-wire 硬件协议，并读取总线上多个 DS18B20 温度传感器的数据。该库构建于 RMT 外设的一对发送和接收通道之上。
+    :SOC_RMT_SUPPORT_TX_LOOP_COUNT: - :example:`peripherals/rmt/musical_buzzer` 演示了如何使用 RMT 外设的 TX 通道驱动无源蜂鸣器播放简单的音乐。每个音符用恒定频率的 PWM 信号和恒定持续时间表示。
+    :SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP: - :example:`peripherals/rmt/stepper_motor` 演示了如何使用 RMT 外设驱动 STEP/DIR 接口的步进电机控制器（例如 DRV8825），通过自定义 RMT 编码器实现加速、匀速和减速阶段的 S 曲线控制，从而平稳驱动步进电机。
+
 
 FAQ
 ---

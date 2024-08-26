@@ -2153,7 +2153,7 @@ int esp_netif_get_all_ip6(esp_netif_t *esp_netif, esp_ip6_addr_t if_ip6[])
 
     if (p_netif != NULL && netif_is_up(p_netif)) {
         for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
-            if (!ip_addr_cmp(&p_netif->ip6_addr[i], IP6_ADDR_ANY)) {
+            if (ip6_addr_isvalid(netif_ip6_addr_state(p_netif, i)) && !ip_addr_cmp(&p_netif->ip6_addr[i], IP6_ADDR_ANY)) {
                 memcpy(&if_ip6[addr_count++], &p_netif->ip6_addr[i], sizeof(ip6_addr_t));
             }
         }
@@ -2623,8 +2623,15 @@ static esp_err_t esp_netif_add_ip6_address_api(esp_netif_api_msg_t *msg)
     return error;
 }
 
-esp_err_t esp_netif_add_ip6_address(esp_netif_t *esp_netif, const ip_event_add_ip6_t *addr)
+static esp_err_t esp_netif_add_ip6_address_priv(esp_netif_t *esp_netif, const ip_event_add_ip6_t *addr)
     _RUN_IN_LWIP_TASK(esp_netif_add_ip6_address_api, esp_netif, addr)
+
+esp_err_t esp_netif_add_ip6_address(esp_netif_t *esp_netif, const esp_ip6_addr_t addr, bool preferred)
+{
+    const ip_event_add_ip6_t addr_evt = {.addr = addr, .preferred = preferred};
+
+    return esp_netif_add_ip6_address_priv(esp_netif, &addr_evt);
+}
 
 static esp_err_t esp_netif_remove_ip6_address_api(esp_netif_api_msg_t *msg)
 {

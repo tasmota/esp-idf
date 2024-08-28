@@ -46,7 +46,7 @@
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
-//  \#define SOC_BOD_SUPPORTED               1    //TODO: [ESP32C61] IDF-9254
+#define SOC_BOD_SUPPORTED               1
 //  \#define SOC_APM_SUPPORTED               1    //TODO: [ESP32C61] IDF-9230
 #define SOC_PMU_SUPPORTED               1    //TODO: [ESP32C61] IDF-9250
 //  \#define SOC_LP_TIMER_SUPPORTED          1    //TODO: [ESP32C61] IDF-9244
@@ -68,6 +68,7 @@
 //  \#define SOC_LP_I2C_SUPPORTED            0    //TODO: [ESP32C61] IDF-9330, IDF-9337
 //  \#define SOC_PM_SUPPORTED                1
 #define SOC_ECDSA_SUPPORTED             1
+#define SOC_SPIRAM_SUPPORTED            1
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
 
@@ -161,10 +162,11 @@
 // ESP32-C61 has 1 GPIO peripheral
 #define SOC_GPIO_PORT                      1U
 #define SOC_GPIO_PIN_COUNT                 22
-//  \#define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1 //TODO: [ESP32C61] IDF-9340
+#define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1
+#define SOC_GPIO_SUPPORT_PIN_HYS_FILTER    1
 
 // GPIO peripheral has the ETM extension
-//  \#define SOC_GPIO_SUPPORT_ETM          1  //TODO: [ESP32C61] IDF-9340
+//  \#define SOC_GPIO_SUPPORT_ETM          1  //TODO: [ESP32C61] IDF-9318
 
 // Target has the full LP IO subsystem
 // On ESP32-C61, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.

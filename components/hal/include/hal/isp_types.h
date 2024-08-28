@@ -63,6 +63,22 @@ typedef enum {
     ISP_COLOR_YUV420 = COLOR_TYPE_ID(COLOR_SPACE_YUV, COLOR_PIXEL_YUV420), ///< YUV420
 } isp_color_t;
 
+/**
+ * @brief ISP color range
+ */
+typedef enum {
+    ISP_COLOR_RANGE_LIMIT = COLOR_RANGE_LIMIT, /*!< Limited color range */
+    ISP_COLOR_RANGE_FULL = COLOR_RANGE_FULL,   /*!< Full color range */
+} isp_color_range_t;
+
+/**
+ * @brief The standard used for conversion between RGB and YUV
+ */
+typedef enum {
+    ISP_YUV_CONV_STD_BT601 = COLOR_CONV_STD_RGB_YUV_BT601, /*!< YUV<->RGB conversion standard: BT.601 */
+    ISP_YUV_CONV_STD_BT709 = COLOR_CONV_STD_RGB_YUV_BT709, /*!< YUV<->RGB conversion standard: BT.709 */
+} isp_yuv_conv_std_t;
+
 /*---------------------------------------------------------------
                       AE
 ---------------------------------------------------------------*/
@@ -99,7 +115,6 @@ typedef enum {
 
 /**
  * @brief ISP AWB sample point in the ISP pipeline
- *
  */
 typedef enum {
     ISP_AWB_SAMPLE_POINT_BEFORE_CCM,       ///< Sample AWB data before CCM (Color Correction Matrix)
@@ -176,7 +191,7 @@ typedef union {
         uint32_t integer:ISP_SHARPEN_H_FREQ_COEF_INT_BITS;    ///< Decimal part
         uint32_t reserved:ISP_SHARPEN_H_FREQ_COEF_RES_BITS;   ///< Reserved
     };
-    uint32_t val;
+    uint32_t val;                                             ///< 32-bit high freq pixel sharpeness coeff register value
 } isp_sharpen_h_freq_coeff;
 
 /**
@@ -188,7 +203,7 @@ typedef union {
         uint32_t integer:ISP_SHARPEN_M_FREQ_COEF_INT_BITS;    ///< Decimal part
         uint32_t reserved:ISP_SHARPEN_M_FREQ_COEF_RES_BITS;   ///< Reserved
     };
-    uint32_t val;
+    uint32_t val;                                             ///< 32-bit medium freq pixel sharpeness coeff register value
 } isp_sharpen_m_freq_coeff;
 
 /**
@@ -198,6 +213,27 @@ typedef enum {
     ISP_SHARPEN_EDGE_PADDING_MODE_SRND_DATA,      ///< Fill Sharpen edge padding data with surrounding pixel data
     ISP_SHARPEN_EDGE_PADDING_MODE_CUSTOM_DATA,    ///< Fill Sharpen edge padding data with custom pixel data
 } isp_sharpen_edge_padding_mode_t;
+
+/*---------------------------------------------------------------
+                      Gamma Correction
+---------------------------------------------------------------*/
+#define ISP_GAMMA_CURVE_POINTS_NUM      16      ///< Number of points to define a gamma correction curve
+
+/**
+ * @brief Structure that declares the points on an ISP gamma curve
+ *
+ * Constraint on pt[n].x:
+ *  When n = 0, pt[n].x = 2 ^ a[n]
+ *  When 0 < n < ISP_GAMMA_CURVE_POINTS_NUM-1, pt[n].x - pt[n-1].x = 2 ^ a[n]
+ *  When n = ISP_GAMMA_CURVE_POINTS_NUM-1, pt[n].x = 255, (pt[n].x + 1) - pt[n-1].x = 2 ^ a[n]
+ *  a[n] within [0, 7]
+ */
+typedef struct {
+    struct {
+        uint8_t x;                      ///< Raw value (0, 255]
+        uint8_t y;                      ///< gamma-corrected value (0, 255]
+    } pt[ISP_GAMMA_CURVE_POINTS_NUM];   ///< Point (x, y)
+} isp_gamma_curve_points_t;
 
 #ifdef __cplusplus
 }

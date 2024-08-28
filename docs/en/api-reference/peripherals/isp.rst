@@ -4,7 +4,7 @@ Image Signal Processor
 Introduction
 ------------
 
-{IDF_TARGET_NAME} includes an Image Signal Processor (ISP), which is a feature pipeline that consists of many image processing algorithms. ISP receives image data from the DVP camera or MIPI-CSI camera, or system memory, and writes the processed image data to the system memory through DMA. ISP shall work with other modules to read and write data, it can not work alone.
+{IDF_TARGET_NAME} includes an Image Signal Processor (ISP), which is a feature pipeline that consists of many image processing algorithms. ISP receives image data from the DVP camera or MIPI-CSI camera, or system memory, and writes the processed image data to the system memory through DMA. The ISP is designed to work with other camera controller modules and cannot operate independently.
 
 Terminology
 -----------
@@ -40,16 +40,16 @@ ISP Pipeline
         isp_chs [label = "Contrast &\n Hue & Saturation", width = 150, height = 70];
         isp_yuv [label = "YUV Limit\nYUB2RGB", width = 120, height = 70];
 
-        isp_header -> BF -> Demosaic -> CCM -> RGB2YUV -> isp_chs -> isp_yuv -> isp_tail;
+        isp_header -> BF -> Demosaic -> CCM -> Gamma -> RGB2YUV -> SHARP -> isp_chs -> isp_yuv -> isp_tail;
 
         BF -> HIST
         Demosaic -> AWB
         Demosaic -> AE
         Demosaic -> HIST
         CCM -> AWB
-        CCM -> AE
+        Gamma -> AE
         RGB2YUV -> HIST
-        RGB2YUV -> AF
+        SHARP -> AF
     }
 
 Functional Overview
@@ -60,9 +60,12 @@ The ISP driver offers following services:
 -  `Resource Allocation <#isp-resource-allocation>`__ - covers how to allocate ISP resources with properly set of configurations. It also covers how to recycle the resources when they finished working.
 -  `Enable and disable ISP processor <#isp-enable-disable>`__ - covers how to enable and disable an ISP processor.
 -  `Get AF statistics in one shot or continuous way <#isp-af-statistics>`__ - covers how to get AF statistics one-shot or continuously.
+-  `Get AE statistics in one shot or continuous way <#isp-ae-statistics>`__ - covers how to get AE statistics one-shot or continuously.
 -  `Get AWB statistics in one shot or continuous way <#isp-awb-statistics>`__ - covers how to get AWB white patches statistics one-shot or continuously.
--  `Enable BF function <#isp_bf>`__ - covers how to enable and configure BF function.
+-  `Enable BF function <#isp-bf>`__ - covers how to enable and configure BF function.
 -  `Configure CCM <#isp-ccm-config>`__ - covers how to config the Color Correction Matrix.
+-  `Enable Gamma Correction <#isp-gamma-correction>`__ - covers how to enable and configure gamma correction.
+-  `Configure Sharpen <#isp-sharpen>`__ - covers how to config the Sharpen function.
 -  `Register callback <#isp-callback>`__ - covers how to hook user specific code to ISP driver event callback function.
 -  `Thread Safety <#isp-thread-safety>`__ - lists which APIs are guaranteed to be thread safe by the driver.
 -  `Kconfig Options <#isp-kconfig-options>`__ - lists the supported Kconfig options that can bring different effects to the driver.
@@ -391,7 +394,7 @@ Note that if you want to use the continuous statistics, you need to register the
     /* Delete the awb controller and free the resources */
     ESP_ERROR_CHECK(esp_isp_del_awb_controller(awb_ctlr));
 
-.. _isp_bf:
+.. _isp-bf:
 
 ISP BF Processor
 ~~~~~~~~~~~~~~~~
@@ -404,6 +407,11 @@ Calling :cpp:func:`esp_isp_bf_configure` to configure BF function, you can take 
 
     esp_isp_bf_config_t bf_config = {
         .denoising_level = 5,
+        .bf_template = {
+            {1, 2, 1},
+            {2, 4, 2},
+            {1, 2, 1},
+        },
         ...
     };
     ESP_ERROR_CHECK(esp_isp_bf_configure(isp_proc, &bf_config));
@@ -416,6 +424,7 @@ After calling :cpp:func:`esp_isp_bf_configure`, you need to enable the ISP BF pr
 * Switches the driver state from **init** to **enable**.
 
 Calling :cpp:func:`esp_isp_bf_disable` does the opposite, that is, put the driver back to the **init** state.
+
 .. _isp-ccm-config:
 
 Configure CCM
@@ -457,18 +466,98 @@ To adjust the color correction matrix, here is the formula:
     // Disable CCM if no longer needed
     ESP_ERROR_CHECK(esp_isp_ccm_disable(isp_proc));
 
+.. _isp-gamma-correction:
+
+Enable Gamma Correction
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The human visual system is non-linearly sensitive to the physical luminance. Adding gamma correction to the ISP pipeline to transforms RGB coordinates into a space in which coordinates are proportional to subjective brightness.
+
+The driver provides a helper API :cpp:func:`esp_isp_gamma_fill_curve_points` to fill :cpp:type:`isp_gamma_curve_points_t`, which is a group of points used to describe the gamma correction curve. Or you can manually declare the points as your desired 'gamma' correction curve. Each R / G / B component can have its own gamma correction curve, you can set the configuration by calling :cpp:func:`esp_isp_gamma_configure`.
+
+A typical code example is:
+
+.. code:: c
+
+    #include <math.h>
+
+    // Set the camera gamma to be 0.7, so the gamma correction curve is y = 256 * (x / 256) ^ 0.7
+    static uint32_t s_gamma_curve(uint32_t x)
+    {
+        return pow((double)x / 256, 0.7) * 256;
+    }
+
+    isp_gamma_curve_points_t pts = {};
+    ESP_ERROR_CHECK(esp_isp_gamma_fill_curve_points(s_gamma_curve, &pts));
+    ESP_ERROR_CHECK(esp_isp_gamma_configure(isp_proc, COLOR_COMPONENT_R, &pts));
+    ESP_ERROR_CHECK(esp_isp_gamma_configure(isp_proc, COLOR_COMPONENT_G, &pts));
+    ESP_ERROR_CHECK(esp_isp_gamma_configure(isp_proc, COLOR_COMPONENT_B, &pts));
+
+    // Enable gamma module after curve parameters configured
+    ESP_ERROR_CHECK(esp_isp_gamma_enable(isp_proc));
+
+    // Disable gamma if no longer needed
+    ESP_ERROR_CHECK(esp_isp_gamma_disable(isp_proc));
+
+.. _isp-sharpen:
+
+ISP Sharpen Processor
+~~~~~~~~~~~~~~~~~~~~~
+
+This pipeline is used for doing image input sharpening under YUV mode.
+
+Calling :cpp:func:`esp_isp_sharpen_configure` to configure BF function, you can take following code as reference.
+
+.. code:: c
+
+    esp_isp_sharpen_config_t sharpen_config = {
+        .h_thresh = 255,
+        .sharpen_template = {
+            {1, 2, 1},
+            {2, 4, 2},
+            {1, 2, 1},
+        },
+        ...
+    };
+    ESP_ERROR_CHECK(esp_isp_sharpen_configure(isp_proc, &sharpen_config));
+    ESP_ERROR_CHECK(esp_isp_sharpen_enable(isp_proc));
+
+:cpp:member:`esp_isp_sharpen_config_t::sharpen_template` is used for sharpening. You can set the :cpp:member:`esp_isp_sharpen_config_t::sharpen_template` with a Gaussian filter template or an average filter template.
+
+After calling :cpp:func:`esp_isp_sharpen_configure`, you need to enable the ISP Sharpen processor, by calling :cpp:func:`esp_isp_sharpen_enable`. This function:
+
+* Switches the driver state from **init** to **enable**.
+
+Calling :cpp:func:`esp_isp_sharpen_disable` does the opposite, that is, put the driver back to the **init** state.
+
+:cpp:func:`esp_isp_sharpen_configure` is allowed to be called even if the driver is in **init** state, but the sharpen configurations will only be taken into effect when in **enable** state.
+
+
 .. _isp-callback:
 
 Register Event Callbacks
 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    The below mentioned callback functions are called within an ISR context, you must ensure that the functions do not attempt to block (e.g., by making sure that only FreeRTOS APIs with ``ISR`` suffix are called from within the function).
+
+Register ISP Processor Event Callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After the ISP processor is enabled, it can generate multiple events of multiple ISP submodules dynamically. You can hook your functions to the interrupt service routine by calling :cpp:func:`esp_isp_register_event_callbacks`. All supported event callbacks are listed in :cpp:type:`esp_isp_evt_cbs_t`:
+
+- :cpp:member:`esp_isp_evt_cbs_t::on_sharpen_frame_done`. sets a callback function for sharpen frame done. It will be called after the ISP sharpen submodule finishes its operation for one frame. The function prototype is declared in :cpp:type:`esp_isp_sharpen_callback_t`.
+
+You can save your own context to :cpp:func:`esp_isp_register_event_callbacks` as well, via the parameter ``user_data``. The user data will be directly passed to the callback function.
 
 Register ISP AF Environment Detector Event Callbacks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 After the ISP AF environment detector starts up, it can generate a specific event dynamically. If you have some functions that should be called when the event happens, please hook your function to the interrupt service routine by calling :cpp:func:`esp_isp_af_env_detector_register_event_callbacks`. All supported event callbacks are listed in :cpp:type:`esp_isp_af_env_detector_evt_cbs_t`:
 
--  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_statistics_done` sets a callback function for environment statistics done. As this function is called within the ISR context, you must ensure that the function does not attempt to block (e.g., by making sure that only FreeRTOS APIs with ``ISR`` suffix are called from within the function). The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
--  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_change` sets a callback function for environment change. As this function is called within the ISR context, you must ensure that the function does not attempt to block (e.g., by making sure that only FreeRTOS APIs with ``ISR`` suffix are called from within the function). The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
+-  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_statistics_done` sets a callback function for environment statistics done. The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
+-  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_change` sets a callback function for environment change. The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
 
 You can save your own context to :cpp:func:`esp_isp_af_env_detector_register_event_callbacks` as well, via the parameter ``user_data``. The user data will be directly passed to the callback function.
 
@@ -477,7 +566,7 @@ Register ISP AWB Statistics Done Event Callbacks
 
 After the ISP AWB controller finished statistics of white patches, it can generate a specific event dynamically. If you want to be informed when the statistics done event takes place, please hook your function to the interrupt service routine by calling :cpp:func:`esp_isp_awb_register_event_callbacks`. All supported event callbacks are listed in :cpp:type:`esp_isp_awb_cbs_t`:
 
--  :cpp:member:`esp_isp_awb_cbs_t::on_statistics_done` sets a callback function when finished statistics of the white patches. As this function is called within the ISR context, you must ensure that the function does not attempt to block (e.g., by making sure that only FreeRTOS APIs with ``ISR`` suffix are called from within the function). The function prototype is declared in :cpp:type:`esp_isp_awb_callback_t`.
+-  :cpp:member:`esp_isp_awb_cbs_t::on_statistics_done` sets a callback function when finished statistics of the white patches. The function prototype is declared in :cpp:type:`esp_isp_awb_callback_t`.
 
 You can save your own context via the parameter ``user_data`` of :cpp:func:`esp_isp_awb_register_event_callbacks`. The user data will be directly passed to the callback function.
 
@@ -502,13 +591,23 @@ IRAM Safe
 
 By default, the ISP interrupt will be deferred when the cache is disabled because of writing or erasing the flash.
 
-There is a Kconfig option :ref:`CONFIG_ISP_ISR_IRAM_SAFE` that:
+Kconfig option :ref:`CONFIG_ISP_ISR_IRAM_SAFE` will:
 
--  Enables the interrupt being serviced even when the cache is disabled
--  Places all functions that used by the ISR into IRAM
--  Places driver object into DRAM (in case it is mapped to PSRAM by accident)
+-  Enable the interrupt being serviced even when the cache is disabled
+-  Place all functions that used by the ISR into IRAM
+-  Place driver object into DRAM (in case it is mapped to PSRAM by accident)
 
-This allows the interrupt to run while the cache is disabled, but comes at the cost of increased IRAM consumption.
+This allows the interrupt to run while the cache is disabled, but comes at the cost of increased IRAM consumption. With this option enabled, the ISR callbacks will be running when cache is disabled. Therefore you should make sure the callbacks and its involved context are IRAM-safe as well.
+
+Kconfig option :ref:`CONFIG_ISP_CTRL_FUNC_IN_IRAM` will:
+
+- Place some of ISP control functions into IRAM, function list:
+  - :cpp:func:`esp_isp_sharpen_configure`
+
+Application Examples
+--------------------
+
+* :example:`peripherals/isp/multi_pipelines` demonstrates how to use the ISP pipelines to process the image signals from camera sensors and display the video on LCD screen via DSI peripheral.
 
 API Reference
 -------------
@@ -516,3 +615,9 @@ API Reference
 .. include-build-file:: inc/isp.inc
 .. include-build-file:: inc/isp_types.inc
 .. include-build-file:: inc/isp_af.inc
+.. include-build-file:: inc/isp_ae.inc
+.. include-build-file:: inc/isp_awb.inc
+.. include-build-file:: inc/isp_bf.inc
+.. include-build-file:: inc/isp_ccm.inc
+.. include-build-file:: inc/isp_sharpen.inc
+.. include-build-file:: inc/isp_gamma.inc

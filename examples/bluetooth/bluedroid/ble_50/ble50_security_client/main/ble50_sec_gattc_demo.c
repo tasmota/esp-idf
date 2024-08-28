@@ -430,7 +430,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     }
     case ESP_GAP_BLE_EXT_SCAN_START_COMPLETE_EVT:
         if (param->ext_scan_start.status != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(GATTC_TAG, "scan start failed, error status = %x", param->scan_start_cmpl.status);
+            ESP_LOGE(GATTC_TAG, "scan start failed, error status = %x", param->ext_scan_start.status);
             break;
         }
         ESP_LOGI(GATTC_TAG, "Scan start success");
@@ -494,8 +494,10 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         } else {
             ESP_LOGI(GATTC_TAG, "extend adv, adv type 0x%x data len %d", param->ext_adv_report.params.event_type, param->ext_adv_report.params.adv_data_len);
         }
-        adv_name = esp_ble_resolve_adv_data(param->ext_adv_report.params.adv_data,
-                                            ESP_BLE_AD_TYPE_NAME_CMPL, &adv_name_len);
+        adv_name = esp_ble_resolve_adv_data_by_type(param->ext_adv_report.params.adv_data,
+                                            param->ext_adv_report.params.adv_data_len,
+                                            ESP_BLE_AD_TYPE_NAME_CMPL,
+                                            &adv_name_len);
         if (!connect && strlen(remote_device_name) == adv_name_len && strncmp((char *)adv_name, remote_device_name, adv_name_len) == 0) {
             connect = true;
             esp_ble_gap_stop_ext_scan();

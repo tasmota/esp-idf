@@ -169,17 +169,39 @@ bool isp_hal_ccm_set_matrix(const isp_hal_context_t *hal, bool saturation, const
 }
 
 /*---------------------------------------------------------------
-                      INTR, put in iram
+                      Demosaic
 ---------------------------------------------------------------*/
-uint32_t isp_hal_check_clear_intr_event(const isp_hal_context_t *hal, uint32_t mask)
+void isp_hal_demosaic_config(isp_hal_context_t *hal, isp_hal_demosaic_cfg_t *config)
 {
-    uint32_t triggered_events = isp_ll_get_intr_status(hal->hw) & mask;
-
-    if (triggered_events) {
-        isp_ll_clear_intr(hal->hw, triggered_events);
+    if (config) {
+        isp_ll_demosaic_set_grad_ratio(hal->hw, config->grad_ratio);
+        isp_ll_demosaic_set_padding_mode(hal->hw, config->padding_mode);
+        isp_ll_demosaic_set_padding_data(hal->hw, config->padding_data);
+        isp_ll_demosaic_set_padding_line_tail_valid_start_pixel(hal->hw, config->padding_line_tail_valid_start_pixel);
+        isp_ll_demosaic_set_padding_line_tail_valid_end_pixel(hal->hw, config->padding_line_tail_valid_end_pixel);
+    } else {
+        isp_demosaic_grad_ratio_t grad_ratio = {};
+        isp_ll_demosaic_set_grad_ratio(hal->hw, grad_ratio);
+        isp_ll_demosaic_set_padding_mode(hal->hw, 0);
+        isp_ll_demosaic_set_padding_data(hal->hw, 0);
+        isp_ll_demosaic_set_padding_line_tail_valid_start_pixel(hal->hw, 0);
+        isp_ll_demosaic_set_padding_line_tail_valid_end_pixel(hal->hw, 0);
     }
+}
 
-    return triggered_events;
+/*---------------------------------------------------------------
+                      Histogram
+---------------------------------------------------------------*/
+void isp_hal_hist_window_config(isp_hal_context_t *hal, const isp_window_t *window)
+{
+    uint32_t hist_x_start = window->top_left.x;
+    uint32_t hist_x_bsize = (window->btm_right.x - window-> top_left.x) / SOC_ISP_HIST_BLOCK_X_NUMS;
+
+    uint32_t hist_y_start = window->top_left.y;
+    uint32_t hist_y_bsize = (window->btm_right.y - window->top_left.y) / SOC_ISP_HIST_BLOCK_Y_NUMS;
+
+    isp_ll_hist_set_window_range(hal->hw, hist_x_start, hist_x_bsize, hist_y_start, hist_y_bsize);
+
 }
 
 /*---------------------------------------------------------------
@@ -201,7 +223,7 @@ void isp_hal_sharpen_config(isp_hal_context_t *hal, isp_hal_sharpen_cfg_t *confi
         isp_ll_sharp_set_low_thresh(hal->hw, 0);
         isp_ll_sharp_set_high_thresh(hal->hw, 0);
         isp_sharpen_m_freq_coeff m_freq = {};
-        isp_sharpen_h_freq_coeff h_freq = {};
+        isp_sharpen_h_freq_coeff_t h_freq = {};
         isp_ll_sharp_set_medium_freq_coeff(hal->hw, m_freq);
         isp_ll_sharp_set_high_freq_coeff(hal->hw, h_freq);
         isp_ll_sharp_set_padding_mode(hal->hw, 0);
@@ -212,4 +234,18 @@ void isp_hal_sharpen_config(isp_hal_context_t *hal, isp_hal_sharpen_cfg_t *confi
         memset(default_template, 0, sizeof(default_template));
         isp_ll_sharp_set_template(hal->hw, default_template);
     }
+}
+
+/*---------------------------------------------------------------
+                      INTR, put in iram
+---------------------------------------------------------------*/
+uint32_t isp_hal_check_clear_intr_event(const isp_hal_context_t *hal, uint32_t mask)
+{
+    uint32_t triggered_events = isp_ll_get_intr_status(hal->hw) & mask;
+
+    if (triggered_events) {
+        isp_ll_clear_intr(hal->hw, triggered_events);
+    }
+
+    return triggered_events;
 }

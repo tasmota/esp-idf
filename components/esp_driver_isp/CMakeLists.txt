@@ -14,11 +14,16 @@ if(CONFIG_SOC_ISP_SUPPORTED)
                      "src/isp_ccm.c"
                      "src/isp_awb.c"
                      "src/isp_ae.c"
-                     "src/isp_gamma.c")
+                     "src/isp_gamma.c"
+                     "src/isp_hist.c")
 endif()
 
 if(CONFIG_SOC_ISP_BF_SUPPORTED)
     list(APPEND srcs "src/isp_bf.c")
+endif()
+
+if(CONFIG_SOC_ISP_DEMOSAIC_SUPPORTED)
+    list(APPEND srcs "src/isp_demosaic.c")
 endif()
 
 if(CONFIG_SOC_ISP_SHARPEN_SUPPORTED)

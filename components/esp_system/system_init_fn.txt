@@ -59,7 +59,6 @@ CORE: 113: init_vfs_nullfs in components/vfs/nullfs.c on BIT(0)
 CORE: 114: init_vfs_console in components/esp_vfs_console/vfs_console.c on BIT(0)
 CORE: 115: init_newlib_stdio in components/newlib/newlib_init.c on BIT(0)
 
-CORE: 120: init_pthread in components/pthread/pthread.c on BIT(0)
 CORE: 130: init_flash in components/esp_system/startup_funcs.c on BIT(0)
 CORE: 140: init_efuse in components/efuse/src/esp_efuse_startup.c on BIT(0)
 CORE: 170: init_xt_wdt in components/esp_system/startup_funcs.c on BIT(0)
@@ -81,8 +80,12 @@ SECONDARY: 103: esp_security_init in components/esp_security/src/init.c on BIT(0
 
 # esp_sleep doesn't have init dependencies
 SECONDARY: 105: esp_sleep_startup_init in components/esp_hw_support/sleep_gpio.c on BIT(0)
-SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/sleep_clock.c on BIT(0)
+SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32c5/sleep_clock.c on BIT(0)
+SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32c6/sleep_clock.c on BIT(0)
+SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32h2/sleep_clock.c on BIT(0)
+SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32p4/sleep_clock.c on BIT(0)
 SECONDARY: 107: sleep_sys_periph_startup_init in components/esp_hw_support/sleep_system_peripheral.c on BIT(0)
+SECONDARY: 108: sleep_mmu_startup_init in components/esp_hw_support/lowpower/port/esp32c5/sleep_mmu.c on BIT(0)
 
 # app_trace has to be initialized before systemview
 SECONDARY: 115: esp_apptrace_init in components/app_trace/app_trace.c on ESP_SYSTEM_INIT_ALL_CORES

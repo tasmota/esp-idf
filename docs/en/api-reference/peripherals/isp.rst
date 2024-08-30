@@ -62,8 +62,10 @@ The ISP driver offers following services:
 -  `Get AF statistics in one shot or continuous way <#isp-af-statistics>`__ - covers how to get AF statistics one-shot or continuously.
 -  `Get AE statistics in one shot or continuous way <#isp-ae-statistics>`__ - covers how to get AE statistics one-shot or continuously.
 -  `Get AWB statistics in one shot or continuous way <#isp-awb-statistics>`__ - covers how to get AWB white patches statistics one-shot or continuously.
--  `Enable BF function <#isp-bf>`__ - covers how to enable and configure BF function.
--  `Configure CCM <#isp-ccm-config>`__ - covers how to config the Color Correction Matrix.
+-  `Get histogram statistics in one shot or continuous way <#isp-hist-statistics>`__ - covers how to get histogram statistics one-shot or continuously.
+-  `Enable BF function <#isp_bf>`__ - covers how to enable and configure BF function.
+-  `Configure CCM <#isp-ccm-config>`__ - covers how to configure the Color Correction Matrix.
+-  `Configure Demosaic <#isp-demosaic>`__ - covers how to config the Demosaic function.
 -  `Enable Gamma Correction <#isp-gamma-correction>`__ - covers how to enable and configure gamma correction.
 -  `Configure Sharpen <#isp-sharpen>`__ - covers how to config the Sharpen function.
 -  `Register callback <#isp-callback>`__ - covers how to hook user specific code to ISP driver event callback function.
@@ -152,26 +154,61 @@ If the configurations in :cpp:type:`esp_isp_ae_config_t` is specified, users can
 
 You can use the created handle to do driver enable / disable the ISP AE driver and ISP AE environment detector setup.
 
-Uninstall ISP Driver
-~~~~~~~~~~~~~~~~~~~~
+Install ISP histogram (HIST) Driver
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If a previously installed ISP processor is no longer needed, it's recommended to recycle the resource by calling :cpp:func:`esp_isp_del_processor`, so that to release the underlying hardware.
+ISP histogram (HIST) driver requires the configuration that specified by :cpp:type:`esp_isp_hist_config_t`.
 
-UnInstall ISP AF Driver
+If the configurations in :cpp:type:`esp_isp_hist_config_t` is specified, users can call :cpp:func:`esp_isp_new_hist_controller` to allocate and initialize an ISP Histogram processor. This function will return an ISP HIST processor handle if it runs correctly. You can take following code as reference.
+
+.. list::
+
+    - The sum of all subwindows weight's decimal value should be 256 or the statistics will be small, and integer value should be 0.
+    - The sum of all RGB coefficients' decimal value should be 256 or the statistics will be small, and integer value should be 0.
+    - The segment_threshold must be 0 ~ 255 and in order
+
+.. code:: c
+
+    esp_isp_hist_config_t hist_cfg = {
+        .segment_threshold = {16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240},
+        .hist_mode = ISP_HIST_SAMPLING_RGB,
+        .rgb_coefficient.coeff_r = {
+            .integer = 0,
+            .decimal = 86,
+        },
+        .rgb_coefficient.coeff_g = {
+            .integer = 0,
+            .decimal = 85,
+        },
+        .rgb_coefficient.coeff_b = {
+            .integer = 0,
+            .decimal = 85,
+        },
+        .window_weight = {
+            {{16, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}},
+            {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}},
+            {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}},
+            {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}},
+            {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}}, {{10, 0}},
+        },
+    };
+    isp_hist_ctlr_t hist_ctlr_ctlr = NULL;
+    ESP_ERROR_CHECK(esp_isp_new_hist_controller(isp_proc, &hist_config, &hist_ctlr));
+
+You can use the created handle to do driver enable / disable the ISP HIST driver setup.
+
+Uninstall ISP Driver(s)
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-If a previously installed ISP AF processor is no longer needed, it's recommended to recycle the resource by calling :cpp:func:`esp_isp_del_af_controller`, so that to release the underlying hardware.
+If a previously installed ISP driver(s) are not needed, it's recommended to recycle the resource by following APIs to release the underlying hardware:
 
-UnInstall ISP AWB Driver
-~~~~~~~~~~~~~~~~~~~~~~~~
+.. list::
 
-If a previously installed ISP AWB processor is no longer needed, it's recommended to free the resource by calling :cpp:func:`esp_isp_del_awb_controller`, it will also release the underlying hardware.
-
-UnInstall ISP AE Driver
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-If a previously installed ISP AE processor is no longer needed, it's recommended to free the resource by calling :cpp:func:`esp_isp_del_ae_controller`, it will also release the underlying hardware.
-
+    - :cpp:func:`esp_isp_del_processor`, for ISP processor.
+    - :cpp:func:`esp_isp_del_af_controller`, for ISP AF processor.
+    - :cpp:func:`esp_isp_del_awb_controller`, for ISP AWB processor.
+    - :cpp:func:`esp_isp_del_ae_controller`, for ISP AE processor.
+    - :cpp:func:`esp_isp_del_hist_controller`, for ISP Histogram processor.
 
 .. _isp-enable-disable:
 
@@ -394,7 +431,47 @@ Note that if you want to use the continuous statistics, you need to register the
     /* Delete the awb controller and free the resources */
     ESP_ERROR_CHECK(esp_isp_del_awb_controller(awb_ctlr));
 
-.. _isp-bf:
+.. _isp-hist:
+
+ISP histogram Processor
+-----------------------
+
+Before doing ISP histogram statistics, you need to enable the ISP histogram processor first, by calling :cpp:func:`esp_isp_hist_controller_enable`. This function:
+
+* Switches the driver state from **init** to **enable**.
+
+Calling :cpp:func:`esp_isp_hist_controller_disable` does the opposite, that is, put the driver back to the **init** state.
+
+.. _isp-hist-statistics:
+
+Histogram One-shot and Continuous Statistics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Calling :cpp:func:`esp_isp_hist_controller_get_oneshot_statistics` to get oneshot histogram statistics result. You can take following code as reference.
+
+Aside from the above oneshot API, the ISP histogram driver also provides a way to start histogram statistics continuously. Calling :cpp:func:`esp_isp_hist_controller_start_continuous_statistics` starts the continuous statistics and :cpp:func:`esp_isp_hist_controller_stop_continuous_statistics` stops it.
+
+Note that if you want to use the continuous statistics, you need to register the :cpp:member:`esp_isp_hist_cbs_t::on_statistics_done` callback to get the statistics result. See how to register it in `Register Event Callbacks <#isp-callback>`__
+
+.. code:: c
+
+    static bool s_hist_scheme_on_statistics_done_callback(isp_hist_ctlr_t awb_ctrlr, const esp_isp_hist_evt_data_t *edata, void *user_data)
+    {
+        for(int i = 0; i < 16; i++) {
+            esp_rom_printf(DRAM_STR("val %d is %x\n"), i, edata->hist_result.hist_value[i]); // get the histogram statistic value
+        }
+        return true;
+    }
+
+    esp_isp_hist_cbs_t hist_cbs = {
+        .on_statistics_done = s_hist_scheme_on_statistics_done_callback,
+    };
+
+    esp_isp_hist_register_event_callbacks(hist_ctlr, &hist_cbs, hist_ctlr);
+    esp_isp_hist_controller_enable(hist_ctlr);
+
+
+.. _isp_bf:
 
 ISP BF Processor
 ~~~~~~~~~~~~~~~~
@@ -466,6 +543,36 @@ To adjust the color correction matrix, here is the formula:
     // Disable CCM if no longer needed
     ESP_ERROR_CHECK(esp_isp_ccm_disable(isp_proc));
 
+.. _isp-demosaic:
+
+ISP Demosaic Processor
+~~~~~~~~~~~~~~~~~~~~~~
+
+This pipeline is used for doing image demosaic algorithm to convert RAW image to RGB mode.
+
+Calling :cpp:func:`esp_isp_demosaic_configure` to configure Demosaic function, you can take following code as reference.
+
+.. code:: c
+
+    esp_isp_demosaic_config_t demosaic_config = {
+        .grad_ratio = {
+            .integer = 2,
+            .decimal = 5,
+        },
+        ...
+    };
+
+    ESP_ERROR_CHECK(esp_isp_demosaic_configure(isp_proc, &sharpen_config));
+    ESP_ERROR_CHECK(esp_isp_demosaic_enable(isp_proc));
+
+After calling :cpp:func:`esp_isp_demosaic_configure`, you need to enable the ISP Sharpen processor, by calling :cpp:func:`esp_isp_demosaic_enable`. This function:
+
+* Switches the driver state from **init** to **enable**.
+
+Calling :cpp:func:`esp_isp_demosaic_disable` does the opposite, that is, put the driver back to the **init** state.
+
+:cpp:func:`esp_isp_demosaic_configure` is allowed to be called even if the driver is in **init** state, but the demosaic configurations will only be taken into effect when in **enable** state.
+
 .. _isp-gamma-correction:
 
 Enable Gamma Correction
@@ -506,7 +613,7 @@ ISP Sharpen Processor
 
 This pipeline is used for doing image input sharpening under YUV mode.
 
-Calling :cpp:func:`esp_isp_sharpen_configure` to configure BF function, you can take following code as reference.
+Calling :cpp:func:`esp_isp_sharpen_configure` to configure Sharpen function, you can take following code as reference.
 
 .. code:: c
 
@@ -537,6 +644,8 @@ Calling :cpp:func:`esp_isp_sharpen_disable` does the opposite, that is, put the 
 
 Register Event Callbacks
 ^^^^^^^^^^^^^^^^^^^^^^^^
+After an ISP module starts up, it can generate a specific event dynamically.
+You can save your own context to callback function as well, via the parameter ``user_data``. The user data will be directly passed to the callback function.
 
 .. note::
 
@@ -549,8 +658,6 @@ After the ISP processor is enabled, it can generate multiple events of multiple 
 
 - :cpp:member:`esp_isp_evt_cbs_t::on_sharpen_frame_done`. sets a callback function for sharpen frame done. It will be called after the ISP sharpen submodule finishes its operation for one frame. The function prototype is declared in :cpp:type:`esp_isp_sharpen_callback_t`.
 
-You can save your own context to :cpp:func:`esp_isp_register_event_callbacks` as well, via the parameter ``user_data``. The user data will be directly passed to the callback function.
-
 Register ISP AF Environment Detector Event Callbacks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -559,8 +666,6 @@ After the ISP AF environment detector starts up, it can generate a specific even
 -  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_statistics_done` sets a callback function for environment statistics done. The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
 -  :cpp:member:`esp_isp_af_env_detector_evt_cbs_t::on_env_change` sets a callback function for environment change. The function prototype is declared in :cpp:type:`esp_isp_af_env_detector_callback_t`.
 
-You can save your own context to :cpp:func:`esp_isp_af_env_detector_register_event_callbacks` as well, via the parameter ``user_data``. The user data will be directly passed to the callback function.
-
 Register ISP AWB Statistics Done Event Callbacks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -568,14 +673,44 @@ After the ISP AWB controller finished statistics of white patches, it can genera
 
 -  :cpp:member:`esp_isp_awb_cbs_t::on_statistics_done` sets a callback function when finished statistics of the white patches. The function prototype is declared in :cpp:type:`esp_isp_awb_callback_t`.
 
-You can save your own context via the parameter ``user_data`` of :cpp:func:`esp_isp_awb_register_event_callbacks`. The user data will be directly passed to the callback function.
+
+Register ISP AE Environment Detector Event Callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After the ISP AE environment detector starts up, it can generate a specific event dynamically. If you have some functions that should be called when the event happens, please hook your function to the interrupt service routine by calling :cpp:func:`esp_isp_ae_env_detector_register_event_callbacks`. All supported event callbacks are listed in :cpp:type:`esp_isp_ae_env_detector_evt_cbs_t`:
+
+-  :cpp:member:`esp_isp_ae_env_detector_evt_cbs_t::on_env_statistics_done` sets a callback function for environment statistics done. . The function prototype is declared in :cpp:type:`esp_isp_ae_env_detector_callback_t`.
+-  :cpp:member:`esp_isp_ae_env_detector_evt_cbs_t::on_env_change` sets a callback function for environment change. . The function prototype is declared in :cpp:type:`esp_isp_ae_env_detector_callback_t`.
+
+
+Register ISP HIST Statistics Done Event Callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After the ISP HIST controller finished statistics of brightness, it can generate a specific event dynamically. If you want to be informed when the statistics done event takes place, please hook your function to the interrupt service routine by calling :cpp:func:`esp_isp_hist_register_event_callbacks`. All supported event callbacks are listed in :cpp:type:`esp_isp_hist_cbs_t`:
+
+-  :cpp:member:`esp_isp_hist_cbs_t::on_statistics_done` sets a callback function when finished statistics of the brightness. . The function prototype is declared in :cpp:type:`esp_isp_hist_callback_t`.
 
 .. _isp-thread-safety:
 
 Thread Safety
 ^^^^^^^^^^^^^
 
-The factory function :cpp:func:`esp_isp_new_processor`, :cpp:func:`esp_isp_del_processor`, :cpp:func:`esp_isp_new_af_controller`, :cpp:func:`esp_isp_del_af_controller`, :cpp:func:`esp_isp_new_ae_controller` and :cpp:func:`esp_isp_del_ae_controller` are guaranteed to be thread safe by the driver, which means, user can call them from different RTOS tasks without protection by extra locks. Other APIs are not guaranteed to be thread-safe
+The factory function
+
+.. list::
+
+    - :cpp:func:`esp_isp_new_processor`
+    - :cpp:func:`esp_isp_del_processor`
+    - :cpp:func:`esp_isp_new_af_controller`
+    - :cpp:func:`esp_isp_del_af_controller`
+    - :cpp:func:`esp_isp_new_awb_controller`
+    - :cpp:func:`esp_isp_del_awb_controller`
+    - :cpp:func:`esp_isp_new_ae_controller`
+    - :cpp:func:`esp_isp_del_ae_controller`
+    - :cpp:func:`esp_isp_new_hist_controller`
+    - :cpp:func:`esp_isp_del_hist_controller`
+
+are guaranteed to be thread safe by the driver, which means, user can call them from different RTOS tasks without protection by extra locks. Other APIs are not guaranteed to be thread-safe.
 
 .. _isp-kconfig-options:
 
@@ -602,7 +737,11 @@ This allows the interrupt to run while the cache is disabled, but comes at the c
 Kconfig option :ref:`CONFIG_ISP_CTRL_FUNC_IN_IRAM` will:
 
 - Place some of ISP control functions into IRAM, function list:
+
+.. list::
+
   - :cpp:func:`esp_isp_sharpen_configure`
+  - :cpp:func:`esp_isp_demosaic_configure`
 
 Application Examples
 --------------------
@@ -619,5 +758,7 @@ API Reference
 .. include-build-file:: inc/isp_awb.inc
 .. include-build-file:: inc/isp_bf.inc
 .. include-build-file:: inc/isp_ccm.inc
+.. include-build-file:: inc/isp_demosaic.inc
 .. include-build-file:: inc/isp_sharpen.inc
 .. include-build-file:: inc/isp_gamma.inc
+.. include-build-file:: inc/isp_hist.inc

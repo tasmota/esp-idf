@@ -519,6 +519,10 @@ config SOC_CPU_PMP_REGION_GRANULARITY
     int
     default 128
 
+config SOC_CPU_HAS_LOCKUP_RESET
+    bool
+    default y
+
 config SOC_DS_SIGNATURE_MAX_BIT_LEN
     int
     default 4096
@@ -835,6 +839,10 @@ config SOC_ISP_CCM_SUPPORTED
     bool
     default y
 
+config SOC_ISP_DEMOSAIC_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_DVP_SUPPORTED
     bool
     default y
@@ -887,6 +895,18 @@ config SOC_ISP_CCM_DIMENSION
     int
     default 3
 
+config SOC_ISP_DEMOSAIC_GRAD_RATIO_INT_BITS
+    int
+    default 2
+
+config SOC_ISP_DEMOSAIC_GRAD_RATIO_DEC_BITS
+    int
+    default 4
+
+config SOC_ISP_DEMOSAIC_GRAD_RATIO_RES_BITS
+    int
+    default 26
+
 config SOC_ISP_DVP_DATA_WIDTH_MAX
     int
     default 16
@@ -922,6 +942,26 @@ config SOC_ISP_SHARPEN_M_FREQ_COEF_DEC_BITS
 config SOC_ISP_SHARPEN_M_FREQ_COEF_RES_BITS
     int
     default 24
+
+config SOC_ISP_HIST_CTLR_NUMS
+    int
+    default 1
+
+config SOC_ISP_HIST_BLOCK_X_NUMS
+    int
+    default 5
+
+config SOC_ISP_HIST_BLOCK_Y_NUMS
+    int
+    default 5
+
+config SOC_ISP_HIST_SEGMENT_NUMS
+    int
+    default 16
+
+config SOC_ISP_HIST_INTERVAL_NUMS
+    int
+    default 15
 
 config SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
     bool
@@ -1756,6 +1796,10 @@ config SOC_PAU_IN_TOP_DOMAIN
     default y
 
 config SOC_CPU_IN_TOP_DOMAIN
+    bool
+    default y
+
+config SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE
     bool
     default y
 

@@ -34,10 +34,25 @@ typedef struct {
 } isp_hal_bf_cfg_t;
 
 /**
+ * @brief Demosaic configurations
+ */
+typedef struct {
+    isp_demosaic_grad_ratio_t grad_ratio;             /**< Demosaic gradient ratio,
+                                                           - gradient_x * grad_ratio < gradient_y, use interpolation results in X direction
+                                                           - gradient_y * grad_ratio < gradient_x, use interpolation results in Y direction
+                                                           - else use the average results between X and Y
+                                                      */
+    isp_demosaic_edge_padding_mode_t padding_mode;    ///< Sharpen edge padding mode
+    uint8_t padding_data;                             ///< Sharpen edge padding pixel data
+    uint8_t padding_line_tail_valid_start_pixel;      ///< Sharpen edge padding line tail valid start pixel
+    uint8_t padding_line_tail_valid_end_pixel;        ///< Sharpen edge padding line tail valid end pixel
+} isp_hal_demosaic_cfg_t;
+
+/**
  * @brief Sharpen configurations
  */
 typedef struct {
-    isp_sharpen_h_freq_coeff h_freq_coeff;                                                  ///< High freq pixel sharpeness coeff
+    isp_sharpen_h_freq_coeff_t h_freq_coeff;                                                ///< High freq pixel sharpeness coeff
     isp_sharpen_m_freq_coeff m_freq_coeff;                                                  ///< Medium freq pixel sharpeness coeff
     uint8_t h_thresh;                                                                       ///< High threshold, pixel value higher than this threshold will be multiplied by `h_freq_coeff`
     uint8_t l_thresh;                                                                       ///< Low threshold, pixel value higher than this threshold but lower than `h_thresh` will be multiplied by `m_freq_coeff`. Pixel value lower than this threshold will be set to 0
@@ -167,6 +182,17 @@ void isp_hal_bf_config(isp_hal_context_t *hal, isp_hal_bf_cfg_t *config);
 bool isp_hal_ccm_set_matrix(const isp_hal_context_t *hal, bool saturation, const float flt_matrix[ISP_CCM_DIMENSION][ISP_CCM_DIMENSION]);
 
 /*---------------------------------------------------------------
+                      Demosaic
+---------------------------------------------------------------*/
+/**
+ * @brief Configure ISP Demosaic
+ *
+ * @param[in] hal        Context of the HAL layer
+ * @param[in] config     Demosaic config, set NULL to de-config the ISP Demosaic
+ */
+void isp_hal_demosaic_config(isp_hal_context_t *hal, isp_hal_demosaic_cfg_t *config);
+
+/*---------------------------------------------------------------
                       INTR
 ---------------------------------------------------------------*/
 /**
@@ -187,6 +213,17 @@ uint32_t isp_hal_check_clear_intr_event(const isp_hal_context_t *hal, uint32_t m
  * @param[in] config     Sharpness config, set NULL to de-config the ISP sharpness
  */
 void isp_hal_sharpen_config(isp_hal_context_t *hal, isp_hal_sharpen_cfg_t *config);
+
+/*---------------------------------------------------------------
+                      Histogram
+---------------------------------------------------------------*/
+/**
+ * @brief Configure Histogram window
+ *
+ * @param[in] hal        Context of the HAL layer
+ * @param[in] window     Window info, see `isp_window_t`
+ */
+void isp_hal_hist_window_config(isp_hal_context_t *hal, const isp_window_t *window);
 
 #ifdef __cplusplus
 }

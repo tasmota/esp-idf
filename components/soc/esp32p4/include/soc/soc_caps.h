@@ -188,6 +188,8 @@
 #define SOC_CPU_IDRAM_SPLIT_USING_PMP   1
 #define SOC_CPU_PMP_REGION_GRANULARITY  128
 
+#define SOC_CPU_HAS_LOCKUP_RESET        1
+
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
 #define SOC_DS_SIGNATURE_MAX_BIT_LEN (4096)
@@ -332,6 +334,7 @@
 /*-------------------------- ISP CAPS ----------------------------------------*/
 #define SOC_ISP_BF_SUPPORTED                     1
 #define SOC_ISP_CCM_SUPPORTED                    1
+#define SOC_ISP_DEMOSAIC_SUPPORTED               1
 #define SOC_ISP_DVP_SUPPORTED                    1
 #define SOC_ISP_SHARPEN_SUPPORTED                1
 #define SOC_ISP_SHARE_CSI_BRG                    1
@@ -346,6 +349,9 @@
 #define SOC_ISP_BF_TEMPLATE_X_NUMS               3
 #define SOC_ISP_BF_TEMPLATE_Y_NUMS               3
 #define SOC_ISP_CCM_DIMENSION                    3
+#define SOC_ISP_DEMOSAIC_GRAD_RATIO_INT_BITS     2
+#define SOC_ISP_DEMOSAIC_GRAD_RATIO_DEC_BITS     4
+#define SOC_ISP_DEMOSAIC_GRAD_RATIO_RES_BITS     26
 #define SOC_ISP_DVP_DATA_WIDTH_MAX               16
 #define SOC_ISP_SHARPEN_TEMPLATE_X_NUMS          3
 #define SOC_ISP_SHARPEN_TEMPLATE_Y_NUMS          3
@@ -355,6 +361,11 @@
 #define SOC_ISP_SHARPEN_M_FREQ_COEF_INT_BITS     3
 #define SOC_ISP_SHARPEN_M_FREQ_COEF_DEC_BITS     5
 #define SOC_ISP_SHARPEN_M_FREQ_COEF_RES_BITS     24
+#define SOC_ISP_HIST_CTLR_NUMS                   1U
+#define SOC_ISP_HIST_BLOCK_X_NUMS                5
+#define SOC_ISP_HIST_BLOCK_Y_NUMS                5
+#define SOC_ISP_HIST_SEGMENT_NUMS                16
+#define SOC_ISP_HIST_INTERVAL_NUMS               15
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -676,6 +687,8 @@
 #define SOC_PM_PAU_LINK_NUM             (4)
 #define SOC_PAU_IN_TOP_DOMAIN           (1)
 #define SOC_CPU_IN_TOP_DOMAIN           (1)
+
+#define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)

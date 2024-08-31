@@ -863,6 +863,27 @@ menu "LWIP"
         default 0x1 if LWIP_TCPIP_TASK_AFFINITY_CPU1
 
 
+    config LWIP_IPV6_ND6_NUM_PREFIXES
+        int "Max number of entries in IPv6 on-link prefixes cache"
+        depends on LWIP_IPV6
+        default 5
+        help
+            Maximum number of entries in IPv6 on-link prefixes cache
+
+    config LWIP_IPV6_ND6_NUM_ROUTERS
+        int "Max number of entries in IPv6 default routers cache"
+        depends on LWIP_IPV6
+        default 3
+        help
+            Maximum number of entries in IPv6 default routers cache
+
+    config LWIP_IPV6_ND6_NUM_DESTINATIONS
+        int "Max number of entries in IPv6 destinations cache"
+        depends on LWIP_IPV6
+        default 10
+        help
+            Maximum number of entries in IPv6 destinations cache
+
     menuconfig LWIP_PPP_SUPPORT
         bool "Enable PPP support"
         default n
@@ -930,6 +951,23 @@ menu "LWIP"
         default n
         help
             Enable Microsoft Point-to-Point Encryption (MPPE) support
+
+    config LWIP_PPP_SERVER_SUPPORT
+        bool "Enable PPP server support"
+        depends on LWIP_PPP_SUPPORT
+        default n
+        help
+            Enable to use PPP server
+
+    config LWIP_PPP_VJ_HEADER_COMPRESSION
+        bool "Enable VJ IP Header compression"
+        depends on LWIP_PPP_SUPPORT
+        default y
+        help
+            Enable support for VJ header compression.
+            Please disable this if you're using NAPT on PPP interface,
+            since the compressed IP header might not be correctly interpreted
+            in NAT causing the compressed packet to be dropped.
 
     config LWIP_ENABLE_LCP_ECHO
         bool "Enable LCP ECHO"

@@ -166,6 +166,11 @@ else() # Regular app build
         # For ESP32S2, inclusion of ROM driver do not depend on CONFIG_SPI_FLASH_ROM_IMPL
         rom_linker_script("spiflash_legacy")
 
+    elseif(target STREQUAL "esp32c2")
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("eco4")
+        endif()
+
     elseif(target STREQUAL "esp32c3")
 
         if(CONFIG_ESP32C3_REV_MIN_FULL GREATER_EQUAL 3)
@@ -186,6 +191,13 @@ else() # Regular app build
     elseif(target STREQUAL "esp32c5")
         # esp32c5.rom.api.ld has been split to several lds by components.
         # esp32c5.rom.api.ld is still reserved to map the APIs
+        rom_linker_script("phy")
+        rom_linker_script("coexist")
+        rom_linker_script("net80211")
+        rom_linker_script("pp")
+    elseif(target STREQUAL "esp32c61")
+        # esp32c61.rom.api.ld has been split to several lds by components.
+        # esp32c61.rom.api.ld is still reserved to map the APIs
         rom_linker_script("phy")
         rom_linker_script("coexist")
         rom_linker_script("net80211")

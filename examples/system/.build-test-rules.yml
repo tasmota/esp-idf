@@ -2,25 +2,22 @@
 
 examples/system/app_trace_basic:
   disable:
-    - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32p4", "esp32c5"]
+    - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32p4", "esp32c5", "esp32c61"]
       temporary: true
-      reason: target esp32c6, esp32h2, esp32p4, esp32c5 is not supported yet
+      reason: targets not supported yet, TODO[C61] IDF-9264 IDF-10992
 
 examples/system/base_mac_address:
+  disable_test:
+    - if: IDF_TARGET in ["esp32c61"]
+      temporary: true
+      reason: test failed # TODO: IDF-10956
   depends_components:
     - esp_hw_support
 
 examples/system/console/advanced:
   disable_test:
-    - if: IDF_TARGET not in ["esp32", "esp32c3"]
+    - if: IDF_TARGET not in ["esp32", "esp32c3"] # IDF-9120 and IDF-9133
       reason: Sufficient to run this app on one chip with each architecture
-  depends_components:
-    - console
-    - vfs
-
-examples/system/console/advanced_usb_cdc:
-  disable:
-    - if: SOC_USB_OTG_SUPPORTED != 1 or IDF_TARGET == "esp32p4" # TODO: IDF-8078, IDF-9120 and IDF-9133
   depends_components:
     - console
     - vfs
@@ -138,6 +135,11 @@ examples/system/ipc/ipc_isr/xtensa:
 examples/system/light_sleep:
   disable:
     - if: SOC_LIGHT_SLEEP_SUPPORTED != 1
+
+examples/system/nmi_isr:
+  enable:
+    - if: IDF_TARGET_ARCH_XTENSA == 1
+      reason: test NMI for Xtensa targets only
 
 examples/system/ota/advanced_https_ota:
   disable:
@@ -278,6 +280,12 @@ examples/system/task_watchdog:
     - esp_system
 
 examples/system/ulp/lp_core/build_system:
+  enable:
+    - if: SOC_LP_CORE_SUPPORTED == 1
+  depends_components:
+    - ulp
+
+examples/system/ulp/lp_core/debugging:
   enable:
     - if: SOC_LP_CORE_SUPPORTED == 1
   depends_components:

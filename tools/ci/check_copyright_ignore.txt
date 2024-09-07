@@ -544,7 +544,6 @@ components/soc/esp32/include/soc/slc_reg.h
 components/soc/esp32/include/soc/slc_struct.h
 components/soc/esp32/include/soc/soc_pins.h
 components/soc/esp32/include/soc/soc_ulp.h
-components/soc/esp32/include/soc/spi_pins.h
 components/soc/esp32/include/soc/syscon_reg.h
 components/soc/esp32/include/soc/syscon_struct.h
 components/soc/esp32/include/soc/touch_sensor_channel.h
@@ -555,7 +554,6 @@ components/soc/esp32/include/soc/uhci_reg.h
 components/soc/esp32/include/soc/uhci_struct.h
 components/soc/esp32/include/soc/wdev_reg.h
 components/soc/esp32/ledc_periph.c
-components/soc/esp32/spi_periph.c
 components/soc/esp32c3/include/soc/apb_saradc_reg.h
 components/soc/esp32c3/include/soc/assist_debug_reg.h
 components/soc/esp32c3/include/soc/bb_reg.h
@@ -574,7 +572,6 @@ components/soc/esp32c3/include/soc/sensitive_reg.h
 components/soc/esp32c3/include/soc/sensitive_struct.h
 components/soc/esp32c3/include/soc/soc_pins.h
 components/soc/esp32c3/include/soc/spi_mem_reg.h
-components/soc/esp32c3/include/soc/spi_pins.h
 components/soc/esp32c3/include/soc/systimer_reg.h
 components/soc/esp32c3/include/soc/systimer_struct.h
 components/soc/esp32c3/include/soc/uart_pins.h
@@ -608,7 +605,6 @@ components/soc/esp32s2/include/soc/rtc_io_reg.h
 components/soc/esp32s2/include/soc/sens_reg.h
 components/soc/esp32s2/include/soc/sensitive_reg.h
 components/soc/esp32s2/include/soc/soc_ulp.h
-components/soc/esp32s2/include/soc/spi_pins.h
 components/soc/esp32s2/include/soc/systimer_reg.h
 components/soc/esp32s2/include/soc/systimer_struct.h
 components/soc/esp32s2/include/soc/touch_sensor_channel.h
@@ -658,7 +654,6 @@ components/soc/esp32s3/include/soc/sensitive_struct.h
 components/soc/esp32s3/include/soc/soc_ulp.h
 components/soc/esp32s3/include/soc/spi_mem_reg.h
 components/soc/esp32s3/include/soc/spi_mem_struct.h
-components/soc/esp32s3/include/soc/spi_pins.h
 components/soc/esp32s3/include/soc/spi_reg.h
 components/soc/esp32s3/include/soc/spi_struct.h
 components/soc/esp32s3/include/soc/syscon_struct.h
@@ -1102,7 +1097,6 @@ examples/system/console/advanced/components/cmd_nvs/cmd_nvs.c
 examples/system/console/advanced/components/cmd_nvs/cmd_nvs.h
 examples/system/console/advanced/components/cmd_system/cmd_system.c
 examples/system/console/advanced/components/cmd_system/cmd_system.h
-examples/system/console/advanced/main/console_example_main.c
 examples/system/console/basic/main/console_example_main.c
 examples/system/efuse/main/efuse_main.c
 examples/system/esp_event/default_event_loop/main/event_source.h

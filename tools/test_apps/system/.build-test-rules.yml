@@ -25,11 +25,14 @@ tools/test_apps/system/cxx_no_except:
 
 tools/test_apps/system/eh_frame:
   enable:
-    - if: IDF_TARGET in ["esp32c2", "esp32c3"]
-      temporary: true
-      reason: the other targets are not tested yet
+    - if: IDF_TARGET not in ["esp32", "esp32s2", "esp32s3", "linux"]
+      reason: Only relevant for riscv targets
 
 tools/test_apps/system/esp_intr_dump:
+  disable_test:
+    - if: IDF_TARGET in ["esp32c61"]
+      temporary: true
+      reason: test failed # TODO: IDF-10957
 
 tools/test_apps/system/g0_components:
   enable:

@@ -5,8 +5,8 @@ project(${ULP_APP_NAME} ASM C)
 add_executable(${ULP_APP_NAME})
 set(CMAKE_EXECUTABLE_SUFFIX ".elf")
 
-# Import all sdkconfig variables into the cmake build
-include(${SDKCONFIG_CMAKE})
+option(ULP_COCPU_IS_RISCV "Use RISC-V based ULP" OFF)
+option(ULP_COCPU_IS_LP_CORE "Use RISC-V based LP Core" OFF)
 
 function(create_arg_file arguments output_file)
     # Escape all spaces
@@ -20,7 +20,7 @@ endfunction()
 message(STATUS "Building ULP app ${ULP_APP_NAME}")
 
 # Check the supported assembler version
-if(CONFIG_ULP_COPROC_TYPE_FSM)
+if(NOT (ULP_COCPU_IS_RISCV OR ULP_COCPU_IS_LP_CORE))
     check_expected_tool_version("esp32ulp-elf" ${CMAKE_ASM_COMPILER})
 endif()
 
@@ -43,9 +43,9 @@ list(APPEND ULP_PREPROCESSOR_ARGS -I${IDF_PATH}/components/esp_system/ld)
 target_include_directories(${ULP_APP_NAME} PRIVATE ${COMPONENT_INCLUDES})
 
 # Pre-process the linker script
-if(CONFIG_ULP_COPROC_TYPE_RISCV)
+if(ULP_COCPU_IS_RISCV)
     set(ULP_LD_TEMPLATE ${IDF_PATH}/components/ulp/ld/ulp_riscv.ld)
-elseif(CONFIG_ULP_COPROC_TYPE_LP_CORE)
+elseif(ULP_COCPU_IS_LP_CORE)
     set(ULP_LD_TEMPLATE ${IDF_PATH}/components/ulp/ld/lp_core_riscv.ld)
 else()
     set(ULP_LD_TEMPLATE ${IDF_PATH}/components/ulp/ld/ulp_fsm.ld)
@@ -71,7 +71,8 @@ target_link_options(${ULP_APP_NAME} PRIVATE SHELL:-T ${CMAKE_CURRENT_BINARY_DIR}
 
 # To avoid warning "Manually-specified variables were not used by the project"
 set(bypassWarning "${IDF_TARGET}")
-if(CONFIG_ULP_COPROC_TYPE_RISCV)
+set(bypassWarning "${CONFIG_ESP_ROM_HAS_LP_ROM}")
+if(ULP_COCPU_IS_RISCV)
     #risc-v ulp uses extra files for building:
     list(APPEND ULP_S_SOURCES
         "${IDF_PATH}/components/ulp/ulp_riscv/ulp_core/ulp_riscv_vectors.S"
@@ -99,7 +100,7 @@ if(CONFIG_ULP_COPROC_TYPE_RISCV)
     target_compile_definitions(${ULP_APP_NAME} PRIVATE IS_ULP_COCPU)
     target_compile_definitions(${ULP_APP_NAME} PRIVATE ULP_RISCV_REGISTER_OPS)
 
-elseif(CONFIG_ULP_COPROC_TYPE_LP_CORE)
+elseif(ULP_COCPU_IS_LP_CORE)
     list(APPEND ULP_S_SOURCES
     "${IDF_PATH}/components/ulp/lp_core/lp_core/start.S"
     "${IDF_PATH}/components/ulp/lp_core/lp_core/vector.S"
@@ -175,7 +176,7 @@ else()
 
 endif()
 
-if(CONFIG_ULP_COPROC_TYPE_LP_CORE)
+if(ULP_COCPU_IS_LP_CORE)
     set(ULP_BASE_ADDR "0x0")
 else()
     set(ULP_BASE_ADDR "0x50000000")

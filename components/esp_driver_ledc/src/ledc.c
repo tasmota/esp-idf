@@ -19,8 +19,10 @@
 #include "driver/ledc.h"
 #include "esp_rom_gpio.h"
 #include "clk_ctrl_os.h"
+#include "esp_private/esp_sleep_internal.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/gpio.h"
+#include "esp_private/esp_clk_tree_common.h"
 #include "esp_private/esp_gpio_reserve.h"
 #include "esp_memory_utils.h"
 
@@ -561,8 +563,19 @@ static esp_err_t ledc_set_timer_div(ledc_mode_t speed_mode, ledc_timer_t timer_n
         }
         p_ledc_obj[speed_mode]->glb_clk_is_acquired[timer_num] = true;
         if (p_ledc_obj[speed_mode]->glb_clk != glb_clk) {
+#if SOC_LIGHT_SLEEP_SUPPORTED
+            /* keep ESP_PD_DOMAIN_RC_FAST on during light sleep */
+            if (glb_clk == LEDC_SLOW_CLK_RC_FAST) {
+                /* Keep ESP_PD_DOMAIN_RC_FAST on during light sleep */
+                esp_sleep_sub_mode_config(ESP_SLEEP_DIG_USE_RC_FAST_MODE, true);
+            } else if (p_ledc_obj[speed_mode]->glb_clk == LEDC_SLOW_CLK_RC_FAST) {
+                /* No need to keep ESP_PD_DOMAIN_RC_FAST on during light sleep anymore */
+                esp_sleep_sub_mode_config(ESP_SLEEP_DIG_USE_RC_FAST_MODE, false);
+            }
+#endif
             // TODO: release old glb_clk (if not UNINIT), and acquire new glb_clk [clk_tree]
             p_ledc_obj[speed_mode]->glb_clk = glb_clk;
+            esp_clk_tree_enable_src((soc_module_clk_t)glb_clk, true);
             LEDC_FUNC_CLOCK_ATOMIC() {
                 ledc_ll_enable_clock(p_ledc_obj[speed_mode]->ledc_hal.dev, true);
                 ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), glb_clk);
@@ -571,12 +584,6 @@ static esp_err_t ledc_set_timer_div(ledc_mode_t speed_mode, ledc_timer_t timer_n
         portEXIT_CRITICAL(&ledc_spinlock);
 
         ESP_LOGD(LEDC_TAG, "In slow speed mode, global clk set: %d", glb_clk);
-
-        /* keep ESP_PD_DOMAIN_RC_FAST on during light sleep */
-#if SOC_LIGHT_SLEEP_SUPPORTED
-        extern void esp_sleep_periph_use_8m(bool use_or_not);
-        esp_sleep_periph_use_8m(glb_clk == LEDC_SLOW_CLK_RC_FAST);
-#endif
     }
 
     /* The divisor is correct, we can write in the hardware. */
@@ -645,8 +652,6 @@ esp_err_t ledc_timer_config(const ledc_timer_config_t *timer_conf)
 esp_err_t _ledc_set_pin(int gpio_num, bool out_inv, ledc_mode_t speed_mode, ledc_channel_t channel)
 {
     gpio_func_sel(gpio_num, PIN_FUNC_GPIO);
-    gpio_set_level(gpio_num, out_inv);
-    gpio_set_direction(gpio_num, GPIO_MODE_OUTPUT);
     // reserve the GPIO output path, because we don't expect another peripheral to signal to the same GPIO
     uint64_t old_gpio_rsv_mask = esp_gpio_reserve(BIT64(gpio_num));
     // check if the GPIO is already used by others, LEDC signal only uses the output path of the GPIO
@@ -698,6 +703,7 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     else if (new_speed_mode_ctx_created) {
         portENTER_CRITICAL(&ledc_spinlock);
         if (p_ledc_obj[speed_mode]->glb_clk == LEDC_SLOW_CLK_UNINIT) {
+            esp_clk_tree_enable_src((soc_module_clk_t)LEDC_LL_GLOBAL_CLK_DEFAULT, true);
             ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), LEDC_LL_GLOBAL_CLK_DEFAULT);
         }
         portEXIT_CRITICAL(&ledc_spinlock);

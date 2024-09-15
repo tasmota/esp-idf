@@ -136,10 +136,19 @@ extern int _rtc_bss_end;
 extern int _bss_bt_start;
 extern int _bss_bt_end;
 #endif // CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
-extern int _instruction_reserved_start;
-extern int _instruction_reserved_end;
-extern int _rodata_reserved_start;
-extern int _rodata_reserved_end;
+
+/**
+ * If using `int`, then for CLANG, with enabled optimization when inlined function is provided with the address of external symbol, the two least bits of the constant used inside that function get cleared.
+ * Optimizer assumes that address of external symbol should be aligned to 4-bytes and therefore aligns constant value used for bitwise AND operation with that address.
+ *
+ * This means `extern int _instruction_reserved_start;` can be unaligned to 4 bytes, whereas using `char` can solve this issue.
+ *
+ * As we only use these symbol address, we declare them as `char` here
+ */
+extern char _instruction_reserved_start;
+extern char _instruction_reserved_end;
+extern char _rodata_reserved_start;
+extern char _rodata_reserved_end;
 
 extern int _vector_table;
 #if SOC_INT_CLIC_SUPPORTED
@@ -228,7 +237,8 @@ void IRAM_ATTR call_start_cpu1(void)
     DPORT_REG_SET_BIT(DPORT_APP_CPU_RECORD_CTRL_REG, DPORT_APP_CPU_PDEBUG_ENABLE | DPORT_APP_CPU_RECORD_ENABLE);
     DPORT_REG_CLR_BIT(DPORT_APP_CPU_RECORD_CTRL_REG, DPORT_APP_CPU_RECORD_ENABLE);
 #elif CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-7688
+    REG_SET_BIT(ASSIST_DEBUG_CORE_1_RCD_EN_REG, ASSIST_DEBUG_CORE_1_RCD_PDEBUGEN);
+    REG_SET_BIT(ASSIST_DEBUG_CORE_1_RCD_EN_REG, ASSIST_DEBUG_CORE_1_RCD_RECORDEN);
 #else
     REG_WRITE(ASSIST_DEBUG_CORE_1_RCD_PDEBUGENABLE_REG, 1);
     REG_WRITE(ASSIST_DEBUG_CORE_1_RCD_RECORDING_REG, 1);

@@ -67,7 +67,7 @@
 #define SOC_LP_I2C_SUPPORTED            1
 #define SOC_ULP_LP_UART_SUPPORTED       1
 #define SOC_CLK_TREE_SUPPORTED          1
-// #define SOC_ASSIST_DEBUG_SUPPORTED      1  // TODO: [ESP32C5] IDF-8663
+// #define SOC_ASSIST_DEBUG_SUPPORTED      1  // TODO: [ESP32C5] IDF-8662
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1     // TODO: [ESP32C5] IDF-8715
 // #define SOC_BITSCRAMBLER_SUPPORTED      1  // TODO: [ESP32C5] IDF-8711
@@ -426,14 +426,17 @@
 #define SOC_MEMSPI_IS_INDEPENDENT 1
 #define SOC_SPI_MAX_PRE_DIVIDER 16
 
+/*-------------------------- SPIRAM CAPS ----------------------------------------*/
+#define SOC_SPIRAM_XIP_SUPPORTED        1
+
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
-// #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
-// #define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
-// #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
-// #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
-// #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
-// #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
-// #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
+#define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
+#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
+#define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
+#define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
+#define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
+#define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
+#define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
@@ -538,7 +541,7 @@
 /*-------------------------- Power Management CAPS ----------------------------*/
 // #define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
 // #define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
-// #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
+#define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configure the EXT1 trigger level */
 #define SOC_PM_SUPPORT_CPU_PD           (1)
@@ -592,6 +595,7 @@
 #define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
 #define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
 #define SOC_WIFI_HE_SUPPORT_5G              (1)    /*!< Support Wi-Fi 6 in 5G */
+#define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */

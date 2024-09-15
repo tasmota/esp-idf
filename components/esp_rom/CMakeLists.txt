@@ -67,6 +67,10 @@ if(CONFIG_ESP_ROM_HAS_FLASH_COUNT_PAGES_BUG OR CONFIG_ESP_ROM_HAS_CACHE_WRITEBAC
     list(APPEND sources "patches/esp_rom_cache_esp32s2_esp32s3.c")
 endif()
 
+if(CONFIG_ESP_ROM_CACHE_WB_INVLD_LOW_RANGE)
+    list(APPEND sources "patches/esp_rom_cache_esp32c61.c")
+endif()
+
 if(CONFIG_ESP_ROM_HAS_CACHE_WRITEBACK_BUG)
     list(APPEND sources "patches/esp_rom_cache_writeback_esp32s3.S")
 endif()
@@ -247,6 +251,10 @@ else() # Regular app build
 
     if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
         rom_linker_script("mbedtls")
+        # For ESP32C2(ECO4), mbedTLS in ROM has been updated to v3.6.0-LTS
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("mbedtls.eco4")
+        endif()
     endif()
 
     if(CONFIG_IDF_TARGET_ARCH_XTENSA)

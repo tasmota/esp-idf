@@ -29,10 +29,6 @@ tools/test_apps/system/eh_frame:
       reason: Only relevant for riscv targets
 
 tools/test_apps/system/esp_intr_dump:
-  disable_test:
-    - if: IDF_TARGET in ["esp32c61"]
-      temporary: true
-      reason: test failed # TODO: IDF-10957
 
 tools/test_apps/system/g0_components:
   enable:
@@ -49,6 +45,9 @@ tools/test_apps/system/gdb_loadable_elf:
     - if: IDF_TARGET == "esp32c6" or IDF_TARGET == "esp32h2"
       temporary: true
       reason: target esp32c6, esp32h2 is not supported yet
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: build failed. IDF-11133
 
 tools/test_apps/system/longjmp_test:
   enable:
@@ -74,21 +73,7 @@ tools/test_apps/system/no_embedded_paths:
 
 tools/test_apps/system/panic:
   enable:
-    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4"] # preview targets
-  disable:
-    - if: IDF_TARGET == "esp32c61"
-      temporary: true
-      reason: not supported  # TODO: [ESP32c61] IDF-9268
-
-tools/test_apps/system/ram_loadable_app:
-  disable:
-    - if: IDF_TARGET == "esp32c5"
-      temporary: true
-      reason: not supported  # TODO: [ESP32C5] IDF-8644, IDF-10315
-  disable_test:
-    - if: IDF_TARGET in ["esp32p4"]
-      temporary: true
-      reason: TBD # TODO: IDF-8994
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4", "esp32c61"] # preview targets
 
 tools/test_apps/system/rtc_mem_reserve:
   enable:

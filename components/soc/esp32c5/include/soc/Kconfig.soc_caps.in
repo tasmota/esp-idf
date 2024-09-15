@@ -1007,6 +1007,38 @@ config SOC_SPI_MAX_PRE_DIVIDER
     int
     default 16
 
+config SOC_SPIRAM_XIP_SUPPORTED
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_AUTO_RESUME
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_IDLE_INTR
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_SW_SUSPEND
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_CHECK_SUS
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_WRAP
+    bool
+    default y
+
 config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
     bool
     default y
@@ -1207,6 +1239,10 @@ config SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH
     int
     default 12
 
+config SOC_PM_SUPPORT_BT_WAKEUP
+    bool
+    default y
+
 config SOC_PM_SUPPORT_EXT1_WAKEUP
     bool
     default y
@@ -1354,6 +1390,10 @@ config SOC_WIFI_HE_SUPPORT
 config SOC_WIFI_HE_SUPPORT_5G
     bool
     default y
+
+config SOC_WIFI_MAC_VERSION_NUM
+    int
+    default 3
 
 config SOC_BLE_SUPPORTED
     bool

@@ -545,8 +545,11 @@ esp_err_t usb_host_install(const usb_host_config_t *config)
     p_host_lib_obj = host_lib_obj;
     HOST_EXIT_CRITICAL();
 
-    // Start the root hub
-    ESP_ERROR_CHECK(hub_root_start());
+    if (!config->root_port_unpowered) {
+        // Start the root hub
+        ESP_ERROR_CHECK(hub_root_start());
+    }
+
     ret = ESP_OK;
     return ret;
 
@@ -697,6 +700,18 @@ esp_err_t usb_host_lib_info(usb_host_lib_info_t *info_ret)
     info_ret->num_devices = num_devs_temp;
     info_ret->num_clients = num_clients_temp;
     return ESP_OK;
+}
+
+esp_err_t usb_host_lib_set_root_port_power(bool enable)
+{
+    esp_err_t ret;
+    if (enable) {
+        ret = hub_root_start();
+    } else {
+        ret = hub_root_stop();
+    }
+
+    return ret;
 }
 
 // ------------------------------------------------ Client Functions ---------------------------------------------------
@@ -1018,16 +1033,10 @@ esp_err_t usb_host_device_free_all(void)
     HOST_EXIT_CRITICAL();
     esp_err_t ret;
 #if ENABLE_USB_HUBS
-    ret = hub_notify_all_free();
-    if (ret != ESP_OK) {
-        ESP_LOGE(USB_HOST_TAG, "Marking all devices as free in HUB error: %s", esp_err_to_name(ret));
-    }
+    hub_notify_all_free();
 #endif // ENABLE_USB_HUBS
     ret = usbh_devs_mark_all_free();
     // If ESP_ERR_NOT_FINISHED is returned, caller must wait for USB_HOST_LIB_EVENT_FLAGS_ALL_FREE to confirm all devices are free
-    if (ret != ESP_OK) {
-        ESP_LOGE(USB_HOST_TAG, "Marking all devices as free in USBH error: %s", esp_err_to_name(ret));
-    }
     return ret;
 }
 

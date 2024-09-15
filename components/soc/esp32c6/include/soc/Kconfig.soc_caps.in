@@ -551,10 +551,6 @@ config SOC_RTCIO_WAKE_SUPPORTED
     bool
     default y
 
-config SOC_RTCIO_VALID_RTCIO_MASK
-    hex
-    default 0xFF
-
 config SOC_DEDIC_GPIO_OUT_CHANNELS_NUM
     int
     default 8
@@ -1486,6 +1482,10 @@ config SOC_WIFI_MESH_SUPPORT
 config SOC_WIFI_HE_SUPPORT
     bool
     default y
+
+config SOC_WIFI_MAC_VERSION_NUM
+    int
+    default 2
 
 config SOC_BLE_SUPPORTED
     bool

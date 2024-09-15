@@ -69,6 +69,8 @@ static void esp_cpu_configure_invalid_regions(void)
 
     // 8. End of address space
     PMA_ENTRY_SET_TOR(14, SOC_PERIPHERAL_HIGH, PMA_NONE);
+
+    PMA_ENTRY_CFG_RESET(15);
     PMA_ENTRY_SET_TOR(15, UINT32_MAX, PMA_TOR | PMA_NONE);
 }
 
@@ -206,7 +208,11 @@ void esp_cpu_configure_region_protection(void)
     PMP_ENTRY_SET(9, SOC_RTC_IRAM_LOW, NONE);
 
     // First part of LP mem is reserved for ULP coprocessor
+#if CONFIG_ESP_SYSTEM_PMP_LP_CORE_RESERVE_MEM_EXECUTABLE
+    PMP_ENTRY_SET(10, (int)&_rtc_text_start, PMP_TOR | RWX);
+#else
     PMP_ENTRY_SET(10, (int)&_rtc_text_start, PMP_TOR | RW);
+#endif
 
     PMP_ENTRY_SET(11, (int)&_rtc_text_end, PMP_TOR | RX);
     PMP_ENTRY_SET(12, SOC_RTC_IRAM_HIGH, PMP_TOR | RW);

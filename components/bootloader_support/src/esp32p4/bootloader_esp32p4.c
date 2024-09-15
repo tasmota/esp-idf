@@ -37,6 +37,7 @@
 #include "bootloader_soc.h"
 #include "esp_private/bootloader_flash_internal.h"
 #include "esp_efuse.h"
+#include "hal/assist_debug_ll.h"
 #include "hal/mmu_hal.h"
 #include "hal/cache_hal.h"
 #include "hal/clk_tree_ll.h"
@@ -55,7 +56,7 @@ static const char *TAG = "boot.esp32p4";
 
 static void wdt_reset_cpu0_info_enable(void)
 {
-    //TODO: IDF-7688
+    _assist_debug_ll_enable_bus_clock(true);
     REG_WRITE(ASSIST_DEBUG_CORE_0_RCD_EN_REG, ASSIST_DEBUG_CORE_0_RCD_PDEBUGEN | ASSIST_DEBUG_CORE_0_RCD_RECORDEN);
 }
 
@@ -109,12 +110,12 @@ static inline void bootloader_hardware_init(void)
     REGI2C_WRITE_MASK(I2C_BIAS, I2C_BIAS_DREG_1P1, 10);
     REGI2C_WRITE_MASK(I2C_BIAS, I2C_BIAS_DREG_1P1_PVT, 10);
 
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
     // IDF-10019 TODO: This is temporarily for ESP32P4-ECO0, please remove it when eco0 is not widly used.
-    int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused));
     if (likely(ESP_CHIP_REV_ABOVE(chip_version, 1))) {
-        spimem_flash_ll_select_clk_source(0, FLASH_CLK_SRC_SPLL);
-        spimem_ctrlr_ll_set_core_clock(0, 6);
+        bootloader_init_mspi_clock();
     }
+#endif
 }
 
 static inline void bootloader_ana_reset_config(void)

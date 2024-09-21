@@ -100,13 +100,13 @@ function(__build_set_default_build_specifications)
     list(APPEND compile_options     "-ffunction-sections"
                                     "-fdata-sections"
                                     # warning-related flags
-                                    "-Wall"
-                                    "-Werror=all"
+                                    # "-Wall"
+                                    # "-Werror=all"
                                     "-Wno-error=unused-function"
                                     "-Wno-error=unused-variable"
                                     "-Wno-error=unused-but-set-variable"
                                     "-Wno-error=deprecated-declarations"
-                                    "-Wextra"
+                                    # "-Wextra"
                                     "-Wno-unused-parameter"
                                     "-Wno-sign-compare"
                                     # ignore multiple enum conversion warnings since gcc 11

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// The LL layer for ESP32-C6 PAU(Power Assist Unit) register operations
+// The LL layer for ESP32-P4 PAU(Power Assist Unit) register operations
 
 #pragma once
 

@@ -225,11 +225,19 @@ else() # Regular app build
 
         if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
             rom_linker_script("mbedtls")
+            # For ESP32C2(ECO4), mbedTLS in ROM has been updated to v3.6.0-LTS
+            if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+                rom_linker_script("mbedtls.eco4")
+            endif()
         endif()
 
         if(CONFIG_NEWLIB_NANO_FORMAT)
             # nano formatting functions in ROM are also built for 64-bit time_t.
             rom_linker_script("newlib-nano")
+        endif()
+
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("eco4")
         endif()
 
     elseif(target STREQUAL "esp32c6")

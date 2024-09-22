@@ -259,6 +259,17 @@ static void start_other_core(void)
     }
 }
 
+#if CONFIG_IDF_TARGET_ESP32
+static void restore_app_mmu_from_pro_mmu(void)
+{
+    const int mmu_reg_num = 2048;
+    volatile uint32_t* from = (uint32_t*)DR_REG_FLASH_MMU_TABLE_PRO;
+    volatile uint32_t* to = (uint32_t*)DR_REG_FLASH_MMU_TABLE_APP;
+    for (int i = 0; i < mmu_reg_num; i++) {
+        *(to++) = *(from++);
+    }
+}
+#endif
 // This function is needed to make the multicore app runnable on a unicore bootloader (built with FREERTOS UNICORE).
 // It does some cache settings for other CPUs.
 void IRAM_ATTR do_multicore_settings(void)
@@ -270,9 +281,11 @@ void IRAM_ATTR do_multicore_settings(void)
         Cache_Read_Disable(1);
         Cache_Flush(1);
         DPORT_REG_SET_BIT(DPORT_APP_CACHE_CTRL1_REG, DPORT_APP_CACHE_MMU_IA_CLR);
+        mmu_init(1);
         DPORT_REG_CLR_BIT(DPORT_APP_CACHE_CTRL1_REG, DPORT_APP_CACHE_MMU_IA_CLR);
         // We do not enable cache for CPU1 now because it will be done later in start_other_core().
     }
+    restore_app_mmu_from_pro_mmu();
 #endif
 
     cache_bus_mask_t cache_bus_mask_core0 = cache_ll_l1_get_enabled_bus(0);
@@ -444,6 +457,10 @@ void IRAM_ATTR call_start_cpu0(void)
     // For Octal flash, it's hard to implement a read_id function in OPI mode for all vendors.
     // So we have to read it here in SPI mode, before entering the OPI mode.
     bootloader_flash_update_id();
+
+    // Configure the power related stuff. After this the MSPI timing tuning can be done.
+    esp_rtc_init();
+
     /**
      * This function initialise the Flash chip to the user-defined settings.
      *
@@ -452,14 +469,9 @@ void IRAM_ATTR call_start_cpu0(void)
      * In this stage, we re-configure the Flash (and MSPI) to required configuration
      */
     spi_flash_init_chip_state();
-
-    // In earlier version of ESP-IDF, the PLL provided by bootloader is not stable enough.
-    // Do calibration again here so that we can use better clock for the timing tuning.
-#if CONFIG_ESP_SYSTEM_BBPLL_RECALIB
-    rtc_clk_recalib_bbpll();
-#endif
 #if SOC_MEMSPI_SRC_FREQ_120M
-    // This function needs to be called when PLL is enabled
+    // This function needs to be called when PLL is enabled. Needs to be called after spi_flash_init_chip_state in case
+    // some state of flash is modified.
     mspi_timing_flash_tuning();
 #endif
 

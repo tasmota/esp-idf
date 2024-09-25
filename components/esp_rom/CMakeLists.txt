@@ -180,6 +180,11 @@ else() # Regular app build
         # For ESP32S2, inclusion of ROM driver do not depend on CONFIG_SPI_FLASH_ROM_IMPL
         rom_linker_script("spiflash_legacy")
 
+    elseif(target STREQUAL "esp32c2")
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("eco4")
+        endif()
+
     elseif(target STREQUAL "esp32c3")
 
         if(CONFIG_ESP32C3_REV_MIN_FULL GREATER_EQUAL 3)
@@ -241,6 +246,10 @@ else() # Regular app build
 
     if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
         rom_linker_script("mbedtls")
+        # For ESP32C2(ECO4), mbedTLS in ROM has been updated to v3.6.0-LTS
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("mbedtls.eco4")
+        endif()
     endif()
 
     if(CONFIG_IDF_TARGET_ARCH_XTENSA)

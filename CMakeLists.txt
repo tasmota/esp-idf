@@ -182,7 +182,7 @@ endif()
 if(CONFIG_COMPILER_ENABLE_LTO)
     set(CMAKE_AR ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar)
     set(CMAKE_RANLIB ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib)
-    list(APPEND compile_options    "-flto=auto"
+    list(APPEND compile_options     "-flto=auto"
                                     "-ffat-lto-objects"
                                     "-flto-compression-level=9")
     list(APPEND link_options        "-flto"
@@ -190,6 +190,7 @@ if(CONFIG_COMPILER_ENABLE_LTO)
                                     "-ffat-lto-objects"
                                     "-flto-partition=max")
 else()
+    list(APPEND compile_options     "-fno-lto")
     list(APPEND link_options        "-fno-lto")
 endif()
 

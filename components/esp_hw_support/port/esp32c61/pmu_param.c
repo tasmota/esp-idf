@@ -283,8 +283,8 @@ const pmu_hp_system_analog_param_t * pmu_hp_system_analog_param_default(pmu_hp_m
         .hp_active_retention_mode       = 0, \
         .hp_sleep2active_retention_en   = 0, \
         .hp_modem2active_retention_en   = 0, \
-        .hp_sleep2active_backup_clk_sel = 0, \
-        .hp_modem2active_backup_clk_sel = 1, \
+        .hp_sleep2active_backup_clk_sel = SOC_CPU_CLK_SRC_XTAL, \
+        .hp_modem2active_backup_clk_sel = SOC_CPU_CLK_SRC_PLL_F160M, \
         .hp_sleep2active_backup_mode    = PMU_HP_RETENTION_REGDMA_CONFIG(0, 0), \
         .hp_modem2active_backup_mode    = PMU_HP_RETENTION_REGDMA_CONFIG(0, 2), \
         .hp_sleep2active_backup_en      = 0, \
@@ -292,6 +292,7 @@ const pmu_hp_system_analog_param_t * pmu_hp_system_analog_param_default(pmu_hp_m
     }, \
     .backup_clk = (                       \
         BIT(PMU_ICG_FUNC_ENA_REGDMA)    | \
+        BIT(PMU_ICG_FUNC_ENA_GDMA)      | \
         BIT(PMU_ICG_FUNC_ENA_TG0)       | \
         BIT(PMU_ICG_FUNC_ENA_TG1)       | \
         BIT(PMU_ICG_FUNC_ENA_HPBUS)     | \
@@ -308,7 +309,7 @@ const pmu_hp_system_analog_param_t * pmu_hp_system_analog_param_default(pmu_hp_m
         .hp_sleep2modem_backup_modem_clk_code  = 1, \
         .hp_modem_retention_mode        = 0, \
         .hp_sleep2modem_retention_en    = 0, \
-        .hp_sleep2modem_backup_clk_sel  = 0, \
+        .hp_sleep2modem_backup_clk_sel  = SOC_CPU_CLK_SRC_XTAL, \
         .hp_sleep2modem_backup_mode     = PMU_HP_RETENTION_REGDMA_CONFIG(0, 1), \
         .hp_sleep2modem_backup_en       = 0, \
     }, \
@@ -332,8 +333,8 @@ const pmu_hp_system_analog_param_t * pmu_hp_system_analog_param_default(pmu_hp_m
         .hp_sleep_retention_mode        = 0, \
         .hp_modem2sleep_retention_en    = 0, \
         .hp_active2sleep_retention_en   = 0, \
-        .hp_modem2sleep_backup_clk_sel  = 0, \
-        .hp_active2sleep_backup_clk_sel = 0, \
+        .hp_modem2sleep_backup_clk_sel  = SOC_CPU_CLK_SRC_XTAL, \
+        .hp_active2sleep_backup_clk_sel = SOC_CPU_CLK_SRC_XTAL, \
         .hp_modem2sleep_backup_mode     = PMU_HP_RETENTION_REGDMA_CONFIG(1, 1), \
         .hp_active2sleep_backup_mode    = PMU_HP_RETENTION_REGDMA_CONFIG(1, 0), \
         .hp_modem2sleep_backup_en       = 0, \

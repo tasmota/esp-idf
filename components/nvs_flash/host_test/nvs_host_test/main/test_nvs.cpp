@@ -18,6 +18,7 @@
 #include <string>
 #include <random>
 #include "test_fixtures.hpp"
+#include "spi_flash_mmap.h"
 
 #define TEST_ESP_ERR(rc, res) CHECK((rc) == (res))
 #define TEST_ESP_OK(rc) CHECK((rc) == ESP_OK)
@@ -3741,7 +3742,7 @@ TEST_CASE("check and read data from partition generated via manufacturing utilit
     }
 }
 
-TEST_CASE("nvs multiple write with same key but different types", "[nvs][xxx]")
+TEST_CASE("nvs multiple write with same key but different types", "[nvs]")
 {
     PartitionEmulationFixture f(0, 10);
 

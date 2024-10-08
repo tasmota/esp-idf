@@ -153,6 +153,7 @@ DEFAULT_FULL_BUILD_TEST_FILEPATTERNS = [
     'tools/ci/ignore_build_warnings.txt',
 ]
 DEFAULT_BUILD_LOG_FILENAME = 'build_log.txt'
+DEFAULT_SIZE_JSON_FILENAME = 'size.json'
 
 
 class CollectMode(str, Enum):
@@ -277,8 +278,14 @@ class PytestCase:
         if 'jtag' in self.env_markers or 'usb_serial_jtag' in self.env_markers:
             return True
 
-        if any('panic' in Path(app.path).parts for app in self.apps):
-            return True
+        cases_need_elf = [
+            'panic',
+            'gdbstub_runtime'
+        ]
+
+        for case in cases_need_elf:
+            if any(case in Path(app.path).parts for app in self.apps):
+                return True
 
         return False
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -101,24 +101,6 @@ static void copy_app_partition_with_offset(esp_ota_handle_t update_handle, const
     ESP_LOGI(TAG, "finish the copy process");
 }
 
-#if defined(CONFIG_BOOTLOADER_FACTORY_RESET) || defined(CONFIG_BOOTLOADER_APP_TEST)
-/* @brief Copies partition from source partition to destination partition.
- *
- * Partitions can be of any types and subtypes.
- * @param[in] dst_partition - Destination partition
- * @param[in] src_partition - Source partition
- */
-static void copy_partition(const esp_partition_t *dst_partition, const esp_partition_t *src_partition)
-{
-    const void *partition_bin = NULL;
-    esp_partition_mmap_handle_t data_map;
-    TEST_ESP_OK(esp_partition_mmap(src_partition, 0, src_partition->size, ESP_PARTITION_MMAP_DATA, &partition_bin, &data_map));
-    TEST_ESP_OK(esp_partition_erase_range(dst_partition, 0, dst_partition->size));
-    TEST_ESP_OK(esp_partition_write(dst_partition, 0, (const void *)partition_bin, dst_partition->size));
-    esp_partition_munmap(data_map);
-}
-#endif
-
 /* @brief Get the next partition of OTA for the update.
  *
  * @return The next partition of OTA(OTA0-15).
@@ -177,7 +159,7 @@ static void erase_ota_data(void)
 {
     const esp_partition_t *data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
     TEST_ASSERT_NOT_EQUAL(NULL, data_partition);
-    TEST_ESP_OK(esp_partition_erase_range(data_partition, 0, 2 * SPI_FLASH_SEC_SIZE));
+    TEST_ESP_OK(esp_partition_erase_range(data_partition, 0, 2 * data_partition->erase_size));
 }
 
 /* @brief Reboots ESP using mode deep sleep. This mode guaranty that RTC_DATA_ATTR variables is not reset.
@@ -251,7 +233,7 @@ static void get_ota_data(const esp_partition_t *otadata_partition, esp_ota_selec
         TEST_ASSERT_NOT_EQUAL(NULL, ota_select_map);
 
         memcpy(ota_data_0, ota_select_map, sizeof(esp_ota_select_entry_t));
-        memcpy(ota_data_1, (uint8_t *)ota_select_map + SPI_FLASH_SEC_SIZE, sizeof(esp_ota_select_entry_t));
+        memcpy(ota_data_1, (uint8_t *)ota_select_map + otadata_partition->erase_size, sizeof(esp_ota_select_entry_t));
         bootloader_munmap(ota_select_map);
     }
 }
@@ -264,7 +246,7 @@ static void get_ota_data(const esp_partition_t *otadata_partition, esp_ota_selec
  */
 static void write_ota_data(const esp_partition_t *otadata_partition, esp_ota_select_entry_t *ota_data, int sec_id)
 {
-    esp_partition_write(otadata_partition, SPI_FLASH_SEC_SIZE * sec_id, &ota_data[sec_id], sizeof(esp_ota_select_entry_t));
+    esp_partition_write(otadata_partition, otadata_partition->erase_size * sec_id, &ota_data[sec_id], sizeof(esp_ota_select_entry_t));
 }
 
 /* @brief Makes a corrupt of ota_data.
@@ -530,7 +512,7 @@ static void test_flow5(void)
             ESP_LOGI(TAG, "Factory");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
             set_output_pin(CONFIG_BOOTLOADER_NUM_PIN_APP_TEST);
-            copy_partition(esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_TEST, NULL), cur_app);
+            esp_partition_copy(esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_TEST, NULL), 0, cur_app, 0, cur_app->size);
             esp_restart();
             break;
         case 3:

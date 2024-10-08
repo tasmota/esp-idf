@@ -25,6 +25,7 @@ from idf_py_actions.constants import SUPPORTED_TARGETS as TOOLS_SUPPORTED_TARGET
 from .constants import CollectMode
 from .constants import DEFAULT_BUILD_LOG_FILENAME
 from .constants import DEFAULT_CONFIG_RULES_STR
+from .constants import DEFAULT_SIZE_JSON_FILENAME
 from .constants import PytestCase
 from .plugin import IdfPytestEmbedded
 
@@ -128,6 +129,7 @@ def get_all_apps(
     config_rules_str: t.Optional[t.List[str]] = None,
     preserve_all: bool = False,
     extra_default_build_targets: t.Optional[t.List[str]] = None,
+    compare_manifest_sha_filepath: t.Optional[str] = None,
     modified_components: t.Optional[t.List[str]] = None,
     modified_files: t.Optional[t.List[str]] = None,
     ignore_app_dependencies_components: t.Optional[t.List[str]] = None,
@@ -143,8 +145,10 @@ def get_all_apps(
     :param config_rules_str: config rules string
     :param preserve_all: preserve all apps
     :param extra_default_build_targets: extra default build targets
+    :param compare_manifest_sha_filepath: check manifest sha filepath
     :param modified_components: modified components
     :param modified_files: modified files
+    :param ignore_app_dependencies_components: ignore app dependencies components
     :param ignore_app_dependencies_filepatterns: ignore app dependencies filepatterns
     :return: tuple of test-required apps and non-test-related apps
     """
@@ -159,9 +163,10 @@ def get_all_apps(
             build_dir='build_@t_@w',
             config_rules_str=config_rules_str or DEFAULT_CONFIG_RULES_STR,
             build_log_filename=DEFAULT_BUILD_LOG_FILENAME,
-            size_json_filename='size.json',
+            size_json_filename=DEFAULT_SIZE_JSON_FILENAME,
             check_warnings=True,
             manifest_rootpath=IDF_PATH,
+            compare_manifest_sha_filepath=compare_manifest_sha_filepath,
             manifest_files=get_all_manifest_files(),
             default_build_targets=SUPPORTED_TARGETS + (extra_default_build_targets or []),
             modified_components=modified_components,

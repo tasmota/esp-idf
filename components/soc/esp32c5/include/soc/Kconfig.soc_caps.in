@@ -451,6 +451,10 @@ config SOC_GDMA_SUPPORT_ETM
     bool
     default y
 
+config SOC_GDMA_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_ETM_GROUPS
     int
     default 1
@@ -671,6 +675,10 @@ config SOC_I2S_TDM_FULL_DATA_WIDTH
     bool
     default y
 
+config SOC_I2S_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_LEDC_SUPPORT_PLL_DIV_CLOCK
     bool
     default y
@@ -792,6 +800,10 @@ config SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY
     default y
 
 config SOC_RMT_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -932,6 +944,10 @@ config SOC_SHA_SUPPORT_SHA224
     default y
 
 config SOC_SHA_SUPPORT_SHA256
+    bool
+    default y
+
+config SOC_ECC_CONSTANT_TIME_POINT_MUL
     bool
     default y
 
@@ -1234,6 +1250,14 @@ config SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
 config SOC_COEX_HW_PTI
     bool
     default y
+
+config SOC_EXTERNAL_COEX_ADVANCE
+    bool
+    default y
+
+config SOC_EXTERNAL_COEX_LEADER_TX_LINE
+    bool
+    default n
 
 config SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH
     int

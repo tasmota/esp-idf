@@ -34,22 +34,16 @@ check_public_headers:
     - IDF_TARGET=esp32p4 python tools/ci/check_public_headers.py --jobs 4 --prefix riscv32-esp-elf-
     - IDF_TARGET=esp32c61 python tools/ci/check_public_headers.py --jobs 4 --prefix riscv32-esp-elf-
 
-test_nvs_on_host:
-  extends: .host_test_template
-  script:
-    - cd components/nvs_flash/test_nvs_host
-    - make test
-
 test_nvs_coverage:
   extends:
     - .host_test_template
     - .rules:labels:nvs_coverage
   artifacts:
     paths:
-      - components/nvs_flash/test_nvs_host/coverage_report
+      - components/nvs_flash/host_test/nvs_host_test/coverage_report
   script:
-    - cd components/nvs_flash/test_nvs_host
-    - make coverage_report
+    - cd components/nvs_flash/host_test/nvs_host_test
+    - idf.py build coverage
   # the 'long' host tests take approx 11 hours on our current runners. Adding some margin here for possible CPU contention
   timeout: 18 hours
 
@@ -402,3 +396,21 @@ test_nvs_gen_check:
   script:
     - cd ${IDF_PATH}/components/nvs_flash/nvs_partition_tool
     - pytest --noconftest test_nvs_gen_check.py --junitxml=XUNIT_RESULT.xml
+
+make_sure_soc_caps_compatible_in_idf_build_apps:
+    extends:
+      - .host_test_template
+      - .rules:dev-push
+    artifacts:
+      paths:
+        - new.json
+        - base.json
+      when: always
+    when: manual
+    script:
+      - python tools/ci/idf_build_apps_dump_soc_caps.py new.json
+      - git fetch --depth=1 origin $CI_MERGE_REQUEST_DIFF_BASE_SHA
+      - git checkout -f $CI_MERGE_REQUEST_DIFF_BASE_SHA
+      - git checkout $CI_COMMIT_SHA -- tools/ci/idf_build_apps_dump_soc_caps.py
+      - python tools/ci/idf_build_apps_dump_soc_caps.py base.json
+      - diff new.json base.json

@@ -356,17 +356,38 @@ static int http_on_chunk_header(http_parser *parser)
 
 esp_err_t esp_http_client_set_header(esp_http_client_handle_t client, const char *key, const char *value)
 {
+    if (client == NULL || client->request == NULL || client->request->headers == NULL || key == NULL || value == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return http_header_set(client->request->headers, key, value);
 }
 
 esp_err_t esp_http_client_get_header(esp_http_client_handle_t client, const char *key, char **value)
 {
+    if (client == NULL || client->request == NULL || client->request->headers == NULL || key == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return http_header_get(client->request->headers, key, value);
 }
 
 esp_err_t esp_http_client_delete_header(esp_http_client_handle_t client, const char *key)
 {
+    if (client == NULL || client->request == NULL || client->request->headers == NULL || key == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return http_header_delete(client->request->headers, key);
+}
+
+esp_err_t esp_http_client_delete_all_headers(esp_http_client_handle_t client)
+{
+    if (client == NULL || client->request == NULL || client->request->headers == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return http_header_clean(client->request->headers);
 }
 
 esp_err_t esp_http_client_get_username(esp_http_client_handle_t client, char **value)
@@ -1493,7 +1514,12 @@ static esp_err_t esp_http_client_connect(esp_http_client_handle_t client)
 static int http_client_prepare_first_line(esp_http_client_handle_t client, int write_len)
 {
     if (write_len >= 0) {
-        http_header_set_format(client->request->headers, "Content-Length", "%d", write_len);
+        const bool length_required = (client->connection_info.method != HTTP_METHOD_GET &&
+                                      client->connection_info.method != HTTP_METHOD_HEAD &&
+                                      client->connection_info.method != HTTP_METHOD_DELETE);
+        if (write_len != 0 || length_required) {
+            http_header_set_format(client->request->headers, "Content-Length", "%d", write_len);
+        }
     } else {
         esp_http_client_set_header(client, "Transfer-Encoding", "chunked");
     }

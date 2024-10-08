@@ -209,7 +209,7 @@
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX        3
 #define SOC_AXI_GDMA_SUPPORT_PSRAM          1
 #define SOC_GDMA_SUPPORT_ETM                1
-// #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
+#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 #define SOC_AXI_DMA_EXT_MEM_ENC_ALIGNMENT   (16)
 
 /*-------------------------- 2D-DMA CAPS -------------------------------------*/
@@ -328,6 +328,7 @@
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)     // On I2S0
 #define SOC_I2S_PDM_MAX_RX_LINES    (4)     // On I2S0
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
+#define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
 
 /*-------------------------- LP_I2S CAPS -------------------------------------*/
 #define SOC_LP_I2S_NUM              (1U)
@@ -691,6 +692,7 @@
 #define SOC_PM_CPU_RETENTION_BY_SW      (1)
 
 #define SOC_PM_PAU_LINK_NUM             (4)
+#define SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR   (1)
 #define SOC_PAU_IN_TOP_DOMAIN           (1)
 #define SOC_CPU_IN_TOP_DOMAIN           (1)
 

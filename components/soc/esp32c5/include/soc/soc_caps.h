@@ -186,7 +186,7 @@
 #define SOC_GDMA_NUM_GROUPS_MAX         1U
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX    3
 #define SOC_GDMA_SUPPORT_ETM            1
-// #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1  // TODO: IDF-9225
+#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
@@ -288,6 +288,7 @@
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)
 #define SOC_I2S_SUPPORTS_TDM        (1)
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
+#define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -334,6 +335,7 @@
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
 #define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
 #define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
+#define SOC_RMT_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up RMT registers before sleep */
 // #define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST as the RMT clock source */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
@@ -394,6 +396,9 @@
 #define SOC_SHA_SUPPORT_SHA1            (1)
 #define SOC_SHA_SUPPORT_SHA224          (1)
 #define SOC_SHA_SUPPORT_SHA256          (1)
+
+/*--------------------------- ECC CAPS ---------------------------------------*/
+#define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
@@ -529,8 +534,8 @@
 #define SOC_COEX_HW_PTI                 (1)
 
 /*-------------------------- EXTERNAL COEXISTENCE CAPS -------------------------------------*/
-// #define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE ADVANCED EXTERNAL COEXISTENCE CAPS */
-// #define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
+#define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE  EXTERNAL COEXISTENCE CAPS */
+#define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 // #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)

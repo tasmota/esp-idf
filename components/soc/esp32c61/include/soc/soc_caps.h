@@ -49,8 +49,7 @@
 #define SOC_PMU_SUPPORTED               1
 #define SOC_LP_TIMER_SUPPORTED          1
 #define SOC_LP_AON_SUPPORTED            1
-//  \#define SOC_LP_PERIPHERALS_SUPPORTED    1
- #define SOC_CLK_TREE_SUPPORTED          1
+#define SOC_CLK_TREE_SUPPORTED          1
 //  \#define SOC_ASSIST_DEBUG_SUPPORTED      1    //TODO: [ESP32C61] IDF-9269
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1       //TODO: [ESP32C61] IDF-9314
@@ -150,7 +149,7 @@
 #define SOC_GDMA_NUM_GROUPS_MAX         1U
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX    2
 // \#define SOC_GDMA_SUPPORT_ETM            1  // Support ETM submodule TODO: IDF-9964
-// \#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1  // TODO: IDF-10380
+#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
@@ -289,6 +288,9 @@
 #define SOC_SHA_SUPPORT_SHA224          (1)
 #define SOC_SHA_SUPPORT_SHA256          (1)
 
+/*--------------------------- ECC CAPS ---------------------------------------*/
+#define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
+
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
@@ -414,9 +416,9 @@
 
 // TODO: IDF-5351 (Copy from esp32c3, need check)
 /*-------------------------- Power Management CAPS ----------------------------*/
-// #define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
-// #define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
-// #define SOC_PM_SUPPORT_BT_WAKEUP        (1)
+#define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
+#define SOC_PM_SUPPORT_BEACON_WAKEUP    (1)
+#define SOC_PM_SUPPORT_BT_WAKEUP        (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP      (1)
 #define SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN   (1) /*!<Supports one bit per pin to configure the EXT1 trigger level */
 #define SOC_PM_SUPPORT_CPU_PD           (1)
@@ -430,7 +432,7 @@
 #define SOC_PM_SUPPORT_MAC_BB_PD        (1)
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
 
-#define SOC_PM_SUPPORT_PMU_MODEM_STATE  (0)
+#define SOC_PM_SUPPORT_PMU_MODEM_STATE  (1)
 /* macro redefine for pass esp_wifi headers md5sum check */
 #define MAC_SUPPORT_PMU_MODEM_STATE     SOC_PM_SUPPORT_PMU_MODEM_STATE
 

@@ -653,7 +653,7 @@ extern "C" {
 #define USB_SERIAL_JTAG_TEST_ENABLE_V  0x00000001U
 #define USB_SERIAL_JTAG_TEST_ENABLE_S  0
 /** USB_SERIAL_JTAG_TEST_USB_OE : R/W; bitpos: [1]; default: 0;
- *  USB pad one in test
+ *  USB pad oen in test
  */
 #define USB_SERIAL_JTAG_TEST_USB_OE    (BIT(1))
 #define USB_SERIAL_JTAG_TEST_USB_OE_M  (USB_SERIAL_JTAG_TEST_USB_OE_V << USB_SERIAL_JTAG_TEST_USB_OE_S)

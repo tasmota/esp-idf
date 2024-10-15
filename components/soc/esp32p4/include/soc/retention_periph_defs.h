@@ -44,6 +44,8 @@ typedef enum periph_retention_module {
     SLEEP_RETENTION_MODULE_I2S0         = 19,
     SLEEP_RETENTION_MODULE_I2S1         = 20,
     SLEEP_RETENTION_MODULE_I2S2         = 21,
+    SLEEP_RETENTION_MODULE_I2C0         = 22,
+    SLEEP_RETENTION_MODULE_I2C1         = 23,
 
     SLEEP_RETENTION_MODULE_MAX          = 31
 } periph_retention_module_t;

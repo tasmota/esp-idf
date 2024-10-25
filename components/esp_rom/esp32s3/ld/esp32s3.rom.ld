@@ -1851,7 +1851,7 @@ ppGetTxQFirstAvail_Locked = 0x400055b0;
 ppGetTxframe = 0x400055bc;
 /*ppMapTxQueue = 0x400055c8;*/
 ppProcessRxPktHdr = 0x400055e0;
-ppProcessTxQ = 0x400055ec;
+/*ppProcessTxQ = 0x400055ec;*/
 ppRecordBarRRC = 0x400055f8;
 lmacRequestTxopQueue = 0x40005604;
 lmacReleaseTxopQueue = 0x40005610;
@@ -2058,7 +2058,7 @@ coex_hw_timer_set = 0x40005c04;
 coex_schm_interval_set = 0x40005c10;
 coex_schm_lock = 0x40005c1c;
 coex_schm_unlock = 0x40005c28;
-coex_status_get = 0x40005c34;
+/*coex_status_get = 0x40005c34;*/
 coex_wifi_release = 0x40005c40;
 esp_coex_ble_conn_dynamic_prio_get = 0x40005c4c;
 /* Data (.data, .bss, .rodata) */

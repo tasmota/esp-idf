@@ -148,31 +148,32 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
             - INT_MTX
             - TEE/APM
             - IO_MUX / GPIO
-            - Timer Group 0 & Timer Group 1
-            - SPI0/1
+            - MSPI (SPI0/1)
             - SYSTIMER
+            :SOC_TIMER_SUPPORT_SLEEP_RETENTION: - GPTimer
             :SOC_RMT_SUPPORT_SLEEP_RETENTION: - RMT
+            :SOC_LEDC_SUPPORT_SLEEP_RETENTION: - LEDC
             :SOC_I2C_SUPPORT_SLEEP_RETENTION: - I2C
             :SOC_I2S_SUPPORT_SLEEP_RETENTION: - I2S
+            :SOC_ETM_SUPPORT_SLEEP_RETENTION: - ETM
             :SOC_UART_SUPPORT_SLEEP_RETENTION: - All UARTs
+            :SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION: - Temperature Sensor
+            :SOC_TWAI_SUPPORT_SLEEP_RETENTION: - All TWAIs
+            :SOC_PARLIO_SUPPORT_SLEEP_RETENTION: - PARL_IO
+            :SOC_SPI_SUPPORT_SLEEP_RETENTION: - All GPSPIs
 
         以下外设尚未支持：
 
         .. list::
 
-            - ETM
             - ASSIST_DEBUG
             - Trace
             - Crypto: AES/ECC/HMAC/RSA/SHA/DS/XTA_AES/ECDSA
-            - SPI2
             - PCNT
             - USB-Serial-JTAG
-            - TWAI
-            - LEDC
             - MCPWM
             - SARADC
             - SDIO
-            - PARL_IO
 
         对于未支持 Light-sleep 上下文备份的外设，若启用了电源管理功能，应在外设工作时持有 ``ESP_PM_NO_LIGHT_SLEEP`` 锁以避免进入休眠导致外设工作上下文丢失。
 

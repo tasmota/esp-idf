@@ -191,6 +191,7 @@
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
 #define SOC_ETM_CHANNELS_PER_GROUP      50  // Number of ETM channels in the group
+#define SOC_ETM_SUPPORT_SLEEP_RETENTION 1   // Support sleep retention
 
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-C5 has 1 GPIO peripheral
@@ -293,12 +294,14 @@
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
 #define SOC_LEDC_SUPPORT_XTAL_CLOCK         (1)
+#define SOC_LEDC_TIMER_NUM                  (4)
 #define SOC_LEDC_CHANNEL_NUM                (6)
 #define SOC_LEDC_TIMER_BIT_WIDTH            (20)
 #define SOC_LEDC_SUPPORT_FADE_STOP          (1)
 #define SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED (1)
 #define SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX (16)
 #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
+#define SOC_LEDC_SUPPORT_SLEEP_RETENTION    (1)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
 #define SOC_MMU_PERIPH_NUM                    (1U)
@@ -369,6 +372,7 @@
 #define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
+#define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -420,6 +424,7 @@
 #define SOC_SPI_SUPPORT_CD_SIG              1
 #define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
 #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
+#define SOC_SPI_SUPPORT_SLEEP_RETENTION     1
 #define SOC_SPI_SUPPORT_CLK_XTAL            1
 #define SOC_SPI_SUPPORT_CLK_PLL_F160M       1
 #define SOC_SPI_SUPPORT_CLK_RC_FAST         1
@@ -590,6 +595,8 @@
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_XTAL                   (1)
 #define SOC_TEMPERATURE_SENSOR_INTR_SUPPORT                   (1)
+#define SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION        (1)
+#define SOC_TEMPERATURE_SENSOR_UNDER_PD_TOP_DOMAIN            (1)
 
 /*------------------------------------ WI-FI CAPS ------------------------------------*/
 #define SOC_WIFI_HW_TSF                     (1)    /*!< Support hardware TSF */

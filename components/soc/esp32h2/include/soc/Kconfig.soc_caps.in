@@ -467,6 +467,10 @@ config SOC_ETM_CHANNELS_PER_GROUP
     int
     default 50
 
+config SOC_ETM_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_GPIO_PORT
     int
     default 1
@@ -687,6 +691,10 @@ config SOC_LEDC_SUPPORT_XTAL_CLOCK
     bool
     default y
 
+config SOC_LEDC_TIMER_NUM
+    int
+    default 4
+
 config SOC_LEDC_CHANNEL_NUM
     int
     default 6
@@ -710,6 +718,10 @@ config SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX
 config SOC_LEDC_FADE_PARAMS_BIT_WIDTH
     int
     default 10
+
+config SOC_LEDC_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
 
 config SOC_MPU_CONFIGURABLE_REGIONS_SUPPORTED
     bool
@@ -899,6 +911,10 @@ config SOC_PARLIO_TRANS_BIT_ALIGN
     bool
     default y
 
+config SOC_PARLIO_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_MPI_MEM_BLOCKS_NUM
     int
     default 4
@@ -984,6 +1000,10 @@ config SOC_SPI_SUPPORT_CONTINUOUS_TRANS
     default y
 
 config SOC_SPI_SUPPORT_SLAVE_HD_VER2
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -1168,6 +1188,10 @@ config SOC_TWAI_BRP_MAX
     default 32768
 
 config SOC_TWAI_SUPPORTS_RX_STATUS
+    bool
+    default y
+
+config SOC_TWAI_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -1416,6 +1440,14 @@ config SOC_TEMPERATURE_SENSOR_INTR_SUPPORT
     default y
 
 config SOC_TEMPERATURE_SENSOR_SUPPORT_ETM
+    bool
+    default y
+
+config SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_TEMPERATURE_SENSOR_UNDER_PD_TOP_DOMAIN
     bool
     default y
 

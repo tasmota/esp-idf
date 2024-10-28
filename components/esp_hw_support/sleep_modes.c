@@ -12,6 +12,7 @@
 
 #include "esp_attr.h"
 #include "esp_rom_caps.h"
+#include "esp_macros.h"
 #include "esp_memory_utils.h"
 #include "esp_sleep.h"
 #include "esp_private/esp_sleep_internal.h"
@@ -61,6 +62,10 @@
 #include "hal/uart_hal.h"
 #if SOC_TOUCH_SENSOR_SUPPORTED
 #include "hal/touch_sensor_hal.h"
+#endif
+
+#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
+#include "hal/ldo_ll.h"
 #endif
 
 #include "sdkconfig.h"
@@ -222,7 +227,7 @@ typedef struct {
     } domain[ESP_PD_DOMAIN_MAX];
     portMUX_TYPE lock;
     uint64_t sleep_duration;
-    uint32_t wakeup_triggers : 15;
+    uint32_t wakeup_triggers : 20;
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
     uint32_t ext1_trigger_mode : 22;  // 22 is the maximum RTCIO number in all chips
     uint32_t ext1_rtc_gpio_mask : 22;
@@ -680,6 +685,9 @@ FORCE_INLINE_ATTR void misc_modules_sleep_prepare(uint32_t pd_flags, bool deep_s
 #if REGI2C_ANA_CALI_PD_WORKAROUND
         regi2c_analog_cali_reg_read();
 #endif
+#if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
+        regi2c_tsens_reg_read();
+#endif
     }
 
 #if !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_IDF_TARGET_ESP32C61
@@ -723,6 +731,9 @@ FORCE_INLINE_ATTR void misc_modules_wake_prepare(uint32_t pd_flags)
 #endif
 #if REGI2C_ANA_CALI_PD_WORKAROUND
     regi2c_analog_cali_reg_write();
+#endif
+#if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
+    regi2c_tsens_reg_write();
 #endif
 }
 
@@ -803,7 +814,16 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     // Save current frequency and switch to XTAL
     rtc_cpu_freq_config_t cpu_freq_config;
     rtc_clk_cpu_freq_get_config(&cpu_freq_config);
+#if SOC_PMU_SUPPORTED
+    // For PMU supported chips, CPU's PLL power can be turned off by PMU, so no need to disable the PLL at here.
+    // Leaving PLL on at this stage also helps USJ keep connection and retention operation (if they rely on this PLL).
+    rtc_clk_cpu_set_to_default_config();
+#else
+    // For earlier chips, there is no PMU module that can turn off the CPU's PLL, so it has to be disabled at here to save the power consumption.
+    // Though ESP32C3/S3 has USB CDC device, it can not function properly during sleep due to the lack of APB clock (before C6, USJ relies on APB clock to work).
+    // Therefore, we will always disable CPU's PLL (i.e. BBPLL).
     rtc_clk_cpu_freq_set_xtal();
+#endif
 
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
     // Configure pins for external wakeup
@@ -901,7 +921,7 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     uint32_t sleep_flags = pd_flags;
 
     if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_DIG_USE_RC_FAST_MODE] && !deep_sleep) {
-        pd_flags &= ~RTC_SLEEP_PD_INT_8M;
+        sleep_flags &= ~RTC_SLEEP_PD_INT_8M;
         sleep_flags |= RTC_SLEEP_DIG_USE_8M;
     }
 
@@ -916,6 +936,12 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_RTC_FAST_USE_XTAL_MODE]) {
         sleep_flags |= RTC_SLEEP_XTAL_AS_RTC_FAST;
     }
+
+#if SOC_LP_VAD_SUPPORTED
+    if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_LP_USE_XTAL_MODE] && !deep_sleep) {
+        sleep_flags |= RTC_SLEEP_LP_PERIPH_USE_XTAL;
+    }
+#endif
 
 #if CONFIG_ESP_SLEEP_DEBUG
     if (s_sleep_ctx != NULL) {
@@ -1154,6 +1180,10 @@ static esp_err_t IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     portENTER_CRITICAL(&spinlock_rtc_deep_sleep);
     esp_ipc_isr_stall_other_cpu();
     esp_ipc_isr_stall_pause();
+#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
+    // Disable PSRAM chip power supply
+    ldo_ll_enable(LDO_ID2UNIT(CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN), false);
+#endif
 
     // record current RTC time
     s_config.rtc_ticks_at_sleep_start = rtc_time_get();
@@ -1215,10 +1245,12 @@ static esp_err_t IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     } else {
         // Because RTC is in a slower clock domain than the CPU, it
         // can take several CPU cycles for the sleep mode to start.
-        while (1) {
-            ;
-        }
+        ESP_INFINITE_LOOP();
     }
+#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
+    // Enable PSRAM chip power supply
+    ldo_ll_enable(LDO_ID2UNIT(CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN), true);
+#endif
     // Never returns here, except that the sleep is rejected.
     esp_ipc_isr_stall_resume();
     esp_ipc_isr_release_other_cpu();
@@ -1644,6 +1676,14 @@ esp_err_t esp_sleep_enable_timer_wakeup(uint64_t time_in_us)
     s_config.sleep_duration = time_in_us;
     return ESP_OK;
 }
+
+#if SOC_LP_VAD_SUPPORTED
+esp_err_t esp_sleep_enable_vad_wakeup(void)
+{
+    s_config.wakeup_triggers |= RTC_LP_VAD_TRIG_EN;
+    return esp_sleep_sub_mode_config(ESP_SLEEP_LP_USE_XTAL_MODE, true);
+}
+#endif
 
 static esp_err_t timer_wakeup_prepare(int64_t sleep_duration)
 {
@@ -2166,6 +2206,10 @@ esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause(void)
     } else if (wakeup_cause & RTC_LP_CORE_TRIG_EN) {
         return ESP_SLEEP_WAKEUP_ULP;
 #endif
+#if SOC_LP_VAD_SUPPORTED
+    } else if (wakeup_cause & RTC_LP_VAD_TRIG_EN) {
+        return ESP_SLEEP_WAKEUP_VAD;
+#endif
     } else {
         return ESP_SLEEP_WAKEUP_UNDEFINED;
     }
@@ -2229,6 +2273,7 @@ int32_t* esp_sleep_sub_mode_dump_config(FILE *stream) {
                                 [ESP_SLEEP_ULTRA_LOW_MODE]              = "ESP_SLEEP_ULTRA_LOW_MODE",
                                 [ESP_SLEEP_RTC_FAST_USE_XTAL_MODE]      = "ESP_SLEEP_RTC_FAST_USE_XTAL_MODE",
                                 [ESP_SLEEP_DIG_USE_XTAL_MODE]           = "ESP_SLEEP_DIG_USE_XTAL_MODE",
+                                [ESP_SLEEP_LP_USE_XTAL_MODE]            = "ESP_SLEEP_LP_USE_XTAL_MODE",
                             }[mode],
                             s_sleep_sub_mode_ref_cnt[mode] ? "ENABLED" : "DISABLED",
                             s_sleep_sub_mode_ref_cnt[mode]);
@@ -2340,6 +2385,11 @@ static uint32_t get_power_down_flags(void)
 #ifndef CONFIG_ESP_SLEEP_POWER_DOWN_FLASH
         s_config.domain[ESP_PD_DOMAIN_VDDSDIO].pd_option = ESP_PD_OPTION_ON;
 #endif
+#if CONFIG_IDF_TARGET_ESP32P4
+        if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 100)) {
+            s_config.domain[ESP_PD_DOMAIN_VDDSDIO].pd_option = ESP_PD_OPTION_ON;
+        }
+#endif
     }
 #endif
 
@@ -2427,6 +2477,13 @@ static uint32_t get_power_down_flags(void)
     }
 #endif
 
+#if CONFIG_IDF_TARGET_ESP32P4
+    if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 100)) {
+        if (pd_flags & RTC_SLEEP_PD_VDDSDIO) {
+            ESP_LOGE(TAG, "ESP32P4 chips lower than v1.0 are not allowed to power down the Flash");
+        }
+    }
+#endif
     return pd_flags;
 }
 

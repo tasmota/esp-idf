@@ -779,7 +779,8 @@ static void btdm_sleep_enter_phase1_wrapper(uint32_t lpcycles)
     // allow a maximum time uncertainty to be about 488ppm(1/2048) at least as clock drift
     // and set the timer in advance
     uint32_t uncertainty = (us_to_sleep >> 11);
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#if CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP
+    // recalculate clock drift when Bluetooth using main XTAL during light sleep
     if (rtc_clk_slow_src_get() == SOC_RTC_SLOW_CLK_SRC_RC_SLOW) {
         uncertainty = us_to_sleep * BTDM_RTC_SLOW_CLK_RC_DRIFT_PERCENT / 100;
     }
@@ -1435,7 +1436,10 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     periph_module_enable(PERIPH_BT_MODULE);
     periph_module_reset(PERIPH_BT_MODULE);
 
-    if (btdm_controller_init(cfg) != 0) {
+    err = btdm_controller_init(cfg);
+
+    if (err != 0) {
+        ESP_LOGE(BT_LOG_TAG, "%s %d\n",__func__,err);
         err = ESP_ERR_NO_MEM;
         goto error;
     }
@@ -1751,7 +1755,7 @@ esp_power_level_t esp_ble_tx_power_get(esp_ble_power_type_t power_type)
         handle = power_type;
     }
 
-    lvl = (esp_power_level_t)ble_txpwr_get(power_type, handle);
+    lvl = (esp_power_level_t)ble_txpwr_get(enh_pwr_type, handle);
 
     return lvl;
 }

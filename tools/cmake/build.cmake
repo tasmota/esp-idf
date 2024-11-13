@@ -253,7 +253,7 @@ function(__build_init idf_path)
         if(IS_DIRECTORY ${component_dir})
             __component_dir_quick_check(is_component ${component_dir})
             if(is_component)
-                __component_add(${component_dir} ${prefix})
+                __component_add(${component_dir} ${prefix} "idf_components")
             endif()
         endif()
     endforeach()
@@ -283,9 +283,29 @@ endfunction()
 #        during build (see the COMPONENTS argument description for command idf_build_process)
 #
 # @param[in] component_dir directory of the component
+# @param[in, optional] component_source source of the component, defaults to "project_components"
 function(idf_build_component component_dir)
     idf_build_get_property(prefix __PREFIX)
-    __component_add(${component_dir} ${prefix} 0)
+
+    # if argvc is 1, then component_source is not specified
+    # this should only happen when users call this function directly
+    if(${ARGC} EQUAL 1)
+        set(component_source "project_components")
+    else()
+        set(component_source ${ARGV1})
+    endif()
+
+    # component_source must be one of the following (sorted by the override order):
+    set(valid_component_sources "idf_components"
+                              "project_managed_components"
+                              "project_extra_components"
+                              "project_components")
+
+    if(NOT component_source IN_LIST valid_component_sources)
+        message(FATAL_ERROR "Invalid component source '${component_source}'.")
+    endif()
+
+    __component_add(${component_dir} ${prefix} ${component_source})
 endfunction()
 
 #
@@ -504,6 +524,7 @@ macro(idf_build_process target)
     cmake_parse_arguments(_ "${options}" "${single_value}" "${multi_value}" ${ARGN})
 
     idf_build_set_property(BOOTLOADER_BUILD "${BOOTLOADER_BUILD}")
+    idf_build_set_property(NON_OS_BUILD "${NON_OS_BUILD}")
 
     idf_build_set_property(IDF_TOOLCHAIN "${IDF_TOOLCHAIN}")
 
@@ -611,7 +632,7 @@ macro(idf_build_process target)
         endforeach()
 
         if(NOT "${__components_with_manifests}" STREQUAL "")
-            message(WARNING "\"idf_component.yml\" file was found for components:\n${__components_with_manifests}"
+            message(NOTICE "\"idf_component.yml\" file was found for components:\n${__components_with_manifests}"
                     "However, the component manager is not enabled.")
         endif()
     endif()

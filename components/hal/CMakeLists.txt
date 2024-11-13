@@ -271,6 +271,10 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "usb_serial_jtag_hal.c")
     endif()
 
+    if(CONFIG_SOC_USB_UTMI_PHY_NUM GREATER 0)
+        list(APPEND srcs "usb_utmi_hal.c")
+    endif()
+
     if(CONFIG_SOC_USB_OTG_SUPPORTED)
         list(APPEND srcs
                     "usb_dwc_hal.c"
@@ -329,9 +333,4 @@ if(CONFIG_HAL_DEFAULT_ASSERTION_LEVEL EQUAL 1)
     target_link_libraries(${COMPONENT_LIB} INTERFACE "-u abort")
 elseif(CONFIG_HAL_DEFAULT_ASSERTION_LEVEL EQUAL 2)
     target_link_libraries(${COMPONENT_LIB} INTERFACE "-u __assert_func")
-endif()
-
-if((CONFIG_IDF_TARGET_ESP32H2 OR CONFIG_IDF_TARGET_ESP32S2 OR CONFIG_IDF_TARGET_ESP32S3) AND
-   CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU") # TODO IDF-10234
-    target_compile_options(${COMPONENT_LIB} PRIVATE "-fno-analyzer")
 endif()

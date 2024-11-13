@@ -25,11 +25,11 @@ ESP-IDF 可以显式地指定和配置每个组件。在构建项目的时候，
 概念
 ----
 
-- ``项目`` 特指一个目录，其中包含了构建可执行应用程序所需的全部文件和配置，以及其他支持型文件，例如分区表、数据/文件系统分区和引导程序。
+- ``项目`` 特指一个目录，其中包含了构建可执行应用程序所需的全部文件和配置，以及其他支持型文件，例如分区表、数据/文件系统分区和引导加载程序。
 
 - ``项目配置`` 保存在项目根目录下名为 ``sdkconfig`` 的文件中，可以通过 ``idf.py menuconfig`` 进行修改，且一个项目只能包含一个项目配置。
 
-- ``应用程序`` 是由 ESP-IDF 构建得到的可执行文件。一个项目通常会构建两个应用程序：项目应用程序（可执行的主文件，即用户自定义的固件）和引导程序（启动并初始化项目应用程序）。
+- ``应用程序`` 是由 ESP-IDF 构建得到的可执行文件。一个项目通常会构建两个应用程序：项目应用程序（可执行的主文件，即用户自定义的固件）和引导加载程序（启动并初始化项目应用程序）。
 
 - ``组件`` 是模块化且独立的代码，会被编译成静态库（.a 文件）并链接到应用程序。部分组件由 ESP-IDF 官方提供，其他组件则来源于其它开源项目。
 
@@ -97,7 +97,7 @@ idf.py
 
     make app-flash
 
-可用的目标还包括：``flash``、``app-flash`` （仅用于 app）、``bootloader-flash`` （仅用于 bootloader）。
+可用的目标还包括：``flash``、``app-flash`` （仅用于 app）、``bootloader-flash`` （仅用于引导加载程序）。
 
 以这种方式烧录时，可以通过设置 ``ESPPORT`` 和 ``ESPBAUD`` 环境变量来指定串口设备和波特率。可以在操作系统或 IDE 项目中设置该环境变量，或者直接在命令行中进行设置::
 
@@ -307,9 +307,16 @@ ESP-IDF 适用于 Python 3.8 以上版本。
 同名组件
 --------
 
-ESP-IDF 在搜索所有待构建的组件时，会按照 ``COMPONENT_DIRS`` 指定的顺序依次进行，这意味着在默认情况下，首先搜索 ESP-IDF 内部组件（``IDF_PATH/components``），然后是 ``EXTRA_COMPONENT_DIRS`` 中的组件，最后是项目组件（``PROJECT_DIR/components``）。如果这些目录中的两个或者多个包含具有相同名字的组件，则使用搜索到的最后一个位置的组件。这就允许将组件复制到项目目录中再修改以覆盖 ESP-IDF 组件，如果使用这种方式，ESP-IDF 目录本身可以保持不变。
+ESP-IDF 在搜索所有待构建的组件时，会按照以下优先级搜索组件目录（从高到低）：
 
-.. 注解::
+* 项目目录下的组件
+* ``EXTRA_COMPONENT_DIRS`` 中的组件
+* 项目目录下 ``managed_components`` 目录中的组件。这些组件由 IDF Component Manager 下载并管理。（除非 IDF Component Manager 被禁用）
+* ``IDF_PATH/components`` 目录下的组件
+
+如果有两个及以上同名组件，构建系统会使用优先级更高的组件。这使得我们可以在项目中覆盖 ESP-IDF 提供的组件。只需要复制 ESP-IDF 组件到项目目录下，然后修改它。这样可以在修改组件的同时，不修改 ESP-IDF 的源代码。
+
+.. note::
 
   如果在现有项目中通过将组件移动到一个新位置来覆盖它，项目不会自动看到新组件的路径。请运行 ``idf.py reconfigure`` 命令后（或删除项目构建文件夹）再重新构建。
 
@@ -1086,9 +1093,9 @@ flash 参数
 
 运行项目构建之后，构建目录将包含项目二进制输出文件（``.bin`` 文件），同时也包含以下烧录数据文件：
 
-- ``flash_project_args`` 包含烧录整个项目的参数，包括应用程序 (app)、引导程序 (bootloader)、分区表，如果设置了 PHY 数据，也会包含此数据。
+- ``flash_project_args`` 包含烧录整个项目的参数，包括应用程序 (app)、引导加载程序 (bootloader)、分区表，如果设置了 PHY 数据，也会包含此数据。
 - ``flash_app_args`` 只包含烧录应用程序的参数。
-- ``flash_bootloader_args`` 只包含烧录引导程序的参数。
+- ``flash_bootloader_args`` 只包含烧录引导加载程序的参数。
 
 .. highlight:: bash
 
@@ -1101,12 +1108,12 @@ flash 参数
 构建目录中还包含生成的 ``flasher_args.json`` 文件，此文件包含 JSON 格式的项目烧录信息，可用于 ``idf.py`` 和其它需要项目构建信息的工具。
 
 
-构建 Bootloader
-===============
+构建引导加载程序
+================
 
-引导程序是 :idf:`/components/bootloader/subproject` 内部独特的“子项目”，它有自己的项目 CMakeLists.txt 文件，能够构建独立于主项目的 ``.ELF`` 和 ``.BIN`` 文件，同时它又与主项目共享配置和构建目录。
+引导加载程序是 :idf:`/components/bootloader/subproject` 内部独特的“子项目”，它有自己的项目 CMakeLists.txt 文件，能够构建独立于主项目的 ``.ELF`` 和 ``.BIN`` 文件，同时它又与主项目共享配置和构建目录。
 
-子项目通过 :idf_file:`/components/bootloader/project_include.cmake` 文件作为外部项目插入到项目的顶层，主构建进程会运行子项目的 CMake，包括查找组件（主项目使用的组件的子集），生成引导程序专用的配置文件（从主 ``sdkconfig`` 文件中派生）。
+子项目通过 :idf_file:`/components/bootloader/project_include.cmake` 文件作为外部项目插入到项目的顶层，主构建进程会运行子项目的 CMake，包括查找组件（主项目使用的组件的子集），生成引导加载程序专用的配置文件（从主 ``sdkconfig`` 文件中派生）。
 
 
 .. _write-pure-component:
@@ -1257,23 +1264,37 @@ ESP-IDF 构建命令
 
 .. code-block:: none
 
-  idf_build_component(component_dir)
+  idf_build_component(component_dir [component_source])
 
 向构建系统提交一个包含组件的 *component_dir* 目录。相对路径会被转换为相对于当前目录的绝对路径。
-所有对该命令的调用必须在`idf_build_process`之前执行。
 
-该命令并不保证组件在构建过程中会被处理（参见 `idf_build_process` 中 `COMPONENTS` 参数说明）
+一个可选的 *component_source* 参数可以用于指定组件源。（默认为 "project_components"）
+
+这个参数决定了同名组件的优先级。详细信息请参考 :ref:`cmake-components-same-name`。
+
+该参数可以指定如下组件源（优先级从高到低排序）：
+
+- "project_components" - 项目目录中的组件
+- "project_extra_components" - 通过 ``EXTRA_COMPONENT_DIRS`` 指定的额外组件
+- "project_managed_components" - 通过 IDF Component Manager 管理的组件
+- "idf_components" - ESP-IDF 中的组件，通常在 :idf:`/components` 目录中
+
+举个例子，如果有两个组件，组件名都为 "json"。一个组件源被定义为 "project_components"，另一个组件源被定义为 "idf_components"，那么 "project_components" 中的 "json" 组件会被优先选择。
+
+.. warning::
+
+    所有对该命令的调用必须在 `idf_build_process` 之前执行。该命令并不保证组件在构建过程中会被处理（参见 `idf_build_process` 中 `COMPONENTS` 参数说明）。
 
 .. code-block:: none
 
-  idf_build_process(target
-                    [PROJECT_DIR project_dir]
-                    [PROJECT_VER project_ver]
-                    [PROJECT_NAME project_name]
-                    [SDKCONFIG sdkconfig]
-                    [SDKCONFIG_DEFAULTS sdkconfig_defaults]
-                    [BUILD_DIR build_dir]
-                    [COMPONENTS component1 component2 ...])
+    idf_build_process(target
+                      [PROJECT_DIR project_dir]
+                      [PROJECT_VER project_ver]
+                      [PROJECT_NAME project_name]
+                      [SDKCONFIG sdkconfig]
+                      [SDKCONFIG_DEFAULTS sdkconfig_defaults]
+                      [BUILD_DIR build_dir]
+                      [COMPONENTS component1 component2 ...])
 
 为导入 ESP-IDF 组件执行大量的幕后工作，包括组件配置、库创建、依赖性扩展和解析。在这些功能中，对于用户最重要的可能是通过调用每个组件的 ``idf_component_register`` 来创建库。该命令为每个组件创建库，这些库可以使用别名来访问，其形式为 idf::*component_name*。
 这些别名可以用来将组件链接到用户自己的目标、库或可执行文件上。
@@ -1422,6 +1443,7 @@ ESP-IDF 组件属性
 - COMPONENT_LIB - 所创建的组件静态/接口库的名称；由 ``idf_build_component`` 设置，库本身由 ``idf_component_register`` 创建。
 - COMPONENT_NAME - 组件的名称；由 ``idf_build_component`` 根据组件的目录名设置。
 - COMPONENT_TYPE - 组件的类型（LIBRARY 或 CONFIG_ONLY）。如果一个组件指定了源文件或嵌入了一个文件，那么它的类型就是 LIBRARY。
+- COMPONENT_SOURCE - 组件源。可选值为 "idf_components"，"project_managed_components"，"project_components"，"project_extra_components". 用于决定同名组件的优先级。
 - EMBED_FILES - 要嵌入组件的文件列表；由 ``idf_component_register`` EMBED_FILES 参数设置。
 - EMBED_TXTFILES - 要嵌入组件的文本文件列表；由 ``idf_component_register`` EMBED_TXTFILES 参数设置。
 - INCLUDE_DIRS - 组件 include 目录列表；由 ``idf_component_register`` INCLUDE_DIRS 参数设置。
@@ -1646,9 +1668,9 @@ CMake 中不可用的功能
 应用示例
 --------------------
 
-- :example:`build_system/wrappers` 演示了如何使用链接器功能在 ESP-IDF 和引导程序中重新定义或覆盖任何公共函数，以修改或扩展函数的默认行为。
+- :example:`build_system/wrappers` 演示了如何使用链接器功能在 ESP-IDF 和引导加载程序中重新定义或覆盖任何公共函数，以修改或扩展函数的默认行为。
 
-- :example:`custom_bootloader/bootloader_override` 演示了如何从常规项目中覆盖二级引导程序，提供一个自定义引导程序，在启动时打印额外的消息，并能够基于某些条件（如目标依赖性或 KConfig 选项）有条件地覆盖引导程序。
+- :example:`custom_bootloader/bootloader_override` 演示了如何从常规项目中覆盖二级引导加载程序，提供一个自定义引导加载程序，在启动时打印额外的消息，并能够基于某些条件（如目标依赖性或 KConfig 选项）有条件地覆盖引导加载程序。
 
 - :example:`build_system/cmake/import_lib` 演示了如何使用 ExternalProject CMake 模块导入和使用第三方库。
 

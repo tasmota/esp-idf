@@ -134,8 +134,8 @@ esp_err_t hub_root_stop(void);
  *
  * @note This function should only be called from the Host Library task
  *
- * @param[in] parent_dev_hdl
- * @param[in] parent_port_num
+ * @param[in] parent_dev_hdl    Parent device handle (is used to get the External Hub handle)
+ * @param[in] parent_port_num   Parent number (is used to specify the External Port)
  * @param[in] dev_uid Device's unique ID
  *
  * @return
@@ -151,9 +151,8 @@ esp_err_t hub_port_recycle(usb_device_handle_t parent_dev_hdl, uint8_t parent_po
  *
  * @note This function should only be called from the Host Library task
  *
- * @param[in] parent_dev_hdl
- * @param[in] parent_port_num
- *
+ * @param[in] parent_dev_hdl    Parent device handle (is used to get the External Hub handle)
+ * @param[in] parent_port_num   Parent number (is used to specify the External Port)
  * @return
  *    - ESP_OK: Port reset successful
  *    - ESP_ERR_INVALID_STATE: Hub driver is not installed
@@ -192,11 +191,13 @@ esp_err_t hub_port_active(usb_device_handle_t parent_dev_hdl, uint8_t parent_por
  */
 esp_err_t hub_port_disable(usb_device_handle_t parent_dev_hdl, uint8_t parent_port_num);
 
-#if ENABLE_USB_HUBS
 /**
  * @brief Notify Hub driver that new device has been attached
  *
  * If device is has a HUB class, then it will be added as External Hub to Hub Driver.
+ *
+ * @note This function should only be called from the Host Library task
+ * @note If the Hub support feature is disabled and device has a Hub class, only the warning message will be shown.
  *
  * @param[in] dev_addr  Device bus address
  *
@@ -211,6 +212,9 @@ esp_err_t hub_notify_new_dev(uint8_t dev_addr);
  *
  * If the device was an External Hub, then it will be removed from the Hub Driver.
  *
+ * @note This function should only be called from the Host Library task
+ * @note If the Hub support feature is disabled, no additional logic requires here.
+ *
  * @param[in] dev_addr  Device bus address
  *
  * @return
@@ -219,8 +223,11 @@ esp_err_t hub_notify_new_dev(uint8_t dev_addr);
  */
 esp_err_t hub_notify_dev_gone(uint8_t dev_addr);
 
+#if ENABLE_USB_HUBS
 /**
  * @brief Notify Hub driver that all devices should be freed
+ *
+ * @note This function should only be called from the Host Library task
  *
  * @return
  *    - ESP_OK: All the devices can be freed

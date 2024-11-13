@@ -29,9 +29,9 @@
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_PCNT_SUPPORTED              1
 #define SOC_LCDCAM_SUPPORTED            1
-#define SOC_LCDCAM_CAM_SUPPORTED        1
+#define SOC_LCDCAM_CAM_SUPPORTED        1 // support the camera driver based on the LCD_CAM peripheral
 #define SOC_LCDCAM_I80_LCD_SUPPORTED    1 // support the Intel 8080 bus driver based on the LCD_CAM peripheral
-// #define SOC_LCDCAM_RGB_LCD_SUPPORTED    1 // TODO: IDF-7465
+#define SOC_LCDCAM_RGB_LCD_SUPPORTED    1 // support the RGB LCD driver based on the LCD_CAM peripheral
 #define SOC_MIPI_CSI_SUPPORTED          1
 #define SOC_MIPI_DSI_SUPPORTED          1
 #define SOC_MCPWM_SUPPORTED             1
@@ -83,6 +83,7 @@
 #define SOC_LP_I2S_SUPPORTED            1
 #define SOC_LP_SPI_SUPPORTED            1
 #define SOC_LP_ADC_SUPPORTED            1
+#define SOC_LP_VAD_SUPPORTED            1
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_PSRAM_DMA_CAPABLE           1
 #define SOC_SDMMC_HOST_SUPPORTED        1
@@ -221,6 +222,7 @@
 /*-------------------------- ETM CAPS --------------------------------------*/
 #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
 #define SOC_ETM_CHANNELS_PER_GROUP      50  // Number of ETM channels in the group
+#define SOC_ETM_SUPPORT_SLEEP_RETENTION 1   // Support sleep retention
 
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-P4 has 1 GPIO peripheral
@@ -304,7 +306,7 @@
 #define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
 #define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
 
-// #define SOC_I2C_SUPPORT_SLEEP_RETENTION (1) // TODO: IDF-9353
+#define SOC_I2C_SUPPORT_SLEEP_RETENTION (1)
 
 /*-------------------------- LP_I2C CAPS -------------------------------------*/
 // ESP32-P4 has 1 LP_I2C
@@ -328,6 +330,7 @@
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)     // On I2S0
 #define SOC_I2S_PDM_MAX_RX_LINES    (4)     // On I2S0
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
+#define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
 
 /*-------------------------- LP_I2S CAPS -------------------------------------*/
 #define SOC_LP_I2S_NUM              (1U)
@@ -339,6 +342,7 @@
 #define SOC_ISP_DVP_SUPPORTED                    1
 #define SOC_ISP_SHARPEN_SUPPORTED                1
 #define SOC_ISP_COLOR_SUPPORTED                  1
+#define SOC_ISP_LSC_SUPPORTED                    1
 #define SOC_ISP_SHARE_CSI_BRG                    1
 
 #define SOC_ISP_NUMS                             1U
@@ -368,16 +372,21 @@
 #define SOC_ISP_HIST_BLOCK_Y_NUMS                5
 #define SOC_ISP_HIST_SEGMENT_NUMS                16
 #define SOC_ISP_HIST_INTERVAL_NUMS               15
+#define SOC_ISP_LSC_GRAD_RATIO_INT_BITS          2
+#define SOC_ISP_LSC_GRAD_RATIO_DEC_BITS          8
+#define SOC_ISP_LSC_GRAD_RATIO_RES_BITS          22
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
 #define SOC_LEDC_SUPPORT_XTAL_CLOCK         (1)
+#define SOC_LEDC_TIMER_NUM                  (4)
 #define SOC_LEDC_CHANNEL_NUM                (8)
 #define SOC_LEDC_TIMER_BIT_WIDTH            (20)
 #define SOC_LEDC_GAMMA_CURVE_FADE_SUPPORTED (1)
 #define SOC_LEDC_GAMMA_CURVE_FADE_RANGE_MAX (16)
 #define SOC_LEDC_SUPPORT_FADE_STOP          (1)
 #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
+#define SOC_LEDC_SUPPORT_SLEEP_RETENTION    (1)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
 #define SOC_MMU_PERIPH_NUM                    (2U)
@@ -399,6 +408,7 @@
 #define SOC_PCNT_THRES_POINT_PER_UNIT         2
 #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
 #define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1  /*!< Support clear signal input */
+// #define SOC_PCNT_SUPPORT_SLEEP_RETENTION      1  // TODO: IDF-9907 Waiting for expansion of module ID /*!< The sleep retention feature can help back up PCNT registers before sleep */
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -421,11 +431,12 @@
 /*-------------------------- LCD CAPS ----------------------------------------*/
 /* I80 bus and RGB timing generator can't work at the same time in the LCD_CAM peripheral */
 #define SOC_LCD_I80_SUPPORTED              1  /*!< support intel 8080 driver */
+#define SOC_LCD_RGB_SUPPORTED              1  /*!< RGB LCD is supported */
 #define SOC_LCDCAM_I80_NUM_BUSES           1U /*!< LCD_CAM peripheral provides one LCD Intel 8080 bus */
 #define SOC_LCDCAM_I80_BUS_WIDTH           24 /*!< Intel 8080 bus max data width */
 #define SOC_LCDCAM_RGB_NUM_PANELS          1U /*!< Support one RGB LCD panel */
-// #define SOC_LCD_RGB_DATA_WIDTH          24 /*!< Number of LCD data lines */
-// #define SOC_LCD_SUPPORT_RGB_YUV_CONV    1  /*!< Support color format conversion between RGB and YUV */
+#define SOC_LCDCAM_RGB_DATA_WIDTH          24 /*!< Number of LCD data lines */
+#define SOC_LCD_SUPPORT_RGB_YUV_CONV       1  /*!< Support color format conversion between RGB and YUV */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
 #define SOC_MCPWM_GROUPS                     (2U)   ///< 2 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
@@ -444,8 +455,15 @@
 #define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR   (1)    ///< Support event comparator (based on ETM)
 #define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP     (1)    ///< Capture timer shares clock with other PWM timers
 
-/*------------------------ USB SERIAL JTAG CAPS ------------------------------*/
+/*-------------------------- USB CAPS ----------------------------------------*/
+// USB Serial JTAG Caps
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
+
+// USB OTG Caps
+#define SOC_USB_OTG_PERIPH_NUM          (2U)
+
+// USB PHY Caps
+#define SOC_USB_UTMI_PHY_NUM            (1U)
 
 /*-------------------------- PARLIO CAPS --------------------------------------*/
 #define SOC_PARLIO_GROUPS                    1U  /*!< Number of parallel IO peripherals */
@@ -458,6 +476,7 @@
 #define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
+#define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -524,6 +543,7 @@
 #define SOC_SPI_MAX_CS_NUM              6
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
 
+#define SOC_SPI_SUPPORT_SLEEP_RETENTION     1
 #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
 #define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
 #define SOC_SPI_SUPPORT_DDRCLK              1
@@ -609,11 +629,12 @@
 #define SOC_TOUCH_SAMPLE_CFG_NUM                    (3)     /*!< The sample configurations number in total, each sampler can be used to sample on one frequency */
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-#define SOC_TWAI_CONTROLLER_NUM         3
-#define SOC_TWAI_CLK_SUPPORT_XTAL       1
-#define SOC_TWAI_BRP_MIN                2
-#define SOC_TWAI_BRP_MAX                32768
-#define SOC_TWAI_SUPPORTS_RX_STATUS     1
+#define SOC_TWAI_CONTROLLER_NUM             3
+#define SOC_TWAI_CLK_SUPPORT_XTAL           1
+#define SOC_TWAI_BRP_MIN                    2
+#define SOC_TWAI_BRP_MAX                    32768
+#define SOC_TWAI_SUPPORTS_RX_STATUS         1
+#define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_PAD_JTAG 1
@@ -660,6 +681,9 @@
 // UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
+/*-------------------------- LP_VAD CAPS -------------------------------------*/
+#define SOC_LP_I2S_SUPPORT_VAD           (1)
+
 // TODO: IDF-5679 (Copy from esp32c3, need check)
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)
@@ -696,6 +720,8 @@
 #define SOC_CPU_IN_TOP_DOMAIN           (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+#define SOC_SLEEP_SYSTIMER_STALL_WORKAROUND 1    //TODO IDF-11381: replace with all xtal field clk gate control
+#define SOC_SLEEP_TGWDT_STOP_WORKAROUND     1    //TODO IDF-11381: replace with all xtal field clk gate control
 
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)
@@ -720,6 +746,8 @@
 #define SOC_TEMPERATURE_SENSOR_INTR_SUPPORT                  (1)
 #define SOC_TSENS_IS_INDEPENDENT_FROM_ADC                    (1)  /*!< Temperature sensor is a separate module, not share regs with ADC */
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_ETM                   (1)
+// temperature sensor on esp32p4 in under low power domain.
+#define SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION       (1)
 
 /*-------------------------- Memory CAPS --------------------------*/
 #define SOC_MEM_TCM_SUPPORTED                      (1)
@@ -743,3 +771,4 @@
 /*------------------------------------- ULP CAPS -------------------------------------*/
 #define SOC_LP_CORE_SUPPORT_ETM               (1) /*!< LP Core supports ETM */
 #define SOC_LP_CORE_SUPPORT_LP_ADC            (1) /*!< LP ADC can be accessed from the LP-Core */
+#define SOC_LP_CORE_SUPPORT_LP_VAD            (1) /*!< LP VAD can be accessed from the LP-Core */

@@ -10,9 +10,8 @@
 #include <assert.h>
 #include <sys/queue.h>
 #include "freertos/FreeRTOS.h"
-#include "freertos/portmacro.h"
-#include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "esp_private/critical_section.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -117,16 +116,15 @@ typedef struct {
 
 static usbh_t *p_usbh_obj = NULL;
 
-static portMUX_TYPE usbh_lock = portMUX_INITIALIZER_UNLOCKED;
-
 const char *USBH_TAG = "USBH";
 
-#define USBH_ENTER_CRITICAL_ISR()       portENTER_CRITICAL_ISR(&usbh_lock)
-#define USBH_EXIT_CRITICAL_ISR()        portEXIT_CRITICAL_ISR(&usbh_lock)
-#define USBH_ENTER_CRITICAL()           portENTER_CRITICAL(&usbh_lock)
-#define USBH_EXIT_CRITICAL()            portEXIT_CRITICAL(&usbh_lock)
-#define USBH_ENTER_CRITICAL_SAFE()      portENTER_CRITICAL_SAFE(&usbh_lock)
-#define USBH_EXIT_CRITICAL_SAFE()       portEXIT_CRITICAL_SAFE(&usbh_lock)
+DEFINE_CRIT_SECTION_LOCK_STATIC(usbh_lock);
+#define USBH_ENTER_CRITICAL_ISR()       esp_os_enter_critical_isr(&usbh_lock)
+#define USBH_EXIT_CRITICAL_ISR()        esp_os_exit_critical_isr(&usbh_lock)
+#define USBH_ENTER_CRITICAL()           esp_os_enter_critical(&usbh_lock)
+#define USBH_EXIT_CRITICAL()            esp_os_exit_critical(&usbh_lock)
+#define USBH_ENTER_CRITICAL_SAFE()      esp_os_enter_critical_safe(&usbh_lock)
+#define USBH_EXIT_CRITICAL_SAFE()       esp_os_exit_critical_safe(&usbh_lock)
 
 #define USBH_CHECK(cond, ret_val) ({                                        \
             if (!(cond)) {                                                  \
@@ -1050,7 +1048,6 @@ esp_err_t usbh_dev_close(usb_device_handle_t dev_hdl)
     if (dev_obj->dynamic.open_count == 0) {
         // Sanity check.
         assert(dev_obj->dynamic.num_ctrl_xfers_inflight == 0);  // There cannot be any control transfer in-flight
-        assert(!dev_obj->dynamic.flags.waiting_free);   // This can only be set when open_count reaches 0
         if (dev_obj->dynamic.flags.is_gone || dev_obj->dynamic.flags.waiting_free) {
             // Device is already gone or is awaiting to be freed. Trigger the USBH process to free the device
             call_proc_req_cb = _dev_set_actions(dev_obj, DEV_ACTION_FREE);

@@ -5,6 +5,7 @@ idf_build_get_property(target IDF_TARGET)
 idf_build_get_property(python PYTHON)
 idf_build_get_property(idf_path IDF_PATH)
 
+idf_build_get_property(non_os_build NON_OS_BUILD)
 
 set(chip_model ${target})
 
@@ -12,7 +13,6 @@ set(ESPTOOLPY ${python} "$ENV{ESPTOOL_WRAPPER}" "${CMAKE_CURRENT_LIST_DIR}/espto
 set(ESPSECUREPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espsecure.py")
 set(ESPEFUSEPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espefuse.py")
 set(ESPMONITOR ${python} -m esp_idf_monitor)
-set(ESPMKUF2 ${python} "${idf_path}/tools/mkuf2.py" write --chip ${chip_model})
 set(ESPTOOLPY_CHIP "${chip_model}")
 
 if(NOT CONFIG_APP_BUILD_TYPE_RAM AND CONFIG_APP_BUILD_GENERATE_BINARIES)
@@ -152,7 +152,7 @@ elseif(CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME OR CONFIG_SECURE_SIGNED_APPS_ECDSA_V
     set(secure_boot_version "2")
 endif()
 
-if(NOT BOOTLOADER_BUILD AND CONFIG_SECURE_SIGNED_APPS)
+if(NOT non_os_build AND CONFIG_SECURE_SIGNED_APPS)
     if(CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES)
         # for locally signed secure boot image, add a signing step to get from unsigned app to signed app
         get_filename_component(secure_boot_signing_key "${CONFIG_SECURE_BOOT_SIGNING_KEY}"
@@ -191,30 +191,6 @@ add_custom_target(erase_flash
     -D "IDF_PATH=${idf_path}"
     -D "SERIAL_TOOL=${ESPTOOLPY}"
     -D "SERIAL_TOOL_ARGS=erase_flash"
-    -P run_serial_tool.cmake
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    USES_TERMINAL
-    VERBATIM
-    )
-
-set(UF2_ARGS --json "${CMAKE_CURRENT_BINARY_DIR}/flasher_args.json")
-
-add_custom_target(uf2
-    COMMAND ${CMAKE_COMMAND}
-    -D "IDF_PATH=${idf_path}"
-    -D "SERIAL_TOOL=${ESPMKUF2}"
-    -D "SERIAL_TOOL_ARGS=${UF2_ARGS};-o;${CMAKE_CURRENT_BINARY_DIR}/uf2.bin"
-    -P run_serial_tool.cmake
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    USES_TERMINAL
-    VERBATIM
-    )
-
-add_custom_target(uf2-app
-    COMMAND ${CMAKE_COMMAND}
-    -D "IDF_PATH=${idf_path}"
-    -D "SERIAL_TOOL=${ESPMKUF2}"
-    -D "SERIAL_TOOL_ARGS=${UF2_ARGS};-o;${CMAKE_CURRENT_BINARY_DIR}/uf2-app.bin;--bin;app"
     -P run_serial_tool.cmake
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     USES_TERMINAL
@@ -551,7 +527,7 @@ function(esptool_py_custom_target target_name flasher_filename dependencies)
     endif()
 endfunction()
 
-if(NOT BOOTLOADER_BUILD)
+if(NOT non_os_build)
     set(flash_deps "")
 
     if(CONFIG_APP_BUILD_TYPE_APP_2NDBOOT)

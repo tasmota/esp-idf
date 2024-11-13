@@ -901,7 +901,13 @@
  *
  * Enable functions that use the filesystem.
  */
+#if CONFIG_MBEDTLS_FS_IO
 #define MBEDTLS_FS_IO
+#else
+#undef MBEDTLS_FS_IO
+#undef MBEDTLS_PSA_ITS_FILE_C
+#undef MBEDTLS_PSA_CRYPTO_STORAGE_C
+#endif
 
 #ifndef CONFIG_IDF_TARGET_LINUX
 /**
@@ -2552,6 +2558,21 @@
 #else
 #undef MBEDTLS_SHA384_C
 #undef MBEDTLS_SHA512_C
+#endif
+
+/**
+ * \def MBEDTLS_SHA3_C
+ *
+ *  Enable the SHA3 cryptographic hash algorithm.
+ *
+ * Module:  library/sha3.c
+ *
+ * This module adds support for SHA3.
+ */
+#ifdef CONFIG_MBEDTLS_SHA3_C
+#define MBEDTLS_SHA3_C
+#else
+#undef MBEDTLS_SHA3_C
 #endif
 
 /**

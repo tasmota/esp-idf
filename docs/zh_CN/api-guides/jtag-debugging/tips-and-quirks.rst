@@ -178,6 +178,8 @@ TCL 语言中为变量赋值的语法是:
       - 设置成 ``0`` 可以关闭对 flash 断点的支持。
     * - ``ESP_SEMIHOST_BASEDIR``
       - 设置 semihosting 在主机端的默认目录。
+    * - ``ESP_ONLYCPU``
+      - 对于多核芯片，将该值设置为 ``1`` 可以仅启用单核调试功能
 
 .. include:: {IDF_TARGET_PATH_NAME}.inc
     :start-after: openocd-target-specific-config-vars
@@ -230,7 +232,7 @@ JTAG 管脚是否能用于其他功能
 JTAG 与 flash 加密和安全引导
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-默认情况下，开启了 flash 加密和（或者）安全引导后，系统在首次启动时，引导程序会烧写 eFuse 的某个比特，从而将 JTAG 永久关闭。
+默认情况下，开启了 flash 加密和（或者）安全引导后，系统在首次启动时，引导加载程序会烧写 eFuse 的某个比特，从而将 JTAG 永久关闭。
 
 .. only:: SOC_HMAC_SUPPORTED
 
@@ -247,7 +249,7 @@ Kconfig 配置项 :ref:`CONFIG_SECURE_BOOT_ALLOW_JTAG` 可以改变这个默认�
 
 .. note::
 
-   同样地，当启用该选项，并且在调试过程中设置了软件断点，引导程序将无法校验通过应用程序的签名。
+   同样地，当启用该选项，并且在调试过程中设置了软件断点，引导加载程序将无法校验通过应用程序的签名。
 
 .. only:: esp32
 

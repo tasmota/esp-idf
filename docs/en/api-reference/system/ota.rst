@@ -19,7 +19,7 @@ OTA Data Partition
 
 An OTA data partition (type ``data``, subtype ``ota``) must be included in the :doc:`../../api-guides/partition-tables` of any project which uses the OTA functions.
 
-For factory boot settings, the OTA data partition should contain no data (all bytes erased to 0xFF). In this case, the ESP-IDF software bootloader will boot the factory app if it is present in the partition table. If no factory app is included in the partition table, the first available OTA slot (usually ``ota_0``) is booted.
+For factory boot settings, the OTA data partition should contain no data (all bytes erased to 0xFF). In this case, the ESP-IDF second stage bootloader boots the factory app if it is present in the partition table. If no factory app is included in the partition table, the first available OTA slot (usually ``ota_0``) is booted.
 
 After the first OTA update, the OTA data partition is updated to specify which OTA app slot partition should be booted next.
 
@@ -344,7 +344,7 @@ See Also
 Application Examples
 --------------------
 
-- :example:`system/ota/native_ota_example` demonstrates how to use the `app_update` component's APIs for native Over-the-Air (OTA) updates on {IDF_TARGET_NAME}. For the applicable SoCs, please refer to :example_file:`system/ota/native_ota_example/README.md`.
+- :example:`system/ota/native_ota_example` demonstrates how to use the `app_update` component's APIs for native over-the-air (OTA) updates on {IDF_TARGET_NAME}. For applicable SoCs, please refer to :example_file:`system/ota/native_ota_example/README.md`.
 
 - :example:`system/ota/otatool` demonstrates how to use the OTA tool to perform operations such as reading, writing, and erasing OTA partitions, switching boot partitions, and switching to factory partition. For more information, please refer to :example_file:`system/ota/otatool/README.md`.
 

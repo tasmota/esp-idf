@@ -212,10 +212,12 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_mesh.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_now.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_smartconfig.h \
+    $(PROJECT_PATH)/components/esp_wifi/include/local/esp_wifi_types_native.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_ap_get_sta_list.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_crypto_types.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_default.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_netif.h \
+    $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_types_generic.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi_types.h \
     $(PROJECT_PATH)/components/esp_wifi/include/esp_wifi.h \
     $(PROJECT_PATH)/components/wpa_supplicant/esp_supplicant/include/esp_mbo.h  \
@@ -314,6 +316,7 @@ INPUT = \
     $(PROJECT_PATH)/components/vfs/include/esp_vfs_eventfd.h \
     $(PROJECT_PATH)/components/vfs/include/esp_vfs_semihost.h \
     $(PROJECT_PATH)/components/vfs/include/esp_vfs_null.h \
+    $(PROJECT_PATH)/components/vfs/include/esp_vfs_ops.h \
     $(PROJECT_PATH)/components/vfs/include/esp_vfs.h \
     $(PROJECT_PATH)/components/wear_levelling/include/wear_levelling.h \
     $(PROJECT_PATH)/components/wifi_provisioning/include/wifi_provisioning/manager.h \

@@ -1,10 +1,10 @@
 # Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
 
 examples/system/app_trace_basic:
-  disable:
+  disable_test:
     - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32p4", "esp32c5", "esp32c61"]
       temporary: true
-      reason: targets not supported yet, TODO[C61] IDF-9264 IDF-10992
+      reason: usb-serial-jtag tests are not stable yet. TODO[C61] IDF-10992
 
 examples/system/base_mac_address:
   depends_components:
@@ -169,14 +169,8 @@ examples/system/ota/native_ota_example:
     - protocol_examples_common
 
 examples/system/ota/otatool:
-  disable:
-    - if: IDF_TARGET in ["esp32h2"]
-      temporary: true
-      reason: target esp32h2 is not supported yet
-  disable_test:
-    - if: IDF_TARGET in ["esp32c61"]
-      reason: target esp32c61 is not supported yet
-
+  enable:
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32c5", "esp32c61"]
 
 examples/system/ota/pre_encrypted_ota:
   disable:
@@ -296,6 +290,12 @@ examples/system/ulp/lp_core/gpio_intr_pulse_counter:
       reason: unknown error
   enable:
     - if: (SOC_LP_CORE_SUPPORTED == 1) and (SOC_ULP_LP_UART_SUPPORTED == 1 and SOC_DEEP_SLEEP_SUPPORTED == 1)
+  depends_components:
+    - ulp
+
+examples/system/ulp/lp_core/gpio_wakeup:
+  enable:
+    - if: (SOC_LP_CORE_SUPPORTED == 1) and (SOC_RTCIO_PIN_COUNT > 0)
   depends_components:
     - ulp
 

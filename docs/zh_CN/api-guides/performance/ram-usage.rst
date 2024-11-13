@@ -192,15 +192,16 @@ IRAM 优化
     - 要禁用不需要的 flash 驱动程序，节省 IRAM 空间，请参阅 sdkconfig 菜单中的 ``Auto-detect Flash chips`` 选项。
     :SOC_GPSPI_SUPPORTED: - 启用 :ref:`CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH`。只要未启用 :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` 选项，且没有从 ISR 中错误地调用堆函数，就可以在所有配置中安全启用此选项。
     :esp32c2: - 启用 :ref:`CONFIG_BT_RELEASE_IRAM`。 蓝牙所使用的 data，bss 和 text 段已经被分配在连续的RAM区间。当调用 ``esp_bt_mem_release`` 时，这些段都会被添加到 Heap 中。 这将节省约 22 KB 的 RAM。但要再次使用蓝牙功能，需要重启程序。
+    :SOC_DEBUG_HAVE_OCD_STUB_BINS: - 禁用 :ref:`CONFIG_ESP_DEBUG_INCLUDE_OCD_STUB_BINS` 选项可以释放 8 KB 的 IRAM, 但由于运行时加载存根的额外开销，特别是在使用 flash 断点时，可能会影响调试的整体速度。
 
 .. only:: esp32
 
    将 SRAM1 用于 IRAM
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   SRAM1 内存区域通常用于 DRAM 存储，但可以设置 :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM` 选项，将其中一部分用作 IRAM 存储。引入该选项前，这个内存区域通常预留给 DRAM 数据使用（如 ``.bss`` ），随后由软件引导加载程序加入到堆中。引入该选项后，引导加载程序的 DRAM 大小会减少到更接近实际需要的值。
+   SRAM1 内存区域通常用于 DRAM 存储，但可以设置 :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM` 选项，将其中一部分用作 IRAM 存储。引入该选项前，这个内存区域通常预留给 DRAM 数据使用（如 ``.bss``），随后由二级引导加载程序加入到堆中。引入该选项后，二级引导加载程序的 DRAM 大小会减少到更接近实际需要的值。
 
-   要使用以上选项，ESP-IDF 应能够将新的 SRAM1 区域识别为有效镜像段的加载地址。部分应用程序的代码置于新扩展的 IRAM 区域，如果软件引导加载程序在引入该选项前编译，将无法加载这类应用程序。这类情况通常在进行 OTA 更新时发生，此时仅会更新应用程序。
+   要使用以上选项，ESP-IDF 应能够将新的 SRAM1 区域识别为有效镜像段的加载地址。部分应用程序的代码置于新扩展的 IRAM 区域，如果二级引导加载程序在引入该选项前编译，将无法加载这类应用程序。这类情况通常在进行 OTA 更新时发生，此时仅会更新应用程序。
 
    如果 IRAM 段放置在无效区域，在启动过程中将检测到以下问题，并导致启动失败：
 
@@ -210,7 +211,7 @@ IRAM 优化
 
    .. warning::
 
-      若与在引入以上配置选项前编译的软件引导加载程序一同使用，使用 :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM` 选项编译的应用程序很可能无法启动。若使用旧版本的引导加载程序，并进行 OTA 更新，请在提交任何更新前仔细测试。
+      若与在引入以上配置选项前编译的二级引导加载程序一同使用，使用 :ref:`CONFIG_ESP_SYSTEM_ESP32_SRAM1_REGION_AS_IRAM` 选项编译的应用程序很可能无法启动。若使用旧版本的引导加载程序，并进行 OTA 更新，请在提交任何更新前仔细测试。
 
    任何最终未用于静态 IRAM 的内存都将添加到堆内存中。
 

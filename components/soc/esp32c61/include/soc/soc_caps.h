@@ -17,7 +17,7 @@
 #pragma once
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
-//  \#define SOC_ADC_SUPPORTED               1    //TODO: [ESP32C61] IDF-9302, IDF-9303, IDF-9304
+#define SOC_ADC_SUPPORTED               1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
@@ -67,35 +67,34 @@
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
 
-//TODO: [ESP32C61] IDF-9302, IDF-9303, IDF-9304
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
-//  \#define SOC_ADC_DIG_CTRL_SUPPORTED              1
-//  \#define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
-//  \#define SOC_ADC_MONITOR_SUPPORTED               1
-//  \#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
-//  \#define SOC_ADC_DMA_SUPPORTED                   1
-#define SOC_ADC_PERIPH_NUM                      (1U)
-#define SOC_ADC_MAX_CHANNEL_NUM                 (7)
-//  \#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (7)
-//  \#define SOC_ADC_ATTEN_NUM                       (4)
+#define SOC_ADC_DIG_CTRL_SUPPORTED              1
+#define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
+#define SOC_ADC_MONITOR_SUPPORTED               1
+#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
+#define SOC_ADC_DMA_SUPPORTED                   1
+#define SOC_ADC_PERIPH_NUM                      (1)
+#define SOC_ADC_MAX_CHANNEL_NUM                 (4)
+#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (4)
+#define SOC_ADC_ATTEN_NUM                       (4)
 
-// /*!< Digital */
-//  \#define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
-//  \#define SOC_ADC_PATT_LEN_MAX                    (8) /*!< Two pattern tables, each contains 4 items. Each item takes 1 byte */
-//  \#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
-//  \#define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
-//  \#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
-//  \#define SOC_ADC_DIGI_MONITOR_NUM                (2)
-//  \#define SOC_ADC_DIGI_RESULT_BYTES               (4)
-//  \#define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-// /*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
-//  \#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-//  \#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
+/*!< Digital */
+#define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
+#define SOC_ADC_PATT_LEN_MAX                    (8) /*!< Two pattern tables, each contains 4 items. Each item takes 1 byte */
+#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
+#define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
+#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
+#define SOC_ADC_DIGI_MONITOR_NUM                (2)
+#define SOC_ADC_DIGI_RESULT_BYTES               (4)
+#define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
+/*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
+#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
+#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
 
-// /*!< RTC */
-//  \#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
-//  \#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
+/*!< RTC */
+#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
+#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
 // /*!< Calibration */  // TODO: [ESP32C61] IDF-9303
 //  \#define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
@@ -106,7 +105,7 @@
 #define SOC_ADC_TEMPERATURE_SHARE_INTR          (1)
 
 /*!< ADC power control is shared by PWDET */
-//  \#define SOC_ADC_SHARED_POWER                    1
+#define SOC_ADC_SHARED_POWER                    1
 
 /*-------------------------- APB BACKUP DMA CAPS -------------------------------*/
 #define SOC_APB_BACKUP_DMA              (0)
@@ -159,7 +158,7 @@
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-C61 has 1 GPIO peripheral
 #define SOC_GPIO_PORT                      1U
-#define SOC_GPIO_PIN_COUNT                 22
+#define SOC_GPIO_PIN_COUNT                 25
 #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1
 #define SOC_GPIO_SUPPORT_PIN_HYS_FILTER    1
 
@@ -173,19 +172,19 @@
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
 
-#define SOC_GPIO_VALID_GPIO_MASK        ((1U<<SOC_GPIO_PIN_COUNT) - 1)
+#define SOC_GPIO_VALID_GPIO_MASK        ((1ULL<<SOC_GPIO_PIN_COUNT) - 1)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
 
-#define SOC_GPIO_IN_RANGE_MAX           21
-#define SOC_GPIO_OUT_RANGE_MAX          21
+#define SOC_GPIO_IN_RANGE_MAX           24
+#define SOC_GPIO_OUT_RANGE_MAX          24
 
 // GPIO0~6 on ESP32C61 can support chip deep sleep wakeup
 #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
 #define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
 #define SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT      (7)
 
-// digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_7~GPIO_NUM_21)
-#define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x00000000003FFF80ULL
+// digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_7~GPIO_NUM_24)
+#define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x1FFFF80ULL
 
 // Support to force hold all IOs
 #define SOC_GPIO_SUPPORT_FORCE_HOLD              (1)
@@ -463,7 +462,11 @@
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
 #define SOC_CLK_LP_FAST_SUPPORT_XTAL              (1)     /*!< Support XTAL clock as the LP_FAST clock source */
+#define SOC_CLK_LP_FAST_SUPPORT_XTAL_D2           (1)     /*!< Support XTAL_D2 clock as the LP_FAST clock source */
+
 #define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control is independent, thanks to the PCR registers */
+
+#define SOC_CLK_ANA_I2C_MST_HAS_ROOT_GATE         (1)     /*!< Any regi2c operation needs enable the analog i2c master clock first */
 
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 // #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)

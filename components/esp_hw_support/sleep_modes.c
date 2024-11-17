@@ -65,10 +65,6 @@
 #include "hal/touch_sens_hal.h"
 #endif
 
-#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
-#include "hal/ldo_ll.h"
-#endif
-
 #include "sdkconfig.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
@@ -691,12 +687,10 @@ FORCE_INLINE_ATTR void misc_modules_sleep_prepare(uint32_t pd_flags, bool deep_s
 #endif
     }
 
-#if !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_IDF_TARGET_ESP32C61
-    // TODO: IDF-7370
     if (!(deep_sleep && (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] != 0))){
+        // TODO: IDF-7370
         sar_periph_ctrl_power_disable();
     }
-#endif
 }
 
 /**
@@ -718,9 +712,7 @@ FORCE_INLINE_ATTR void misc_modules_wake_prepare(uint32_t pd_flags)
 #if SOC_USB_SERIAL_JTAG_SUPPORTED && !SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP
     sleep_console_usj_pad_restore();
 #endif
-#if !CONFIG_IDF_TARGET_ESP32C61 // TODO: IDF-9304
     sar_periph_ctrl_power_enable();
-#endif
 #if CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP && SOC_PM_CPU_RETENTION_BY_RTCCNTL
     sleep_disable_cpu_retention();
 #endif
@@ -1179,10 +1171,6 @@ static esp_err_t IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     portENTER_CRITICAL(&spinlock_rtc_deep_sleep);
     esp_ipc_isr_stall_other_cpu();
     esp_ipc_isr_stall_pause();
-#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
-    // Disable PSRAM chip power supply
-    ldo_ll_enable(LDO_ID2UNIT(CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN), false);
-#endif
 
     // record current RTC time
     s_config.rtc_ticks_at_sleep_start = rtc_time_get();
@@ -1246,10 +1234,6 @@ static esp_err_t IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         // can take several CPU cycles for the sleep mode to start.
         ESP_INFINITE_LOOP();
     }
-#if CONFIG_SPIRAM && CONFIG_ESP_LDO_RESERVE_PSRAM
-    // Enable PSRAM chip power supply
-    ldo_ll_enable(LDO_ID2UNIT(CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN), true);
-#endif
     // Never returns here, except that the sleep is rejected.
     esp_ipc_isr_stall_resume();
     esp_ipc_isr_release_other_cpu();

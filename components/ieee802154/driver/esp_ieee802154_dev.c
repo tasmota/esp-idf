@@ -161,7 +161,7 @@ uint8_t ieee802154_get_recent_lqi(void)
     return s_rx_frame_info[s_recent_rx_frame_info_index].lqi;
 }
 
-IEEE802154_STATIC void set_next_rx_buffer(void)
+IEEE802154_STATIC IEEE802154_NOINLINE void set_next_rx_buffer(void)
 {
     uint8_t* next_rx_buffer = NULL;
     uint8_t index = 0;
@@ -194,7 +194,7 @@ IEEE802154_STATIC void set_next_rx_buffer(void)
     ieee802154_ll_set_rx_addr(next_rx_buffer);
 }
 
-static bool stop_rx(void)
+IEEE802154_NOINLINE static bool stop_rx(void)
 {
     ieee802154_ll_events events;
 
@@ -210,7 +210,7 @@ static bool stop_rx(void)
     return true;
 }
 
-static bool stop_tx_ack(void)
+IEEE802154_NOINLINE static bool stop_tx_ack(void)
 {
     ieee802154_set_cmd(IEEE802154_CMD_STOP);
 
@@ -221,7 +221,7 @@ static bool stop_tx_ack(void)
     return true;
 }
 
-static bool stop_tx(void)
+IEEE802154_NOINLINE static bool stop_tx(void)
 {
     ieee802154_ll_events events;
 
@@ -245,21 +245,21 @@ static bool stop_tx(void)
     return true;
 }
 
-static bool stop_cca(void)
+IEEE802154_NOINLINE static bool stop_cca(void)
 {
     ieee802154_set_cmd(IEEE802154_CMD_STOP);
     ieee802154_ll_clear_events(IEEE802154_EVENT_ED_DONE | IEEE802154_EVENT_RX_ABORT);
     return true;
 }
 
-static bool stop_tx_cca(void)
+IEEE802154_NOINLINE static bool stop_tx_cca(void)
 {
     stop_tx(); // in case the transmission already started
     ieee802154_ll_clear_events(IEEE802154_EVENT_TX_ABORT);
     return true;
 }
 
-static bool stop_rx_ack(void)
+IEEE802154_NOINLINE static bool stop_rx_ack(void)
 {
     ieee802154_ll_events events;
 
@@ -281,7 +281,7 @@ static bool stop_rx_ack(void)
     return true;
 }
 
-static bool stop_ed(void)
+IEEE802154_NOINLINE static bool stop_ed(void)
 {
     ieee802154_set_cmd(IEEE802154_CMD_STOP);
 
@@ -290,7 +290,7 @@ static bool stop_ed(void)
     return true;
 }
 
-IEEE802154_STATIC bool stop_current_operation(void)
+IEEE802154_NOINLINE IEEE802154_STATIC bool stop_current_operation(void)
 {
     event_end_process();
     switch (s_ieee802154_state) {
@@ -341,8 +341,23 @@ IEEE802154_STATIC bool stop_current_operation(void)
     return true;
 }
 
+FORCE_INLINE_ATTR void extcoex_tx_stage_start(void)
+{
+#if CONFIG_ESP_COEX_EXTERNAL_COEXIST_ENABLE
+    esp_coex_ieee802154_extcoex_tx_stage();
+#endif
+}
+
+FORCE_INLINE_ATTR void extcoex_rx_stage_start(void)
+{
+#if CONFIG_ESP_COEX_EXTERNAL_COEXIST_ENABLE
+    esp_coex_ieee802154_extcoex_rx_stage();
+#endif
+}
+
 static void enable_rx(void)
 {
+    extcoex_rx_stage_start();
     set_next_rx_buffer();
     IEEE802154_SET_TXRX_PTI(IEEE802154_SCENE_RX);
 
@@ -403,6 +418,7 @@ static IRAM_ATTR void isr_handle_tx_done(void)
         NEEDS_NEXT_OPT(true);
     } else if (s_ieee802154_state == IEEE802154_STATE_TX || s_ieee802154_state == IEEE802154_STATE_TX_CCA) {
         if (ieee802154_frame_is_ack_required(s_tx_frame) && ieee802154_ll_get_rx_auto_ack()) {
+            extcoex_rx_stage_start();
             ieee802154_set_state(IEEE802154_STATE_RX_ACK);
 #if !CONFIG_IEEE802154_TEST
             receive_ack_timeout_timer_start(200000); // 200ms for receive ack timeout
@@ -423,6 +439,7 @@ static IRAM_ATTR void isr_handle_rx_done(void)
     if (s_ieee802154_state == IEEE802154_STATE_RX) {
         if (ieee802154_frame_is_ack_required(s_rx_frame[s_rx_index]) && ieee802154_frame_get_version(s_rx_frame[s_rx_index]) <= IEEE802154_FRAME_VERSION_1
                 && ieee802154_ll_get_tx_auto_ack()) {
+            extcoex_tx_stage_start();
             // auto tx ack only works for the frame with version 0b00 and 0b01
             s_rx_frame_info[s_rx_index].pending = ieee802154_ack_config_pending_bit(s_rx_frame[s_rx_index]);
             ieee802154_set_state(IEEE802154_STATE_TX_ACK);
@@ -432,6 +449,7 @@ static IRAM_ATTR void isr_handle_rx_done(void)
             s_rx_frame_info[s_rx_index].pending = ieee802154_ack_config_pending_bit(s_rx_frame[s_rx_index]);
             // For 2015 enh-ack, SW should generate an enh-ack then send it manually
             if (esp_ieee802154_enh_ack_generator(s_rx_frame[s_rx_index], &s_rx_frame_info[s_rx_index], s_enh_ack_frame) == ESP_OK) {
+                extcoex_tx_stage_start();
 #if !CONFIG_IEEE802154_TEST
                 // Send the Enh-Ack frame if generator succeeds.
                 ieee802154_ll_set_tx_addr(s_enh_ack_frame);
@@ -456,6 +474,7 @@ static IRAM_ATTR void isr_handle_rx_done(void)
 
 static IRAM_ATTR void isr_handle_ack_tx_done(void)
 {
+    extcoex_rx_stage_start();
     ieee802154_receive_done((uint8_t *)s_rx_frame[s_rx_index], &s_rx_frame_info[s_rx_index]);
     NEEDS_NEXT_OPT(true);
 }
@@ -629,7 +648,7 @@ IEEE802154_STATIC IRAM_ATTR void ieee802154_exit_critical(void)
     portEXIT_CRITICAL(&s_ieee802154_spinlock);
 }
 
-static void ieee802154_isr(void *arg)
+IEEE802154_NOINLINE static void ieee802154_isr(void *arg)
 {
     ieee802154_enter_critical();
     ieee802154_ll_events events = ieee802154_ll_get_events();
@@ -832,6 +851,7 @@ IEEE802154_STATIC void tx_init(const uint8_t *frame)
         // set rx pointer for ack frame
         set_next_rx_buffer();
     }
+    extcoex_tx_stage_start();
 }
 
 static inline esp_err_t ieee802154_transmit_internal(const uint8_t *frame, bool cca)
@@ -878,7 +898,7 @@ esp_err_t ieee802154_transmit(const uint8_t *frame, bool cca)
     return ieee802154_transmit_internal(frame, cca);
 }
 
-static inline bool is_target_time_expired(uint32_t target, uint32_t now)
+IEEE802154_NOINLINE static bool is_target_time_expired(uint32_t target, uint32_t now)
 {
     return (((now - target) & (1 << 31)) == 0);
 }

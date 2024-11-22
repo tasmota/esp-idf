@@ -1164,6 +1164,19 @@ static void bt_mesh_bta_gatts_cb(tBTA_GATTS_EVT event, tBTA_GATTS *p_data)
         /* When connection is created, advertising will be stopped automatically. */
         bt_mesh_atomic_test_and_clear_bit(bt_mesh_dev.flags, BLE_MESH_DEV_ADVERTISING);
 #endif
+
+#if (CONFIG_BLE_MESH_PROVISIONER && CONFIG_BLE_MESH_PB_GATT) || \
+     CONFIG_BLE_MESH_GATT_PROXY_CLIENT || \
+    (CONFIG_BLE_MESH_RPR_SRV && CONFIG_BLE_MESH_PB_GATT)
+        /* Check if this connection is created by Proxy client */
+        for (size_t i = 0; i < ARRAY_SIZE(bt_mesh_gattc_info); i++) {
+            if (!memcmp(bt_mesh_gattc_info[i].addr.val, p_data->conn.remote_bda, BLE_MESH_ADDR_LEN)) {
+                BT_WARN("Already create connection with %s by proxy client",
+                        bt_hex(p_data->conn.remote_bda, BLE_MESH_ADDR_LEN));
+                return;
+            }
+        }
+#endif
         if (bt_mesh_gatts_conn_cb != NULL && bt_mesh_gatts_conn_cb->connected != NULL) {
             uint8_t index = BLE_MESH_GATT_GET_CONN_ID(p_data->conn.conn_id);
             if (index < BLE_MESH_MAX_CONN) {
@@ -1777,8 +1790,8 @@ int bt_mesh_gattc_conn_create(const bt_mesh_addr_t *addr, uint16_t service_uuid)
 
     BTA_DmBleGapPreferExtConnectParamsSet(bt_mesh_gattc_info[i].addr.val, 0x01, &conn_1m_param ,NULL, NULL);
 
-    BTA_GATTC_Open(bt_mesh_gattc_if, bt_mesh_gattc_info[i].addr.val,
-                   bt_mesh_gattc_info[i].addr.type, true, BTA_GATT_TRANSPORT_LE, TRUE);
+    BTA_GATTC_Enh_Open(bt_mesh_gattc_if, bt_mesh_gattc_info[i].addr.val,
+                   bt_mesh_gattc_info[i].addr.type, true, BTA_GATT_TRANSPORT_LE, TRUE, BLE_ADDR_UNKNOWN_TYPE);
 #else
     /* Min_interval: 15ms
      * Max_interval: 15ms
@@ -1788,8 +1801,8 @@ int bt_mesh_gattc_conn_create(const bt_mesh_addr_t *addr, uint16_t service_uuid)
 
     BTA_DmSetBlePrefConnParams(bt_mesh_gattc_info[i].addr.val, 0x18, 0x18, 0x00, 0x64);
 
-    BTA_GATTC_Open(bt_mesh_gattc_if, bt_mesh_gattc_info[i].addr.val,
-                   bt_mesh_gattc_info[i].addr.type, true, BTA_GATT_TRANSPORT_LE, FALSE);
+    BTA_GATTC_Enh_Open(bt_mesh_gattc_if, bt_mesh_gattc_info[i].addr.val,
+                   bt_mesh_gattc_info[i].addr.type, true, BTA_GATT_TRANSPORT_LE, FALSE, BLE_ADDR_UNKNOWN_TYPE);
 #endif
 
     return 0;

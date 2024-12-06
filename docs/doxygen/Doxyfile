@@ -179,6 +179,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_io_i2c.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_io_i80.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_io_spi.h \
+    $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_io_parl.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_io.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_ops.h \
     $(PROJECT_PATH)/components/esp_lcd/include/esp_lcd_panel_vendor.h \
@@ -278,6 +279,7 @@ INPUT = \
     $(PROJECT_PATH)/components/log/include/esp_log_buffer.h \
     $(PROJECT_PATH)/components/log/include/esp_log_timestamp.h \
     $(PROJECT_PATH)/components/log/include/esp_log_color.h \
+    $(PROJECT_PATH)/components/log/include/esp_log_write.h \
     $(PROJECT_PATH)/components/lwip/include/apps/esp_sntp.h \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \

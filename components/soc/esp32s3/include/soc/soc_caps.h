@@ -228,9 +228,11 @@
 #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
 #define SOC_I2S_SUPPORTS_PDM        (1)
-#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM    (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX     (1)     // Support to input raw PDM format data
+#define SOC_I2S_SUPPORTS_PDM2PCM    (1)     // Support to input PDM format but read PCM format data with the help of PDM to PCM filter
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)
-#define SOC_I2S_SUPPORTS_PDM_RX     (1)
 #define SOC_I2S_PDM_MAX_RX_LINES    (4)
 #define SOC_I2S_SUPPORTS_TDM        (1)
 
@@ -260,7 +262,11 @@
 #define SOC_MMU_PERIPH_NUM                      (1U)
 
 /*-------------------------- MPU CAPS ----------------------------------------*/
-#include "mpu_caps.h"
+#define SOC_MPU_CONFIGURABLE_REGIONS_SUPPORTED    0
+#define SOC_MPU_MIN_REGION_SIZE                   0x20000000U
+#define SOC_MPU_REGIONS_MAX_NUM                   8
+#define SOC_MPU_REGION_RO_SUPPORTED               0
+#define SOC_MPU_REGION_WO_SUPPORTED               0
 
 /*-------------------------- PCNT CAPS ---------------------------------------*/
 #define SOC_PCNT_GROUPS               (1U)
@@ -354,7 +360,7 @@
 #define SOC_SPI_SCT_BUFFER_NUM_MAX                (1 + SOC_SPI_SCT_REG_NUM)  //1-word-bitmap + 14-word-regs
 #define SOC_SPI_SCT_CONF_BITLEN_MAX               0x3FFFA       //18 bits wide reg
 
-#define SOC_MEMSPI_SRC_FREQ_120M         1
+#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED          1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED          1
 #define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED          1

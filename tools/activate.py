@@ -33,6 +33,7 @@ os.environ['IDF_PYTHON_ENV_PATH'] = ''  # let idf_tools get the pyenv path
 idf_tools.g.idf_tools_path = os.environ.get('IDF_TOOLS_PATH') or os.path.expanduser(idf_tools.IDF_TOOLS_PATH_DEFAULT)
 idf_python_env_path, idf_python_export_path, virtualenv_python, idf_version = idf_tools.get_python_env_path()
 
+os.environ['IDF_PATH_OLD'] = os.environ.get('IDF_PATH', '')
 os.environ['IDF_PATH'] = idf_path
 os.environ['IDF_PYTHON_ENV_PATH'] = idf_python_env_path
 os.environ['ESP_IDF_VERSION'] = idf_version
@@ -41,7 +42,7 @@ if not os.path.exists(virtualenv_python):
     die(f'ESP-IDF Python virtual environment not found. Please run the install script to set it up before proceeding.')
 
 try:
-    run([virtualenv_python, os.path.join(idf_path, 'tools', 'export_utils', 'activate_venv.py')] + sys.argv[1:], check=True)
+    run([virtualenv_python, os.path.join(idf_path, 'tools', 'export_utils', 'activate_venv.py')] + sys.argv[1:], check=True, env=os.environ.copy())
 except (OSError, SubprocessError):
     die('\n'.join(['Activation script failed',
                    'To view detailed debug information, set ESP_IDF_EXPORT_DEBUG=1 and run the export script again.']))

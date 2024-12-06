@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <string.h>
+#include <sys/lock.h>
 #include <sys/param.h>
 #include "esp_types.h"
 #include "freertos/FreeRTOS.h"
@@ -434,7 +435,7 @@ static bool ledc_speed_mode_ctx_create(ledc_mode_t speed_mode)
                         .arg = NULL,
                     },
                 },
-                .depends = BIT(SLEEP_RETENTION_MODULE_CLOCK_SYSTEM),
+                .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
             };
             if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
                 ESP_LOGW(LEDC_TAG, "init sleep retention failed for ledc, power domain may be turned off during sleep");

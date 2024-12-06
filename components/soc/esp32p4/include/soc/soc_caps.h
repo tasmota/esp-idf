@@ -100,7 +100,6 @@
 #define SOC_DEEP_SLEEP_SUPPORTED        1
 #define SOC_PM_SUPPORTED                1
 
-
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
 
@@ -323,8 +322,10 @@
 #define SOC_I2S_SUPPORTS_APLL       (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
 #define SOC_I2S_SUPPORTS_PDM        (1)
-#define SOC_I2S_SUPPORTS_PDM_TX     (1)
-#define SOC_I2S_SUPPORTS_PDM_RX     (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM    (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX     (1)     // Support to input raw PDM format data
+#define SOC_I2S_SUPPORTS_PDM2PCM    (1)     // Support to input PDM format but read PCM format data with the help of PDM to PCM filter
 #define SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER (1)
 #define SOC_I2S_SUPPORTS_TX_SYNC_CNT      (1)
 #define SOC_I2S_SUPPORTS_TDM        (1)
@@ -409,7 +410,7 @@
 #define SOC_PCNT_THRES_POINT_PER_UNIT         2
 #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
 #define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1  /*!< Support clear signal input */
-// #define SOC_PCNT_SUPPORT_SLEEP_RETENTION      1  // TODO: IDF-9907 Waiting for expansion of module ID /*!< The sleep retention feature can help back up PCNT registers before sleep */
+#define SOC_PCNT_SUPPORT_SLEEP_RETENTION      1  /*!< The sleep retention feature can help back up PCNT registers before sleep */
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
@@ -455,7 +456,7 @@
 #define SOC_MCPWM_SUPPORT_ETM                (1)    ///< Support ETM (Event Task Matrix)
 #define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR   (1)    ///< Support event comparator (based on ETM)
 #define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP     (1)    ///< Capture timer shares clock with other PWM timers
-// #define SOC_MCPWM_SUPPORT_SLEEP_RETENTION    (1)   // TODO: IDF-9928 Waiting for expansion of module ID  ///< Support back up registers before sleep
+#define SOC_MCPWM_SUPPORT_SLEEP_RETENTION    (1)    ///< Support back up registers before sleep
 
 /*-------------------------- USB CAPS ----------------------------------------*/
 // USB Serial JTAG Caps
@@ -479,6 +480,8 @@
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
 #define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
+#define SOC_PARLIO_SUPPORT_SPI_LCD           1   /*!< Support to drive SPI interfaced LCD */
+#define SOC_PARLIO_SUPPORT_I80_LCD           1   /*!< Support to drive I80 interfaced LCD */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -579,6 +582,7 @@
 // #define SOC_SPI_MEM_SUPPORT_WRAP                          (1) // IDFCI-2073 The feature cannot be treated as supported on P4
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
+#define SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY           (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 
 #define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
@@ -586,6 +590,7 @@
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED        1
 
 #define SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT        1
 
@@ -725,6 +730,8 @@
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_SLEEP_SYSTIMER_STALL_WORKAROUND 1    //TODO IDF-11381: replace with all xtal field clk gate control
 #define SOC_SLEEP_TGWDT_STOP_WORKAROUND     1    //TODO IDF-11381: replace with all xtal field clk gate control
+
+#define SOC_PM_RETENTION_MODULE_NUM         (64)
 
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)

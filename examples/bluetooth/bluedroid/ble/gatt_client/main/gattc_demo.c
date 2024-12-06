@@ -370,14 +370,15 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                         connect = true;
                         ESP_LOGI(GATTC_TAG, "Connect to the remote device");
                         esp_ble_gap_stop_scanning();
-                        esp_ble_gatt_creat_conn_params_t esp_ble_gatt_create_conn;
-                        memcpy(&esp_ble_gatt_create_conn.remote_bda, scan_result->scan_rst.bda, ESP_BD_ADDR_LEN);
-                        esp_ble_gatt_create_conn.remote_addr_type = scan_result->scan_rst.ble_addr_type;
-                        esp_ble_gatt_create_conn.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-                        esp_ble_gatt_create_conn.is_direct = true;
-                        esp_ble_gatt_create_conn.is_aux = false;
+                        esp_ble_gatt_creat_conn_params_t creat_conn_params = {0};
+                        memcpy(&creat_conn_params.remote_bda, scan_result->scan_rst.bda, ESP_BD_ADDR_LEN);
+                        creat_conn_params.remote_addr_type = scan_result->scan_rst.ble_addr_type;
+                        creat_conn_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+                        creat_conn_params.is_direct = true;
+                        creat_conn_params.is_aux = false;
+                        creat_conn_params.phy_mask = 0x0;
                         esp_ble_gattc_enh_open(gl_profile_tab[PROFILE_A_APP_ID].gattc_if,
-                                            esp_ble_gatt_create_conn);
+                                            &creat_conn_params);
                     }
                 }
             }
@@ -515,5 +516,24 @@ void app_main(void)
     if (local_mtu_ret){
         ESP_LOGE(GATTC_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
     }
+
+
+    /*
+    * This code is intended for debugging and prints all HCI data.
+    * To enable it, turn on the "BT_HCI_LOG_DEBUG_EN" configuration option.
+    * The output HCI data can be parsed using the script:
+    * esp-idf/tools/bt/bt_hci_to_btsnoop.py.
+    * For detailed instructions, refer to esp-idf/tools/bt/README.md.
+    */
+
+    /*
+    while (1) {
+        extern void bt_hci_log_hci_data_show(void);
+        extern void bt_hci_log_hci_adv_show(void);
+        bt_hci_log_hci_data_show();
+        bt_hci_log_hci_adv_show();
+        vTaskDelay(1000 / portNUM_PROCESSORS);
+    }
+    */
 
 }

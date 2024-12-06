@@ -97,6 +97,8 @@
 #define SOC_AES_SUPPORT_AES_128 (1)
 #define SOC_AES_SUPPORT_AES_256 (1)
 
+#define SOC_AES_SUPPORT_PSEUDO_ROUND_FUNCTION (1)
+
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
 #define SOC_ADC_DIG_CTRL_SUPPORTED              1
@@ -278,14 +280,19 @@
 #define SOC_I2S_NUM                 (1U)
 #define SOC_I2S_HW_VERSION_2        (1)
 #define SOC_I2S_SUPPORTS_ETM        (1)
-#define SOC_I2S_SUPPORTS_TX_SYNC_CNT (1)
 #define SOC_I2S_SUPPORTS_XTAL       (1)
 #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
 #define SOC_I2S_SUPPORTS_PLL_F240M  (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
 #define SOC_I2S_SUPPORTS_PDM        (1)
-#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+#define SOC_I2S_SUPPORTS_PDM_TX         (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM        (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX         (1)     // Support to input raw PDM format data
+#define SOC_I2S_SUPPORTS_PDM2PCM        (1)     // Support to input PDM format but read PCM format data with the help of PDM to PCM filter
+#define SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER (1)
+#define SOC_I2S_SUPPORTS_TX_SYNC_CNT      (1)
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)
+#define SOC_I2S_PDM_MAX_RX_LINES    (1U)
 #define SOC_I2S_SUPPORTS_TDM        (1)
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 #define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
@@ -374,6 +381,7 @@
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SIZE_BY_DMA            1   /*!< Transaction length is controlled by DMA instead of indicated by register */
 #define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
+#define SOC_PARLIO_SUPPORT_SPI_LCD           1   /*!< Support to drive SPI interfaced LCD */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -439,6 +447,7 @@
 
 /*-------------------------- SPIRAM CAPS ----------------------------------------*/
 #define SOC_SPIRAM_XIP_SUPPORTED        1
+#define SOC_PSRAM_DMA_CAPABLE           1
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
@@ -505,6 +514,7 @@
 #define SOC_KEY_MANAGER_FE_KEY_DEPLOY       1 /*!< Key manager responsible to deploy Flash Encryption key */
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
+#define SOC_SECURE_BOOT_V2_RSA              1
 #define SOC_SECURE_BOOT_V2_ECC              1
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
 #define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1
@@ -514,6 +524,7 @@
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1
 
 /*-------------------------- APM CAPS-----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
@@ -585,6 +596,8 @@
 #define SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC  (4) // The range of values for the link index is [0, SOC_PM_PAU_LINK_NUM)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+
+#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)

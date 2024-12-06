@@ -534,6 +534,7 @@ menu "Security features"
         config SECURE_SIGNED_APPS_RSA_SCHEME
             bool "RSA"
             depends on SECURE_BOOT_V2_RSA_SUPPORTED && (SECURE_SIGNED_APPS_NO_SECURE_BOOT || SECURE_BOOT_V2_ENABLED)
+            depends on !(IDF_TARGET_ESP32C5 && ESP32C5_REV_MIN_FULL < 1)
             help
                 Appends the RSA-3072 based Signature block to the application.
                 Refer to <Secure Boot Version 2 documentation link> before enabling.
@@ -1070,6 +1071,44 @@ menu "Security features"
             The app requires this bit is on to continue work otherwise abort.
 
             If not set, the app does not care if the flash encryption eFuse bit is set or not.
+
+    config SECURE_FLASH_PSEUDO_ROUND_FUNC
+        bool "Permanently enable XTS-AES's pseudo rounds function"
+        default y
+        depends on SECURE_FLASH_ENCRYPTION_MODE_RELEASE && SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND
+        help
+            If set (default), the bootloader will permanently enable the XTS-AES peripheral's pseudo rounds function.
+            Note: Enabling this config would burn an efuse.
+
+    choice SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH
+        prompt "Strength of the pseudo rounds function"
+        depends on SECURE_FLASH_PSEUDO_ROUND_FUNC
+        default SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_LOW
+        help
+            The strength of the pseudo rounds functions can be configured to low, medium and high,
+            each denoting the values that would be stored in the efuses field.
+            By default the value to set to low.
+            You can configure the strength of the pseudo rounds functions according to your use cases,
+            for example, increasing the strength would provide higher security but would slow down the
+            flash encryption/decryption operations.
+            For more info regarding the performance impact, please checkout the pseudo round function section of the
+            security guide documentation.
+
+        config SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_LOW
+            bool "Low"
+
+        config SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_MEDIUM
+            bool "Medium"
+
+        config SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_HIGH
+            bool "High"
+    endchoice
+
+    config SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH
+        int
+        default 1 if SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_LOW
+        default 2 if SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_MEDIUM
+        default 3 if SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH_HIGH
 
     config SECURE_ROM_DL_MODE_ENABLED
         bool

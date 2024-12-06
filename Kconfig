@@ -668,6 +668,13 @@ mainmenu "Espressif IoT Development Framework Configuration"
     endmenu # Compiler Options
 
     menu "Component config"
+        comment "!!! MINIMAL_BUILD is enabled !!!"
+        depends on "${IDF_MINIMAL_BUILD}"
+        comment "Only common components and those transitively required by the main component are listed"
+        depends on "${IDF_MINIMAL_BUILD}"
+        comment "If a component configuration is missing, please add it to the main component's requirements"
+        depends on "${IDF_MINIMAL_BUILD}"
+
         source "$COMPONENT_KCONFIGS_SOURCE_FILE"
     endmenu
 
@@ -689,3 +696,4 @@ mainmenu "Espressif IoT Development Framework Configuration"
             - CONFIG_ESP_WIFI_ENABLE_ROAMING_APP
             - CONFIG_USB_HOST_EXT_PORT_SUPPORT_LS
             - CONFIG_USB_HOST_EXT_PORT_RESET_ATTEMPTS
+            - CONFIG_LIBC_PICOLIBC

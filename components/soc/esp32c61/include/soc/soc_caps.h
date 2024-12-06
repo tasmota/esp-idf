@@ -198,13 +198,13 @@
 #define SOC_GPIO_CLOCKOUT_CHANNEL_NUM           (3)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
- #define SOC_RTCIO_PIN_COUNT                 7
- #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
+#define SOC_RTCIO_PIN_COUNT                 7
+#define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
                                                  * so it supports unique IOMUX configuration (including IE, OE, PU, PD, DRV etc.)
                                                  * when the pins are switched to RTC function.
                                                  */
- #define SOC_RTCIO_HOLD_SUPPORTED            1
- #define SOC_RTCIO_WAKE_SUPPORTED            1
+#define SOC_RTCIO_HOLD_SUPPORTED            1
+#define SOC_RTCIO_WAKE_SUPPORTED            1
 
 /*-------------------------- Dedicated GPIO CAPS -----------------------------*/
 #define SOC_DEDIC_GPIO_OUT_CHANNELS_NUM (8) /*!< 8 outward channels on each CPU core */
@@ -234,14 +234,18 @@
 #define SOC_I2S_NUM                     (1U)
 #define SOC_I2S_HW_VERSION_2            (1)
 #define SOC_I2S_SUPPORTS_ETM            (1)
-#define SOC_I2S_SUPPORTS_TX_SYNC_CNT    (1)
 #define SOC_I2S_SUPPORTS_XTAL           (1)
 #define SOC_I2S_SUPPORTS_PLL_F160M      (1)
 #define SOC_I2S_SUPPORTS_PLL_F120M      (1)
 #define SOC_I2S_SUPPORTS_PCM            (1)
 #define SOC_I2S_SUPPORTS_PDM            (1)
-#define SOC_I2S_SUPPORTS_PDM_TX         (1)
+#define SOC_I2S_SUPPORTS_PDM_TX         (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM        (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX         (1)     // Support to input raw PDM format data
+#define SOC_I2S_SUPPORTS_PDM2PCM        (1)     // Support to input PDM format but read PCM format data with the help of PDM to PCM filter
+#define SOC_I2S_SUPPORTS_TX_SYNC_CNT    (1)
 #define SOC_I2S_PDM_MAX_TX_LINES        (2)
+#define SOC_I2S_PDM_MAX_RX_LINES        (1U)
 #define SOC_I2S_SUPPORTS_TDM            (1)
 #define SOC_I2S_SUPPORT_SLEEP_RETENTION (1)
 
@@ -386,6 +390,7 @@
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1
 
 /*-------------------------- APM CAPS ----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
@@ -403,7 +408,8 @@
 #define SOC_UART_SUPPORT_RTC_CLK        (1)         /*!< Support RTC clock as the clock source */
 #define SOC_UART_SUPPORT_XTAL_CLK       (1)         /*!< Support XTAL clock as the clock source */
 #define SOC_UART_SUPPORT_WAKEUP_INT     (1)         /*!< Support UART wakeup interrupt */
-#define SOC_UART_SUPPORT_SLEEP_RETENTION   (1)
+#define SOC_UART_SUPPORT_SLEEP_RETENTION   (1)      /*!< Support back up registers before sleep */
+
 // UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
@@ -454,6 +460,8 @@
 #define SOC_PM_PAU_REGDMA_LINK_WIFIMAC      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+
+#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)

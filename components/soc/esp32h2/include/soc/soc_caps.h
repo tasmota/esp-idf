@@ -271,8 +271,11 @@
 #define SOC_I2S_SUPPORTS_PLL_F64M   (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
 #define SOC_I2S_SUPPORTS_PDM        (1)
-#define SOC_I2S_SUPPORTS_PDM_TX     (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM    (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX     (1)     // Support to input raw PDM format data
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)
+#define SOC_I2S_PDM_MAX_RX_LINES    (1U)
 #define SOC_I2S_SUPPORTS_TDM        (1)
 #define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
 #define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
@@ -351,6 +354,7 @@
 #define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1  /*!< Support back up registers before sleep */
+#define SOC_PARLIO_SUPPORT_SPI_LCD           1  /*!< Support to drive SPI interfaced LCD */
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM (4)
@@ -542,6 +546,8 @@
 #define SOC_PM_PAU_REGDMA_LINK_WIFIMAC      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+
+#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN        (1)
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)

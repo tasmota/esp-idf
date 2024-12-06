@@ -135,6 +135,7 @@ USB_DOCS = ['api-reference/peripherals/usb_device.rst',
 I80_LCD_DOCS = ['api-reference/peripherals/lcd/i80_lcd.rst']
 RGB_LCD_DOCS = ['api-reference/peripherals/lcd/rgb_lcd.rst']
 DSI_LCD_DOCS = ['api-reference/peripherals/lcd/dsi_lcd.rst']
+PARLIO_LCD_DOCS = ['api-reference/peripherals/lcd/parl_lcd.rst']
 
 # TODO: Merge this back with `USB_DOCS` IDF-9919 IDF-9920 IDF-9133
 USB_OTG_DFU_DOCS = ['api-guides/dfu.rst']
@@ -173,6 +174,10 @@ SPI_DOCS = ['api-reference/peripherals/spi_master.rst',
             'api-reference/peripherals/lcd/spi_lcd.rst']
 
 I2S_DOCS = ['api-reference/peripherals/i2s.rst']
+
+VAD_DOCS = ['api-reference/peripherals/vad.rst']
+
+LP_I2S_DOCS = ['api-reference/peripherals/lp_i2s.rst']
 
 ISP_DOCS = ['api-reference/peripherals/isp.rst']
 
@@ -265,6 +270,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_DEDICATED_GPIO_SUPPORTED':DEDIC_GPIO_DOCS,
                             'SOC_LCD_I80_SUPPORTED':I80_LCD_DOCS,
                             'SOC_LCD_RGB_SUPPORTED':RGB_LCD_DOCS,
+                            'SOC_PARLIO_SUPPORT_SPI_LCD':PARLIO_LCD_DOCS,
                             'SOC_MIPI_DSI_SUPPORTED':DSI_LCD_DOCS,
                             'SOC_SPIRAM_SUPPORTED':SPIRAM_DOCS,
                             'SOC_PARLIO_SUPPORTED':PARLIO_DOCS,
@@ -286,6 +292,8 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_I2C_SUPPORTED':I2C_DOCS,
                             'SOC_GPSPI_SUPPORTED':SPI_DOCS,
                             'SOC_I2S_SUPPORTED':I2S_DOCS,
+                            'SOC_LP_I2S_SUPPORTED':LP_I2S_DOCS,
+                            'SOC_LP_VAD_SUPPORTED':VAD_DOCS,
                             'SOC_ISP_SUPPORTED':ISP_DOCS,
                             'ESP_ROM_SUPPORT_DEEP_SLEEP_WAKEUP_STUB': DSLP_STUB_DOCS,
                             'SOC_ADC_SUPPORTED':ADC_DOCS,

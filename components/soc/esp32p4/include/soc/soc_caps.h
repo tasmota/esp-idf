@@ -303,6 +303,7 @@
 #define SOC_I2C_SUPPORT_RTC         (1)
 #define SOC_I2C_SUPPORT_10BIT_ADDR  (1)
 #define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
 #define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
 #define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
 
@@ -454,6 +455,7 @@
 #define SOC_MCPWM_SUPPORT_ETM                (1)    ///< Support ETM (Event Task Matrix)
 #define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR   (1)    ///< Support event comparator (based on ETM)
 #define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP     (1)    ///< Capture timer shares clock with other PWM timers
+// #define SOC_MCPWM_SUPPORT_SLEEP_RETENTION    (1)   // TODO: IDF-9928 Waiting for expansion of module ID  ///< Support back up registers before sleep
 
 /*-------------------------- USB CAPS ----------------------------------------*/
 // USB Serial JTAG Caps
@@ -499,6 +501,7 @@
 #define SOC_SDMMC_DELAY_PHASE_NUM    4
 #define SOC_SDMMC_IO_POWER_EXTERNAL  1    ///< SDMMC IO power controlled by external power supply
 #define SOC_SDMMC_PSRAM_DMA_CAPABLE  1    ///< SDMMC peripheral can do DMA transfer to/from PSRAM
+#define SOC_SDMMC_UHS_I_SUPPORTED    1
 
 // TODO: IDF-5353 (Copy from esp32c3, need check)
 /*--------------------------- SHA CAPS ---------------------------------------*/
@@ -723,6 +726,8 @@
 #define SOC_SLEEP_SYSTIMER_STALL_WORKAROUND 1    //TODO IDF-11381: replace with all xtal field clk gate control
 #define SOC_SLEEP_TGWDT_STOP_WORKAROUND     1    //TODO IDF-11381: replace with all xtal field clk gate control
 
+#define SOC_PM_RETENTION_MODULE_NUM         (64)
+
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)
 
@@ -732,6 +737,7 @@
 
 #define SOC_CLK_APLL_SUPPORTED                    (1)     /*!< Support Audio PLL */
 #define SOC_CLK_MPLL_SUPPORTED                    (1)     /*!< Support MSPI PLL */
+#define SOC_CLK_SDIO_PLL_SUPPORTED                (1)     /*!< Support SDIO PLL */
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
 

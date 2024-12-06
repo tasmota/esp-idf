@@ -570,8 +570,6 @@ esp_err_t esp_bt_controller_disable(void);
  */
 esp_bt_controller_status_t esp_bt_controller_get_status(void);
 
-uint16_t esp_bt_get_tx_buf_num(void);
-
 /** @brief esp_vhci_host_callback
  *  used for vhci call host function to notify what host need to do
  */
@@ -725,16 +723,6 @@ void esp_bt_controller_wakeup_request(void);
  *
  */
 int esp_bt_h4tl_eif_io_event_notify(int event);
-
-/**
- * @brief bt Wi-Fi power domain power on
- */
-void esp_wifi_bt_power_domain_on(void);
-
-/**
- * @brief bt Wi-Fi power domain power off
- */
-void esp_wifi_bt_power_domain_off(void);
 
 /**
  * @brief Get the Bluetooth module sleep clock source.

@@ -10,6 +10,12 @@ Introduction
 
 I2S (Inter-IC Sound) is a synchronous serial communication protocol usually used for transmitting audio data between two digital audio devices.
 
+.. only:: SOC_LP_I2S_SUPPORTED
+
+    .. note::
+
+        For LP I2S documentation, see :doc:`Low Power Inter-IC Sound <./lp_i2s>`.
+
 {IDF_TARGET_NAME} contains {IDF_TARGET_I2S_NUM} I2S peripheral(s). These peripherals can be configured to input and output sample data via the I2S driver.
 
 An I2S bus that communicates in standard or TDM mode consists of the following lines:
@@ -125,7 +131,8 @@ ESP32-C6    I2S 0     I2S 0     none      I2S 0     none       none
 ESP32-S3   I2S 0/1    I2S 0     I2S 0    I2S 0/1    none       none
 ESP32-H2    I2S 0     I2S 0     none      I2S 0     none       none
 ESP32-P4   I2S 0~2    I2S 0     I2S 0    I2S 0~2    none       none
-ESP32-C5    I2S 0     I2S 0     none      I2S 0     none       none
+ESP32-C5    I2S 0     I2S 0     I2S 0     I2S 0     none       none
+ESP32-C61   I2S 0     I2S 0     I2S 0     I2S 0     none       none
 =========  ========  ========  ========  ========  ========  ==========
 
 Standard Mode

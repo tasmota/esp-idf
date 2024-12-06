@@ -686,7 +686,7 @@ FORCE_INLINE_ATTR void misc_modules_sleep_prepare(uint32_t pd_flags, bool deep_s
 #endif
     }
 
-#if !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_IDF_TARGET_ESP32C61
+#if !CONFIG_IDF_TARGET_ESP32C61
     // TODO: IDF-7370
     if (!(deep_sleep && (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] != 0))){
         sar_periph_ctrl_power_disable();
@@ -1669,8 +1669,27 @@ esp_err_t esp_sleep_enable_timer_wakeup(uint64_t time_in_us)
 #if SOC_LP_VAD_SUPPORTED
 esp_err_t esp_sleep_enable_vad_wakeup(void)
 {
+    esp_err_t ret = ESP_FAIL;
+
+    ret = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "fail to keep rtc periph power on");
+        return ret;
+    }
+
+    ret = esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_ON);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "fail to keep xtal power on");
+        return ret;
+    }
+    ret = esp_sleep_sub_mode_config(ESP_SLEEP_LP_USE_XTAL_MODE, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "fail to set to ESP_SLEEP_LP_USE_XTAL_MODE mode");
+        return ret;
+    }
     s_config.wakeup_triggers |= RTC_LP_VAD_TRIG_EN;
-    return esp_sleep_sub_mode_config(ESP_SLEEP_LP_USE_XTAL_MODE, true);
+
+    return ESP_OK;
 }
 #endif
 

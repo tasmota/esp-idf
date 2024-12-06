@@ -879,6 +879,10 @@ config SOC_MCPWM_CAPTURE_CLK_FROM_GROUP
     bool
     default y
 
+config SOC_MCPWM_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_PARLIO_GROUPS
     int
     default 1
@@ -1382,6 +1386,10 @@ config SOC_PM_PAU_REGDMA_LINK_WIFIMAC
 config SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE
     bool
     default y
+
+config SOC_PM_RETENTION_MODULE_NUM
+    int
+    default 32
 
 config SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN
     bool

@@ -279,7 +279,6 @@
 #define SOC_I2S_HW_VERSION_2        (1)
 #define SOC_I2S_SUPPORTS_ETM        (1)
 #define SOC_I2S_SUPPORTS_TX_SYNC_CNT (1)
-// #define SOC_I2S_SUPPORTS_RX_RECOMB  (1) //TODO[C5] IDF-9966
 #define SOC_I2S_SUPPORTS_XTAL       (1)
 #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
 #define SOC_I2S_SUPPORTS_PLL_F240M  (1)
@@ -358,6 +357,7 @@
 #define SOC_MCPWM_SUPPORT_ETM                    1  ///< Support ETM (Event Task Matrix)
 #define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR       1  ///< Support event comparator (based on ETM)
 #define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP         1  ///< Capture timer shares clock with other PWM timers
+#define SOC_MCPWM_SUPPORT_SLEEP_RETENTION        1  ///< Support back up registers before sleep
 
 /*------------------------ USB SERIAL JTAG CAPS ------------------------------*/
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
@@ -578,7 +578,6 @@
 
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA           (1)
-#define SOC_PM_MMU_TABLE_RETENTION_WHEN_TOP_PD     (1)
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN        (1)
 
 #define SOC_PM_PAU_LINK_NUM                 (5)
@@ -586,6 +585,8 @@
 #define SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC  (4) // The range of values for the link index is [0, SOC_PM_PAU_LINK_NUM)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+
+#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)

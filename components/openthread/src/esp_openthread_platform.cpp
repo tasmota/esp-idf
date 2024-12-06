@@ -94,14 +94,18 @@ static esp_err_t esp_openthread_host_interface_init(const esp_openthread_platfor
 {
     esp_openthread_host_connection_mode_t host_mode = get_host_connection_mode();
     switch (host_mode) {
+#if CONFIG_OPENTHREAD_RCP_SPI
     case HOST_CONNECTION_MODE_RCP_SPI:
         ESP_RETURN_ON_ERROR(esp_openthread_host_rcp_spi_init(config), OT_PLAT_LOG_TAG,
                           "esp_openthread_host_rcp_spi_init failed");
         break;
+#endif
+#if CONFIG_OPENTHREAD_RCP_UART
     case HOST_CONNECTION_MODE_RCP_UART:
         ESP_RETURN_ON_ERROR(esp_openthread_host_rcp_uart_init(config), OT_PLAT_LOG_TAG,
                           "esp_openthread_host_rcp_uart_init failed");
         break;
+#endif
 #if CONFIG_OPENTHREAD_CONSOLE_TYPE_UART
     case HOST_CONNECTION_MODE_CLI_UART:
         ESP_RETURN_ON_ERROR(esp_openthread_host_cli_uart_init(config), OT_PLAT_LOG_TAG,
@@ -199,4 +203,14 @@ esp_err_t esp_openthread_platform_process(otInstance *instance, const esp_openth
         current_workflow = current_workflow->next;
     }
     return ESP_OK;
+}
+
+uint32_t esp_openthread_get_alloc_caps(void)
+{
+    return
+#if CONFIG_OPENTHREAD_PLATFORM_MALLOC_CAP_SPIRAM
+    (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    (MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT);
+#endif
 }

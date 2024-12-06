@@ -475,12 +475,14 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_config_bss = NULL;//wpa_config_bss;
     wpa_cb->wpa_michael_mic_failure = wpa_michael_mic_failure;
     wpa_cb->wpa_config_done = wpa_config_done;
+    wpa_cb->wpa_sta_clear_curr_pmksa = wpa_sta_clear_curr_pmksa;
 
     esp_wifi_register_wpa3_ap_cb(wpa_cb);
     esp_wifi_register_wpa3_cb(wpa_cb);
 #ifdef CONFIG_OWE_STA
     esp_wifi_register_owe_cb(wpa_cb);
 #endif /* CONFIG_OWE_STA */
+
     eloop_init();
     ret = esp_supplicant_common_init(wpa_cb);
 
@@ -492,10 +494,6 @@ int esp_supplicant_init(void)
 
 #if CONFIG_ESP_WIFI_WAPI_PSK
     ret =  esp_wifi_internal_wapi_init();
-#endif
-
-#if CONFIG_ESP_WIFI_ENABLE_ROAMING_APP
-    init_roaming_app();
 #endif
 
     return ret;

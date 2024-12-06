@@ -15,7 +15,6 @@ if(CONFIG_OPENTHREAD_ENABLED)
 
     set(private_include_dirs
         "openthread/examples/platforms"
-        "openthread/include/openthread"
         "openthread/src"
         "openthread/src/core"
         "openthread/src/lib"
@@ -84,6 +83,7 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/api/nat64_api.cpp"
             "openthread/src/core/api/netdata_api.cpp"
             "openthread/src/core/api/netdiag_api.cpp"
+            "openthread/src/core/api/network_time_api.cpp"
             "openthread/src/core/api/random_crypto_api.cpp"
             "openthread/src/core/api/tcp_api.cpp"
             "openthread/src/core/api/udp_api.cpp"
@@ -123,6 +123,7 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/thread/network_diagnostic.cpp"
             "openthread/src/core/thread/panid_query_server.cpp"
             "openthread/src/core/thread/thread_netif.cpp"
+            "openthread/src/core/thread/time_sync_service.cpp"
             "openthread/src/core/thread/tmf.cpp"
             "openthread/src/core/thread/topology.cpp"
             "openthread/src/core/utils/child_supervision.cpp")
@@ -138,6 +139,19 @@ if(CONFIG_OPENTHREAD_ENABLED)
         list(APPEND exclude_srcs
             "src/port/esp_openthread_radio.c"
             "src/port/esp_openthread_sleep.c")
+    elseif(CONFIG_OPENTHREAD_RADIO_154_NONE)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_radio_spinel.cpp"
+            "src/port/esp_spi_spinel_interface.cpp"
+            "src/port/esp_uart_spinel_interface.cpp"
+            "src/port/esp_openthread_radio.c"
+            "src/port/esp_openthread_sleep.c"
+            )
+    endif()
+
+    if(NOT CONFIG_OPENTHREAD_RADIO_TREL)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_trel.c")
     endif()
 
     if(CONFIG_OPENTHREAD_BORDER_ROUTER)
@@ -154,6 +168,13 @@ if(CONFIG_OPENTHREAD_ENABLED)
     if(CONFIG_OPENTHREAD_NCP_VENDOR_HOOK)
         list(APPEND src_dirs
             "src/ncp")
+        if(CONFIG_OPENTHREAD_RCP_UART)
+            list(APPEND exclude_srcs
+                "src/ncp/esp_openthread_ncp_spi.cpp")
+        elseif(CONFIG_OPENTHREAD_RCP_SPI)
+            list(APPEND exclude_srcs
+                "src/ncp/esp_openthread_ncp_hdlc.cpp")
+        endif()
     endif()
 
     if(NOT CONFIG_OPENTHREAD_DNS64_CLIENT)
@@ -249,6 +270,10 @@ idf_component_register(SRC_DIRS "${src_dirs}"
                        LDFRAGMENTS linker.lf
                        PRIV_REQUIRES console esp_event esp_partition esp_timer
                                      ieee802154 mbedtls nvs_flash)
+
+if(CONFIG_OPENTHREAD_RADIO_TREL)
+    idf_component_optional_requires(PRIVATE espressif__mdns)
+endif()
 
 if(CONFIG_OPENTHREAD_ENABLED OR CONFIG_OPENTHREAD_SPINEL_ONLY)
     if(CONFIG_OPENTHREAD_RADIO)

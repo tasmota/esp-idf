@@ -135,13 +135,19 @@ menu "LWIP"
 
     config LWIP_MAX_SOCKETS
         int "Max number of open sockets"
-        range 1 16
+        range 1 253
         default 10
         help
+            The practical maximum limit is
+            determined by available heap memory at runtime.
+
             Sockets take up a certain amount of memory, and allowing fewer
             sockets to be open at the same time conserves memory. Specify
             the maximum amount of sockets here. The valid value is from 1
-            to 16.
+            to 253. If using value above 61, update CMakeLists defining
+            FD_SETSIZE to the number of sockets used plus the
+            expected open files (minimum of +3 for stdout, stderr and stdin).
+
 
     config LWIP_USE_ONLY_LWIP_SELECT
         bool "Support LWIP socket select() only (DEPRECATED)"
@@ -877,6 +883,27 @@ menu "LWIP"
         default 0x1 if LWIP_TCPIP_TASK_AFFINITY_CPU1
 
 
+    config LWIP_IPV6_ND6_NUM_PREFIXES
+        int "Max number of entries in IPv6 on-link prefixes cache"
+        depends on LWIP_IPV6
+        default 5
+        help
+            Maximum number of entries in IPv6 on-link prefixes cache
+
+    config LWIP_IPV6_ND6_NUM_ROUTERS
+        int "Max number of entries in IPv6 default routers cache"
+        depends on LWIP_IPV6
+        default 3
+        help
+            Maximum number of entries in IPv6 default routers cache
+
+    config LWIP_IPV6_ND6_NUM_DESTINATIONS
+        int "Max number of entries in IPv6 destinations cache"
+        depends on LWIP_IPV6
+        default 10
+        help
+            Maximum number of entries in IPv6 destinations cache
+
     menuconfig LWIP_PPP_SUPPORT
         bool "Enable PPP support"
         default n
@@ -1304,11 +1331,15 @@ menu "LWIP"
         choice LWIP_HOOK_IP6_INPUT
             prompt "IPv6 packet input"
             depends on LWIP_IPV6
-            default LWIP_HOOK_IP6_INPUT_NONE
+            default LWIP_HOOK_IP6_INPUT_DEFAULT
             help
                 Enables custom IPv6 packet input.
-                Setting this to "default" provides weak implementation
-                stub that could be overwritten in application code.
+                Setting this to "default" provides weak IDF implementation,
+                which drops all incoming IPv6 traffic if the interface has no link local address.
+                (this default implementation is "weak" and could be still overwritten
+                in the application if some additional IPv6 input packet filtering is needed)
+                Setting this to "none" removes this default filter and conforms to the lwIP
+                implementation (which accepts multicasts even if the interface has no link local address)
                 Setting this to "custom" provides hook's declaration
                 only and expects the application to implement it.
 

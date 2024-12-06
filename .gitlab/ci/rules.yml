@@ -217,6 +217,10 @@
   rules:
     - <<: *if-tag-release
 
+.rules:dev-push:
+  rules:
+    - <<: *if-dev-push
+
 # Do not upload caches on dev branches by default
 .rules:upload-python-cache:
   rules:
@@ -248,15 +252,6 @@
     - <<: *if-protected
     - <<: *if-dev-push
       changes: *patterns-python-files
-
-.rules:patterns:static-code-analysis-preview:
-  rules:
-    - <<: *if-dev-push
-      changes: *patterns-c-files
-    - <<: *if-dev-push
-      changes: *patterns-python-files
-    - <<: *if-dev-push
-      changes: *patterns-sonarqube-files
 
 .rules:patterns:idf-pytest-plugin:
   rules:

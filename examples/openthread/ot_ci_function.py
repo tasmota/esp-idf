@@ -114,22 +114,20 @@ def wait_for_join(dut:IdfDut, role:str) -> bool:
 def joinWiFiNetwork(dut:IdfDut, wifi:wifi_parameter) -> Tuple[str, int]:
     clean_buffer(dut)
     ip_address = ''
-    information = ''
     for order in range(1, wifi.retry_times):
         command = 'wifi connect -s ' + str(wifi.ssid) + ' -p ' + str(wifi.psk)
         tmp = get_ouput_string(dut, command, 10)
         if 'sta ip' in str(tmp):
             ip_address = re.findall(r'sta ip: (\w+.\w+.\w+.\w+),', str(tmp))[0]
-        if 'wifi sta' in str(tmp):
-            information = re.findall(r'wifi sta (\w+ \w+ \w+)\W', str(tmp))[0]
-        if information == 'is connected successfully':
-            break
-    assert information == 'is connected successfully'
-    return ip_address, order
+        wait(dut, 2)
+        execute_command(dut, 'wifi state')
+        if dut.expect('connected', timeout=5):
+            return ip_address, order
+    raise Exception(f'{dut} connect wifi {str(wifi.ssid)} with password {str(wifi.psk)} fail')
 
 
 def getDeviceRole(dut:IdfDut) -> str:
-    clean_buffer(dut)
+    wait(dut, 1)
     execute_command(dut, 'state')
     role = dut.expect(r'\W+(\w+)\W+Done', timeout=5)[1].decode()
     print(role)
@@ -142,7 +140,6 @@ def changeDeviceRole(dut:IdfDut, role:str) -> None:
 
 
 def getDataset(dut:IdfDut) -> str:
-    clean_buffer(dut)
     execute_command(dut, 'dataset active -x')
     dut_data = dut.expect(r'\n(\w+)\r', timeout=5)[1].decode()
     return str(dut_data)
@@ -155,7 +152,6 @@ def init_thread(dut:IdfDut) -> None:
 
 
 def reset_thread(dut:IdfDut) -> None:
-    clean_buffer(dut)
     execute_command(dut, 'factoryreset')
     dut.expect('OpenThread attached to netif', timeout=20)
     dut.expect('>', timeout=10)
@@ -166,7 +162,6 @@ def reset_thread(dut:IdfDut) -> None:
 # get the mleid address of the thread
 def get_mleid_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr mleid')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -175,7 +170,6 @@ def get_mleid_addr(dut:IdfDut) -> str:
 # get the rloc address of the thread
 def get_rloc_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr rloc')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -184,7 +178,6 @@ def get_rloc_addr(dut:IdfDut) -> str:
 # get the linklocal address of the thread
 def get_linklocal_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr linklocal')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -195,7 +188,6 @@ def get_global_unicast_addr(dut:IdfDut, br:IdfDut) -> str:
     dut_adress = ''
     clean_buffer(br)
     omrprefix = get_omrprefix(br)
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr')
     dut_adress = dut.expect(r'(%s(?:\w+:){3}\w+)\r' % str(omrprefix), timeout=5)[1].decode()
     return dut_adress
@@ -460,6 +452,26 @@ def get_domain() -> str:
     return str(role)
 
 
+def flush_ipv6_addr_by_interface() -> None:
+    interface_name = get_host_interface_name()
+    print(f'flush ipv6 addr : {interface_name}')
+    command_show_addr = f'ip -6 addr show dev {interface_name}'
+    command_show_route = f'ip -6 route show dev {interface_name}'
+    addr_before = subprocess.getoutput(command_show_addr)
+    route_before = subprocess.getoutput(command_show_route)
+    print(f'Before flush, IPv6 addresses: \n{addr_before}')
+    print(f'Before flush, IPv6 routes: \n{route_before}')
+    subprocess.run(['ip', 'link', 'set', interface_name, 'down'])
+    subprocess.run(['ip', '-6', 'addr', 'flush', 'dev', interface_name])
+    subprocess.run(['ip', '-6', 'route', 'flush', 'dev', interface_name])
+    subprocess.run(['ip', 'link', 'set', interface_name, 'up'])
+    time.sleep(5)
+    addr_after = subprocess.getoutput(command_show_addr)
+    route_after = subprocess.getoutput(command_show_route)
+    print(f'After flush, IPv6 addresses: \n{addr_after}')
+    print(f'After flush, IPv6 routes: \n{route_after}')
+
+
 class tcp_parameter:
 
     def __init__(self, tcp_type:str='', addr:str='::', port:int=12345, listen_flag:bool=False, recv_flag:bool=False, timeout:float=15.0, tcp_bytes:bytes=b''):
@@ -520,33 +532,29 @@ def decimal_to_hex(decimal_str:str) -> str:
 
 
 def get_omrprefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br omrprefix')
     omrprefix = br.expect(r'Local: ((?:\w+:){4}):/\d+\r', timeout=5)[1].decode()
     return str(omrprefix)
 
 
 def get_onlinkprefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br onlinkprefix')
     onlinkprefix = br.expect(r'Local: ((?:\w+:){4}):/\d+\r', timeout=5)[1].decode()
     return str(onlinkprefix)
 
 
 def get_nat64prefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br nat64prefix')
     nat64prefix = br.expect(r'Local: ((?:\w+:){6}):/\d+', timeout=5)[1].decode()
     return str(nat64prefix)
 
 
 def execute_command(dut:IdfDut, command:str) -> None:
+    clean_buffer(dut)
     dut.write(command)
-    dut.expect(command, timeout=3)
 
 
 def get_ouput_string(dut:IdfDut, command:str, wait_time:int) -> str:
-    clean_buffer(dut)
     execute_command(dut, command)
     tmp = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
     clean_buffer(dut)

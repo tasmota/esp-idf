@@ -18,6 +18,7 @@
 #ifdef CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
 #include <sys/param.h>      // for the MIN macro
 #include "esp_app_desc.h"
+#include "esp_memory_utils.h"
 #endif
 
 #define ELF_CLASS ELFCLASS32
@@ -208,7 +209,7 @@ static int elf_write_note_header(core_dump_elf_t *self,
     elf_note note_hdr = { 0 };
 
     memcpy(name_buffer, name, name_len);
-    note_hdr.n_namesz = ALIGN_UP(name_len, 4);
+    note_hdr.n_namesz = ALIGN_UP(name_len + 1, 4);
     note_hdr.n_descsz = data_sz;
     note_hdr.n_type = type;
     // write note header
@@ -241,7 +242,7 @@ static int elf_write_note(core_dump_elf_t *self,
     // write segment data during second pass
     if (self->elf_stage == ELF_STAGE_PLACE_DATA) {
         ELF_CHECK_ERR(data, ELF_PROC_ERR_OTHER, "Invalid data pointer %x.", (uint32_t)data);
-        err = elf_write_note_header(self, name, name_len, data_sz, type);
+        err = elf_write_note_header(self, name, strlen(name), data_sz, type);
         if (err != ESP_OK) {
             return err;
         }
@@ -300,22 +301,6 @@ static int elf_add_regs(core_dump_elf_t *self, core_dump_task_header_t *task)
                         len);
 }
 
-static int elf_add_stack(core_dump_elf_t *self, core_dump_task_header_t *task)
-{
-    uint32_t stack_vaddr, stack_len = 0, stack_paddr = 0;
-
-    ELF_CHECK_ERR((task), ELF_PROC_ERR_OTHER, "Invalid task pointer.");
-
-    stack_len = esp_core_dump_get_stack(task, &stack_vaddr, &stack_paddr);
-    ESP_COREDUMP_LOG_PROCESS("Add stack for task 0x%x: addr 0x%x, sz %u",
-                             task->tcb_addr, stack_vaddr, stack_len);
-    int ret = elf_add_segment(self, PT_LOAD,
-                              (uint32_t)stack_vaddr,
-                              (void*)stack_paddr,
-                              (uint32_t) stack_len);
-    return ret;
-}
-
 static int elf_add_tcb(core_dump_elf_t *self, core_dump_task_header_t *task)
 {
     ELF_CHECK_ERR((task), ELF_PROC_ERR_OTHER, "Invalid task pointer.");
@@ -348,17 +333,39 @@ static int elf_process_task_tcb(core_dump_elf_t *self, core_dump_task_header_t *
 
 static int elf_process_task_stack(core_dump_elf_t *self, core_dump_task_header_t *task)
 {
-    int ret = ELF_PROC_ERR_OTHER;
+    int ret = 0;
+    uint32_t stack_vaddr;
+    uint32_t stack_len = 0;
+    uint32_t stack_paddr = 0;
 
     ELF_CHECK_ERR((task), ELF_PROC_ERR_OTHER, "Invalid input data.");
 
-    ret = elf_add_stack(self, task);
-    if (ret <= 0) {
-        ESP_COREDUMP_LOGE("Task (TCB:%x), (Stack:%x), stack processing failure = %d.",
-                          task->tcb_addr,
-                          task->stack_start,
-                          ret);
+    stack_len = esp_core_dump_get_stack(task, &stack_vaddr, &stack_paddr);
+    ESP_COREDUMP_LOG_PROCESS("Add stack for task 0x%x: addr 0x%x, sz %u",
+                             task->tcb_addr, stack_vaddr, stack_len);
+
+#if CONFIG_ESP_COREDUMP_CAPTURE_DRAM
+    /*
+        When saving all data sections (enabled by `CONFIG_ESP_COREDUMP_CAPTURE_DRAM`),
+        the task stack located in DRAM will be saved in `esp_core_dump_store_section()`.
+        Therefore, we filter them out here.
+        PSRAM data do not fall into any ELF section, so we always save such stacks here.
+    */
+    if (esp_ptr_external_ram((void *)stack_vaddr))
+#endif
+    {
+        ret = elf_add_segment(self, PT_LOAD,
+                              (uint32_t)stack_vaddr,
+                              (void*)stack_paddr,
+                              (uint32_t) stack_len);
+        if (ret <= 0) {
+            ESP_COREDUMP_LOGE("Task (TCB:%x), (Stack:%x), stack processing failure = %d.",
+                              task->tcb_addr,
+                              task->stack_start,
+                              ret);
+        }
     }
+
     return ret;
 }
 
@@ -453,20 +460,14 @@ static int elf_save_task(core_dump_elf_t *self, core_dump_task_header_t *task)
     return elf_len;
 }
 
-static int elf_write_tasks_data(core_dump_elf_t *self)
+static int elf_process_task_data(core_dump_elf_t *self)
 {
     int elf_len = 0;
     core_dump_task_header_t task_hdr = { 0 };
     core_dump_mem_seg_header_t interrupted_stack = { 0 };
     TaskIterator_t task_iter;
-    int ret = ELF_PROC_ERR_OTHER;
     uint16_t tasks_num = 0;
     uint16_t bad_tasks_num = 0;
-
-    ESP_COREDUMP_LOG_PROCESS("================ Processing task registers ================");
-    ret = elf_process_tasks_regs(self);
-    ELF_CHECK_ERR((ret > 0), ret, "Tasks regs addition failed, return (%d).", ret);
-    elf_len += ret;
 
     ESP_COREDUMP_LOG_PROCESS("================   Processing task data   ================");
     // processes all task's stack data and writes segment data into partition
@@ -479,17 +480,16 @@ static int elf_write_tasks_data(core_dump_elf_t *self)
             bad_tasks_num++;
             continue;
         }
-
-#if CONFIG_ESP_COREDUMP_CAPTURE_DRAM
-        /* Only crashed task data will be saved here. The other task's data will be automatically saved within the sections */
-        if (esp_core_dump_get_current_task_handle() == task_iter.pxTaskHandle)
-#endif
-        {
-            ret = elf_save_task(self, &task_hdr);
-            ELF_CHECK_ERR((ret > 0), ret,
-                          "Task %x, TCB write failed, return (%d).", task_iter.pxTaskHandle, ret);
-            elf_len += ret;
-        }
+        int ret = elf_save_task(self, &task_hdr);
+        ELF_CHECK_ERR((ret > 0), ret,
+                      "Task %x, TCB write failed, return (%d).", task_iter.pxTaskHandle, ret);
+        elf_len += ret;
+        /*  interrupt stacks:
+            - 'port_IntStack' is in the data section for xtensa
+            - 'xIsrStack' is in the bss section for risc-v
+            When DRAM capture is enabled, interrupt stack saving can be done during the full section store
+        */
+#if !CONFIG_ESP_COREDUMP_CAPTURE_DRAM
         if (interrupted_stack.size > 0) {
             ESP_COREDUMP_LOG_PROCESS("Add interrupted task stack %lu bytes @ %x",
                                      interrupted_stack.size, interrupted_stack.start);
@@ -500,9 +500,26 @@ static int elf_write_tasks_data(core_dump_elf_t *self)
             ELF_CHECK_ERR((ret > 0), ret, "Interrupted task stack write failed, return (%d).", ret);
             elf_len += ret;
         }
+#endif
     }
     ESP_COREDUMP_LOG_PROCESS("Found %d bad task out of %d", bad_tasks_num, tasks_num);
+
     return elf_len;
+}
+
+static int elf_write_tasks_data(core_dump_elf_t *self)
+{
+    ESP_COREDUMP_LOG_PROCESS("================ Processing task registers ================");
+    int ret = elf_process_tasks_regs(self);
+    ELF_CHECK_ERR((ret > 0), ret, "Tasks regs addition failed, return (%d).", ret);
+    int elf_len = ret;
+
+    ret = elf_process_task_data(self);
+    if (ret <= 0) {
+        return ret;
+    }
+
+    return elf_len + ret;
 }
 
 #if CONFIG_ESP_COREDUMP_CAPTURE_DRAM
@@ -671,7 +688,7 @@ static void elf_write_core_dump_note_cb(void *opaque, const char *data)
 
 static int elf_add_wdt_panic_details(core_dump_elf_t *self)
 {
-    uint32_t name_len = sizeof(ELF_ESP_CORE_DUMP_PANIC_DETAILS_NOTE_NAME);
+    uint32_t name_len = sizeof(ELF_ESP_CORE_DUMP_PANIC_DETAILS_NOTE_NAME) - 1;
     core_dump_elf_opaque_t param = {
         .self = self,
         .total_size = 0,

@@ -386,7 +386,7 @@ static void prvSendItemDoneNoSplit(Ringbuffer_t *pxRingbuffer, uint8_t* pucItem)
      */
     pxCurHeader = (ItemHeader_t *)pxRingbuffer->pucWrite;
     //Skip over Items that have already been written or are dummy items
-    while (((pxCurHeader->uxItemFlags & rbITEM_WRITTEN_FLAG) || (pxCurHeader->uxItemFlags & rbITEM_DUMMY_DATA_FLAG)) && pxRingbuffer->pucWrite != pxRingbuffer->pucAcquire) {
+    while (((pxCurHeader->uxItemFlags & rbITEM_WRITTEN_FLAG) || (pxCurHeader->uxItemFlags & rbITEM_DUMMY_DATA_FLAG))) {
         if (pxCurHeader->uxItemFlags & rbITEM_DUMMY_DATA_FLAG) {
             pxCurHeader->uxItemFlags |= rbITEM_WRITTEN_FLAG;   //Mark as freed (not strictly necessary but adds redundancy)
             pxRingbuffer->pucWrite = pxRingbuffer->pucHead;    //Wrap around due to dummy data
@@ -401,6 +401,12 @@ static void prvSendItemDoneNoSplit(Ringbuffer_t *pxRingbuffer, uint8_t* pucItem)
         if ((pxRingbuffer->pucTail - pxRingbuffer->pucWrite) < rbHEADER_SIZE) {
             pxRingbuffer->pucWrite = pxRingbuffer->pucHead;
         }
+
+        // If the write pointer has caught up to the acquire pointer, we can break out of the loop
+        if (pxRingbuffer->pucWrite == pxRingbuffer->pucAcquire) {
+            break;
+        }
+
         pxCurHeader = (ItemHeader_t *)pxRingbuffer->pucWrite;      //Update header to point to item
     }
 }
@@ -831,7 +837,7 @@ static BaseType_t prvReceiveGeneric(Ringbuffer_t *pxRingbuffer,
 
 #ifdef __clang_analyzer__
     // Teach clang-tidy that if NULL pointers are provided, this function will never dereference them
-    if (!pvItem1 || !pvItem2 || !xItemSize1 || !xItemSize2) {
+    if (!pvItem1 || !xItemSize1) {
         return pdFALSE;
     }
 #endif /*__clang_analyzer__ */
@@ -850,6 +856,12 @@ static BaseType_t prvReceiveGeneric(Ringbuffer_t *pxRingbuffer,
             }
             //If split buffer, check for split items
             if (pxRingbuffer->uxRingbufferFlags & rbALLOW_SPLIT_FLAG) {
+#ifdef __clang_analyzer__
+                // Teach clang-tidy that if NULL pointers are provided, this function will never dereference them
+                if (!pvItem2 || !xItemSize2) {
+                    return pdFALSE;
+                }
+#endif /*__clang_analyzer__ */
                 if (xIsSplit == pdTRUE) {
                     *pvItem2 = pxRingbuffer->pvGetItem(pxRingbuffer, &xIsSplit, 0, xItemSize2);
                     configASSERT(*pvItem2 < *pvItem1);  //Check wrap around has occurred
@@ -897,7 +909,7 @@ static BaseType_t prvReceiveGenericFromISR(Ringbuffer_t *pxRingbuffer,
 
 #ifdef __clang_analyzer__
     // Teach clang-tidy that if NULL pointers are provided, this function will never dereference them
-    if (!pvItem1 || !pvItem2 || !xItemSize1 || !xItemSize2) {
+    if (!pvItem1 || !xItemSize1) {
         return pdFALSE;
     }
 #endif /*__clang_analyzer__ */
@@ -914,6 +926,12 @@ static BaseType_t prvReceiveGenericFromISR(Ringbuffer_t *pxRingbuffer,
         }
         //If split buffer, check for split items
         if (pxRingbuffer->uxRingbufferFlags & rbALLOW_SPLIT_FLAG) {
+#ifdef __clang_analyzer__
+            // Teach clang-tidy that if NULL pointers are provided, this function will never dereference them
+            if (!pvItem2 || !xItemSize2) {
+                return pdFALSE;
+            }
+#endif /*__clang_analyzer__ */
             if (xIsSplit == pdTRUE) {
                 *pvItem2 = pxRingbuffer->pvGetItem(pxRingbuffer, &xIsSplit, 0, xItemSize2);
                 configASSERT(*pvItem2 < *pvItem1);  //Check wrap around has occurred

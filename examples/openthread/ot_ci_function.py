@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Unlicense OR CC0-1.0
 # !/usr/bin/env python3
 # this file defines some functions for testing cli and br under pytest framework
+import os
 import re
 import socket
 import struct
@@ -11,6 +12,7 @@ from typing import Tuple
 
 import netifaces
 import pexpect
+import yaml
 from pytest_embedded_idf.dut import IdfDut
 
 
@@ -119,14 +121,15 @@ def joinWiFiNetwork(dut:IdfDut, wifi:wifi_parameter) -> Tuple[str, int]:
         tmp = get_ouput_string(dut, command, 10)
         if 'sta ip' in str(tmp):
             ip_address = re.findall(r'sta ip: (\w+.\w+.\w+.\w+),', str(tmp))[0]
+        wait(dut, 2)
         execute_command(dut, 'wifi state')
-        if dut.expect('\nconnected\r', timeout=5):
+        if dut.expect('connected', timeout=5):
             return ip_address, order
     raise Exception(f'{dut} connect wifi {str(wifi.ssid)} with password {str(wifi.psk)} fail')
 
 
 def getDeviceRole(dut:IdfDut) -> str:
-    clean_buffer(dut)
+    wait(dut, 1)
     execute_command(dut, 'state')
     role = dut.expect(r'\W+(\w+)\W+Done', timeout=5)[1].decode()
     print(role)
@@ -139,7 +142,6 @@ def changeDeviceRole(dut:IdfDut, role:str) -> None:
 
 
 def getDataset(dut:IdfDut) -> str:
-    clean_buffer(dut)
     execute_command(dut, 'dataset active -x')
     dut_data = dut.expect(r'\n(\w+)\r', timeout=5)[1].decode()
     return str(dut_data)
@@ -152,7 +154,6 @@ def init_thread(dut:IdfDut) -> None:
 
 
 def reset_thread(dut:IdfDut) -> None:
-    clean_buffer(dut)
     execute_command(dut, 'factoryreset')
     dut.expect('OpenThread attached to netif', timeout=20)
     dut.expect('>', timeout=10)
@@ -163,7 +164,6 @@ def reset_thread(dut:IdfDut) -> None:
 # get the mleid address of the thread
 def get_mleid_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr mleid')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -172,7 +172,6 @@ def get_mleid_addr(dut:IdfDut) -> str:
 # get the rloc address of the thread
 def get_rloc_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr rloc')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -181,7 +180,6 @@ def get_rloc_addr(dut:IdfDut) -> str:
 # get the linklocal address of the thread
 def get_linklocal_addr(dut:IdfDut) -> str:
     dut_adress = ''
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr linklocal')
     dut_adress = dut.expect(r'\n((?:\w+:){7}\w+)\r', timeout=5)[1].decode()
     return dut_adress
@@ -192,7 +190,6 @@ def get_global_unicast_addr(dut:IdfDut, br:IdfDut) -> str:
     dut_adress = ''
     clean_buffer(br)
     omrprefix = get_omrprefix(br)
-    clean_buffer(dut)
     execute_command(dut, 'ipaddr')
     dut_adress = dut.expect(r'(%s(?:\w+:){3}\w+)\r' % str(omrprefix), timeout=5)[1].decode()
     return dut_adress
@@ -261,9 +258,30 @@ def init_interface_ipv6_address() -> None:
 
 
 def get_host_interface_name() -> str:
-    interfaces = netifaces.interfaces()
-    interface_name = [s for s in interfaces if 'wl' in s][0]
-    return str(interface_name)
+    home_dir = os.path.expanduser('~')
+    config_path = os.path.join(home_dir, 'config', 'env_config.yml')
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+            interface_name = config.get('interface_name')
+            if interface_name:
+                if interface_name == 'eth0':
+                    print(
+                        f"Warning: 'eth0' is not recommended as a valid network interface. "
+                        f"Please check and update the 'interface_name' in the configuration file: "
+                        f'{config_path}'
+                    )
+                else:
+                    return str(interface_name)
+            else:
+                print("Warning: Configuration file found but 'interface_name' is not defined.")
+    except Exception as e:
+        print(f'Error: Failed to read or parse {config_path}. Details: {e}')
+    if 'eth1' in netifaces.interfaces():
+        return 'eth1'
+
+    raise Exception('Warning: No valid network interface detected. Please check your configuration.')
 
 
 def clean_buffer(dut:IdfDut) -> None:
@@ -537,33 +555,29 @@ def decimal_to_hex(decimal_str:str) -> str:
 
 
 def get_omrprefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br omrprefix')
     omrprefix = br.expect(r'Local: ((?:\w+:){4}):/\d+\r', timeout=5)[1].decode()
     return str(omrprefix)
 
 
 def get_onlinkprefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br onlinkprefix')
     onlinkprefix = br.expect(r'Local: ((?:\w+:){4}):/\d+\r', timeout=5)[1].decode()
     return str(onlinkprefix)
 
 
 def get_nat64prefix(br:IdfDut) -> str:
-    clean_buffer(br)
     execute_command(br, 'br nat64prefix')
     nat64prefix = br.expect(r'Local: ((?:\w+:){6}):/\d+', timeout=5)[1].decode()
     return str(nat64prefix)
 
 
 def execute_command(dut:IdfDut, command:str) -> None:
+    clean_buffer(dut)
     dut.write(command)
-    dut.expect(command, timeout=3)
 
 
 def get_ouput_string(dut:IdfDut, command:str, wait_time:int) -> str:
-    clean_buffer(dut)
     execute_command(dut, command)
     tmp = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
     clean_buffer(dut)

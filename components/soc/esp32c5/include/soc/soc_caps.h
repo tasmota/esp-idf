@@ -18,6 +18,7 @@
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_ADC_SUPPORTED               1
+#define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
@@ -251,6 +252,11 @@
 #define SOC_DEDIC_GPIO_IN_CHANNELS_NUM  (8) /*!< 8 inward channels on each CPU core */
 #define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
+/*------------------------- Analog Comparator CAPS ---------------------------*/
+#define SOC_ANA_CMPR_NUM                       (1U)
+#define SOC_ANA_CMPR_CAN_DISTINGUISH_EDGE      (1)  // Support positive/negative/any cross interrupt
+#define SOC_ANA_CMPR_SUPPORT_ETM               (1)
+
 /*-------------------------- I2C CAPS ----------------------------------------*/
 #define SOC_I2C_NUM                 (2U)
 #define SOC_HP_I2C_NUM              (1U)
@@ -461,7 +467,6 @@
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
-#define SOC_MEMSPI_FLASH_CLK_SRC_IS_INDEPENDENT   1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 // TODO: [ESP32C5] IDF-8707
@@ -494,11 +499,15 @@
 #define SOC_MWDT_SUPPORT_SLEEP_RETENTION   (1)
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-// #define SOC_TWAI_CONTROLLER_NUM         2
-// #define SOC_TWAI_CLK_SUPPORT_XTAL       1
-// #define SOC_TWAI_BRP_MIN                2
-// #define SOC_TWAI_BRP_MAX                32768
-// #define SOC_TWAI_SUPPORTS_RX_STATUS     1
+#define SOC_TWAI_CONTROLLER_NUM         2
+#define SOC_TWAI_MASK_FILTER_NUM        3
+#define SOC_TWAI_RANGE_FILTER_NUM       1U
+#define SOC_TWAI_BRP_MIN                1U
+#define SOC_TWAI_BRP_MAX                255
+#define SOC_TWAI_CLK_SUPPORT_XTAL       1
+#define SOC_TWAI_SUPPORTS_RX_STATUS     1
+#define SOC_TWAI_SUPPORT_FD             1
+#define SOC_TWAI_SUPPORT_TIMESTAMP      1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 // #define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 1

@@ -16,7 +16,24 @@
 
 #pragma once
 
+#ifdef __has_include
+#  if __has_include("sdkconfig.h")
+#    include "sdkconfig.h"
+#    define SOC_CAPS_ECO_VER    CONFIG_ESP32H2_REV_MIN_FULL
+#  endif
+#endif
+
+#if !defined(SOC_CAPS_ECO_VER)
+#define SOC_CAPS_ECO_VER    SOC_CAPS_ECO_VER_MAX
+#endif
+
+#ifndef SOC_CAPS_ECO_VER
+#warning ECO version not determined. Some ECO related caps will not be available.
+#warning Define SOC_CAPS_ECO_VER before including this header.
+#endif
+
 /*-------------------------- COMMON CAPS ---------------------------------------*/
+#define SOC_CAPS_ECO_VER_MAX            102
 #define SOC_ADC_SUPPORTED               1
 #define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
@@ -447,6 +464,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_LP_TIMER_BOD_SHARE_INTR_SOURCE 1   //LP timer and brownout detector share the interrupt source
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 #define SOC_TIMER_GROUPS                  (2)
@@ -477,7 +495,9 @@
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
 #define SOC_EFUSE_DIS_ICACHE 1
 #define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // XTS-AES and ECDSA key purposes not supported for this block
+#if SOC_CAPS_ECO_VER < 102
 #define SOC_EFUSE_ECDSA_USE_HARDWARE_K 1 // Force use hardware TRNG supplied K for ECDSA
+#endif
 #define SOC_EFUSE_ECDSA_KEY 1
 
 /*-------------------------- Secure Boot CAPS----------------------------*/

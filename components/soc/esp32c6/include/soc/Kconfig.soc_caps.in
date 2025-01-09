@@ -555,6 +555,10 @@ config SOC_RTCIO_WAKE_SUPPORTED
     bool
     default y
 
+config SOC_RTCIO_EDGE_WAKE_SUPPORTED
+    bool
+    default y
+
 config SOC_DEDIC_GPIO_OUT_CHANNELS_NUM
     int
     default 8
@@ -1150,6 +1154,10 @@ config SOC_LP_TIMER_BIT_WIDTH_LO
 config SOC_LP_TIMER_BIT_WIDTH_HI
     int
     default 16
+
+config SOC_LP_TIMER_BOD_SHARE_INTR_SOURCE
+    bool
+    default y
 
 config SOC_TIMER_GROUPS
     int

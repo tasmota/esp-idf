@@ -59,6 +59,26 @@ esp_err_t esp_ieee802154_set_txpower(int8_t power)
     return ESP_OK;
 }
 
+esp_err_t esp_ieee802154_set_power_table(esp_ieee802154_txpower_table_t power_table)
+{
+    return ieee802154_pib_set_power_table(power_table);
+}
+
+esp_err_t esp_ieee802154_get_power_table(esp_ieee802154_txpower_table_t *out_power_table)
+{
+    return ieee802154_pib_get_power_table(out_power_table);
+}
+
+esp_err_t esp_ieee802154_set_power_with_channel(uint8_t channel, int8_t power)
+{
+    return ieee802154_pib_set_power_with_channel(channel, power);
+}
+
+esp_err_t esp_ieee802154_get_power_with_channel(uint8_t channel, int8_t *out_power)
+{
+    return ieee802154_pib_get_power_with_channel(channel, out_power);
+}
+
 bool esp_ieee802154_get_promiscuous(void)
 {
     return ieee802154_pib_get_promiscuous();
@@ -183,6 +203,22 @@ esp_err_t esp_ieee802154_set_multipan_enable(uint8_t mask)
 }
 
 #else
+
+esp_err_t esp_ieee802154_set_ack_timeout(uint32_t timeout)
+{
+    // Divide by 16 and round it up.
+    uint32_t target_reg_value = (timeout + 15) / 16;
+    if((timeout % 16) != 0) {
+        ESP_LOGW(IEEE802154_TAG, "Ack timeout should be a multiple of 16, input %"PRIu32", will be replaced by %"PRIu32"", timeout, (target_reg_value * 16));
+    }
+    ieee802154_ll_set_ack_timeout(target_reg_value);
+    return ESP_OK;
+}
+
+uint32_t esp_ieee802154_get_ack_timeout(void)
+{
+    return ieee802154_ll_get_ack_timeout() * 16;
+}
 
 uint16_t esp_ieee802154_get_panid(void)
 {

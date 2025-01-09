@@ -74,6 +74,52 @@ int8_t esp_ieee802154_get_txpower(void);
 esp_err_t esp_ieee802154_set_txpower(int8_t power);
 
 /**
+ * @brief  Set the transmission power table.
+ *
+ * @param[in]  power_table  The power table.
+ *
+ * @return
+ *        - ESP_OK   Set the transmission power table to successfully.
+ */
+esp_err_t esp_ieee802154_set_power_table(esp_ieee802154_txpower_table_t power_table);
+
+/**
+ * @brief  Get the transmission power table.
+ *
+ * @param[out]  out_power_table  The power table.
+ *
+ * @return
+ *        - ESP_OK                  Get the transmission power table successfully.
+ *        - ESP_ERR_INVALID_ARG     Invalid arguments.
+ *
+ */
+esp_err_t esp_ieee802154_get_power_table(esp_ieee802154_txpower_table_t *out_power_table);
+
+/**
+ * @brief  Set the transmission power for a specific channel.
+ *
+ * @param[in]  channel  The channel.
+ * @param[in]  power    The power.
+ *
+ * @return
+ *        - ESP_OK                  Set the transmission power for a specific channel successfully.
+ *        - ESP_ERR_INVALID_ARG     Invalid arguments.
+ */
+esp_err_t esp_ieee802154_set_power_with_channel(uint8_t channel, int8_t power);
+
+/**
+ * @brief  Get the transmission power for a specific channel.
+ *
+ * @param[in]  channel    The channel.
+ * @param[out] out_power  The power.
+ *
+ * @return
+ *        - ESP_OK                  Get the transmission power for a specific channel successfully.
+ *        - ESP_ERR_INVALID_ARG     Invalid arguments.
+ */
+esp_err_t esp_ieee802154_get_power_with_channel(uint8_t channel, int8_t *out_power);
+
+/**
  * @brief  Get the promiscuous mode.
  *
  * @return
@@ -150,14 +196,21 @@ esp_err_t esp_ieee802154_transmit(const uint8_t *frame, bool cca);
 /**
  * @brief  Set the time to wait for the ack frame.
  *
- * @param[in]  timeout  The time to wait for the ack frame, in symbol unit (16 us).
- *                      Default: 0x006C, Range: 0x0000 - 0xFFFF.
+ * @param[in]  timeout  The time to wait for the ack frame, in us.
+ *                      It Should be a multiple of 16. The default value is 1728 us (108 * 16).
  *
  * @return
  *      - ESP_OK on success.
  *      - ESP_FAIL on failure.
  */
 esp_err_t esp_ieee802154_set_ack_timeout(uint32_t timeout);
+
+/**
+ * @brief  Get the time to wait for the ack frame.
+ *
+ * @return  The time to wait for the ack frame, in us.
+ */
+uint32_t esp_ieee802154_get_ack_timeout(void);
 
 /**
  * @brief  Get the device PAN ID.

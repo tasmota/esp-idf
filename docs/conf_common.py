@@ -93,6 +93,8 @@ MM_SYNC_DOCS = ['api-reference/system/mm_sync.rst']
 
 CAMERA_DOCS = ['api-reference/peripherals/camera_driver.rst']
 
+BITSCRAMBLER_DOCS = ['api-reference/peripherals/bitscrambler.rst']
+
 CLK_TREE_DOCS = ['api-reference/peripherals/clk_tree.rst']
 
 UART_DOCS = ['api-reference/peripherals/uart.rst']
@@ -197,6 +199,13 @@ PPA_DOCS = ['api-reference/peripherals/ppa.rst']
 
 QEMU_DOCS = ['api-guides/tools/qemu.rst']
 
+ESP_TEE_DOCS = ['security/tee/index.rst',
+                'security/tee/tee.rst',
+                'security/tee/tee-advanced.rst',
+                'security/tee/tee-attestation.rst',
+                'security/tee/tee-ota.rst',
+                'security/tee/tee-sec-storage.rst']
+
 ESP32_DOCS = ['api-reference/system/himem.rst',
               'api-guides/romconsole.rst',
               'api-reference/system/ipc.rst',
@@ -240,7 +249,7 @@ ESP32C61_DOCS = ['api-guides/phy.rst']
 
 ESP32C6_DOCS = ['api-guides/RF_calibration.rst',
                 'api-reference/peripherals/sd_pullup_requirements.rst',
-                'api-guides/phy.rst']
+                'api-guides/phy.rst'] + ESP_TEE_DOCS
 
 ESP32H2_DOCS = ['api-guides/RF_calibration.rst',
                 'api-guides/phy.rst']
@@ -302,6 +311,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_SDM_SUPPORTED':SDM_DOCS,
                             'SOC_WIFI_MESH_SUPPORT':WIFI_MESH_DOCS,
                             'SOC_MIPI_CSI_SUPPORTED':CAMERA_DOCS,
+                            'SOC_BITSCRAMBLER_SUPPORTED':BITSCRAMBLER_DOCS,
                             'SOC_SPI_SUPPORT_SLAVE_HD_VER2':SPI_SLAVE_HD_DOCS,
                             'SOC_WIFI_NAN_SUPPORT':NAN_DOCS,
                             'SOC_JPEG_CODEC_SUPPORTED':JPEG_DOCS,

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -31,6 +31,7 @@
 #include "soc/spi_pins.h"
 #include "soc/chip_revision.h"
 #include "driver/rtc_io.h"
+#include "driver/gpio.h"
 #include "hal/efuse_hal.h"
 #include "hal/rtc_io_hal.h"
 #include "hal/clk_tree_hal.h"
@@ -56,13 +57,11 @@
 #include "soc/rtc.h"
 #include "regi2c_ctrl.h"    //For `REGI2C_ANA_CALI_PD_WORKAROUND`, temp
 
-#include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
 #include "hal/clk_tree_ll.h"
 #include "hal/wdt_hal.h"
 #include "hal/uart_hal.h"
 #if SOC_TOUCH_SENSOR_SUPPORTED
-#include "hal/touch_sensor_hal.h"
 #include "hal/touch_sens_hal.h"
 #endif
 #include "hal/mspi_ll.h"
@@ -70,6 +69,7 @@
 #include "sdkconfig.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
+#include "esp_private/cache_utils.h"
 #include "esp_private/brownout.h"
 #include "esp_private/sleep_console.h"
 #include "esp_private/sleep_cpu.h"
@@ -303,7 +303,7 @@ static void ext0_wakeup_prepare(void);
 static void ext1_wakeup_prepare(void);
 #endif
 static esp_err_t timer_wakeup_prepare(int64_t sleep_duration);
-#if SOC_TOUCH_SENSOR_VERSION >= 2
+#if SOC_TOUCH_SENSOR_SUPPORTED
 static void touch_wakeup_prepare(void);
 #endif
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
@@ -494,7 +494,7 @@ static int s_cache_suspend_cnt = 0;
 static void IRAM_ATTR suspend_cache(void) {
     s_cache_suspend_cnt++;
     if (s_cache_suspend_cnt == 1) {
-        cache_hal_suspend(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
+        spi_flash_disable_cache(esp_cpu_get_core_id(), NULL);
     }
 }
 
@@ -503,7 +503,7 @@ static void IRAM_ATTR resume_cache(void) {
     s_cache_suspend_cnt--;
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
-        cache_hal_resume(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
+        spi_flash_restore_cache(esp_cpu_get_core_id(), 0);
     }
 }
 
@@ -876,7 +876,7 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
 
     misc_modules_sleep_prepare(pd_flags, deep_sleep);
 
-#if SOC_TOUCH_SENSOR_VERSION >= 2
+#if SOC_TOUCH_SENSOR_SUPPORTED
     bool keep_rtc_power_on = false;
     if (deep_sleep) {
         if (s_config.wakeup_triggers & RTC_TOUCH_TRIG_EN) {
@@ -1732,14 +1732,11 @@ static esp_err_t timer_wakeup_prepare(int64_t sleep_duration)
     return ESP_OK;
 }
 
-#if SOC_TOUCH_SENSOR_VERSION >= 2
+#if SOC_TOUCH_SENSOR_SUPPORTED
 static void touch_wakeup_prepare(void)
 {
     touch_hal_prepare_deep_sleep();
 }
-#endif
-
-#if SOC_TOUCH_SENSOR_SUPPORTED
 
 esp_err_t esp_sleep_enable_touchpad_wakeup(void)
 {
@@ -1758,18 +1755,18 @@ esp_err_t esp_sleep_enable_touchpad_wakeup(void)
     return ESP_OK;
 }
 
-touch_pad_t esp_sleep_get_touchpad_wakeup_status(void)
+int esp_sleep_get_touchpad_wakeup_status(void)
 {
     if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TOUCHPAD) {
-        return TOUCH_PAD_MAX;
+        return -1;
     }
-    touch_pad_t pad_num;
-#if SOC_TOUCH_SENSOR_VERSION == 3
-    touch_ll_sleep_get_channel_num((uint32_t *)(&pad_num));
+    uint32_t chan_num;
+#if SOC_TOUCH_SENSOR_VERSION == 1
+    touch_ll_get_active_channel_mask(&chan_num);
 #else
-    touch_hal_get_wakeup_status(&pad_num);
+    touch_ll_sleep_get_channel_num(&chan_num);
 #endif
-    return pad_num;
+    return (int)chan_num;
 }
 
 #endif // SOC_TOUCH_SENSOR_SUPPORTED
@@ -1938,7 +1935,7 @@ static void ext1_wakeup_prepare(void)
 {
     // Configure all RTC IOs selected as ext1 wakeup inputs
     uint32_t rtc_gpio_mask = s_config.ext1_rtc_gpio_mask;
-    for (int gpio = 0; gpio < GPIO_PIN_COUNT && rtc_gpio_mask != 0; ++gpio) {
+    for (int gpio = 0; gpio < SOC_GPIO_PIN_COUNT && rtc_gpio_mask != 0; ++gpio) {
         int rtc_pin = rtc_io_number_get(gpio);
         if ((rtc_gpio_mask & BIT(rtc_pin)) == 0) {
             continue;
@@ -1987,7 +1984,7 @@ uint64_t esp_sleep_get_ext1_wakeup_status(void)
     uint32_t status = rtc_hal_ext1_get_wakeup_status();
     // Translate bit map of RTC IO numbers into the bit map of GPIO numbers
     uint64_t gpio_mask = 0;
-    for (int gpio = 0; gpio < GPIO_PIN_COUNT; ++gpio) {
+    for (int gpio = 0; gpio < SOC_GPIO_PIN_COUNT; ++gpio) {
         if (!esp_sleep_is_valid_wakeup_gpio(gpio)) {
             continue;
         }

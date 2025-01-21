@@ -56,10 +56,15 @@
 
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
+#include "hal/clk_tree_ll.h"
 #include "hal/wdt_hal.h"
 #include "hal/uart_hal.h"
 #if SOC_TOUCH_SENSOR_SUPPORTED
 #include "hal/touch_sensor_hal.h"
+#endif
+
+#if __has_include("hal/mspi_timing_tuning_ll.h")
+#include "hal/mspi_timing_tuning_ll.h"
 #endif
 
 #include "sdkconfig.h"
@@ -69,10 +74,13 @@
 #include "esp_private/sleep_console.h"
 #include "esp_private/sleep_cpu.h"
 #include "esp_private/sleep_modem.h"
+#include "esp_private/sleep_usb.h"
 #include "esp_private/esp_clk.h"
 #include "esp_private/esp_task_wdt.h"
 #include "esp_private/sar_periph_ctrl.h"
+#if MSPI_TIMING_LL_FLASH_CPU_CLK_SRC_BINDED
 #include "esp_private/mspi_timing_tuning.h"
+#endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/cache.h"
@@ -638,7 +646,7 @@ FORCE_INLINE_ATTR bool light_sleep_uart_prepare(uint32_t pd_flags, int64_t sleep
 /**
  * These save-restore workaround should be moved to lower layer
  */
-FORCE_INLINE_ATTR void misc_modules_sleep_prepare(bool deep_sleep)
+FORCE_INLINE_ATTR void misc_modules_sleep_prepare(bool deep_sleep, uint32_t pd_flags)
 {
     if (deep_sleep){
         for (int n = 0; n < MAX_DSLP_HOOKS; n++) {
@@ -650,6 +658,11 @@ FORCE_INLINE_ATTR void misc_modules_sleep_prepare(bool deep_sleep)
 #if SOC_USB_SERIAL_JTAG_SUPPORTED && !SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP
         // Only avoid USJ pad leakage here, USB OTG pad leakage is prevented through USB Host driver.
         sleep_console_usj_pad_backup_and_disable();
+#endif
+#if SOC_USB_OTG_SUPPORTED && SOC_PM_SUPPORT_CNNT_PD
+        if (!(pd_flags & PMU_SLEEP_PD_CNNT)) {
+            sleep_usb_otg_phy_backup_and_disable();
+        }
 #endif
 #if CONFIG_MAC_BB_PD
         mac_bb_power_down_cb_execute();
@@ -689,6 +702,11 @@ FORCE_INLINE_ATTR void misc_modules_wake_prepare(uint32_t pd_flags)
 
 #if SOC_USB_SERIAL_JTAG_SUPPORTED && !SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP
     sleep_console_usj_pad_restore();
+#endif
+#if SOC_USB_OTG_SUPPORTED && SOC_PM_SUPPORT_CNNT_PD
+    if (!(pd_flags & PMU_SLEEP_PD_CNNT)) {
+        sleep_usb_otg_phy_restore();
+    }
 #endif
     sar_periph_ctrl_power_enable();
 #if CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP && SOC_PM_CPU_RETENTION_BY_RTCCNTL
@@ -788,8 +806,10 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     }
 #endif
 
+#if MSPI_TIMING_LL_FLASH_CPU_CLK_SRC_BINDED
     // Will switch to XTAL turn down MSPI speed
     mspi_timing_change_speed_mode_cache_safe(true);
+#endif
 
 #if SOC_PM_RETENTION_SW_TRIGGER_REGDMA
     if (!deep_sleep && (pd_flags & PMU_SLEEP_PD_TOP)) {
@@ -800,7 +820,16 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     // Save current frequency and switch to XTAL
     rtc_cpu_freq_config_t cpu_freq_config;
     rtc_clk_cpu_freq_get_config(&cpu_freq_config);
+#if SOC_PMU_SUPPORTED
+    // For PMU supported chips, CPU's PLL power can be turned off by PMU, so no need to disable the PLL at here.
+    // Leaving PLL on at this stage also helps USJ keep connection and retention operation (if they rely on this PLL).
+    rtc_clk_cpu_set_to_default_config();
+#else
+    // For earlier chips, there is no PMU module that can turn off the CPU's PLL, so it has to be disabled at here to save the power consumption.
+    // Though ESP32C3/S3 has USB CDC device, it can not function properly during sleep due to the lack of APB clock (before C6, USJ relies on APB clock to work).
+    // Therefore, we will always disable CPU's PLL (i.e. BBPLL).
     rtc_clk_cpu_freq_set_xtal();
+#endif
 
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
     // Configure pins for external wakeup
@@ -841,7 +870,7 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     }
 #endif // CONFIG_ULP_COPROC_ENABLED
 
-    misc_modules_sleep_prepare(deep_sleep);
+    misc_modules_sleep_prepare(deep_sleep, pd_flags);
 
 #if SOC_TOUCH_SENSOR_VERSION >= 2
     if (deep_sleep) {
@@ -1071,8 +1100,8 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
         misc_modules_wake_prepare(pd_flags);
     }
 
-#if SOC_SPI_MEM_SUPPORT_TIMING_TUNING
-    if (cpu_freq_config.source == SOC_CPU_CLK_SRC_PLL) {
+#if MSPI_TIMING_LL_FLASH_CPU_CLK_SRC_BINDED
+    if (cpu_freq_config.source_freq_mhz > clk_ll_xtal_load_freq_mhz()) {
         // Turn up MSPI speed if switch to PLL
         mspi_timing_change_speed_mode_cache_safe(false);
     }

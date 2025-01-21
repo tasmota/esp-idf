@@ -22,8 +22,14 @@
 #include "esp_private/periph_ctrl.h"
 
 #include "soc/rtc.h"
+#include "hal/clk_tree_ll.h"
 #include "hal/uart_ll.h"
 #include "hal/uart_types.h"
+
+#if __has_include("hal/mspi_timing_tuning_ll.h")
+#include "hal/mspi_timing_tuning_ll.h"
+#endif
+
 #include "driver/gpio.h"
 
 #include "freertos/FreeRTOS.h"
@@ -31,10 +37,6 @@
 #if CONFIG_FREERTOS_SYSTICK_USES_CCOUNT
 #include "xtensa_timer.h"
 #include "xtensa/core-macros.h"
-#endif
-
-#if SOC_SPI_MEM_SUPPORT_TIMING_TUNING
-#include "esp_private/mspi_timing_tuning.h"
 #endif
 
 #include "esp_private/pm_impl.h"
@@ -45,6 +47,9 @@
 #include "esp_private/sleep_gpio.h"
 #include "esp_private/sleep_modem.h"
 #include "esp_private/uart_share_hw_ctrl.h"
+#if MSPI_TIMING_LL_FLASH_CPU_CLK_SRC_BINDED
+#include "esp_private/mspi_timing_tuning.h"
+#endif
 #include "esp_sleep.h"
 #include "esp_memory_utils.h"
 
@@ -663,16 +668,16 @@ static void IRAM_ATTR do_switch(pm_mode_t new_mode)
         if (switch_down) {
             on_freq_update(old_ticks_per_us, new_ticks_per_us);
         }
-#if SOC_SPI_MEM_SUPPORT_TIMING_TUNING
-    if (new_config.source == SOC_CPU_CLK_SRC_PLL) {
-        rtc_clk_cpu_freq_set_config_fast(&new_config);
-        mspi_timing_change_speed_mode_cache_safe(false);
-    } else {
-        mspi_timing_change_speed_mode_cache_safe(true);
-        rtc_clk_cpu_freq_set_config_fast(&new_config);
-    }
+#if MSPI_TIMING_LL_FLASH_CPU_CLK_SRC_BINDED
+        if (new_config.source_freq_mhz > clk_ll_xtal_load_freq_mhz()) {
+            rtc_clk_cpu_freq_set_config_fast(&new_config);
+            mspi_timing_change_speed_mode_cache_safe(false);
+        } else {
+            mspi_timing_change_speed_mode_cache_safe(true);
+            rtc_clk_cpu_freq_set_config_fast(&new_config);
+        }
 #else
-    rtc_clk_cpu_freq_set_config_fast(&new_config);
+        rtc_clk_cpu_freq_set_config_fast(&new_config);
 #endif
         if (!switch_down) {
             on_freq_update(old_ticks_per_us, new_ticks_per_us);
@@ -820,10 +825,6 @@ void IRAM_ATTR vApplicationSleep( TickType_t xExpectedIdleTime )
 #endif
         if (sleep_time_us >= configEXPECTED_IDLE_TIME_BEFORE_SLEEP * portTICK_PERIOD_MS * 1000LL) {
             esp_sleep_enable_timer_wakeup(sleep_time_us - LIGHT_SLEEP_EARLY_WAKEUP_US);
-#if CONFIG_PM_TRACE && SOC_PM_SUPPORT_RTC_PERIPH_PD
-            /* to force tracing GPIOs to keep state */
-            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-#endif
             /* Enter sleep */
             ESP_PM_TRACE_ENTER(SLEEP, core_id);
             int64_t sleep_start = esp_timer_get_time();

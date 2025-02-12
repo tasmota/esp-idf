@@ -59,7 +59,7 @@ typedef struct {
   * @brief Wi-Fi authmode type
   * Strength of authmodes
   * Personal Networks   : OPEN < WEP < WPA_PSK < OWE < WPA2_PSK = WPA_WPA2_PSK < WAPI_PSK < WPA3_PSK = WPA2_WPA3_PSK
-  * Enterprise Networks : WIFI_AUTH_WPA2_ENTERPRISE < WIFI_AUTH_WPA3_ENTERPRISE = WIFI_AUTH_WPA2_WPA3_ENTERPRISE < WIFI_AUTH_WPA3_ENT_192
+  * Enterprise Networks : WIFI_AUTH_WPA2_ENTERPRISE < WIFI_AUTH_WPA3_ENT_192
   */
 typedef enum {
     WIFI_AUTH_OPEN = 0,         /**< authenticate mode : open */
@@ -76,9 +76,6 @@ typedef enum {
     WIFI_AUTH_WPA3_ENT_192,     /**< authenticate mode : WPA3_ENT_SUITE_B_192_BIT */
     WIFI_AUTH_WPA3_EXT_PSK,     /**< this authentication mode will yield same result as WIFI_AUTH_WPA3_PSK and not recommended to be used. It will be deprecated in future, please use WIFI_AUTH_WPA3_PSK instead. */
     WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE, /**< this authentication mode will yield same result as WIFI_AUTH_WPA3_PSK and not recommended to be used. It will be deprecated in future, please use WIFI_AUTH_WPA3_PSK instead.*/
-    WIFI_AUTH_DUMMY_1,          /**< Dummy placeholder authenticate mode for WIFI_AUTH_DPP */
-    WIFI_AUTH_WPA3_ENTERPRISE,  /**< authenticate mode : WPA3-Enterprise Only Mode */
-    WIFI_AUTH_WPA2_WPA3_ENTERPRISE, /**< authenticate mode : WPA3-Enterprise Transition Mode */
     WIFI_AUTH_MAX
 } wifi_auth_mode_t;
 
@@ -925,6 +922,7 @@ typedef enum {
     WIFI_EVENT_NDP_TERMINATED,           /**< NAN Datapath terminated indication */
     WIFI_EVENT_HOME_CHANNEL_CHANGE,      /**< WiFi home channel change，doesn't occur when scanning */
 
+    WIFI_EVENT_AP_WRONG_PASSWORD,        /**< a station tried to connect with wrong password */
     WIFI_EVENT_MAX,                      /**< Invalid WiFi event ID */
 } wifi_event_t;
 
@@ -1024,6 +1022,11 @@ typedef struct {
     uint8_t            new_chan;   /**< new home channel of the device */
     wifi_second_chan_t new_snd;    /**< new second channel of the device */
 } wifi_event_home_channel_change_t;
+
+/** Argument structure for WIFI_EVENT_AP_WRONG_PASSWORD event */
+typedef struct {
+    uint8_t mac[6];           /**< MAC address of the station trying to connect to Soft-AP */
+} wifi_event_ap_wrong_password_t;
 
 /**
   * @brief FTM operation status types

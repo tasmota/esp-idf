@@ -250,8 +250,6 @@
 #define SOC_I2S_SUPPORTS_PDM_TX         (1)     // Support to output raw PDM format data
 #define SOC_I2S_SUPPORTS_PCM2PDM        (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
 #define SOC_I2S_SUPPORTS_PDM_RX         (1)     // Support to input raw PDM format data
-#define SOC_I2S_SUPPORTS_PDM2PCM        (1)     // Support to input PDM format but read PCM format data with the help of PDM to PCM filter
-#define SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER (1)
 #define SOC_I2S_SUPPORTS_TX_SYNC_CNT    (1)
 #define SOC_I2S_PDM_MAX_TX_LINES        (2)
 #define SOC_I2S_PDM_MAX_RX_LINES        (1U)
@@ -506,6 +504,7 @@
 #define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
 #define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
 #define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
+#define SOC_WIFI_NAN_SUPPORT                (1)    /*!< Support WIFI Aware (NAN) */
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */

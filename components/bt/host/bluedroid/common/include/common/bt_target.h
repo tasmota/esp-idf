@@ -176,6 +176,10 @@
 #define BTC_HD_INCLUDED             TRUE
 #endif /* UC_BT_HID_DEVICE_ENABLED */
 
+#if UC_BT_HID_REMOVE_DEVICE_BONDING_ENABLED
+#define BTC_HID_REMOVE_DEVICE_BONDING     TRUE
+#endif
+
 #if UC_BT_GOEPC_ENABLED
 #ifndef RFCOMM_INCLUDED
 #define RFCOMM_INCLUDED             TRUE
@@ -479,6 +483,10 @@
 
 #ifndef BTC_HD_INCLUDED
 #define BTC_HD_INCLUDED FALSE
+#endif
+
+#ifndef BTC_HID_REMOVE_DEVICE_BONDING
+#define BTC_HID_REMOVE_DEVICE_BONDING     FALSE
 #endif
 
 #ifndef SBC_DEC_INCLUDED
@@ -1658,13 +1666,14 @@
 #endif /* defined(HID_DEV_INCLUDED) && (HID_DEV_INCLUDED==TRUE) */
 #endif
 
+/* The maximum length, in bytes, of all SDP attributes combined. */
 #ifndef SDP_MAX_PAD_LEN
-#define SDP_MAX_PAD_LEN             300
+#define SDP_MAX_PAD_LEN             UC_SDP_MAX_PAD_LEN
 #endif
 
 /* The maximum length, in bytes, of an attribute. */
 #ifndef SDP_MAX_ATTR_LEN
-#define SDP_MAX_ATTR_LEN            400
+#define SDP_MAX_ATTR_LEN            UC_SDP_MAX_ATTR_LEN
 #endif
 
 /* The maximum number of attribute filters supported by SDP databases. */

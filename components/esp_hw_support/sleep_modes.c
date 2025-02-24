@@ -1784,7 +1784,9 @@ static void ext0_wakeup_prepare(void)
 {
     int rtc_gpio_num = s_config.ext0_rtc_gpio_num;
 #if SOC_LP_IO_CLOCK_IS_INDEPENDENT
-    io_mux_enable_lp_io_clock(rtc_gpio_num, true);
+    // To suppress build errors about spinlock's __DECLARE_RCC_ATOMIC_ENV
+    int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused));
+    rtcio_ll_enable_io_clock(true);
 #endif
     rtcio_hal_ext0_set_wakeup_pin(rtc_gpio_num, s_config.ext0_trigger_level);
     rtcio_hal_function_select(rtc_gpio_num, RTCIO_LL_FUNC_RTC);
@@ -1917,7 +1919,9 @@ static void ext1_wakeup_prepare(void)
             continue;
         }
 #if SOC_LP_IO_CLOCK_IS_INDEPENDENT
-        io_mux_enable_lp_io_clock(rtc_pin, true);
+        // To suppress build errors about spinlock's __DECLARE_RCC_ATOMIC_ENV
+        int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused));
+        rtcio_ll_enable_io_clock(true);
 #endif
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         // Route pad to RTC
@@ -1991,6 +1995,11 @@ static void gpio_deep_sleep_wakeup_prepare(void)
         if ((s_config.gpio_wakeup_mask & BIT64(gpio_idx)) == 0) {
             continue;
         }
+#if SOC_LP_IO_CLOCK_IS_INDEPENDENT
+        // To suppress build errors about spinlock's __DECLARE_RCC_ATOMIC_ENV
+        int __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused));
+        rtcio_ll_enable_io_clock(true);
+#endif
 #if CONFIG_ESP_SLEEP_GPIO_ENABLE_INTERNAL_RESISTORS
         if (s_config.gpio_trigger_mode & BIT(gpio_idx)) {
             ESP_ERROR_CHECK(gpio_pullup_dis(gpio_idx));
@@ -2046,6 +2055,10 @@ esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepslee
 
 esp_err_t esp_sleep_enable_gpio_wakeup(void)
 {
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+    ESP_LOGE(TAG, "%s wakeup source is not available if the peripheral power domain is powered down in sleep", "GPIO");
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
 #if CONFIG_IDF_TARGET_ESP32
     if (s_config.wakeup_triggers & (RTC_TOUCH_TRIG_EN | RTC_ULP_TRIG_EN)) {
         ESP_LOGE(TAG, "Conflicting wake-up triggers: touch / ULP");
@@ -2058,6 +2071,10 @@ esp_err_t esp_sleep_enable_gpio_wakeup(void)
 
 esp_err_t esp_sleep_enable_uart_wakeup(int uart_num)
 {
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+    ESP_LOGE(TAG, "%s wakeup source is not available if the peripheral power domain is powered down in sleep", "UART");
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
     if (uart_num == UART_NUM_0) {
         s_config.wakeup_triggers |= RTC_UART0_TRIG_EN;
     } else if (uart_num == UART_NUM_1) {

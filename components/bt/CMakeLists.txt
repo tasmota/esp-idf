@@ -156,11 +156,8 @@ if(CONFIG_BT_ENABLED)
          "common/osi/osi.c"
          "common/osi/semaphore.c"
          "porting/mem/bt_osi_mem.c"
+         "common/ble_log/ble_log_spi_out.c"
          )
-
-    if(CONFIG_BT_LE_CONTROLLER_LOG_SPI_OUT_ENABLED)
-        list(APPEND srcs "common/ble_log/ble_log_spi_out.c")
-    endif()
 
     # Host Bluedroid
     if(CONFIG_BT_BLUEDROID_ENABLED)
@@ -878,7 +875,7 @@ idf_component_register(SRCS "${srcs}"
                        PRIV_INCLUDE_DIRS "${priv_include_dirs}"
                        REQUIRES esp_timer esp_wifi
                        PRIV_REQUIRES nvs_flash soc esp_pm esp_phy esp_coex mbedtls esp_driver_uart vfs esp_ringbuf
-                                     esp_driver_spi
+                                     esp_driver_spi esp_driver_gpio
                        LDFRAGMENTS "${ldscripts}")
 
 if(CONFIG_BT_ENABLED)
@@ -905,6 +902,9 @@ if(CONFIG_BT_ENABLED)
             target_link_libraries(${COMPONENT_LIB} PUBLIC btdm_app)
         endif()
     elseif(CONFIG_BT_CONTROLLER_ENABLED)
+        if(CONFIG_BT_LE_CONTROLLER_LOG_WRAP_PANIC_HANDLER_ENABLE)
+            target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler")
+        endif()
         if(CONFIG_IDF_TARGET_ESP32C6)
             add_prebuilt_library(libble_app "controller/lib_${target}/${target}-bt-lib/esp32c6/libble_app.a")
         else()

@@ -379,6 +379,10 @@ config SOC_CPU_HAS_FLEXIBLE_INTC
     bool
     default y
 
+config SOC_CPU_SUPPORT_WFE
+    bool
+    default y
+
 config SOC_INT_CLIC_SUPPORTED
     bool
     default y
@@ -1486,6 +1490,10 @@ config SOC_WIFI_SUPPORT_5G
 config SOC_WIFI_MAC_VERSION_NUM
     int
     default 3
+
+config SOC_WIFI_NAN_SUPPORT
+    bool
+    default y
 
 config SOC_BLE_SUPPORTED
     bool

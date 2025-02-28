@@ -172,7 +172,6 @@ api-reference/peripherals/cap_touch_sens.rst
 api-reference/peripherals/index.rst
 api-reference/peripherals/rmt.rst
 api-reference/peripherals/ds.rst
-api-reference/peripherals/gptimer.rst
 api-reference/peripherals/sdio_slave.rst
 api-reference/peripherals/bitscrambler.rst
 api-reference/peripherals/temp_sensor.rst
@@ -193,7 +192,6 @@ api-reference/peripherals/ana_cmpr.rst
 api-reference/peripherals/i2c_slave_v1.rst
 api-reference/peripherals/adc_continuous.rst
 api-reference/peripherals/hmac.rst
-api-reference/peripherals/uart.rst
 api-reference/peripherals/sdspi_host.rst
 api-reference/peripherals/spi_slave_hd.rst
 api-reference/peripherals/vad.rst
@@ -213,7 +211,6 @@ api-reference/peripherals/parlio.rst
 api-reference/peripherals/adc_calibration.rst
 api-reference/peripherals/lp_i2s.rst
 api-reference/peripherals/ecdsa.rst
-api-reference/peripherals/gpio.rst
 api-reference/peripherals/dac.rst
 api-reference/peripherals/spi_slave.rst
 api-reference/peripherals/spi_flash/index.rst

@@ -158,7 +158,11 @@ typedef enum {
  * }
  * @endcode
  */
+#if SOC_CLK_TREE_SUPPORTED
 #define SOC_GPTIMER_CLKS {SOC_MOD_CLK_PLL_F48M, SOC_MOD_CLK_RC_FAST, SOC_MOD_CLK_XTAL}
+#else
+#define SOC_GPTIMER_CLKS {SOC_MOD_CLK_XTAL}
+#endif
 
 /**
  * @brief Type of GPTimer clock source
@@ -167,7 +171,11 @@ typedef enum {
     GPTIMER_CLK_SRC_PLL_F48M = SOC_MOD_CLK_PLL_F48M, /*!< Select PLL_F48M as the source clock */
     GPTIMER_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,   /*!< Select RC_FAST as the source clock */
     GPTIMER_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as the source clock */
+#if SOC_CLK_TREE_SUPPORTED
     GPTIMER_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F48M,  /*!< Select PLL_F48M as the default choice */
+#else
+    GPTIMER_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,      /*!< Select XTAL as the default choice if no clk_tree */
+#endif
 } soc_periph_gptimer_clk_src_t;
 
 /**
@@ -176,7 +184,11 @@ typedef enum {
 typedef enum {
     TIMER_SRC_CLK_PLL_F48M = SOC_MOD_CLK_PLL_F48M,     /*!< Timer group clock source is PLL_F48M */
     TIMER_SRC_CLK_XTAL = SOC_MOD_CLK_XTAL,             /*!< Timer group clock source is XTAL */
-    TIMER_SRC_CLK_DEFAULT = SOC_MOD_CLK_PLL_F48M,      /*!< Timer group clock source default choice is PLL_F48M */
+#if SOC_CLK_TREE_SUPPORTED
+    TIMER_SRC_CLK_DEFAULT = SOC_MOD_CLK_PLL_F48M,      /*!< Select PLL_F48M as the default choice */
+#else
+    TIMER_SRC_CLK_DEFAULT = SOC_MOD_CLK_XTAL,          /*!< Select XTAL as the default choice if no clk_tree */
+#endif
 } soc_periph_tg_clk_src_legacy_t;
 
 ///////////////////////////////////////////////////UART/////////////////////////////////////////////////////////////////
@@ -184,7 +196,11 @@ typedef enum {
 /**
  * @brief Array initializer for all supported clock sources of UART
  */
+#if SOC_CLK_TREE_SUPPORTED
 #define SOC_UART_CLKS {SOC_MOD_CLK_PLL_F48M, SOC_MOD_CLK_XTAL, SOC_MOD_CLK_RC_FAST}
+#else
+#define SOC_UART_CLKS {SOC_MOD_CLK_XTAL}
+#endif
 
 /**
  * @brief Type of UART clock source, reserved for the legacy UART driver
@@ -193,7 +209,11 @@ typedef enum {
     UART_SCLK_PLL_F48M = SOC_MOD_CLK_PLL_F48M,     /*!< UART source clock is PLL_F48M */
     UART_SCLK_RTC = SOC_MOD_CLK_RC_FAST,           /*!< UART source clock is RC_FAST */
     UART_SCLK_XTAL = SOC_MOD_CLK_XTAL,             /*!< UART source clock is XTAL */
-    UART_SCLK_DEFAULT = SOC_MOD_CLK_PLL_F48M,      /*!< UART source clock default choice is PLL_F48M */
+#if SOC_CLK_TREE_SUPPORTED
+    UART_SCLK_DEFAULT = SOC_MOD_CLK_PLL_F48M,      /*!< Select PLL_F48M as the default choice */
+#else
+    UART_SCLK_DEFAULT = SOC_MOD_CLK_XTAL,          /*!< Select XTAL as the default choice if no clk_tree */
+#endif
 } soc_periph_uart_clk_src_legacy_t;
 
 /////////////////////////////////////////////////SPI////////////////////////////////////////////////////////////////////

@@ -30,11 +30,13 @@ if(CONFIG_BT_ENABLED)
             set(ldscripts "linker_esp32c2.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32C6)
+            list(APPEND srcs "controller/esp32c6/ble.c")
             list(APPEND srcs "controller/esp32c6/bt.c")
             list(APPEND include_dirs include/esp32c6/include)
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32H2)
+            list(APPEND srcs "controller/esp32h2/ble.c")
             list(APPEND srcs "controller/esp32h2/bt.c")
             list(APPEND include_dirs include/esp32h2/include)
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
@@ -770,11 +772,24 @@ if(CONFIG_BT_ENABLED)
 
 endif()
 
+
+set(bt_priv_requires
+    nvs_flash
+    soc
+    esp_pm
+    esp_phy
+    esp_coex
+    mbedtls
+    driver
+    vfs
+    esp_gdbstub
+)
+
 idf_component_register(SRCS "${srcs}"
                        INCLUDE_DIRS "${include_dirs}"
                        PRIV_INCLUDE_DIRS "${priv_include_dirs}"
                        REQUIRES esp_timer esp_wifi
-                       PRIV_REQUIRES nvs_flash soc esp_pm esp_phy esp_coex mbedtls driver vfs
+                       PRIV_REQUIRES "${bt_priv_requires}"
                        LDFRAGMENTS "${ldscripts}")
 
 if(CONFIG_BT_ENABLED)

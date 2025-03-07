@@ -423,8 +423,12 @@ esp_err_t spi_bus_add_device(spi_host_device_t host_id, const spi_device_interfa
     spi_hal_timing_conf_t temp_timing_conf;
     int freq;
     esp_err_t ret = spi_hal_cal_clock_conf(&timing_param, &freq, &temp_timing_conf);
-    temp_timing_conf.clock_source = clk_src;
     SPI_CHECK(ret == ESP_OK, "assigned clock speed not supported", ret);
+    temp_timing_conf.clock_source = clk_src;
+    temp_timing_conf.rx_sample_point = dev_config->sample_point;
+    if (temp_timing_conf.rx_sample_point == SPI_SAMPLING_POINT_PHASE_1) {
+        SPI_CHECK(spi_ll_master_is_rx_std_sample_supported(), "SPI_SAMPLING_POINT_PHASE_1 is not supported on this chip", ESP_ERR_NOT_SUPPORTED);
+    }
 
     //Allocate memory for device
     dev = malloc(sizeof(spi_device_t));
@@ -513,6 +517,15 @@ esp_err_t spi_bus_remove_device(spi_device_handle_t handle)
 
 #if SOC_SPI_SUPPORT_CLK_RC_FAST
     if (handle->cfg.clock_source == SPI_CLK_SRC_RC_FAST) {
+        // If no transactions from other device, acquire the bus to switch module clock to `SPI_CLK_SRC_DEFAULT`
+        // because `SPI_CLK_SRC_RC_FAST` will be disabled then, which block following transactions
+        if (handle->host->cur_cs == DEV_NUM_MAX) {
+            spi_device_acquire_bus(handle, portMAX_DELAY);
+            SPI_MASTER_PERI_CLOCK_ATOMIC() {
+                spi_ll_set_clk_source(handle->host->hal.hw, SPI_CLK_SRC_DEFAULT);
+            }
+            spi_device_release_bus(handle);
+        }
         periph_rtc_dig_clk8m_disable();
     }
 #endif

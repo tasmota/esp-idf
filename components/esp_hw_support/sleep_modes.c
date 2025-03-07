@@ -12,10 +12,13 @@
 #include "esp_attr.h"
 #include "esp_memory_utils.h"
 #include "esp_sleep.h"
+#include "esp_private/esp_clk_tree_common.h"
 #include "esp_private/esp_sleep_internal.h"
 #include "esp_private/esp_timer_private.h"
+#include "esp_private/rtc_clk.h"
 #include "esp_private/sleep_event.h"
 #include "esp_private/system_internal.h"
+#include "esp_private/io_mux.h"
 #include "esp_log.h"
 #include "esp_newlib.h"
 #include "esp_timer.h"
@@ -874,9 +877,7 @@ static esp_err_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags, esp_sleep_mode_t m
     rtc_sleep_init(config);
 
     // Set state machine time for light sleep
-    if (!deep_sleep) {
-        rtc_sleep_low_init(s_config.rtc_clk_cal_period);
-    }
+    rtc_sleep_low_init(s_config.rtc_clk_cal_period, deep_sleep);
 #endif
 
     // Configure timer wakeup
@@ -1488,6 +1489,10 @@ esp_err_t esp_sleep_enable_ulp_wakeup(void)
 
 esp_err_t esp_sleep_enable_timer_wakeup(uint64_t time_in_us)
 {
+    if (time_in_us > ((BIT64(SOC_LP_TIMER_BIT_WIDTH_LO + SOC_LP_TIMER_BIT_WIDTH_HI) - 1) / esp_clk_tree_lp_slow_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX)) * MHZ ) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     s_config.wakeup_triggers |= RTC_TIMER_TRIG_EN;
     s_config.sleep_duration = time_in_us;
     return ESP_OK;
@@ -1606,6 +1611,9 @@ esp_err_t esp_sleep_enable_ext0_wakeup(gpio_num_t gpio_num, int level)
 static void ext0_wakeup_prepare(void)
 {
     int rtc_gpio_num = s_config.ext0_rtc_gpio_num;
+#if SOC_LP_IO_CLOCK_IS_INDEPENDENT
+    rtcio_ll_enable_io_clock(true);
+#endif
     rtcio_hal_ext0_set_wakeup_pin(rtc_gpio_num, s_config.ext0_trigger_level);
     rtcio_hal_function_select(rtc_gpio_num, RTCIO_LL_FUNC_RTC);
     rtcio_hal_input_enable(rtc_gpio_num);
@@ -1735,6 +1743,9 @@ static void ext1_wakeup_prepare(void)
         if ((rtc_gpio_mask & BIT(rtc_pin)) == 0) {
             continue;
         }
+#if SOC_LP_IO_CLOCK_IS_INDEPENDENT
+        rtcio_ll_enable_io_clock(true);
+#endif
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         // Route pad to RTC
         rtcio_hal_function_select(rtc_pin, RTCIO_LL_FUNC_RTC);
@@ -1806,6 +1817,9 @@ static void gpio_deep_sleep_wakeup_prepare(void)
         if (((1ULL << gpio_idx) & s_config.gpio_wakeup_mask) == 0) {
             continue;
         }
+#if SOC_LP_IO_CLOCK_IS_INDEPENDENT
+        rtcio_ll_enable_io_clock(true);
+#endif
 #if CONFIG_ESP_SLEEP_GPIO_ENABLE_INTERNAL_RESISTORS
         if (s_config.gpio_trigger_mode & BIT(gpio_idx)) {
             ESP_ERROR_CHECK(gpio_pullup_dis(gpio_idx));
@@ -1854,6 +1868,9 @@ esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepslee
 
 esp_err_t esp_sleep_enable_gpio_wakeup(void)
 {
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+    ESP_LOGW(TAG, "%s wakeup source is not available if the peripheral power domain is powered down in sleep", "GPIO");
+#endif
 #if CONFIG_IDF_TARGET_ESP32
     if (s_config.wakeup_triggers & (RTC_TOUCH_TRIG_EN | RTC_ULP_TRIG_EN)) {
         ESP_LOGE(TAG, "Conflicting wake-up triggers: touch / ULP");
@@ -1866,6 +1883,9 @@ esp_err_t esp_sleep_enable_gpio_wakeup(void)
 
 esp_err_t esp_sleep_enable_uart_wakeup(int uart_num)
 {
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+    ESP_LOGW(TAG, "%s wakeup source is not available if the peripheral power domain is powered down in sleep", "UART");
+#endif
     if (uart_num == UART_NUM_0) {
         s_config.wakeup_triggers |= RTC_UART0_TRIG_EN;
     } else if (uart_num == UART_NUM_1) {

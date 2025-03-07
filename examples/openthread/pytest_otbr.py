@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Unlicense OR CC0-1.0
 # !/usr/bin/env python3
 import copy
@@ -61,6 +61,9 @@ from pytest_embedded_idf.dut import IdfDut
 
 # Case 15: Thread network formation and attaching with TREL
 #         A TREL device forms a Thread network, other TREL devices attach to it, then test ping connection between them.
+
+# Case 16: Thread network BR lib check
+#         Check BR library compatibility
 
 
 @pytest.fixture(scope='module', name='Init_avahi')
@@ -447,7 +450,10 @@ def test_service_discovery_of_WiFi_device(Init_interface:bool, Init_avahi:bool, 
         command = 'dns browse _testxxx._udp.default.service.arpa'
         tmp = ocf.get_ouput_string(cli, command, 5)
         assert 'Port:12347' not in str(tmp)
-        ocf.host_publish_service()
+        ocf.restart_avahi()
+        command = 'avahi-publish-service testxxx _testxxx._udp 12347 test=1235 dn="for_ci_br_test"'
+        sp = subprocess.Popen(command, shell=True)
+        time.sleep(2)
         ocf.wait(cli, 5)
 
         command = 'dns browse _testxxx._udp.default.service.arpa'
@@ -455,14 +461,13 @@ def test_service_discovery_of_WiFi_device(Init_interface:bool, Init_avahi:bool, 
         assert 'response for _testxxx' in str(tmp)
         assert 'Port:12347' in str(tmp)
 
-        command = 'dns browse _testxxx._udp.default.service.arpa'
+        command = 'dns service testxxx _testxxx._udp.default.service.arpa.'
         tmp = ocf.get_ouput_string(cli, command, 5)
-        ocf.execute_command(cli, 'dns service testxxx _testxxx._udp.default.service.arpa.')
-        tmp = cli.expect(pexpect.TIMEOUT, timeout=5)
         assert 'response for testxxx' in str(tmp)
         assert 'Port:12347' in str(tmp)
     finally:
         ocf.host_close_service()
+        sp.terminate()
         ocf.execute_command(br, 'factoryreset')
         ocf.execute_command(cli, 'factoryreset')
         time.sleep(3)
@@ -925,4 +930,35 @@ def test_trel_connect(dut: Tuple[IdfDut, IdfDut]) -> None:
         ocf.execute_command(trel_s3, 'factoryreset')
         for trel in trel_list:
             ocf.execute_command(trel, 'factoryreset')
+        time.sleep(3)
+
+
+# Case 16: Thread network BR lib check
+@pytest.mark.supported_targets
+@pytest.mark.openthread_br
+@pytest.mark.flaky(reruns=1, reruns_delay=1)
+@pytest.mark.parametrize(
+    'config, count, app_path, target, port',
+    [
+        pytest.param(
+            'rcp_uart|br_libcheck',
+            2,
+            f'{os.path.join(os.path.dirname(__file__), "ot_rcp")}'
+            f'|{os.path.join(os.path.dirname(__file__), "ot_br")}',
+            'esp32c6|esp32s3',
+            f'{ESPPORT3}|{ESPPORT2}',
+            id='c6-s3'
+        ),
+    ],
+    indirect=True,
+)
+def test_br_lib_check(dut: Tuple[IdfDut, IdfDut]) -> None:
+    br = dut[1]
+    dut[0].serial.stop_redirect_thread()
+    try:
+        time.sleep(3)
+        ocf.execute_command(br, 'brlibcheck')
+        br.expect('The br library compatibility checking passed', timeout=10)
+    finally:
+        ocf.execute_command(br, 'factoryreset')
         time.sleep(3)

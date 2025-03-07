@@ -1,6 +1,7 @@
-# SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: CC0-1.0
 import re
+from typing import Any
 from typing import List
 from typing import Optional
 from typing import Union
@@ -89,9 +90,43 @@ def get_default_backtrace(config: str) -> List[str]:
     return [config, 'app_main', 'main_task', 'vPortTaskWrapper']
 
 
+def expect_coredump_flash_write_logs(dut: PanicTestDut, config: str) -> None:
+    dut.expect_exact('Save core dump to flash...')
+    if 'extram_stack' in config:
+        dut.expect_exact('Backing up stack @')
+        dut.expect_exact('Restoring stack')
+    dut.expect_exact('Core dump has been saved to flash.')
+    dut.expect(dut.REBOOT)
+
+
+def expect_coredump_uart_write_logs(dut: PanicTestDut, check_cpu_reset: Optional[bool] = True) -> Any:
+    # ================= CORE DUMP START =================
+    # B8AAAMAEgAGAAAAXAEAAAAAAABkAAAA
+    # ...
+    # ================= CORE DUMP END =================
+    # Coredump checksum='9730d7ff'
+    # Rebooting...
+    # ..
+    # rst:0xc (SW_CPU_RESET),boot:
+
+    # Read all uart logs until the end of the reset reason
+    uart_str = dut.expect(',boot:', return_what_before_match=True).decode('utf-8', errors='ignore')
+    coredump_base64 = uart_str.split(dut.COREDUMP_UART_START)[1].split(dut.COREDUMP_UART_END)[0].strip()
+    uart_str = uart_str.split(dut.COREDUMP_UART_END)[1]
+    assert re.search(dut.COREDUMP_CHECKSUM, uart_str)
+    assert re.search(dut.REBOOT, uart_str)
+    if check_cpu_reset:
+        assert re.search(dut.CPU_RESET, uart_str)
+    return coredump_base64
+
+
 def common_test(dut: PanicTestDut, config: str, expected_backtrace: Optional[List[str]] = None, check_cpu_reset: Optional[bool] = True,
                 expected_coredump: Optional[List[Union[str, re.Pattern]]] = None) -> None:
     if 'gdbstub' in config:
+        if 'coredump' in config:
+            uart_str = dut.expect(dut.COREDUMP_CHECKSUM, return_what_before_match=True).decode('utf-8')
+            coredump_base64 = uart_str.split(dut.COREDUMP_UART_START)[1].split(dut.COREDUMP_UART_END)[0].strip()
+            dut.process_coredump_uart(coredump_base64, expected_coredump)
         dut.expect_exact('Entering gdb stub now.')
         dut.start_gdb()
         frames = dut.gdb_backtrace()
@@ -105,13 +140,13 @@ def common_test(dut: PanicTestDut, config: str, expected_backtrace: Optional[Lis
         expected_coredump = None
 
     if 'uart' in config:
-        dut.process_coredump_uart(expected_coredump)
+        coredump_base64 = expect_coredump_uart_write_logs(dut, check_cpu_reset)
+        dut.process_coredump_uart(coredump_base64, expected_coredump)
+        check_cpu_reset = False  # CPU reset is already checked in expect_coredump_uart_write_logs
     elif 'flash' in config:
         dut.process_coredump_flash(expected_coredump)
     elif 'panic' in config:
-        pass
-
-    dut.expect('Rebooting...')
+        dut.expect(dut.REBOOT)
 
     if check_cpu_reset:
         dut.expect_cpu_reset()
@@ -177,42 +212,6 @@ def test_task_wdt_cpu1(dut: PanicTestDut, config: str, test_func_name: str) -> N
     coredump_pattern = (PANIC_ABORT_PREFIX +
                         'Task watchdog got triggered. '
                         'The following tasks/users did not reset the watchdog in time:\n - IDLE1 (CPU 1)')
-    common_test(
-        dut,
-        config,
-        expected_backtrace=expected_backtrace,
-        expected_coredump=[coredump_pattern]
-    )
-
-
-@pytest.mark.parametrize('config', CONFIGS_DUAL_CORE, indirect=True)
-@pytest.mark.generic
-def test_task_wdt_both_cpus(dut: PanicTestDut, config: str, test_func_name: str) -> None:
-    if dut.target == 'esp32s3':
-        pytest.xfail(reason='Only prints "Print CPU 1 backtrace", IDF-6560')
-    dut.run_test_func(test_func_name)
-    dut.expect_exact(
-        'Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:'
-    )
-    dut.expect_exact('CPU 0: Infinite loop')
-    dut.expect_exact('CPU 1: Infinite loop')
-    if dut.is_xtensa:
-        # see comment in test_task_wdt_cpu0
-        dut.expect_none('register dump:')
-        dut.expect_exact('Print CPU 0 (current core) backtrace')
-        dut.expect_backtrace()
-        dut.expect_exact('Print CPU 1 backtrace')
-        dut.expect_backtrace()
-        # On Xtensa, we get incorrect backtrace from GDB in this test
-        expected_backtrace = ['infinite_loop', 'vPortTaskWrapper']
-    else:
-        assert False, 'No dual-core RISC-V chips yet, check this test case later'
-    dut.expect_elf_sha256()
-    dut.expect_none('Guru Meditation')
-
-    coredump_pattern = (PANIC_ABORT_PREFIX +
-                        'Task watchdog got triggered. '
-                        'The following tasks/users did not reset the watchdog in time:\n - IDLE1 (CPU 1)\n - IDLE0 (CPU 0)')
     common_test(
         dut,
         config,

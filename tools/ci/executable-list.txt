@@ -55,7 +55,6 @@ tools/ci/check_api_violation.sh
 tools/ci/check_build_test_rules.py
 tools/ci/check_callgraph.py
 tools/ci/check_codeowners.py
-tools/ci/check_deprecated_kconfigs.py
 tools/ci/check_esp_memory_utils_headers.sh
 tools/ci/check_examples_extra_component_dirs.sh
 tools/ci/check_executables.py
@@ -66,6 +65,7 @@ tools/ci/check_requirement_files.py
 tools/ci/check_rules_components_patterns.py
 tools/ci/check_soc_headers_leak.py
 tools/ci/check_soc_struct_headers.py
+tools/ci/check_test_files.py
 tools/ci/check_tools_files_patterns.py
 tools/ci/check_type_comments.py
 tools/ci/checkout_project_ref.py

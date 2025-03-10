@@ -41,6 +41,10 @@
 #include "stack/hcimsgs.h"
 #include "hci_log/bt_hci_log.h"
 
+#if CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
+#include "ble_log/ble_log_spi_out.h"
+#endif // CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
+
 #define HCI_BLE_EVENT 0x3e
 #define PACKET_TYPE_TO_INBOUND_INDEX(type) ((type) - 2)
 #define PACKET_TYPE_TO_INDEX(type) ((type) - 1)
@@ -51,9 +55,6 @@
 #else
 #define HCI_HAL_BLE_ADV_RPT_QUEUE_LEN_MAX      (200)
 #endif
-
-extern bool BTU_check_queue_is_congest(void);
-
 
 static const uint8_t preamble_sizes[] = {
     HCI_COMMAND_PREAMBLE_SIZE,
@@ -71,6 +72,7 @@ static const uint16_t outbound_event_types[] = {
 
 typedef struct {
     fixed_queue_t *rx_q;
+#if (BLE_42_SCAN_EN == TRUE)
     struct pkt_queue *adv_rpt_q;
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
     osi_mutex_t adv_flow_lock;
@@ -80,6 +82,7 @@ typedef struct {
     pkt_linked_item_t *adv_fc_cmd_buf;
     bool cmd_buf_in_use;
 #endif
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     hci_hal_callbacks_t *callbacks;
     osi_thread_t *hci_h4_thread;
     struct osi_event *upstream_data_ready;
@@ -93,15 +96,18 @@ static const esp_bluedroid_hci_driver_callbacks_t hci_host_cb;
 static void host_send_pkt_available_cb(void);
 static int host_recv_pkt_cb(uint8_t *data, uint16_t len);
 static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet);
+#if (BLE_42_SCAN_EN == TRUE)
 static void hci_hal_h4_hdl_rx_adv_rpt(pkt_linked_item_t *linked_pkt);
+#endif // #if (BLE_42_SCAN_EN == TRUE)
 static void hci_upstream_data_handler(void *arg);
 static bool hci_upstream_data_post(uint32_t timeout);
 
+#if (BLE_42_SCAN_EN == TRUE)
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
 static void hci_adv_flow_monitor(void *context);
 static void hci_adv_flow_cmd_free_cb(pkt_linked_item_t *linked_pkt);
 #endif
-
+#endif // #if (BLE_42_SCAN_EN == TRUE)
 static bool hci_hal_env_init(const hci_hal_callbacks_t *upper_callbacks, osi_thread_t *task_thread)
 {
     assert(upper_callbacks != NULL);
@@ -109,7 +115,7 @@ static bool hci_hal_env_init(const hci_hal_callbacks_t *upper_callbacks, osi_thr
 
     hci_hal_env.hci_h4_thread = task_thread;
     hci_hal_env.callbacks = (hci_hal_callbacks_t *)upper_callbacks;
-
+#if (BLE_42_SCAN_EN == TRUE)
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
     hci_hal_env.adv_fc_cmd_buf = osi_calloc(HCI_CMD_LINKED_BUF_SIZE(HCIC_PARAM_SIZE_BLE_UPDATE_ADV_FLOW_CONTROL));
     assert(hci_hal_env.adv_fc_cmd_buf != NULL);
@@ -122,13 +128,13 @@ static bool hci_hal_env_init(const hci_hal_callbacks_t *upper_callbacks, osi_thr
     hci_hal_env.adv_flow_monitor = osi_alarm_new("adv_fc_mon", hci_adv_flow_monitor, NULL, HCI_ADV_FLOW_MONITOR_PERIOD_MS);
     assert (hci_hal_env.adv_flow_monitor != NULL);
 #endif
-
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     hci_hal_env.rx_q = fixed_queue_new(QUEUE_SIZE_MAX);
     assert(hci_hal_env.rx_q != NULL);
-
+#if (BLE_42_SCAN_EN == TRUE)
     hci_hal_env.adv_rpt_q = pkt_queue_create();
     assert(hci_hal_env.adv_rpt_q != NULL);
-
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     struct osi_event *event = osi_event_create(hci_upstream_data_handler, NULL);
     assert(event != NULL);
     hci_hal_env.upstream_data_ready = event;
@@ -140,19 +146,23 @@ static bool hci_hal_env_init(const hci_hal_callbacks_t *upper_callbacks, osi_thr
 static void hci_hal_env_deinit(void)
 {
     fixed_queue_t *rx_q = hci_hal_env.rx_q;
+#if (BLE_42_SCAN_EN == TRUE)
     struct pkt_queue *adv_rpt_q = hci_hal_env.adv_rpt_q;
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     struct osi_event *upstream_data_ready = hci_hal_env.upstream_data_ready;
 
     hci_hal_env.rx_q = NULL;
+#if (BLE_42_SCAN_EN == TRUE)
     hci_hal_env.adv_rpt_q = NULL;
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     hci_hal_env.upstream_data_ready = NULL;
 
     fixed_queue_free(rx_q, osi_free_func);
-
+#if (BLE_42_SCAN_EN == TRUE)
     pkt_queue_destroy(adv_rpt_q, NULL);
-
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     osi_event_delete(upstream_data_ready);
-
+#if (BLE_42_SCAN_EN == TRUE)
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
     hci_hal_env.cmd_buf_in_use = true;
     osi_alarm_cancel(hci_hal_env.adv_flow_monitor);
@@ -162,7 +172,7 @@ static void hci_hal_env_deinit(void)
     osi_free(hci_hal_env.adv_fc_cmd_buf);
     hci_hal_env.adv_fc_cmd_buf = NULL;
 #endif
-
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     hci_hal_env.hci_h4_thread = NULL;
 
     memset(&hci_hal_env, 0, sizeof(hci_hal_env_t));
@@ -225,7 +235,9 @@ static uint16_t transmit_data(serial_data_type_t type,
 static void hci_upstream_data_handler(void *arg)
 {
     fixed_queue_t *rx_q = hci_hal_env.rx_q;
+#if (BLE_42_SCAN_EN == TRUE)
     struct pkt_queue *adv_rpt_q = hci_hal_env.adv_rpt_q;
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     size_t pkts_to_process;
 
     do {
@@ -237,7 +249,7 @@ static void hci_upstream_data_handler(void *arg)
             }
         }
     } while (0);
-
+#if (BLE_42_SCAN_EN == TRUE)
     do {
         pkts_to_process = pkt_queue_length(adv_rpt_q);
         for (size_t i = 0; i < pkts_to_process; i++) {
@@ -247,8 +259,12 @@ static void hci_upstream_data_handler(void *arg)
             }
         }
     } while (0);
-
-    if (!fixed_queue_is_empty(rx_q) || pkt_queue_length(adv_rpt_q) > 0) {
+#endif // #if (BLE_42_SCAN_EN == TRUE)
+    if (!fixed_queue_is_empty(rx_q)
+#if (BLE_42_SCAN_EN == TRUE)
+    || pkt_queue_length(adv_rpt_q) > 0
+#endif // #if (BLE_42_SCAN_EN == TRUE)
+    ) {
         hci_upstream_data_post(OSI_THREAD_MAX_TIMEOUT);
     }
 }
@@ -289,6 +305,7 @@ bool host_recv_adv_packet(uint8_t *packet)
     return false;
 }
 
+#if (BLE_42_SCAN_EN == TRUE)
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
 static void hci_adv_flow_monitor(void *context)
 {
@@ -414,6 +431,7 @@ int hci_adv_credits_force_release(uint16_t num)
     return credits_released;
 }
 #endif
+#endif // #if (BLE_42_SCAN_EN == TRUE)
 
 static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
 {
@@ -475,7 +493,7 @@ static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
     packet->event = outbound_event_types[PACKET_TYPE_TO_INDEX(type)];
     hci_hal_env.callbacks->packet_ready(packet);
 }
-
+#if (BLE_42_SCAN_EN == TRUE)
 static void hci_hal_h4_hdl_rx_adv_rpt(pkt_linked_item_t *linked_pkt)
 {
     uint8_t type;
@@ -511,13 +529,6 @@ static void hci_hal_h4_hdl_rx_adv_rpt(pkt_linked_item_t *linked_pkt)
         goto _discard_packet;
     }
 
-#if SCAN_QUEUE_CONGEST_CHECK
-    if(BTU_check_queue_is_congest()) {
-        HCI_TRACE_DEBUG("BtuQueue is congested");
-        goto _discard_packet;
-    }
-#endif
-
     packet->event = outbound_event_types[PACKET_TYPE_TO_INDEX(type)];
     hci_hal_env.callbacks->adv_rpt_ready(linked_pkt);
 
@@ -529,6 +540,7 @@ _discard_packet:
     hci_adv_credits_prep_to_release(1);
 #endif
 }
+#endif // #if (BLE_42_SCAN_EN == TRUE)
 
 static void host_send_pkt_available_cb(void)
 {
@@ -559,9 +571,14 @@ void bt_record_hci_data(uint8_t *data, uint16_t len)
 
 static int host_recv_pkt_cb(uint8_t *data, uint16_t len)
 {
+#if (BT_BLE_LOG_SPI_OUT_HCI_ENABLED && !SOC_ESP_NIMBLE_CONTROLLER)
+    ble_log_spi_out_write_with_ts(BLE_LOG_SPI_OUT_SOURCE_HCI_UPSTREAM, data, len);
+#endif // (BT_BLE_LOG_SPI_OUT_HCI_ENABLED && !SOC_ESP_NIMBLE_CONTROLLER)
     //Target has packet to host, malloc new buffer for packet
     BT_HDR *pkt = NULL;
+#if (BLE_42_SCAN_EN == TRUE)
     pkt_linked_item_t *linked_pkt = NULL;
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     size_t pkt_size;
 
     if (hci_hal_env.rx_q == NULL) {
@@ -586,6 +603,7 @@ static int host_recv_pkt_cb(uint8_t *data, uint16_t len)
         memcpy(pkt->data, data, len);
         fixed_queue_enqueue(hci_hal_env.rx_q, pkt, FIXED_QUEUE_MAX_TIMEOUT);
     } else {
+#if (BLE_42_SCAN_EN == TRUE)
 #if !BLE_ADV_REPORT_FLOW_CONTROL
         // drop the packets if pkt_queue length goes beyond upper limit
         if (pkt_queue_length(hci_hal_env.adv_rpt_q) > HCI_HAL_BLE_ADV_RPT_QUEUE_LEN_MAX) {
@@ -614,6 +632,9 @@ static int host_recv_pkt_cb(uint8_t *data, uint16_t len)
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
         hci_adv_credits_consumed(1);
 #endif
+#else
+    assert(0);
+#endif // #if (BLE_42_SCAN_EN == TRUE)
     }
 
     hci_upstream_data_post(OSI_THREAD_MAX_TIMEOUT);

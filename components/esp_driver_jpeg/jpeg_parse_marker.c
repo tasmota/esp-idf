@@ -162,6 +162,8 @@ esp_err_t jpeg_parse_dht_marker(jpeg_dec_header_info_t *header_info)
         num_left -= (1 + JPEG_HUFFMAN_BITS_LEN_TABLE_LEN + np);
     }
 
+    // Record, that Huffman table present in JPEG header
+    header_info->dht_marker = true;
     return ESP_OK;
 }
 
@@ -182,5 +184,15 @@ esp_err_t jpeg_parse_sos_marker(jpeg_dec_header_info_t *header_info)
     header_info->buffer_offset -= 2;
     header_info->header_size -= 2;
     header_info->buffer_left += 2;
+    return ESP_OK;
+}
+
+esp_err_t jpeg_parse_inv_marker(jpeg_dec_header_info_t *header_info)
+{
+    // Got invalid 0xFFFF, (followed by a valid marker type)
+    // Go one byte back, to skip the first 0xFF
+    header_info->buffer_offset--;
+    header_info->header_size--;
+    header_info->buffer_left++;
     return ESP_OK;
 }

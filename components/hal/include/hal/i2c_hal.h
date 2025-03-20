@@ -1,4 +1,3 @@
-
 /*
  * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *

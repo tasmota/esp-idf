@@ -104,10 +104,12 @@ if(CONFIG_BT_ENABLED)
             set(ldscripts "linker_esp32c2.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32C6)
+            list(APPEND srcs "controller/esp32c6/ble.c")
             list(APPEND srcs "controller/esp32c6/bt.c")
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
 
         elseif(CONFIG_IDF_TARGET_ESP32H2)
+            list(APPEND srcs "controller/esp32h2/ble.c")
             list(APPEND srcs "controller/esp32h2/bt.c")
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
         endif()
@@ -635,23 +637,25 @@ if(CONFIG_BT_ENABLED)
 
     if(NOT (CONFIG_BT_LE_CRYPTO_STACK_MBEDTLS OR CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS))
         list(APPEND include_dirs
-                porting/ext/tinycrypt/include
+                common/tinycrypt/include
+                common/tinycrypt/port
             )
-        list(APPEND srcs "porting/ext/tinycrypt/src/utils.c"
-                "porting/ext/tinycrypt/src/sha256.c"
-                "porting/ext/tinycrypt/src/ecc.c"
-                "porting/ext/tinycrypt/src/ctr_prng.c"
-                "porting/ext/tinycrypt/src/ctr_mode.c"
-                "porting/ext/tinycrypt/src/aes_decrypt.c"
-                "porting/ext/tinycrypt/src/aes_encrypt.c"
-                "porting/ext/tinycrypt/src/ccm_mode.c"
-                "porting/ext/tinycrypt/src/ecc_dsa.c"
-                "porting/ext/tinycrypt/src/cmac_mode.c"
-                "porting/ext/tinycrypt/src/ecc_dh.c"
-                "porting/ext/tinycrypt/src/hmac_prng.c"
-                "porting/ext/tinycrypt/src/ecc_platform_specific.c"
-                "porting/ext/tinycrypt/src/hmac.c"
-                "porting/ext/tinycrypt/src/cbc_mode.c")
+        list(APPEND srcs "common/tinycrypt/src/utils.c"
+                "common/tinycrypt/src/sha256.c"
+                "common/tinycrypt/src/ecc.c"
+                "common/tinycrypt/src/ctr_prng.c"
+                "common/tinycrypt/src/ctr_mode.c"
+                "common/tinycrypt/src/aes_decrypt.c"
+                "common/tinycrypt/src/aes_encrypt.c"
+                "common/tinycrypt/src/ccm_mode.c"
+                "common/tinycrypt/src/ecc_dsa.c"
+                "common/tinycrypt/src/cmac_mode.c"
+                "common/tinycrypt/src/ecc_dh.c"
+                "common/tinycrypt/src/hmac_prng.c"
+                "common/tinycrypt/src/ecc_platform_specific.c"
+                "common/tinycrypt/src/hmac.c"
+                "common/tinycrypt/src/cbc_mode.c"
+                "common/tinycrypt/port/esp_tinycrypt_port.c")
     endif()
 
     if(CONFIG_BT_NIMBLE_ENABLED)
@@ -861,11 +865,24 @@ if(CONFIG_BT_ENABLED)
 
 endif()
 
+
+set(bt_priv_requires
+    nvs_flash
+    soc
+    esp_pm
+    esp_phy
+    esp_coex
+    mbedtls
+    driver
+    vfs
+    esp_gdbstub
+)
+
 idf_component_register(SRCS "${srcs}"
                        INCLUDE_DIRS "${include_dirs}"
                        PRIV_INCLUDE_DIRS "${priv_include_dirs}"
                        REQUIRES esp_timer esp_wifi
-                       PRIV_REQUIRES nvs_flash soc esp_pm esp_phy esp_coex mbedtls driver vfs
+                       PRIV_REQUIRES "${bt_priv_requires}"
                        LDFRAGMENTS "${ldscripts}")
 
 if(CONFIG_BT_ENABLED)

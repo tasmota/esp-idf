@@ -40,7 +40,7 @@
 // #define SOC_SDM_SUPPORTED               1    //TODO: [ESP32H21] IDF-11573
 // #define SOC_GPSPI_SUPPORTED             1    //TODO: [ESP32H21] IDF-11583, IDF-11584, IDF-11587
 // #define SOC_LEDC_SUPPORTED              1    //TODO: [ESP32H21] IDF-11568
-// #define SOC_I2C_SUPPORTED               1    //TODO: [ESP32H21] IDF-11578, IDF-11580
+#define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1       //TODO: [ESP32H21] IDF-11596, IDF-11598
 // #define SOC_SUPPORT_COEXISTENCE         1    //TODO: [ESP32H21] IDF-11658, IDF-11659, IDF-11660
 #define SOC_MPI_SUPPORTED               1
@@ -50,12 +50,12 @@
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 // #define SOC_ECDSA_SUPPORTED             1    //TODO: [ESP32H21] IDF-11496
-#define SOC_FLASH_ENC_SUPPORTED         1       //TODO: [ESP32H21] IDF-11499
+#define SOC_FLASH_ENC_SUPPORTED         1
 // #define SOC_SECURE_BOOT_SUPPORTED       1    //TODO: [ESP32H21] IDF-11500
 // #define SOC_BOD_SUPPORTED               1    //TODO: [ESP32H21] IDF-11530
 // #define SOC_APM_SUPPORTED               1    //TODO: [ESP32H21] IDF-11494
-// #define SOC_PMU_SUPPORTED               1    //TODO: [ESP32H21] IDf-11522
-// #define SOC_LP_TIMER_SUPPORTED          1    //TODO: [ESP32H21] IDF-11512
+// #define SOC_PMU_SUPPORTED               1
+// #define SOC_LP_TIMER_SUPPORTED          1
 // #define SOC_LP_AON_SUPPORTED            1
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1
 // #define SOC_CLK_TREE_SUPPORTED          1    //TODO: [ESP32H21] IDF-11521
@@ -245,23 +245,23 @@
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-H21 has 2 I2C
-// #define SOC_I2C_NUM                 (2U)
-// #define SOC_HP_I2C_NUM              (2U)
+#define SOC_I2C_NUM                             (2U)
+#define SOC_HP_I2C_NUM                          (2U)
 
-// #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
-// #define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
-// #define SOC_I2C_SUPPORT_SLAVE       (1)
+#define SOC_I2C_FIFO_LEN                        (32) /*!< I2C hardware FIFO depth */
+#define SOC_I2C_CMD_REG_NUM                     (8)  /*!< Number of I2C command registers */
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
 
-// #define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
-// #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
+#define SOC_I2C_SUPPORT_HW_FSM_RST              (1)
+#define SOC_I2C_SUPPORT_HW_CLR_BUS              (1)
 
-// #define SOC_I2C_SUPPORT_XTAL        (1)
-// #define SOC_I2C_SUPPORT_RTC         (1)
-// #define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
-// #define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
-// #define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
-// #define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
-// #define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
+#define SOC_I2C_SUPPORT_XTAL                    (1)
+#define SOC_I2C_SUPPORT_RTC                     (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR              (1)
+#define SOC_I2C_SLAVE_SUPPORT_BROADCAST         (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
+#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS     (1)
+#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH     (1)
 // #define SOC_I2C_SUPPORT_SLEEP_RETENTION           (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
@@ -477,6 +477,7 @@
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1
 
 /*-------------------------- APM CAPS ----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
@@ -538,7 +539,7 @@
 #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
-#define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
+// #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */

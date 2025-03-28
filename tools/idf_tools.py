@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 #
-# SPDX-FileCopyrightText: 2019-2024 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -469,10 +469,7 @@ def get_env_for_extra_paths(extra_paths: List[str]) -> Dict[str, str]:
     """
     env_arg = os.environ.copy()
     new_path = os.pathsep.join(extra_paths) + os.pathsep + env_arg['PATH']
-    if sys.version_info.major == 2:
-        env_arg['PATH'] = new_path.encode('utf8')  # type: ignore
-    else:
-        env_arg['PATH'] = new_path
+    env_arg['PATH'] = new_path
     return env_arg
 
 
@@ -526,11 +523,14 @@ def unpack(filename: str, destination: str) -> None:
         archive_obj = ZipFile(filename)
     else:
         raise NotImplementedError('Unsupported archive type')
-    if sys.version_info.major == 2:
-        # This is a workaround for the issue that unicode destination is not handled:
-        # https://bugs.python.org/issue17153
-        destination = str(destination)
-    archive_obj.extractall(destination)
+
+    # Handle tar/zip extraction with backward compatibility
+    if isinstance(archive_obj, tarfile.TarFile) and sys.version_info[:2] >= (3, 12):
+        # Use the tar filter argument for Python 3.12 and later
+        archive_obj.extractall(destination, filter='tar')
+    else:
+        archive_obj.extractall(destination)
+
     # ZipFile on Unix systems does not preserve file permissions while extracting it
     # We need to reset the permissions afterward
     if sys.platform != 'win32' and filename.endswith('zip') and isinstance(archive_obj, ZipFile):
@@ -900,7 +900,8 @@ class IDFTool(object):
             if v_repl != v:
                 v_repl = to_shell_specific_paths([v_repl])[0]
             old_v = os.environ.get(k)
-            if old_v is None or old_v != v_repl:
+            # Remove condition in IDF-10292
+            if sys.platform != 'win32' or old_v is None or old_v != v_repl:
                 result[k] = v_repl
         return result
 
@@ -1583,8 +1584,7 @@ class ENVState:
 
     def save(self) -> str:
         try:
-            if self.deactivate_file_path and os.path.basename(self.deactivate_file_path).endswith(f'idf_{str(os.getppid())}'):
-                # If exported file path/name exists and belongs to actual opened shell
+            if self.deactivate_file_path:
                 with open(self.deactivate_file_path, 'w', encoding='utf-8') as w:
                     json.dump(self.idf_variables, w, ensure_ascii=False, indent=4)  # type: ignore
             else:
@@ -1783,14 +1783,24 @@ def process_and_check_features(idf_env_obj: IDFEnv, features_str: str) -> List[s
     """
     new_features = []
     remove_features = []
-    for new_feature_candidate in features_str.split(','):
+    invalid_features = []
+
+    for new_feature_candidate in [feature for feature in features_str.split(',') if feature != '']:
+        # Feature to be added/removed needs to be checked if valid
+        sanitized_feat = new_feature_candidate.lstrip('-+')
+        if not os.path.isfile(feature_to_requirements_path(sanitized_feat)):
+            invalid_features += [sanitized_feat]
+            continue
+
         if new_feature_candidate.startswith('-'):
             remove_features += [new_feature_candidate.lstrip('-')]
         else:
-            new_feature_candidate = new_feature_candidate.lstrip('+')
-            # Feature to be added needs to be checked if is valid
-            if os.path.isfile(feature_to_requirements_path(new_feature_candidate)):
-                new_features += [new_feature_candidate]
+            new_features += [new_feature_candidate.lstrip('+')]
+
+    if invalid_features:
+        fatal(f'The following selected features are not valid: {", ".join(invalid_features)}')
+        raise SystemExit(1)
+
     idf_env_obj.get_active_idf_record().update_features(tuple(new_features), tuple(remove_features))
     return idf_env_obj.get_active_idf_record().features
 
@@ -1858,7 +1868,6 @@ def print_deactivate_statement(args: List[str]) -> None:
     """
     env_state_obj = ENVState.get_env_state()
     if not env_state_obj.idf_variables:
-        warn('No IDF variables to remove from environment found. Deactivation of previous esp-idf version was not successful.')
         return
     unset_vars = env_state_obj.idf_variables
     env_path: Optional[str] = os.getenv('PATH')
@@ -1893,27 +1902,6 @@ def get_unset_format_and_separator(args: List[str]) -> Tuple[str, str]:
     Returns pattern to unset a variable (formatted string) either for shell or for key-value pair.
     """
     return {EXPORT_SHELL: ('unset {}', ';'), EXPORT_KEY_VALUE: ('{}', '\n')}[args.format]  # type: ignore
-
-
-def different_idf_detected() -> bool:
-    """
-    Checks if new IDF detected.
-    """
-    # If IDF global variable found, test if belong to different ESP-IDF version
-    if 'IDF_TOOLS_EXPORT_CMD' in os.environ:
-        if g.idf_path != os.path.dirname(os.environ['IDF_TOOLS_EXPORT_CMD']):
-            return True
-
-    # No previous ESP-IDF export detected, nothing to be unset
-    if all(s not in os.environ for s in ['IDF_PYTHON_ENV_PATH', 'OPENOCD_SCRIPTS', 'ESP_IDF_VERSION']):
-        return False
-
-    # User is exporting the same version as is in env
-    if os.getenv('ESP_IDF_VERSION') == get_idf_version():
-        return False
-
-    # Different version detected
-    return True
 
 
 def active_repo_id() -> str:
@@ -2157,8 +2145,7 @@ def action_export(args: Any) -> None:
     Exports all necessary environment variables and paths needed for tools used.
     """
     if args.deactivate:
-        if different_idf_detected():
-            print_deactivate_statement(args)
+        print_deactivate_statement(args)
         return
 
     tools_info = load_tools_info()
@@ -2190,8 +2177,10 @@ def action_export(args: Any) -> None:
         idf_python_env_path = to_shell_specific_paths([idf_python_env_path])[0]
         if os.getenv('IDF_PYTHON_ENV_PATH') != idf_python_env_path:
             export_vars['IDF_PYTHON_ENV_PATH'] = to_shell_specific_paths([idf_python_env_path])[0]
-        if current_path and idf_python_export_path not in current_path:  # getenv can return None
-            paths_to_export.append(idf_python_export_path)
+        if current_path:  # getenv can return None
+            # Remove condition in IDF-10292
+            if sys.platform != 'win32' or idf_python_export_path not in current_path:
+                paths_to_export.append(idf_python_export_path)
 
     idf_version = get_idf_version()
     if os.getenv('ESP_IDF_VERSION') != idf_version:
@@ -2201,8 +2190,10 @@ def action_export(args: Any) -> None:
 
     idf_tools_dir = os.path.join(g.idf_path, 'tools')  # type: ignore
     idf_tools_dir = to_shell_specific_paths([idf_tools_dir])[0]
-    if current_path and idf_tools_dir not in current_path:
-        paths_to_export.append(idf_tools_dir)
+    if current_path:
+        # Remove condition in IDF-10292
+        if sys.platform != 'win32' or idf_tools_dir not in current_path:
+            paths_to_export.append(idf_tools_dir)
 
     if sys.platform == 'win32':
         old_path = '%PATH%'
@@ -2617,7 +2608,7 @@ def action_install_python_env(args):  # type: ignore
     else:
         if subprocess.run([sys.executable, '-m', 'venv', '-h'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
             # venv available
-            virtualenv_options = ['--clear']  # delete environment if already exists
+            virtualenv_options = []
 
             info(f'Creating a new Python environment in {idf_python_env_path}')
 
@@ -2632,6 +2623,18 @@ def action_install_python_env(args):  # type: ignore
                          'version of Python. If you have not set IDF_PYTHON_ENV_PATH intentionally then it is '
                          'recommended to re-run this script from a clean shell where an ESP-IDF environment is '
                          'not active.')
+
+                # Verify if IDF_PYTHON_ENV_PATH is a valid ESP-IDF Python virtual environment directory
+                # to decide if content should be removed
+                if (
+                    os.path.exists(os.path.join(environ_idf_python_env_path, VENV_VER_FILE))
+                    or re.search(PYTHON_VENV_DIR_TEMPLATE.format(r'\d+\.\d+', r'\d+\.\d+'), environ_idf_python_env_path)
+                ):
+                    virtualenv_options.append('--clear')  # delete environment if already exists
+                elif os.listdir(environ_idf_python_env_path):  # show the message only if the directory is not empty
+                    info(f'IDF_PYTHON_ENV_PATH is set to {environ_idf_python_env_path}, '
+                         'but it does not appear to be an ESP-IDF Python virtual environment directory. '
+                         'Existing data in this folder will be preserved to prevent unintentional data loss.')
 
             except KeyError:
                 # if IDF_PYTHON_ENV_PATH not defined then the above checks can be skipped
@@ -3235,15 +3238,6 @@ def main(argv: List[str]) -> None:
     # Otherwise sys.executable keeps pointing to the system Python, even when a python binary from a virtualenv is invoked.
     # See https://bugs.python.org/issue22490#msg283859.
     os.environ.pop('__PYVENV_LAUNCHER__', None)
-
-    if sys.version_info.major == 2:
-        try:
-            g.idf_tools_path.decode('ascii')  # type: ignore
-        except UnicodeDecodeError:
-            fatal(f'IDF_TOOLS_PATH contains non-ASCII characters: {g.idf_tools_path}'
-                  '\nThis is not supported yet with Python 2. '
-                  'Please set IDF_TOOLS_PATH to a directory with an ASCII name, or switch to Python 3.')
-            raise SystemExit(1)
 
     if CURRENT_PLATFORM is None:
         fatal(f'Platform {PYTHON_PLATFORM} appears to be unsupported')

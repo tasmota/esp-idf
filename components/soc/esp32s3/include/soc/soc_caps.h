@@ -399,6 +399,8 @@
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/
 #define SOC_TOUCH_SENSOR_VERSION                    (2)  /*!< Hardware version of touch sensor */
 #define SOC_TOUCH_SENSOR_NUM                        (15) /*!< 15 Touch channels */
+#define SOC_TOUCH_MIN_CHAN_ID                       (1)  /*!< Touch minimum channel number, (0 is internal denoise channel) */
+#define SOC_TOUCH_MAX_CHAN_ID                       (14) /*!< Touch maximum channel number */
 #define SOC_TOUCH_SUPPORT_BENCHMARK                 (1)  /*!< Touch sensor supports benchmark configuration */
 #define SOC_TOUCH_SUPPORT_SLEEP_WAKEUP              (1)  /*!< Touch sensor supports sleep awake */
 #define SOC_TOUCH_SUPPORT_WATERPROOF                (1)  /*!< Touch sensor supports waterproof */
@@ -545,7 +547,7 @@
 #define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
 #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
-#define SOC_SPI_MEM_SUPPORT_OPI_MODE                      (1)
+#define SOC_SPI_MEM_SUPPORT_FLASH_OPI_MODE                (1)
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE          (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)

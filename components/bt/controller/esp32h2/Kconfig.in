@@ -108,7 +108,7 @@ menu "HCI Config"
     config BT_LE_HCI_TRANS_TASK_STACK_SIZE
         int "HCI transport task stack size"
         depends on !BT_LE_HCI_INTERFACE_USE_RAM
-        default 1024
+        default 2048
         help
             This configures stack size of hci transport task
 
@@ -227,6 +227,19 @@ config BT_LE_POWER_CONTROL_ENABLED
     default n
     help
         Set this option to enable the Power Control feature on controller
+
+config BT_LE_CTE_FEATURE_ENABLED
+    bool "Enable Bluetooth LE Direction Finding (AoA/AoD)"
+    depends on BT_LE_50_FEATURE_SUPPORT && SOC_BLE_CTE_SUPPORTED && !(BT_LE_SECURITY_ENABLE)
+    default n
+    help
+        Enable this option to activate Bluetooth LE Direction Finding (AoA/AoD) feature.
+        Note:
+        This feature allows devices to determine the direction of a Bluetooth CTE signal,
+        enabling Angle of Arrival (AoA) and Angle of Departure (AoD) functionality.
+        In chip esp32h2, Direction Finding is not supported in encrypted
+        communication scenarios. If you are using chip esp32h2, ensure that encryption is
+        disabled when using this feature.
 
 menu "Memory Settings"
     depends on !BT_NIMBLE_ENABLED
@@ -482,7 +495,7 @@ config BT_LE_CRYPTO_STACK_MBEDTLS
 
 config BT_LE_WHITELIST_SIZE
     int "BLE white list size"
-    range 1 15
+    range 1 31
     default 12
     depends on !BT_NIMBLE_ENABLED
 

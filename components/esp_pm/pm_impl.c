@@ -105,6 +105,8 @@
 #define REF_CLK_DIV_MIN 2
 #elif CONFIG_IDF_TARGET_ESP32P4
 #define REF_CLK_DIV_MIN 2
+#elif CONFIG_IDF_TARGET_ESP32H4
+#define REF_CLK_DIV_MIN 2
 #endif
 
 #ifdef CONFIG_PM_PROFILING
@@ -374,19 +376,19 @@ static void IRAM_ATTR esp_pm_execute_exit_sleep_callbacks(int64_t sleep_time_us)
 }
 #endif
 
-static esp_err_t esp_pm_sleep_configure(const void *vconfig)
+static esp_err_t esp_pm_sleep_configure(const esp_pm_config_t *config)
 {
     esp_err_t err = ESP_OK;
-    const esp_pm_config_t* config = (const esp_pm_config_t*) vconfig;
 
-#if ESP_SLEEP_POWER_DOWN_CPU
+#if ESP_SLEEP_POWER_DOWN_CPU && CONFIG_SOC_LIGHT_SLEEP_SUPPORTED
     err = sleep_cpu_configure(config->light_sleep_enable);
     if (err != ESP_OK) {
         return err;
     }
 #endif
-
+#if CONFIG_SOC_LIGHT_SLEEP_SUPPORTED
     err = sleep_modem_configure(config->max_freq_mhz, config->min_freq_mhz, config->light_sleep_enable);
+#endif
     return err;
 }
 

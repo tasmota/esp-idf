@@ -523,6 +523,10 @@ config SOC_CPU_HAS_HWLOOP
     bool
     default y
 
+config SOC_CPU_HAS_HWLOOP_STATE_BUG
+    bool
+    default y
+
 config SOC_CPU_HAS_PIE
     bool
     default y
@@ -1722,6 +1726,14 @@ config SOC_TOUCH_SENSOR_VERSION
 config SOC_TOUCH_SENSOR_NUM
     int
     default 14
+
+config SOC_TOUCH_MIN_CHAN_ID
+    int
+    default 0
+
+config SOC_TOUCH_MAX_CHAN_ID
+    int
+    default 13
 
 config SOC_TOUCH_SUPPORT_SLEEP_WAKEUP
     bool

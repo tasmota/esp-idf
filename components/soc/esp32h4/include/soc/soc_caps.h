@@ -162,6 +162,9 @@
 #define SOC_CPU_HAS_PMA                 1
 #define SOC_CPU_IDRAM_SPLIT_USING_PMP   1
 
+#define SOC_HP_CPU_HAS_MULTIPLE_CORES   1   // Convenience boolean macro used to determine if a target has multiple cores.
+#define SOC_CPU_HAS_LOCKUP_RESET        1
+
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
 // #define SOC_DS_SIGNATURE_MAX_BIT_LEN (3072)
@@ -203,6 +206,10 @@
 
 #define SOC_GPIO_VALID_GPIO_MASK        ((1ULL<<SOC_GPIO_PIN_COUNT) - 1)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
+
+#define SOC_GPIO_IN_RANGE_MAX           39
+#define SOC_GPIO_OUT_RANGE_MAX          39
+
 #define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_8~GPIO_NUM_30)
@@ -465,10 +472,9 @@
 // #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
 
 /*-------------------------- UART CAPS ---------------------------------------*/
-// ESP32-H4 has 3 UARTs (2 HP UART, and 1 LP UART)  TODO: IDF-12445 [ESP32H4] inherit from verify code, need remove LP*/
-#define SOC_UART_NUM                    (3)
+// ESP32-H4 has 2 HP UARTs
+#define SOC_UART_NUM                    (2)
 #define SOC_UART_HP_NUM                 (2)
-#define SOC_UART_LP_NUM                 (1U)
 #define SOC_UART_FIFO_LEN               (128)       /*!< The UART hardware FIFO length */
 #define SOC_LP_UART_FIFO_LEN            (16)        /*!< The LP UART hardware FIFO length */
 #define SOC_UART_BITRATE_MAX            (5000000)   /*!< Max bit rate supported by UART */

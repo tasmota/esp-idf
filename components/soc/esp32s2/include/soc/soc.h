@@ -25,7 +25,7 @@
 #define REG_I2S_BASE( i )       (DR_REG_I2S_BASE)
 #define REG_TIMG_BASE(i)        (DR_REG_TIMERGROUP0_BASE + (i)*0x1000)
 #define REG_SPI_MEM_BASE(i)     (DR_REG_SPI0_BASE - (i) * 0x1000)
-#define REG_SPI_BASE(i)         (((i)>=2) ? (DR_REG_SPI2_BASE + (i-2) * 0x1000) : (0))    // GPSPI2 and GPSPI3
+#define REG_SPI_BASE(i)         (DR_REG_SPI2_BASE + (((i)>3) ? (((i-2)* 0x1000) + 0x10000) : ((i - 2)* 0x1000 )))
 #define REG_I2C_BASE(i)         (DR_REG_I2C_EXT_BASE + (i) * 0x14000 )
 
 //Convenient way to replace the register ops when ulp riscv projects
@@ -146,6 +146,7 @@
 #define  CPU_CLK_FREQ_MHZ_BTLD                       (80)                 // The cpu clock frequency (in MHz) to set at 2nd stage bootloader system clock configuration
 #define  CPU_CLK_FREQ                                APB_CLK_FREQ
 #define  APB_CLK_FREQ                                ( 80*1000000 )       //unit: Hz
+#define  MODEM_REQUIRED_MIN_APB_CLK_FREQ             ( 80*1000000 )
 #define  REF_CLK_FREQ                                ( 1000000 )
 #define  UART_CLK_FREQ                               APB_CLK_FREQ
 #define  WDT_CLK_FREQ                                APB_CLK_FREQ

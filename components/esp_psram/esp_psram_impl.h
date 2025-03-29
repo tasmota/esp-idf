@@ -64,3 +64,7 @@ esp_err_t esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode);
  * @return psram CS IO
  */
 uint8_t esp_psram_impl_get_cs_io(void);
+
+#ifdef __cplusplus
+}
+#endif

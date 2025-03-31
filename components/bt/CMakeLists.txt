@@ -86,6 +86,7 @@ if(CONFIG_BT_ENABLED)
         elseif(CONFIG_IDF_TARGET_ESP32S3)
             list(APPEND ldscripts "linker_rw_bt_controller.lf")
         elseif(CONFIG_IDF_TARGET_ESP32C2)
+            list(APPEND srcs "controller/${target_name}/ble.c")
             if(CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY)
                 list(APPEND srcs "controller/esp32c2/dummy.c")
             endif()
@@ -456,6 +457,19 @@ if(CONFIG_BT_ENABLED)
 
         if(CONFIG_BLE_MESH)
             list(APPEND srcs "esp_ble_mesh/core/bluedroid_host/adapter.c")
+        endif()
+
+        if(CONFIG_BT_BLE_FEAT_ISO_EN)
+            list(APPEND srcs "host/bluedroid/stack/btm/btm_ble_iso.c"
+                            "host/bluedroid/btc/profile/std/iso/btc_iso_ble.c"
+                            "host/bluedroid/api/esp_ble_iso_api.c"
+                            "host/bluedroid/hci/ble_hci_iso.c")
+        endif()
+
+        if(CONFIG_BT_BLE_FEAT_CTE_EN)
+            list(APPEND srcs "host/bluedroid/stack/btm/btm_ble_cte.c"
+                            "host/bluedroid/btc/profile/std/cte/btc_ble_cte.c"
+                            "host/bluedroid/api/esp_ble_cte_api.c")
         endif()
 
     endif()

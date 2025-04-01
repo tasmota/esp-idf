@@ -1,6 +1,5 @@
 
 menu "HCI Config"
-
     choice BT_LE_HCI_INTERFACE
         prompt "HCI mode"
         default BT_LE_HCI_INTERFACE_USE_RAM
@@ -228,6 +227,16 @@ config BT_LE_POWER_CONTROL_ENABLED
     help
         Set this option to enable the Power Control feature on controller
 
+config BT_LE_CTE_FEATURE_ENABLED
+    bool "Enable Bluetooth LE Direction Finding (AoA/AoD)"
+    depends on BT_LE_50_FEATURE_SUPPORT && SOC_BLE_CTE_SUPPORTED
+    default n
+    help
+        Enable this option to activate Bluetooth LE Direction Finding (AoA/AoD) feature.
+        Note:
+        This feature allows devices to determine the direction of a Bluetooth CTE signal,
+        enabling Angle of Arrival (AoA) and Angle of Departure (AoD) functionality.
+
 menu "Memory Settings"
     depends on !BT_NIMBLE_ENABLED
 
@@ -434,6 +443,10 @@ menu "Controller debug features"
         default n
         help
             Retain scene with GDB to capture info, requires disabling WDT (CONFIG_ESP_INT_WDT, CONFIG_ESP_TASK_WDT_EN).
+
+    config BT_LE_PTR_CHECK_ENABLED
+        bool "Enable boundary check for internal memory"
+        default n
 endmenu
 
 config BT_LE_LL_RESOLV_LIST_SIZE

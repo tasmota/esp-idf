@@ -531,10 +531,11 @@ void btm_acl_device_down (void)
 *******************************************************************************/
 void btm_acl_update_busy_level (tBTM_BLI_EVENT event)
 {
-    tBTM_BL_UPDATE_DATA  evt;
-    UINT8 busy_level;
-    BTM_TRACE_DEBUG ("btm_acl_update_busy_level\n");
+    UINT8 busy_level_flags = 0;
     BOOLEAN old_inquiry_state = btm_cb.is_inquiry;
+
+    BTM_TRACE_DEBUG ("btm_acl_update_busy_level\n");
+
     switch (event) {
     case BTM_BLI_ACL_UP_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_ACL_UP_EVT\n");
@@ -545,30 +546,31 @@ void btm_acl_update_busy_level (tBTM_BLI_EVENT event)
     case BTM_BLI_PAGE_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_PAGE_EVT\n");
         btm_cb.is_paging = TRUE;
-        evt.busy_level_flags = BTM_BL_PAGING_STARTED;
+        busy_level_flags = BTM_BL_PAGING_STARTED;
         break;
     case BTM_BLI_PAGE_DONE_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_PAGE_DONE_EVT\n");
         btm_cb.is_paging = FALSE;
-        evt.busy_level_flags = BTM_BL_PAGING_COMPLETE;
+        busy_level_flags = BTM_BL_PAGING_COMPLETE;
         break;
     case BTM_BLI_INQ_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_INQ_EVT\n");
         btm_cb.is_inquiry = TRUE;
-        evt.busy_level_flags = BTM_BL_INQUIRY_STARTED;
+        busy_level_flags = BTM_BL_INQUIRY_STARTED;
         break;
     case BTM_BLI_INQ_CANCEL_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_INQ_CANCEL_EVT\n");
         btm_cb.is_inquiry = FALSE;
-        evt.busy_level_flags = BTM_BL_INQUIRY_CANCELLED;
+        busy_level_flags = BTM_BL_INQUIRY_CANCELLED;
         break;
     case BTM_BLI_INQ_DONE_EVT:
         BTM_TRACE_DEBUG ("BTM_BLI_INQ_DONE_EVT\n");
         btm_cb.is_inquiry = FALSE;
-        evt.busy_level_flags = BTM_BL_INQUIRY_COMPLETE;
+        busy_level_flags = BTM_BL_INQUIRY_COMPLETE;
         break;
     }
 
+    UINT8 busy_level;
     if (btm_cb.is_paging || btm_cb.is_inquiry) {
         busy_level = 10;
     } else {
@@ -576,8 +578,11 @@ void btm_acl_update_busy_level (tBTM_BLI_EVENT event)
     }
 
     if ((busy_level != btm_cb.busy_level) || (old_inquiry_state != btm_cb.is_inquiry)) {
-        evt.event         = BTM_BL_UPDATE_EVT;
-        evt.busy_level    = busy_level;
+        tBTM_BL_UPDATE_DATA evt = {
+            .event = BTM_BL_UPDATE_EVT,
+            .busy_level = busy_level,
+            .busy_level_flags = busy_level_flags,
+        };
         btm_cb.busy_level = busy_level;
         if (btm_cb.p_bl_changed_cb && (btm_cb.bl_evt_mask & BTM_BL_UPDATE_MASK)) {
             (*btm_cb.p_bl_changed_cb)((tBTM_BL_EVENT_DATA *)&evt);
@@ -2060,6 +2065,7 @@ tBTM_STATUS BTM_ReadLinkQuality (BD_ADDR remote_bda, tBTM_CMPL_CB *p_cb)
     return (BTM_UNKNOWN_ADDR);
 }
 
+#if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 /*******************************************************************************
 **
 ** Function         BTM_ReadTxPower
@@ -2116,6 +2122,7 @@ tBTM_STATUS BTM_ReadTxPower (BD_ADDR remote_bda, tBT_TRANSPORT transport, tBTM_C
     /* If here, no BD Addr found */
     return (BTM_UNKNOWN_ADDR);
 }
+#endif // #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 
 tBTM_STATUS BTM_SetAclPktTypes(BD_ADDR remote_bda, UINT16 pkt_types, tBTM_CMPL_CB *p_cb)
 {
@@ -2182,6 +2189,7 @@ void btm_acl_pkt_types_changed(UINT8 status, UINT16 handle, UINT16 pkt_types)
 }
 
 #if (BLE_INCLUDED == TRUE)
+#if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 tBTM_STATUS BTM_BleReadAdvTxPower(tBTM_CMPL_CB *p_cb)
 {
     BOOLEAN ret;
@@ -2208,6 +2216,7 @@ tBTM_STATUS BTM_BleReadAdvTxPower(tBTM_CMPL_CB *p_cb)
         return BTM_CMD_STARTED;
     }
 }
+#endif // #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 
 void BTM_BleGetWhiteListSize(uint16_t *length)
 {
@@ -2218,8 +2227,21 @@ void BTM_BleGetWhiteListSize(uint16_t *length)
     *length = p_cb->white_list_avail_size;
     return;
 }
+
+#if (BLE_50_EXTEND_SYNC_EN == TRUE)
+void BTM_BleGetPeriodicAdvListSize(uint8_t *size)
+{
+    tBTM_BLE_CB *p_cb = &btm_cb.ble_ctr_cb;
+    if (p_cb->periodic_adv_list_size == 0) {
+        BTM_TRACE_WARNING("%s Periodic Adv list is full.", __func__);
+    }
+    *size = p_cb->periodic_adv_list_size;
+}
+#endif  //#if (BLE_50_EXTEND_SYNC_EN == TRUE)
+
 #endif  ///BLE_INCLUDED == TRUE
 
+#if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 /*******************************************************************************
 **
 ** Function         btm_read_tx_power_complete
@@ -2273,6 +2295,7 @@ void btm_read_tx_power_complete (UINT8 *p, BOOLEAN is_ble)
         (*p_cb)(&results);
     }
 }
+#endif // #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
 
 /*******************************************************************************
 **

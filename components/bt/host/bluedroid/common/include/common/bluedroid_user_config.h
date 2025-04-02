@@ -73,6 +73,20 @@
 #define UC_BT_SDP_COMMON_ENABLED            FALSE
 #endif
 
+// SDP Pad Length
+#ifdef CONFIG_BT_SDP_PAD_LEN
+#define UC_SDP_MAX_PAD_LEN                  CONFIG_BT_SDP_PAD_LEN
+#else
+#define UC_SDP_MAX_PAD_LEN                  300
+#endif
+
+// SDP Max Attribute Length
+#ifdef CONFIG_BT_SDP_ATTR_LEN
+#define UC_SDP_MAX_ATTR_LEN                 CONFIG_BT_SDP_ATTR_LEN
+#else
+#define UC_SDP_MAX_ATTR_LEN                 300
+#endif
+
 //HFP(AG)
 #ifdef CONFIG_BT_HFP_AG_ENABLE
 #define UC_BT_HFP_AG_ENABLED                CONFIG_BT_HFP_AG_ENABLE
@@ -106,6 +120,13 @@
 #define UC_BT_HID_DEVICE_ENABLED           	CONFIG_BT_HID_DEVICE_ENABLED
 #else
 #define UC_BT_HID_DEVICE_ENABLED           	FALSE
+#endif
+
+//HID remove device bonding option
+#ifdef CONFIG_BT_HID_REMOVE_DEVICE_BONDING_ENABLED
+#define UC_BT_HID_REMOVE_DEVICE_BONDING_ENABLED         CONFIG_BT_HID_REMOVE_DEVICE_BONDING_ENABLED
+#else
+#define UC_BT_HID_REMOVE_DEVICE_BONDING_ENABLED         FALSE
 #endif
 
 //BQB(BT)
@@ -160,10 +181,58 @@
 #define UC_BT_BLE_42_FEATURES_SUPPORTED            FALSE
 #endif
 
+#ifdef CONFIG_BT_BLE_42_DTM_TEST_EN
+#define UC_BT_BLE_42_DTM_TEST_EN                   CONFIG_BT_BLE_42_DTM_TEST_EN
+#else
+#define UC_BT_BLE_42_DTM_TEST_EN                   FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_42_ADV_EN
+#define UC_BT_BLE_42_ADV_EN                   CONFIG_BT_BLE_42_ADV_EN
+#else
+#define UC_BT_BLE_42_ADV_EN                   FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_42_SCAN_EN
+#define UC_BT_BLE_42_SCAN_EN                   CONFIG_BT_BLE_42_SCAN_EN
+#else
+#define UC_BT_BLE_42_SCAN_EN                   FALSE
+#endif
+
 #ifdef CONFIG_BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER
 #define UC_BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER            CONFIG_BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER
 #else
 #define UC_BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_50_EXTEND_ADV_EN
+#define UC_BT_BLE_50_EXTEND_ADV_EN           CONFIG_BT_BLE_50_EXTEND_ADV_EN
+#else
+#define UC_BT_BLE_50_EXTEND_ADV_EN           FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_50_PERIODIC_ADV_EN
+#define UC_BT_BLE_50_PERIODIC_ADV_EN           CONFIG_BT_BLE_50_PERIODIC_ADV_EN
+#else
+#define UC_BT_BLE_50_PERIODIC_ADV_EN           FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_50_EXTEND_SCAN_EN
+#define UC_BT_BLE_50_EXTEND_SCAN_EN           CONFIG_BT_BLE_50_EXTEND_SCAN_EN
+#else
+#define UC_BT_BLE_50_EXTEND_SCAN_EN           FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_50_EXTEND_SYNC_EN
+#define UC_BT_BLE_50_EXTEND_SYNC_EN           CONFIG_BT_BLE_50_EXTEND_SYNC_EN
+#else
+#define UC_BT_BLE_50_EXTEND_SYNC_EN           FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_50_DTM_TEST_EN
+#define UC_BT_BLE_50_DTM_TEST_EN           CONFIG_BT_BLE_50_DTM_TEST_EN
+#else
+#define UC_BT_BLE_50_DTM_TEST_EN           FALSE
 #endif
 
 #ifdef CONFIG_BT_BLE_FEAT_PERIODIC_ADV_ENH
@@ -331,14 +400,6 @@
 #define UC_BT_BLE_ESTAB_LINK_CONN_TOUT          CONFIG_BT_BLE_ESTAB_LINK_CONN_TOUT
 #else
 #define UC_BT_BLE_ESTAB_LINK_CONN_TOUT          30
-#endif
-
-
-//HOST QUEUE CONGEST CHECK
-#ifdef CONFIG_BT_BLE_HOST_QUEUE_CONGESTION_CHECK
-#define UC_BT_BLE_HOST_QUEUE_CONGESTION_CHECK   CONFIG_BT_BLE_HOST_QUEUE_CONGESTION_CHECK
-#else
-#define UC_BT_BLE_HOST_QUEUE_CONGESTION_CHECK   FALSE
 #endif
 
 #ifdef CONFIG_BT_GATTS_PPCP_CHAR_GAP

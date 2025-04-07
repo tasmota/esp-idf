@@ -95,6 +95,7 @@ __attribute__((always_inline))
 inline static bool esp_ptr_in_diram_iram(const void *p) {
 // TODO: IDF-5980 esp32c6 D/I RAM share the same address
 #if SOC_DIRAM_IRAM_LOW == SOC_DIRAM_DRAM_LOW
+    (void)p;
     return false;
 #else
     return ((intptr_t)p >= SOC_DIRAM_IRAM_LOW && (intptr_t)p < SOC_DIRAM_IRAM_HIGH);
@@ -113,6 +114,7 @@ inline static bool esp_ptr_in_rtc_iram_fast(const void *p) {
 #if SOC_RTC_FAST_MEM_SUPPORTED
     return ((intptr_t)p >= SOC_RTC_IRAM_LOW && (intptr_t)p < SOC_RTC_IRAM_HIGH);
 #else
+    (void)p;
     return false;
 #endif
 }
@@ -129,6 +131,7 @@ inline static bool esp_ptr_in_rtc_dram_fast(const void *p) {
 #if SOC_RTC_FAST_MEM_SUPPORTED
     return ((intptr_t)p >= SOC_RTC_DRAM_LOW && (intptr_t)p < SOC_RTC_DRAM_HIGH);
 #else
+    (void)p;
     return false;
 #endif
 }
@@ -252,21 +255,7 @@ inline static bool esp_ptr_word_aligned(const void *p)
  *
  * @return true: is executable; false: not executable
  */
-__attribute__((always_inline))
-inline static bool esp_ptr_executable(const void *p)
-{
-    intptr_t ip = (intptr_t) p;
-    return (ip >= SOC_IROM_LOW && ip < SOC_IROM_HIGH)
-        || (ip >= SOC_IRAM_LOW && ip < SOC_IRAM_HIGH)
-        || (ip >= SOC_IROM_MASK_LOW && ip < SOC_IROM_MASK_HIGH)
-#if defined(SOC_CACHE_APP_LOW) && defined(CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE)
-        || (ip >= SOC_CACHE_APP_LOW && ip < SOC_CACHE_APP_HIGH)
-#endif
-#if SOC_RTC_FAST_MEM_SUPPORTED
-        || (ip >= SOC_RTC_IRAM_LOW && ip < SOC_RTC_IRAM_HIGH)
-#endif
-    ;
-}
+bool esp_ptr_executable(const void *p);
 
 /**
  * @brief Check if the pointer is byte accessible

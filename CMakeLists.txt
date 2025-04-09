@@ -179,6 +179,21 @@ if(CONFIG_COMPILER_DISABLE_GCC14_WARNINGS)
     list(APPEND compile_options "-Wno-calloc-transposed-args")
 endif()
 
+if(CONFIG_COMPILER_ENABLE_LTO)
+    set(CMAKE_AR ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar)
+    set(CMAKE_RANLIB ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib)
+    list(APPEND compile_options     "-flto=auto"
+                                    "-ffat-lto-objects"
+                                    "-flto-compression-level=9")
+    list(APPEND link_options        "-flto"
+                                    "-fuse-linker-plugin"
+                                    "-ffat-lto-objects"
+                                    "-flto-partition=max")
+else()
+    list(APPEND compile_options     "-fno-lto")
+    list(APPEND link_options        "-fno-lto")
+endif()
+
 if(CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
         idf_build_replace_option_from_property(COMPILE_OPTIONS "-Werror" "-Werror=all")
@@ -197,8 +212,6 @@ if(CONFIG_ESP_SYSTEM_USE_EH_FRAME)
   list(APPEND compile_options "-fasynchronous-unwind-tables")
   list(APPEND link_options "-Wl,--eh-frame-hdr")
 endif()
-
-list(APPEND link_options "-fno-lto")
 
 if(CONFIG_IDF_TARGET_LINUX AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
     # Not all versions of the MacOS linker support the -warn_commons flag.

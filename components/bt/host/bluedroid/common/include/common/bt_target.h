@@ -88,9 +88,14 @@
 #define BTC_AV_INCLUDED             TRUE
 #define BTA_AV_SINK_INCLUDED        TRUE
 #define BTC_AV_SINK_INCLUDED        TRUE
-#define SBC_DEC_INCLUDED            TRUE
 #define BTC_AV_SRC_INCLUDED         TRUE
+#if (UC_BT_A2DP_USE_EXTERNAL_CODEC == TRUE)
+#define BTC_AV_EXT_CODEC            TRUE
+#define BTA_AV_EXT_CODEC            TRUE
+#else
+#define SBC_DEC_INCLUDED            TRUE
 #define SBC_ENC_INCLUDED            TRUE
+#endif
 #if UC_BT_AVRCP_CT_COVER_ART_ENABLED
 #define BTA_AV_CA_INCLUDED          TRUE
 #define BTC_AV_CA_INCLUDED          TRUE
@@ -122,14 +127,22 @@
 #ifndef BTM_SCO_INCLUDED
 #define BTM_SCO_INCLUDED            TRUE
 #endif
+#if (UC_BT_HFP_AUDIO_DATA_PATH_HCI == TRUE)
+#if (UC_BT_HFP_USE_EXTERNAL_CODEC == TRUE)
+#define BTC_HFP_EXT_CODEC           TRUE
+#define BTA_HFP_EXT_CODEC           TRUE
+#define PLC_INCLUDED                FALSE
+#else
 #ifndef SBC_DEC_INCLUDED
 #define SBC_DEC_INCLUDED            TRUE
 #endif
 #ifndef SBC_ENC_INCLUDED
 #define SBC_ENC_INCLUDED            TRUE
 #endif
-#ifndef PLC_INCLUDED
 #define PLC_INCLUDED                TRUE
+#endif /* (UC_BT_HFP_USE_EXTERNAL_CODEC == TRUE) */
+#else
+#define PLC_INCLUDED                FALSE
 #endif
 
 #if (UC_BT_HFP_AG_ENABLED == TRUE)
@@ -306,6 +319,102 @@
 #define BLE_FEAT_CREATE_SYNC_ENH   FALSE
 #endif
 
+#if (UC_BT_BLE_FEAT_ISO_EN == TRUE)
+#define BLE_FEAT_ISO_EN     TRUE
+#else
+#define BLE_FEAT_ISO_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_ISO_60_EN == TRUE)
+#define BLE_FEAT_ISO_60_EN     TRUE
+#else
+#define BLE_FEAT_ISO_60_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_ISO_BIG_BROCASTER == TRUE)
+#define BLE_FEAT_ISO_BIG_BROCASTER_EN   TRUE
+#else
+#define BLE_FEAT_ISO_BIG_BROCASTER_EN   FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_ISO_BIG_SYNCER == TRUE)
+#define BLE_FEAT_ISO_BIG_SYNCER_EN   TRUE
+#else
+#define BLE_FEAT_ISO_BIG_SYNCER_EN   FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_ISO_CIG_CENTRAL == TRUE)
+#define BLE_FEAT_ISO_CIG_CENTRAL_EN   TRUE
+#else
+#define BLE_FEAT_ISO_CIG_CENTRAL_EN   FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_ISO_CIG_PERIPHERAL == TRUE)
+#define BLE_FEAT_ISO_CIG_PERIPHERAL_EN   TRUE
+#else
+#define BLE_FEAT_ISO_CIG_PERIPHERAL_EN   FALSE
+#endif
+
+#if ((BLE_FEAT_ISO_CIG_CENTRAL_EN == TRUE) || (BLE_FEAT_ISO_CIG_PERIPHERAL_EN == TRUE))
+#define BLE_FEAT_ISO_CIG_EN             TRUE
+#else
+#define BLE_FEAT_ISO_CIG_EN             FALSE
+#endif
+
+#ifdef UC_BT_BLE_ISO_CIS_MAX_COUNT
+#define BLE_ISO_CIS_MAX_COUNT   UC_BT_BLE_ISO_CIS_MAX_COUNT
+#else
+#define BLE_ISO_CIS_MAX_COUNT   (0)
+#endif
+
+#ifdef CONFIG_BT_BLE_ISO_BIS_MAX_COUNT
+#define BLE_ISO_BIS_MAX_COUNT   CONFIG_BT_BLE_ISO_BIS_MAX_COUNT
+#else
+#define BLE_ISO_BIS_MAX_COUNT   (0)
+#endif
+
+#ifdef UC_BT_BLE_ISO_STD_FLOW_CTRL
+#define BLE_ISO_STD_FLOW_CTRL        TRUE
+#endif
+
+#ifdef UC_BT_BLE_ISO_NON_STD_FLOW_CTRL
+#define BLE_ISO_NON_STD_FLOW_CTRL        TRUE
+#endif
+
+#if ((UC_BT_BLE_ISO_STD_FLOW_CTRL == TRUE) && (UC_BT_BLE_ISO_NON_STD_FLOW_CTRL == TRUE))
+#error "Only one of standard or non-standard can be enabled"
+#endif
+
+#if (UC_BT_BLE_FEAT_CTE_EN == TRUE)
+#define BLE_FEAT_CTE_EN     TRUE
+#else
+#define BLE_FEAT_CTE_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_CTE_CONNECTIONLESS_EN == TRUE)
+#define BLE_FEAT_CTE_CONNECTIONLESS_EN     TRUE
+#else
+#define BLE_FEAT_CTE_CONNECTIONLESS_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_CTE_CONNECTION_EN == TRUE)
+#define BLE_FEAT_CTE_CONNECTION_EN     TRUE
+#else
+#define BLE_FEAT_CTE_CONNECTION_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_POWER_CONTROL == TRUE)
+#define BLE_FEAT_POWER_CONTROL_EN     TRUE
+#else
+#define BLE_FEAT_POWER_CONTROL_EN     FALSE
+#endif
+
+#if (UC_BT_BLE_FEAT_CONN_SUBRATING == TRUE)
+#define BLE_FEAT_CONN_SUBRATING     TRUE
+#else
+#define BLE_FEAT_CONN_SUBRATING     FALSE
+#endif
+
 #if (UC_BT_BLE_HIGH_DUTY_ADV_INTERVAL == TRUE)
 #define BLE_HIGH_DUTY_ADV_INTERVAL TRUE
 #else
@@ -473,6 +582,10 @@
 #define BTC_AV_SRC_INCLUDED FALSE
 #endif
 
+#ifndef BTC_AV_EXT_CODEC
+#define BTC_AV_EXT_CODEC FALSE
+#endif
+
 #ifndef BTC_SPP_INCLUDED
 #define BTC_SPP_INCLUDED FALSE
 #endif
@@ -495,6 +608,10 @@
 
 #ifndef SBC_ENC_INCLUDED
 #define SBC_ENC_INCLUDED FALSE
+#endif
+
+#ifndef BTC_HFP_EXT_CODEC
+#define BTC_HFP_EXT_CODEC FALSE
 #endif
 
 /******************************************************************************
@@ -546,6 +663,10 @@
 #define BTA_AV_CA_INCLUDED FALSE
 #endif
 
+#ifndef BTA_AV_EXT_CODEC
+#define BTA_AV_EXT_CODEC FALSE
+#endif
+
 #ifndef BTA_AV_SINK_INCLUDED
 #define BTA_AV_SINK_INCLUDED FALSE
 #endif
@@ -556,6 +677,10 @@
 
 #ifndef BTA_SDP_INCLUDED
 #define BTA_SDP_INCLUDED FALSE
+#endif
+
+#ifndef BTA_HFP_EXT_CODEC
+#define BTA_HFP_EXT_CODEC FALSE
 #endif
 
 /* This is set to enable use of GAP L2CAP connections. */
@@ -1004,9 +1129,95 @@
 #define BTM_SEC_MAX_DEVICE_RECORDS  UC_BT_SMP_MAX_BONDS
 #endif
 
-/* The number of security records for services. 32 AS Default*/
+#if BTA_SDP_INCLUDED
+#define BTM_SDP_SEC_SERVICE_RECORDS 1
+#else
+#define BTM_SDP_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BTA_AG_INCLUDED
+#define BTM_AG_SEC_SERVICE_RECORDS 1
+#else
+#define BTM_AG_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BTA_HF_INCLUDED
+#define BTM_HF_SEC_SERVICE_RECORDS 1
+#else
+#define BTM_HF_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BTA_JV_INCLUDED
+#define BTM_JV_SEC_SERVICE_RECORDS (MAX_RFC_PORTS - BTM_HF_SEC_SERVICE_RECORDS - BTM_AG_SEC_SERVICE_RECORDS)
+#else
+#define BTM_JV_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BTA_PBA_CLIENT_INCLUDED
+#define BTM_PBA_SEC_SERVICE_RECORDS 2
+#else
+#define BTM_PBA_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BTA_AV_CA_INCLUDED
+#define BTM_AC_VA_SEC_SERVICE_RECORDS 1
+#else
+#define BTM_AC_VA_SEC_SERVICE_RECORDS 0
+#endif
+
+#if AVCT_INCLUDED
+#if AVCT_BROWSE_INCLUDED
+#define BTM_AVCT_SEC_SERVICE_RECORDS 2
+#else
+#define BTM_AVCT_SEC_SERVICE_RECORDS 1
+#endif // AVCT_BROWSE_INCLUDED
+#else
+#define BTM_AVCT_SEC_SERVICE_RECORDS 0
+#endif
+
+#if AVDT_INCLUDED
+#if AVDT_REPORTING
+#define BTM_AVDT_SEC_SERVICE_RECORDS 3
+#else
+#define BTM_AVDT_SEC_SERVICE_RECORDS 2
+#endif // AVDT_INCLUDED
+#else
+#define BTM_AVDT_SEC_SERVICE_RECORDS 0
+#endif
+
+#if GAP_CONN_INCLUDED
+#define BTM_GAP_SEC_SERVICE_RECORDS GAP_MAX_CONNECTIONS
+#else
+#define BTM_GAP_SEC_SERVICE_RECORDS 0
+#endif
+
+#if HID_DEV_INCLUDED
+#define BTM_HIDD_SEC_SERVICE_RECORDS 3
+#else
+#define BTM_HIDD_SEC_SERVICE_RECORDS 0
+#endif
+
+#if HID_HOST_INCLUDED
+#define BTM_HIDH_SEC_SERVICE_RECORDS 3
+#else
+#define BTM_HIDH_SEC_SERVICE_RECORDS 0
+#endif
+
+#if BLE_INCLUDED
+#define BTM_GATT_SEC_SERVICE_RECORDS 1
+#else
+#define BTM_GATT_SEC_SERVICE_RECORDS 0
+#endif
+
+#define BTM_SEC_DEV_SERVICE_RECORDS  1
+
+/* The number of security records for services. */
 #ifndef BTM_SEC_MAX_SERVICE_RECORDS
-#define BTM_SEC_MAX_SERVICE_RECORDS 32
+#define BTM_SEC_MAX_SERVICE_RECORDS (BTM_SDP_SEC_SERVICE_RECORDS + BTM_AG_SEC_SERVICE_RECORDS     \
+   + BTM_AVCT_SEC_SERVICE_RECORDS + BTM_AVDT_SEC_SERVICE_RECORDS + BTM_GAP_SEC_SERVICE_RECORDS    \
+   + BTM_HIDD_SEC_SERVICE_RECORDS  + BTM_GATT_SEC_SERVICE_RECORDS + BTM_PBA_SEC_SERVICE_RECORDS   \
+   + BTM_HIDH_SEC_SERVICE_RECORDS + BTM_SEC_DEV_SERVICE_RECORDS + BTM_HF_SEC_SERVICE_RECORDS      \
+   + BTM_JV_SEC_SERVICE_RECORDS + BTM_AC_VA_SEC_SERVICE_RECORDS )
 #endif
 
 /* If True, force a retrieval of remote device name for each bond in case it's changed */

@@ -40,7 +40,7 @@
 #define PARLIO_INTR_ALLOC_FLAG_SHARED 0
 #endif
 
-#if CONFIG_PARLIO_TX_CACHE_SAFE
+#if CONFIG_PARLIO_TX_ISR_CACHE_SAFE
 #define PARLIO_TX_INTR_ALLOC_FLAG   (ESP_INTR_FLAG_LOWMED | PARLIO_INTR_ALLOC_FLAG_SHARED | ESP_INTR_FLAG_IRAM)
 #else
 #define PARLIO_TX_INTR_ALLOC_FLAG   (ESP_INTR_FLAG_LOWMED | PARLIO_INTR_ALLOC_FLAG_SHARED)
@@ -60,6 +60,9 @@ typedef dma_descriptor_align8_t     parlio_dma_desc_t;
 #define PARLIO_GDMA_NEW_CHANNEL     gdma_new_axi_channel
 #endif
 #endif // defined(SOC_GDMA_TRIG_PERIPH_PARLIO0_BUS)
+
+// loop transmission requires ping-pong link to prevent data tearing.
+#define PARLIO_DMA_LINK_NUM         2
 
 #if SOC_PERIPH_CLK_CTRL_SHARED
 #define PARLIO_CLOCK_SRC_ATOMIC() PERIPH_RCC_ATOMIC()

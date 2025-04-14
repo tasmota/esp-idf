@@ -40,9 +40,6 @@
 #include "ap/sta_info.h"
 #include "wps/wps_defs.h"
 #include "wps/wps.h"
-#if CONFIG_ESP_WIFI_ENABLE_ROAMING_APP
-#include "esp_roaming.h"
-#endif
 #include "rsn_supp/pmksa_cache.h"
 
 #ifdef CONFIG_DPP
@@ -53,6 +50,7 @@
 bool g_wpa_pmk_caching_disabled = 0;
 const wifi_osi_funcs_t *wifi_funcs;
 struct wpa_funcs *wpa_cb;
+bool g_wpa_config_changed;
 
 void  wpa_install_key(enum wpa_alg alg, u8 *addr, int key_idx, int set_tx,
                       u8 *seq, size_t seq_len, u8 *key, size_t key_len, enum key_flag key_flag)
@@ -229,11 +227,22 @@ int dpp_connect(uint8_t *bssid, bool pdr_done)
 }
 #endif
 
+static void wpa_config_reload(void)
+{
+    struct wpa_sm *sm = &gWpaSm;
+    wpa_sm_pmksa_cache_flush(sm, NULL);
+}
+
 int wpa_sta_connect(uint8_t *bssid)
 {
     /* use this API to set AP specific IEs during connection */
     int ret = 0;
     ret = wpa_config_profile(bssid);
+
+    if (g_wpa_config_changed) {
+        wpa_config_reload();
+        g_wpa_config_changed = false;
+    }
     if (ret == 0) {
         ret = wpa_config_bss(bssid);
         if (ret) {
@@ -446,12 +455,6 @@ fail:
     return false;
 }
 #endif
-
-static void wpa_config_reload(void)
-{
-    struct wpa_sm *sm = &gWpaSm;
-    wpa_sm_pmksa_cache_flush(sm, NULL);
-}
 
 int esp_supplicant_init(void)
 {

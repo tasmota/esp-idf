@@ -468,6 +468,19 @@ if(CONFIG_BT_ENABLED)
             list(APPEND srcs "esp_ble_mesh/core/bluedroid_host/adapter.c")
         endif()
 
+        if(CONFIG_BT_BLE_FEAT_ISO_EN)
+            list(APPEND srcs "host/bluedroid/stack/btm/btm_ble_iso.c"
+                            "host/bluedroid/btc/profile/std/iso/btc_iso_ble.c"
+                            "host/bluedroid/api/esp_ble_iso_api.c"
+                            "host/bluedroid/hci/ble_hci_iso.c")
+        endif()
+
+        if(CONFIG_BT_BLE_FEAT_CTE_EN)
+            list(APPEND srcs "host/bluedroid/stack/btm/btm_ble_cte.c"
+                            "host/bluedroid/btc/profile/std/cte/btc_ble_cte.c"
+                            "host/bluedroid/api/esp_ble_cte_api.c")
+        endif()
+
     endif()
 
     if(CONFIG_BLE_MESH)
@@ -645,23 +658,25 @@ if(CONFIG_BT_ENABLED)
 
     if(NOT (CONFIG_BT_LE_CRYPTO_STACK_MBEDTLS OR CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS))
         list(APPEND include_dirs
-                porting/ext/tinycrypt/include
+                common/tinycrypt/include
+                common/tinycrypt/port
             )
-        list(APPEND srcs "porting/ext/tinycrypt/src/utils.c"
-                "porting/ext/tinycrypt/src/sha256.c"
-                "porting/ext/tinycrypt/src/ecc.c"
-                "porting/ext/tinycrypt/src/ctr_prng.c"
-                "porting/ext/tinycrypt/src/ctr_mode.c"
-                "porting/ext/tinycrypt/src/aes_decrypt.c"
-                "porting/ext/tinycrypt/src/aes_encrypt.c"
-                "porting/ext/tinycrypt/src/ccm_mode.c"
-                "porting/ext/tinycrypt/src/ecc_dsa.c"
-                "porting/ext/tinycrypt/src/cmac_mode.c"
-                "porting/ext/tinycrypt/src/ecc_dh.c"
-                "porting/ext/tinycrypt/src/hmac_prng.c"
-                "porting/ext/tinycrypt/src/ecc_platform_specific.c"
-                "porting/ext/tinycrypt/src/hmac.c"
-                "porting/ext/tinycrypt/src/cbc_mode.c")
+        list(APPEND srcs "common/tinycrypt/src/utils.c"
+                "common/tinycrypt/src/sha256.c"
+                "common/tinycrypt/src/ecc.c"
+                "common/tinycrypt/src/ctr_prng.c"
+                "common/tinycrypt/src/ctr_mode.c"
+                "common/tinycrypt/src/aes_decrypt.c"
+                "common/tinycrypt/src/aes_encrypt.c"
+                "common/tinycrypt/src/ccm_mode.c"
+                "common/tinycrypt/src/ecc_dsa.c"
+                "common/tinycrypt/src/cmac_mode.c"
+                "common/tinycrypt/src/ecc_dh.c"
+                "common/tinycrypt/src/hmac_prng.c"
+                "common/tinycrypt/src/ecc_platform_specific.c"
+                "common/tinycrypt/src/hmac.c"
+                "common/tinycrypt/src/cbc_mode.c"
+                "common/tinycrypt/port/esp_tinycrypt_port.c")
     endif()
 
     if(CONFIG_BT_NIMBLE_ENABLED)

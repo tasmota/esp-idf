@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -276,7 +276,12 @@ void rtc_clk_32k_enable(bool en);
 void rtc_clk_32k_enable_external(void);
 
 /**
- * @brief Get the state of 32k XTAL oscillator
+ * @brief Disable 32 kHz XTAL oscillator input.
+ */
+void rtc_clk_32k_disable_external(void);
+
+/**
+ * @brief Get the state of 32k XTAL oscillators
  * @return true if 32k XTAL oscillator has been enabled
  */
 bool rtc_clk_32k_enabled(void);
@@ -541,6 +546,14 @@ bool rtc_dig_8m_enabled(void);
  * @return Frequency of the clock in Hz
  */
 uint32_t rtc_clk_freq_cal(uint32_t cal_val);
+
+/**
+ * @brief Calculate the slow clock period value by slow clock frequency
+ *
+ * @param freq_hz Frequency of the slow clock in Hz
+ * @return Fixed point value of slow clock period in microseconds
+ */
+uint32_t rtc_clk_freq_to_period(uint32_t freq_hz);
 
 /**
  * @brief Power up flags for rtc_sleep_pd function

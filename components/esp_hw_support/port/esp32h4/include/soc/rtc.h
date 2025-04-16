@@ -208,6 +208,11 @@ void rtc_clk_32k_enable(bool en);
 void rtc_clk_32k_enable_external(void);
 
 /**
+ * @brief Disable 32 kHz XTAL oscillator input.
+ */
+void rtc_clk_32k_disable_external(void);
+
+/**
  * @brief Get the state of 32k XTAL oscillator
  * @return true if 32k XTAL oscillator has been enabled
  */
@@ -442,6 +447,14 @@ bool rtc_dig_8m_enabled(void);
  * @return Frequency of the clock in Hz
  */
 uint32_t rtc_clk_freq_cal(uint32_t cal_val);
+
+/**
+ * @brief Calculate the slow clock period value by slow clock frequency
+ *
+ * @param freq_hz Frequency of the slow clock in Hz
+ * @return Fixed point value of slow clock period in microseconds
+ */
+uint32_t rtc_clk_freq_to_period(uint32_t freq_hz);
 
 #ifdef __cplusplus
 }

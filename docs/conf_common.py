@@ -17,6 +17,8 @@ if os.environ.get('IDF_PATH') is None:
     raise RuntimeError('IDF_PATH should be set, run export.sh before building docs')
 
 BT_DOCS = [
+    'api-guides/bt-architecture/index.rst',
+    'api-guides/bt-architecture/overview.rst',
     'api-reference/bluetooth/esp_bt_defs.rst',
     'api-reference/bluetooth/esp_bt_device.rst',
     'api-reference/bluetooth/esp_bt_main.rst',
@@ -36,6 +38,7 @@ BLE_DOCS = [
     'api-guides/ble/get-started/ble-device-discovery.rst',
     'api-guides/ble/get-started/ble-connection.rst',
     'api-guides/ble/get-started/ble-data-exchange.rst',
+    'api-guides/ble/smp.rst',
     'api-reference/bluetooth/bt_le.rst',
     'api-reference/bluetooth/esp_gap_ble.rst',
     'api-reference/bluetooth/esp_gatt_defs.rst',
@@ -58,6 +61,7 @@ BLE_MESH_DOCS = [
 CLASSIC_BT_DOCS = [
     'api-guides/classic-bt/index.rst',
     'api-guides/classic-bt/overview.rst',
+    'api-guides/classic-bt/profiles-protocols.rst',
     'api-reference/bluetooth/classic_bt.rst',
     'api-reference/bluetooth/esp_a2dp.rst',
     'api-reference/bluetooth/esp_avrc.rst',
@@ -238,7 +242,6 @@ ESP32_DOCS = (
         'api-guides/romconsole.rst',
         'api-reference/system/ipc.rst',
         'security/secure-boot-v1.rst',
-        'api-reference/peripherals/dac.rst',
         'api-reference/peripherals/sd_pullup_requirements.rst',
         'hw-reference/esp32/**',
         'api-guides/RF_calibration.rst',
@@ -253,8 +256,6 @@ ESP32S2_DOCS = (
         'hw-reference/esp32s2/**',
         'api-guides/usb-console.rst',
         'api-reference/peripherals/ds.rst',
-        'api-reference/peripherals/temp_sensor.rst',
-        'api-reference/system/async_memcpy.rst',
         'api-reference/peripherals/touch_element.rst',
         'api-guides/RF_calibration.rst',
         'api-guides/phy.rst',
@@ -270,6 +271,7 @@ ESP32S3_DOCS = (
         'api-reference/system/ipc.rst',
         'api-guides/flash_psram_config.rst',
         'api-reference/peripherals/sd_pullup_requirements.rst',
+        'api-reference/peripherals/touch_element.rst',
         'api-guides/RF_calibration.rst',
         'api-guides/phy.rst',
     ]
@@ -450,6 +452,7 @@ with open('../page_redirects.txt') as f:
 html_redirect_pages = [tuple(line.split(' ')) for line in lines]
 
 html_static_path = ['../_static']
+html_css_files = ['js/chatbot_widget.css']
 
 idf_build_system = {
     'doxygen_component_info': True,

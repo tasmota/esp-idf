@@ -707,7 +707,7 @@ FORCE_INLINE_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool dee
 #endif
     }
 
-    if (!(deep_sleep && (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] != 0))){
+    if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] == 0) {
         // TODO: IDF-7370
         sar_periph_ctrl_power_disable();
     }
@@ -737,7 +737,9 @@ FORCE_INLINE_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
         sleep_usb_otg_phy_restore();
     }
 #endif
-    sar_periph_ctrl_power_enable();
+    if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] == 0) {
+        sar_periph_ctrl_power_enable();
+    }
 #if CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP && SOC_PM_CPU_RETENTION_BY_RTCCNTL
     sleep_disable_cpu_retention();
 #endif
@@ -2315,7 +2317,9 @@ FORCE_INLINE_ATTR bool top_domain_pd_allowed(void) {
 #if SOC_PM_SUPPORT_MODEM_PD
     top_pd_allowed &= modem_domain_pd_allowed();
 #endif
+#if SOC_XTAL_CLOCK_PATH_DEPENDS_ON_TOP_DOMAIN
     top_pd_allowed &= (s_config.domain[ESP_PD_DOMAIN_XTAL].pd_option != ESP_PD_OPTION_ON);
+#endif
 
     return top_pd_allowed;
 }

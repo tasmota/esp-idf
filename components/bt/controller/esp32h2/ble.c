@@ -38,10 +38,15 @@ void pcl_stack_enableSetRssiThreshVsCmd(bool en);
 void chanSel_stack_enableSetCsaVsCmd(bool en);
 void log_stack_enableLogsRelatedVsCmd(bool en);
 void hci_stack_enableSetVsEvtMaskVsCmd(bool en);
+void winWiden_stack_enableSetConstPeerScaVsCmd(bool en);
 
 void adv_stack_enableScanReqRxdVsEvent(bool en);
 void conn_stack_enableChanMapUpdCompVsEvent(bool en);
+void sleep_stack_enableWakeupVsEvent(bool en);
 #endif // (CONFIG_BT_NIMBLE_ENABLED || CONFIG_BT_BLUEDROID_ENABLED)
+#if CONFIG_BT_LE_RXBUF_OPT_ENABLED
+extern void mmgmt_enableRxbufOptFeature(void);
+#endif // CONFIG_BT_LE_RXBUF_OPT_ENABLED
 
 /* Local functions definition
  ***************************************************************************
@@ -57,12 +62,17 @@ void ble_stack_enableVsCmds(bool en)
     chanSel_stack_enableSetCsaVsCmd(en);
     log_stack_enableLogsRelatedVsCmd(en);
     hci_stack_enableSetVsEvtMaskVsCmd(en);
+    winWiden_stack_enableSetConstPeerScaVsCmd(en);
 }
 
 void ble_stack_enableVsEvents(bool en)
 {
     adv_stack_enableScanReqRxdVsEvent(en);
     conn_stack_enableChanMapUpdCompVsEvent(en);
+
+#if CONFIG_BT_LE_SLEEP_ENABLE
+    sleep_stack_enableWakeupVsEvent(en);
+#endif // CONFIG_BT_LE_SLEEP_ENABLE
 }
 #endif // (CONFIG_BT_NIMBLE_ENABLED || CONFIG_BT_BLUEDROID_ENABLED)
 
@@ -129,6 +139,10 @@ int ble_stack_enable(void)
     ble_stack_enableVsCmds(true);
     ble_stack_enableVsEvents(true);
 #endif // (CONFIG_BT_NIMBLE_ENABLED || CONFIG_BT_BLUEDROID_ENABLED)
+
+#if CONFIG_BT_LE_RXBUF_OPT_ENABLED
+    mmgmt_enableRxbufOptFeature();
+#endif // CONFIG_BT_LE_RXBUF_OPT_ENABLED
 
     return 0;
 }

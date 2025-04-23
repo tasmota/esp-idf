@@ -57,6 +57,9 @@ static esp_err_t rmt_rx_init_dma_link(rmt_rx_channel_t *rx_channel, const rmt_rx
 {
     gdma_channel_alloc_config_t dma_chan_config = {
         .direction = GDMA_CHANNEL_DIRECTION_RX,
+#if CONFIG_RMT_ISR_IRAM_SAFE
+        .flags.isr_cache_safe = true,
+#endif
     };
     ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_chan_config, &rx_channel->base.dma_chan), TAG, "allocate RX DMA channel failed");
     gdma_transfer_config_t transfer_cfg = {
@@ -408,7 +411,7 @@ esp_err_t rmt_receive(rmt_channel_handle_t channel, void *buffer, size_t buffer_
 
     // check if we're in a proper state to start the receiver
     rmt_fsm_t expected_fsm = RMT_FSM_ENABLE;
-    ESP_RETURN_ON_FALSE_ISR(atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_RUN_WAIT),
+    ESP_RETURN_ON_FALSE_ISR(atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_WAIT),
                             ESP_ERR_INVALID_STATE, TAG, "channel not in enable state");
 
     // fill in the transaction descriptor
@@ -502,7 +505,7 @@ static esp_err_t rmt_rx_enable(rmt_channel_handle_t channel)
 {
     // can only enable the channel when it's in "init" state
     rmt_fsm_t expected_fsm = RMT_FSM_INIT;
-    ESP_RETURN_ON_FALSE(atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_ENABLE_WAIT),
+    ESP_RETURN_ON_FALSE(atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_WAIT),
                         ESP_ERR_INVALID_STATE, TAG, "channel not in init state");
 
     rmt_group_t *group = channel->group;
@@ -538,11 +541,11 @@ static esp_err_t rmt_rx_disable(rmt_channel_handle_t channel)
     // can disable the channel when it's in `enable` or `run` state
     bool valid_state = false;
     rmt_fsm_t expected_fsm = RMT_FSM_ENABLE;
-    if (atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_INIT_WAIT)) {
+    if (atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_WAIT)) {
         valid_state = true;
     }
     expected_fsm = RMT_FSM_RUN;
-    if (atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_INIT_WAIT)) {
+    if (atomic_compare_exchange_strong(&channel->fsm, &expected_fsm, RMT_FSM_WAIT)) {
         valid_state = true;
     }
     ESP_RETURN_ON_FALSE(valid_state, ESP_ERR_INVALID_STATE, TAG, "channel not in enable or run state");

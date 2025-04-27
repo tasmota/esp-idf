@@ -92,6 +92,9 @@ typedef enum {
     ESP_SLEEP_CLOCK_LEDC,   //!< The clock ICG cell mapping of LEDC
     ESP_SLEEP_CLOCK_UART0,   //!< The clock ICG cell mapping of UART0
     ESP_SLEEP_CLOCK_UART1,   //!< The clock ICG cell mapping of UART1
+#if SOC_UART_HP_NUM > 2
+    ESP_SLEEP_CLOCK_UART2,   //!< The clock ICG cell mapping of UART2
+#endif
     ESP_SLEEP_CLOCK_MAX     //!< Number of ICG cells
 } esp_sleep_clock_t;
 
@@ -157,6 +160,15 @@ void esp_sleep_mmu_retention(bool backup_or_restore);
  */
 bool mmu_domain_pd_allowed(void);
 #endif
+
+/**
+ * @brief Notify the sleep process that `sleep_time_overhead_out` needs to be remeasured, which must be called
+ *        in the following scenarios:
+ *        1. When the CPU frequency changes to below the crystal oscillator frequency.
+ *        2. When a new callback function is registered in the sleep process.
+ *        3. Other events occur that affect the execution time of the CPU sleep process.
+ */
+void esp_sleep_overhead_out_time_refresh(void);
 
 #ifdef __cplusplus
 }

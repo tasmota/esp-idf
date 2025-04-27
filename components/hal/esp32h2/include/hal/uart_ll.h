@@ -28,6 +28,8 @@ extern "C" {
 #define UART_LL_FIFO_DEF_LEN  (SOC_UART_FIFO_LEN)
 // Get UART hardware instance with giving uart num
 #define UART_LL_GET_HW(num) (((num) == UART_NUM_0) ? (&UART0) : (&UART1))
+// Get UART sleep clock with giving uart num
+#define UART_LL_SLEEP_CLOCK(num) (((num) == UART_NUM_0) ? (ESP_SLEEP_CLOCK_UART0) : (ESP_SLEEP_CLOCK_UART1))
 
 #define UART_LL_PULSE_TICK_CNT_MAX          UART_LOWPULSE_MIN_CNT_V
 
@@ -368,7 +370,7 @@ FORCE_INLINE_ATTR uint32_t uart_ll_get_intr_ena_status(uart_dev_t *hw)
 FORCE_INLINE_ATTR void uart_ll_read_rxfifo(uart_dev_t *hw, uint8_t *buf, uint32_t rd_len)
 {
     for (int i = 0; i < (int)rd_len; i++) {
-        buf[i] = hw->fifo.rxfifo_rd_byte;
+        buf[i] = hw->fifo.val;
     }
 }
 

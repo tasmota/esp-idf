@@ -105,7 +105,7 @@ int sha512_vector(size_t num_elem, const u8 *addr[], const size_t *len,
     return digest_vector(MBEDTLS_MD_SHA512, num_elem, addr, len, mac);
 }
 
-#if CONFIG_MBEDTLS_SHA1_C || CONFIG_MBEDTLS_HARDWARE_SHA
+#if defined(CONFIG_MBEDTLS_SHA1_C) || defined(CONFIG_MBEDTLS_HARDWARE_SHA)
 int sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
 #if defined(MBEDTLS_SHA1_C)
@@ -388,7 +388,7 @@ int hmac_md5(const u8 *key, size_t key_len, const u8 *data, size_t data_len,
     return hmac_md5_vector(key, key_len, 1, &data, &data_len, mac);
 }
 
-#ifdef MBEDTLS_SHA1_C
+#if defined(CONFIG_MBEDTLS_SHA1_C)
 int hmac_sha1_vector(const u8 *key, size_t key_len, size_t num_elem,
                      const u8 *addr[], const size_t *len, u8 *mac)
 {

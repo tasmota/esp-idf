@@ -7,7 +7,6 @@
 #include "esp_system.h"
 #endif
 
-#include <errno.h>
 #include "utils/includes.h"
 #include "utils/common.h"
 #include "crypto.h"
@@ -105,12 +104,11 @@ int sha512_vector(size_t num_elem, const u8 *addr[], const size_t *len,
     return digest_vector(MBEDTLS_MD_SHA512, num_elem, addr, len, mac);
 }
 
-#if defined(CONFIG_MBEDTLS_SHA1_C) || defined(CONFIG_MBEDTLS_HARDWARE_SHA)
 int sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
-#if defined(CONFIG_MBEDTLS_SHA1_C)
+#if defined(MBEDTLS_SHA1_C)
     return digest_vector(MBEDTLS_MD_SHA1, num_elem, addr, len, mac);
-#elif defined(CONFIG_MBEDTLS_SHA1_ALT)
+#elif defined(MBEDTLS_SHA1_ALT)
     mbedtls_sha1_context ctx;
     size_t i;
     int ret;
@@ -131,7 +129,6 @@ exit:
     return -ENOTSUP;
 #endif
 }
-#endif
 
 int md5_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
@@ -388,7 +385,7 @@ int hmac_md5(const u8 *key, size_t key_len, const u8 *data, size_t data_len,
     return hmac_md5_vector(key, key_len, 1, &data, &data_len, mac);
 }
 
-#if defined(CONFIG_MBEDTLS_SHA1_C)
+#ifdef MBEDTLS_SHA1_C
 int hmac_sha1_vector(const u8 *key, size_t key_len, size_t num_elem,
                      const u8 *addr[], const size_t *len, u8 *mac)
 {
@@ -775,7 +772,6 @@ cleanup:
     return ret;
 }
 
-#if defined(CONFIG_MBEDTLS_SHA1_C) || defined(CONFIG_MBEDTLS_HARDWARE_SHA)
 int pbkdf2_sha1(const char *passphrase, const u8 *ssid, size_t ssid_len,
                 int iterations, u8 *buf, size_t buflen)
 {
@@ -803,7 +799,6 @@ cleanup:
     return ret;
 #endif
 }
-#endif /* defined(CONFIG_MBEDTLS_SHA1_C) || defined(CONFIG_MBEDTLS_HARDWARE_SHA) */
 
 #ifdef MBEDTLS_DES_C
 int des_encrypt(const u8 *clear, const u8 *key, u8 *cypher)

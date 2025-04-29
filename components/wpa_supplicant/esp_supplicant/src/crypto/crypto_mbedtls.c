@@ -108,9 +108,9 @@ int sha512_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 #if defined(CONFIG_MBEDTLS_SHA1_C) || defined(CONFIG_MBEDTLS_HARDWARE_SHA)
 int sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 {
-#if defined(MBEDTLS_SHA1_C)
+#if defined(CONFIG_MBEDTLS_SHA1_C)
     return digest_vector(MBEDTLS_MD_SHA1, num_elem, addr, len, mac);
-#elif defined(MBEDTLS_SHA1_ALT)
+#elif defined(CONFIG_MBEDTLS_SHA1_ALT)
     mbedtls_sha1_context ctx;
     size_t i;
     int ret;

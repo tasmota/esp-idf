@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -242,7 +242,7 @@ typedef enum {
         .smi_gpio =                                                           \
         {                                                                     \
             .mdc_num = 31,                                                    \
-            .mdio_num = 27                                                    \
+            .mdio_num = 52                                                    \
         },                                                                    \
         .interface = EMAC_DATA_INTERFACE_RMII,                                \
         .clock_config =                                                       \
@@ -251,14 +251,6 @@ typedef enum {
             {                                                                 \
                 .clock_mode = EMAC_CLK_EXT_IN,                                \
                 .clock_gpio = (emac_rmii_clock_gpio_t) 50                     \
-            }                                                                 \
-        },                                                                    \
-        .clock_config_out_in =                                                \
-        {                                                                     \
-            .rmii =                                                           \
-            {                                                                 \
-                .clock_mode = EMAC_CLK_EXT_IN,                                \
-                .clock_gpio = (emac_rmii_clock_gpio_t) -1                     \
             }                                                                 \
         },                                                                    \
         .dma_burst_len = ETH_DMA_BURST_LEN_32,                                \
@@ -273,6 +265,14 @@ typedef enum {
                 .crs_dv_num = 28,                                             \
                 .rxd0_num = 29,                                               \
                 .rxd1_num = 30                                                \
+            }                                                                 \
+        },                                                                    \
+        .clock_config_out_in =                                                \
+        {                                                                     \
+            .rmii =                                                           \
+            {                                                                 \
+                .clock_mode = EMAC_CLK_EXT_IN,                                \
+                .clock_gpio = (emac_rmii_clock_gpio_t) -1                     \
             }                                                                 \
         },                                                                    \
     }

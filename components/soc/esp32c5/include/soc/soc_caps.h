@@ -21,6 +21,7 @@
 #define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
+#define SOC_UHCI_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
@@ -32,7 +33,7 @@
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_USB_SERIAL_JTAG_SUPPORTED   1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
-// #define SOC_WIFI_SUPPORTED              1    // TODO: [ESP32C5 ECO2] IDF-12820
+#define SOC_WIFI_SUPPORTED              1
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 #define SOC_LP_CORE_SUPPORTED           1
 #define SOC_ULP_SUPPORTED               1
@@ -47,6 +48,7 @@
 #define SOC_LEDC_SUPPORTED              1
 #define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1     // TODO: [ESP32C5] IDF-8707
+#define SOC_SUPPORT_COEXISTENCE         1
 #define SOC_AES_SUPPORTED               1
 #define SOC_MPI_SUPPORTED               1
 #define SOC_SHA_SUPPORTED               1
@@ -57,7 +59,7 @@
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
-// #define SOC_IEEE802154_SUPPORTED        1    // TODO: [ESP32C5 ECO2] IDF-12824
+#define SOC_IEEE802154_SUPPORTED        1
 #define SOC_BOD_SUPPORTED               1
 #define SOC_APM_SUPPORTED               1 /*!< Support for APM peripheral */
 #define SOC_PMU_SUPPORTED               1
@@ -70,6 +72,7 @@
 #define SOC_CLK_TREE_SUPPORTED          1
 #define SOC_ASSIST_DEBUG_SUPPORTED      1
 #define SOC_WDT_SUPPORTED               1
+#define SOC_SDIO_SLAVE_SUPPORTED        1
 #define SOC_SPI_FLASH_SUPPORTED         1     // TODO: [ESP32C5] IDF-8715
 #define SOC_ECDSA_SUPPORTED             1
 #define SOC_RNG_SUPPORTED               1
@@ -81,8 +84,8 @@
 #define SOC_PM_SUPPORTED                1
 
 #define SOC_SPIRAM_SUPPORTED            1
-// #define SOC_BT_SUPPORTED                1    // TODO: [ESP32C5 ECO2] IDF-12822
-// #define SOC_PHY_SUPPORTED               1    // TODO: [ESP32C5 ECO2] IDF-12823
+#define SOC_BT_SUPPORTED                1
+#define SOC_PHY_SUPPORTED               1
 #define SOC_BITSCRAMBLER_SUPPORTED      1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
@@ -423,6 +426,8 @@
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
+#define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
+#define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 
 /*-------------------------- Sigma Delta Modulator CAPS -----------------*/
 #define SOC_SDM_GROUPS               1U
@@ -570,6 +575,9 @@
 #define SOC_UART_WAKEUP_SUPPORT_START_BIT_MODE     (1)
 #define SOC_UART_WAKEUP_SUPPORT_CHAR_SEQ_MODE      (1)
 
+/*--------------------------- UHCI CAPS -------------------------------------*/
+#define SOC_UHCI_NUM               (1UL)
+
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)
 
@@ -619,7 +627,6 @@
 #define SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE (1)
 #define SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC  (4) // The range of values for the link index is [0, SOC_PM_PAU_LINK_NUM)
 
-#define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
 
 #define SOC_PM_RETENTION_MODULE_NUM         (32)
@@ -645,26 +652,26 @@
 #define SOC_TEMPERATURE_SENSOR_UNDER_PD_TOP_DOMAIN            (1)
 
 /*------------------------------------ WI-FI CAPS ------------------------------------*/
-// #define SOC_WIFI_HW_TSF                     (1)    /*!< Support hardware TSF */  // // TODO: [ESP32C5 ECO2] IDF-12820
-// #define SOC_WIFI_FTM_SUPPORT                (0)    /*!< Support FTM */ // TODO: [ESP32C5] WIFI-6426
-// #define SOC_WIFI_GCMP_SUPPORT               (1)    /*!< Support GCMP(GCMP128 and GCMP256) */
-// #define SOC_WIFI_WAPI_SUPPORT               (1)    /*!< Support WAPI */
-// #define SOC_WIFI_CSI_SUPPORT                (1)    /*!< Support CSI */
-// #define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
-// #define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
-// #define SOC_WIFI_SUPPORT_5G                 (1)    /*!< Support 5G */
-// #define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
-// #define SOC_WIFI_NAN_SUPPORT                (1)    /*!< Support WIFI Aware (NAN) */
+#define SOC_WIFI_HW_TSF                     (1)    /*!< Support hardware TSF */
+#define SOC_WIFI_FTM_SUPPORT                (0)    /*!< Support FTM */ // TODO: [ESP32C5] WIFI-6426
+#define SOC_WIFI_GCMP_SUPPORT               (1)    /*!< Support GCMP(GCMP128 and GCMP256) */
+#define SOC_WIFI_WAPI_SUPPORT               (1)    /*!< Support WAPI */
+#define SOC_WIFI_CSI_SUPPORT                (1)    /*!< Support CSI */
+#define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
+#define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
+#define SOC_WIFI_SUPPORT_5G                 (1)    /*!< Support 5G */
+#define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
+#define SOC_WIFI_NAN_SUPPORT                (1)    /*!< Support WIFI Aware (NAN) */
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
-// #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */  // TODO: [ESP32C5 ECO2] IDF-12822
+#define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */
 // #define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
-// #define SOC_ESP_NIMBLE_CONTROLLER           (1)    /*!< Support BLE EMBEDDED controller V1 */
-// #define SOC_BLE_50_SUPPORTED                (1)    /*!< Support Bluetooth 5.0 */
-// #define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)    /*!< Support BLE device privacy mode */
-// #define SOC_BLE_POWER_CONTROL_SUPPORTED     (1)    /*!< Support Bluetooth Power Control */
-// #define SOC_BLE_MULTI_CONN_OPTIMIZATION     (1)    /*!< Support multiple connections optimization */
-// #define SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED  (1)    /*!< Support For BLE Periodic Adv Enhancements */
+#define SOC_ESP_NIMBLE_CONTROLLER           (1)    /*!< Support BLE EMBEDDED controller V1 */
+#define SOC_BLE_50_SUPPORTED                (1)    /*!< Support Bluetooth 5.0 */
+#define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)    /*!< Support BLE device privacy mode */
+#define SOC_BLE_POWER_CONTROL_SUPPORTED     (1)    /*!< Support Bluetooth Power Control */
+#define SOC_BLE_MULTI_CONN_OPTIMIZATION     (1)    /*!< Support multiple connections optimization */
+#define SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED  (1)    /*!< Support For BLE Periodic Adv Enhancements */
 
 /*------------------------------------- PHY CAPS -------------------------------------*/
 // #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/

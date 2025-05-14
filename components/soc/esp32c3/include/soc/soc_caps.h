@@ -21,6 +21,7 @@
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
+#define SOC_UHCI_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_TWAI_SUPPORTED              1
@@ -377,7 +378,8 @@
 #define SOC_MWDT_SUPPORT_XTAL              (1)
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-#define SOC_TWAI_CONTROLLER_NUM         1UL
+#define SOC_TWAI_CONTROLLER_NUM         1U
+#define SOC_TWAI_MASK_FILTER_NUM        1U
 #define SOC_TWAI_CLK_SUPPORT_APB        1
 #define SOC_TWAI_BRP_MIN                2
 #define SOC_TWAI_BRP_MAX                16384
@@ -423,6 +425,9 @@
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
 #define SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE (1)
+
+/*--------------------------- UHCI CAPS -------------------------------------*/
+#define SOC_UHCI_NUM               (1UL)
 
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)

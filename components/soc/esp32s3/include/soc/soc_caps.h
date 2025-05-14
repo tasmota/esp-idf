@@ -29,6 +29,7 @@
 #define SOC_WIFI_SUPPORTED              1
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
+#define SOC_UHCI_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_LCDCAM_SUPPORTED            1
@@ -412,7 +413,8 @@
 #define SOC_TOUCH_SAMPLE_CFG_NUM                    (1U) /*!< The sample configuration number in total, each sampler can be used to sample on one frequency */
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-#define SOC_TWAI_CONTROLLER_NUM         1UL
+#define SOC_TWAI_CONTROLLER_NUM         1U
+#define SOC_TWAI_MASK_FILTER_NUM        1U
 #define SOC_TWAI_CLK_SUPPORT_APB        1
 #define SOC_TWAI_BRP_MIN                2
 #define SOC_TWAI_BRP_MAX                16384
@@ -432,6 +434,9 @@
 #define SOC_UART_SUPPORT_XTAL_CLK   (1)     /*!< Support XTAL clock as the clock source */
 
 #define SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE (1)
+
+/*--------------------------- UHCI CAPS -------------------------------------*/
+#define SOC_UHCI_NUM               (1UL)
 
 /*-------------------------- USB CAPS ----------------------------------------*/
 #define SOC_USB_OTG_PERIPH_NUM          (1U)

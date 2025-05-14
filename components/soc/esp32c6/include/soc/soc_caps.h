@@ -20,6 +20,7 @@
 #define SOC_ADC_SUPPORTED               1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
+#define SOC_UHCI_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
@@ -468,6 +469,7 @@
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM             2
+#define SOC_TWAI_MASK_FILTER_NUM            1U
 #define SOC_TWAI_CLK_SUPPORT_XTAL           1
 #define SOC_TWAI_BRP_MIN                    2
 #define SOC_TWAI_BRP_MAX                    32768
@@ -525,6 +527,9 @@
 #define SOC_UART_WAKEUP_SUPPORT_FIFO_THRESH_MODE   (1)
 #define SOC_UART_WAKEUP_SUPPORT_START_BIT_MODE     (1)
 #define SOC_UART_WAKEUP_SUPPORT_CHAR_SEQ_MODE      (1)
+
+/*--------------------------- UHCI CAPS -------------------------------------*/
+#define SOC_UHCI_NUM               (1UL)
 
 // TODO: IDF-5679 (Copy from esp32c3, need check)
 

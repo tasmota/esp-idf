@@ -558,8 +558,9 @@
 #define SOC_BOOTLOADER_ANTI_ROLLBACK_SUPPORTED        (0)
 
 /*-------------------------- APM CAPS-----------------------------------------*/
-#define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
-#define SOC_APM_LP_APM0_SUPPORTED       1 /*!< Support for LP APM0 control filter */
+#define SOC_APM_CTRL_FILTER_SUPPORTED        1 /*!< Support for APM control filter */
+#define SOC_APM_LP_APM0_SUPPORTED            1 /*!< Support for LP APM0 control filter */
+#define SOC_APM_SUPPORT_TEE_PERI_ACCESS_CTRL 1 /*!< Support for TEE controller per-peripheral access control */
 
 /*------------------------ Anti DPA (Security) CAPS --------------------------*/
 #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
@@ -690,5 +691,6 @@
 // #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/
 
 /*------------------------------------- ULP CAPS -------------------------------------*/
-#define SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR   (1) /*!< LP Core interrupts all map to a single entry in vector table */
-#define SOC_LP_CORE_SUPPORT_ETM               (1) /*!< LP Core supports ETM */
+#define SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR         (1) /*!< LP Core interrupts all map to a single entry in vector table */
+#define SOC_LP_CORE_SUPPORT_ETM                     (1) /*!< LP Core supports ETM */
+#define SOC_LP_CORE_SUPPORT_STORE_LOAD_EXCEPTIONS   (1) /*!< LP Core will raise exceptions if accessing invalid addresses */

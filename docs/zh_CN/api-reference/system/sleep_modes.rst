@@ -309,17 +309,17 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
 
        .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，为了继续使用 :cpp:func:`gpio_wakeup_enable` 用于 GPIO 唤醒， 需要先调用 :cpp:func:`rtc_gpio_init` 和 :cpp:func:`rtc_gpio_set_direction`，用于设置 RTC IO 为输入模式。
 
                 或者， 可以使用直接调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 用于 GPIO 唤醒，因为此时 digital IO 的电源域已经被关闭，这个情况类似于进入 Deep-sleep。
 
-            .. only::  not SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  not SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，为了继续使用 :cpp:func:`gpio_wakeup_enable` 用于 GPIO 唤醒， 需要先调用 :cpp:func:`rtc_gpio_init` 和 :cpp:func:`rtc_gpio_set_direction`，用于设置 RTC IO 为输入模式。
 
-    .. only:: SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    .. only:: SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
         .. _deep_sleep_gpio_wakeup:
 
@@ -345,7 +345,7 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
 
         .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，可以使用直接调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 用于 GPIO 唤醒，因为此时 digital IO 的电源域会被断电，行为与进入 Deep-sleep 模式时相同。
 

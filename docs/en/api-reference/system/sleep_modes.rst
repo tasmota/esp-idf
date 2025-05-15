@@ -309,17 +309,17 @@ RTC peripherals or RTC memories do not need to be powered on during sleep in thi
 
        .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， to continue using :cpp:func:`gpio_wakeup_enable` for GPIO wakeup, you need to first call :cpp:func:`rtc_gpio_init` and :cpp:func:`rtc_gpio_set_direction`, setting the RTCIO to input mode.
 
                 Alternatively，you can use :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` directly in that condition for GPIO wakeup, because the digital IO power domain is being powered off, where the situation is the same as entering Deep-sleep.
 
-            .. only::  not SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  not SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， to continue using :cpp:func:`gpio_wakeup_enable` for GPIO wakeup, you need to first call :cpp:func:`rtc_gpio_init` and :cpp:func:`rtc_gpio_set_direction`, setting the RTCIO to input mode.
 
-    .. only:: SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    .. only:: SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
         .. _deep_sleep_gpio_wakeup:
 
@@ -345,7 +345,7 @@ RTC peripherals or RTC memories do not need to be powered on during sleep in thi
 
         .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， you can use :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` directly for GPIO wakeup, because the digital IO power domain is being powered off, where the situation is the same as entering Deep-sleep.
 

@@ -600,6 +600,13 @@ if BT_NIMBLE_50_FEATURE_SUPPORT
             will be supported from BLE 5.0 onwards.
 
     if BT_NIMBLE_EXT_ADV
+        config BT_NIMBLE_EXT_ADV_V2
+            bool "Enable support for extended adv v2"
+            default n
+            depends on BT_NIMBLE_EXT_ADV
+            help
+                Enable this option to use Extended Adv V2 command instead of V1.
+
         config BT_NIMBLE_MAX_EXT_ADV_INSTANCES
             int "Maximum number of extended advertising instances."
             range 0 4
@@ -708,6 +715,19 @@ menuconfig BT_NIMBLE_GATT_CACHING
     select BT_NIMBLE_DYNAMIC_SERVICE
     help
         Enable GATT caching
+config BT_NIMBLE_GATT_CACHING_INCLUDE_SERVICES
+    bool "Include services in GATT caching"
+    depends on BT_NIMBLE_GATT_CACHING
+    default n
+    help
+        Enable this option to include *included services* (e.g., services referenced by other services)
+        in the GATT database cache. Disabling this will skip caching of included service entries.
+config BT_NIMBLE_INCL_SVC_DISCOVERY
+    bool "Enable Included service discovery"
+    default y if BT_NIMBLE_GATT_CACHING_INCLUDE_SERVICES
+    default n
+    help
+        Enable this option to start discovery for included service.
 config BT_NIMBLE_GATT_CACHING_MAX_CONNS
     int "Maximum connections to be cached"
     depends on BT_NIMBLE_GATT_CACHING
@@ -720,6 +740,12 @@ config BT_NIMBLE_GATT_CACHING_MAX_SVCS
     default 64
     help
         Set this option to set the upper limit on number of services per connection to be cached.
+config BT_NIMBLE_GATT_CACHING_MAX_INCL_SVCS
+    int "Maximum number of included services per connection"
+    depends on BT_NIMBLE_GATT_CACHING
+    default 64
+    help
+        Set this option to set the upper limit on number of included services per connection to be cached.
 config BT_NIMBLE_GATT_CACHING_MAX_CHRS
     int "Maximum number of characteristics per connection"
     depends on BT_NIMBLE_GATT_CACHING
@@ -1075,8 +1101,7 @@ config BT_NIMBLE_HIGH_DUTY_ADV_ITVL
 
 config BT_NIMBLE_HOST_ALLOW_CONNECT_WITH_SCAN
     bool "Allow Connections with scanning in progress"
-    depends on BT_NIMBLE_ENABLED
-    depends on (!SOC_ESP_NIMBLE_CONTROLLER || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32H2)
+    depends on BT_NIMBLE_ENABLED && !(IDF_TARGET_ESP32C2)
     help
         This enables support for user to initiate a new connection with scan in progress
 

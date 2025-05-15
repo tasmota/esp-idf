@@ -124,6 +124,48 @@ GPIO
 
 - 为 :func:`gpio_uninstall_isr_service` 添加了 :cpp:type:`esp_err_t` 返回类型。
 
+GPIO 深度睡眠唤醒 API 已移除
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+以下 GPIO 驱动 API 已被移除：
+
+- :func:`gpio_deep_sleep_wakeup_enable` - 请使用 :func:`gpio_wakeup_enable_on_hp_periph_powerdown_sleep` 替代
+- :func:`gpio_deep_sleep_wakeup_disable` - 请使用 :func:`gpio_wakeup_disable_on_hp_periph_powerdown_sleep` 替代
+
+已弃用的宏 ``GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO()`` 已被移除。请使用 ``GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO()`` 替代。
+
+**迁移示例：**
+
+旧代码：
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // 启用 GPIO 唤醒
+    gpio_deep_sleep_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // 检查有效性
+    if (GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(GPIO_NUM_0)) {
+        // ...
+    }
+
+新代码：
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // 启用 GPIO 唤醒（同时支持深度睡眠和外设电源域掉电时的 Light Sleep）
+    gpio_wakeup_enable_on_hp_periph_powerdown_sleep(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // 检查 GPIO 外设掉电的睡眠唤醒有效性
+    if (GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO(GPIO_NUM_0)) {
+        // ...
+    }
+
+更多详细信息，请参阅系统迁移指南中的 :ref:`GPIO 唤醒 API 变更 <gpio_wakeup_api_changes>` 部分。
+
 LEDC
 ----
 

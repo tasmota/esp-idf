@@ -530,6 +530,10 @@
 
 /*------------------------- ECDSA CAPS -------------------------*/
 #define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
+#define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
+#define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
+
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-H2 has 2 UARTs
 #define SOC_UART_NUM                (2)
@@ -607,8 +611,6 @@
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 #define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control is independent, thanks to the PCR registers */
-
-#define SOC_CLK_ANA_I2C_MST_HAS_ROOT_GATE         (1)     /*!< Any regi2c operation needs enable the analog i2c master clock first */
 
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)

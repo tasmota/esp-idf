@@ -1331,6 +1331,18 @@ config SOC_ECDSA_USES_MPI
     bool
     default y
 
+config SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE
+    bool
+    default y
+
+config SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP
+    bool
+    default y
+
+config SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED
+    bool
+    default y
+
 config SOC_UART_NUM
     int
     default 2
@@ -1520,10 +1532,6 @@ config SOC_MODEM_CLOCK_IS_INDEPENDENT
     default y
 
 config SOC_RCC_IS_INDEPENDENT
-    bool
-    default y
-
-config SOC_CLK_ANA_I2C_MST_HAS_ROOT_GATE
     bool
     default y
 

@@ -148,9 +148,11 @@ esp_err_t jpeg_encoder_process(jpeg_encoder_handle_t encoder_engine, const jpeg_
 
     esp_err_t ret = ESP_OK;
 
+#if CONFIG_PM_ENABLE
     if (encoder_engine->codec_base->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(encoder_engine->codec_base->pm_lock), TAG, "acquire pm_lock failed");
     }
+#endif
     jpeg_hal_context_t *hal = &encoder_engine->codec_base->hal;
     uint8_t *raw_buffer = (uint8_t*)encode_inbuf;
     uint32_t compressed_size;
@@ -237,7 +239,7 @@ esp_err_t jpeg_encoder_process(jpeg_encoder_handle_t encoder_engine, const jpeg_
     memset(encoder_engine->txlink, 0, sizeof(dma2d_descriptor_t));
     s_cfg_desc(encoder_engine, encoder_engine->txlink, JPEG_DMA2D_2D_ENABLE, DMA2D_DESCRIPTOR_BLOCK_RW_MODE_MULTIPLE, dma_vb, dma_hb, JPEG_DMA2D_EOF_NOT_LAST, dma2d_desc_pixel_format_to_pbyte_value(picture_format), DMA2D_DESCRIPTOR_BUFFER_OWNER_DMA, encoder_engine->header_info->origin_v, encoder_engine->header_info->origin_h, raw_buffer, NULL);
 
-    ret = esp_cache_msync((void*)raw_buffer, encoder_engine->header_info->origin_v * encoder_engine->header_info->origin_h * encoder_engine->bytes_per_pixel, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+    ret = esp_cache_msync((void*)raw_buffer, inbuf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
     assert(ret == ESP_OK);
 
     dma2d_trans_config_t trans_desc = {
@@ -280,18 +282,22 @@ esp_err_t jpeg_encoder_process(jpeg_encoder_handle_t encoder_engine, const jpeg_
     *out_size = compressed_size;
 
     xSemaphoreGive(encoder_engine->codec_base->codec_mutex);
+#if CONFIG_PM_ENABLE
     if (encoder_engine->codec_base->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_release(encoder_engine->codec_base->pm_lock), TAG, "release pm_lock failed");
     }
+#endif
     return ESP_OK;
 
 err1:
     dma2d_force_end(encoder_engine->trans_desc, &need_yield);
 err2:
     xSemaphoreGive(encoder_engine->codec_base->codec_mutex);
+#if CONFIG_PM_ENABLE
     if (encoder_engine->codec_base->pm_lock) {
         esp_pm_lock_release(encoder_engine->codec_base->pm_lock);
     }
+#endif
     return ret;
 }
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,7 +22,6 @@
 #include "esp_clk_tree.h"
 #include "driver/gpio.h"
 #include "driver/sdm.h"
-#include "hal/gpio_hal.h"
 #include "hal/sdm_hal.h"
 #include "hal/sdm_ll.h"
 #include "hal/hal_utils.h"
@@ -70,9 +69,9 @@ struct sdm_channel_t {
     int gpio_num;                    // GPIO number
     uint32_t sample_rate_hz;         // Sample rate, in Hz
     portMUX_TYPE spinlock;           // to protect per-channels resources concurrently accessed by task and ISR handler
-    esp_pm_lock_handle_t pm_lock;    // PM lock, for glitch filter, as that module can only be functional under APB
     sdm_fsm_t fsm;              // FSM state
 #if CONFIG_PM_ENABLE
+    esp_pm_lock_handle_t pm_lock;    // PM lock, for glitch filter, as that module can only be functional under APB
     char pm_lock_name[SDM_PM_LOCK_NAME_LEN_MAX]; // pm lock name
 #endif
 };
@@ -181,9 +180,11 @@ static void sdm_unregister_from_group(sdm_channel_t *chan)
 
 static esp_err_t sdm_destroy(sdm_channel_t *chan)
 {
+#if CONFIG_PM_ENABLE
     if (chan->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_delete(chan->pm_lock), TAG, "delete pm lock failed");
     }
+#endif
     if (chan->group) {
         sdm_unregister_from_group(chan);
     }
@@ -231,10 +232,6 @@ esp_err_t sdm_new_channel(const sdm_config_t *config, sdm_channel_handle_t *ret_
     ESP_GOTO_ON_ERROR(io_mux_set_clock_source((soc_module_clk_t)(group->clk_src)), err, TAG, "set IO MUX clock source failed");
 
     gpio_func_sel(config->gpio_num, PIN_FUNC_GPIO);
-    // deprecated, to be removed in in esp-idf v6.0
-    if (config->flags.io_loop_back) {
-        gpio_input_enable(config->gpio_num);
-    }
     // connect the signal to the GPIO by matrix, it will also enable the output path properly
     esp_rom_gpio_connect_out_signal(config->gpio_num, sigma_delta_periph_signals.channels[chan_id].sd_sig, config->flags.invert_out, false);
     chan->gpio_num = config->gpio_num;
@@ -292,10 +289,12 @@ esp_err_t sdm_channel_enable(sdm_channel_handle_t chan)
     ESP_RETURN_ON_FALSE(chan, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(chan->fsm == SDM_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "channel not in init state");
 
+#if CONFIG_PM_ENABLE
     // acquire power manager lock
     if (chan->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(chan->pm_lock), TAG, "acquire pm_lock failed");
     }
+#endif
     chan->fsm = SDM_FSM_ENABLE;
     return ESP_OK;
 }
@@ -305,10 +304,12 @@ esp_err_t sdm_channel_disable(sdm_channel_handle_t chan)
     ESP_RETURN_ON_FALSE(chan, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(chan->fsm == SDM_FSM_ENABLE, ESP_ERR_INVALID_STATE, TAG, "channel not in enable state");
 
+#if CONFIG_PM_ENABLE
     // release power manager lock
     if (chan->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_release(chan->pm_lock), TAG, "release pm_lock failed");
     }
+#endif
     chan->fsm = SDM_FSM_INIT;
     return ESP_OK;
 }

@@ -25,13 +25,11 @@
 #include "soc/gpio_pins.h"
 #include "hal/pcnt_hal.h"
 #include "hal/pcnt_ll.h"
-#include "hal/gpio_hal.h"
 #include "esp_private/esp_clk.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/sleep_retention.h"
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
-#include "hal/gpio_ll.h" // for io_loop_back flag only
 #include "driver/pulse_cnt.h"
 #include "esp_memory_utils.h"
 
@@ -50,8 +48,6 @@
 #endif
 
 #define PCNT_ALLOW_INTR_PRIORITY_MASK ESP_INTR_FLAG_LOWMED
-
-#define PCNT_PM_LOCK_NAME_LEN_MAX 16
 
 #if !SOC_RCC_IS_INDEPENDENT
 #define PCNT_RCC_ATOMIC() PERIPH_RCC_ATOMIC()
@@ -85,6 +81,9 @@ struct pcnt_group_t {
     portMUX_TYPE spinlock; // to protect per-group register level concurrent access
     pcnt_hal_context_t hal;
     pcnt_unit_t *units[SOC_PCNT_UNITS_PER_GROUP]; // array of PCNT units
+#if CONFIG_PM_ENABLE
+    esp_pm_lock_handle_t pm_lock;  // power management lock
+#endif
 };
 
 typedef struct {
@@ -119,10 +118,6 @@ struct pcnt_unit_t {
     pcnt_chan_t *channels[SOC_PCNT_CHANNELS_PER_UNIT];    // array of PCNT channels
     pcnt_watch_point_t watchers[PCNT_LL_WATCH_EVENT_MAX]; // array of PCNT watchers
     intr_handle_t intr;                                   // interrupt handle
-    esp_pm_lock_handle_t pm_lock;                         // PM lock, for glitch filter, as that module can only be functional under APB
-#if CONFIG_PM_ENABLE
-    char pm_lock_name[PCNT_PM_LOCK_NAME_LEN_MAX]; // pm lock name
-#endif
     pcnt_unit_fsm_t fsm;      // record PCNT unit's driver state
     pcnt_watch_cb_t on_reach; // user registered callback function
     void *user_data;          // user data registered by user, which would be passed to the right callback function
@@ -191,9 +186,6 @@ static void pcnt_unregister_from_group(pcnt_unit_t *unit)
 
 static esp_err_t pcnt_destroy(pcnt_unit_t *unit)
 {
-    if (unit->pm_lock) {
-        ESP_RETURN_ON_ERROR(esp_pm_lock_delete(unit->pm_lock), TAG, "delete pm lock failed");
-    }
     if (unit->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(unit->intr), TAG, "delete interrupt service failed");
     }
@@ -206,9 +198,6 @@ static esp_err_t pcnt_destroy(pcnt_unit_t *unit)
 
 esp_err_t pcnt_new_unit(const pcnt_unit_config_t *config, pcnt_unit_handle_t *ret_unit)
 {
-#if CONFIG_PCNT_ENABLE_DEBUG_LOG
-    esp_log_level_set(TAG, ESP_LOG_DEBUG);
-#endif
     esp_err_t ret = ESP_OK;
     pcnt_unit_t *unit = NULL;
     ESP_GOTO_ON_FALSE(config && ret_unit, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
@@ -262,14 +251,6 @@ esp_err_t pcnt_new_unit(const pcnt_unit_config_t *config, pcnt_unit_handle_t *re
                                                     pcnt_default_isr, unit, &unit->intr), err,
                           TAG, "install interrupt service failed");
     }
-
-    // PCNT uses the APB as its function clock,
-    // and its filter module is sensitive to the clock frequency
-#if CONFIG_PM_ENABLE
-    sprintf(unit->pm_lock_name, "pcnt_%d_%d", group_id, unit_id); // e.g. pcnt_0_0
-    ESP_GOTO_ON_ERROR(esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, unit->pm_lock_name, &unit->pm_lock), err, TAG, "install pm lock failed");
-    ESP_LOGD(TAG, "install APB_FREQ_MAX lock for unit (%d,%d)", group_id, unit_id);
-#endif
 
     // some events are enabled by default, disable them all
     pcnt_ll_disable_all_events(group->hal.dev, unit_id);
@@ -341,8 +322,6 @@ esp_err_t pcnt_del_unit(pcnt_unit_handle_t unit)
     if (unit->clear_signal_gpio_num >= 0) {
         uint32_t clear_signal_idx = pcnt_periph_signals.groups[group_id].units[unit_id].clear_sig;
         esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ZERO_INPUT, clear_signal_idx, 0);
-        gpio_pullup_dis(unit->clear_signal_gpio_num);
-        gpio_pulldown_dis(unit->clear_signal_gpio_num);
     }
 #endif // SOC_PCNT_SUPPORT_CLEAR_SIGNAL
 
@@ -365,27 +344,13 @@ esp_err_t pcnt_unit_set_clear_signal(pcnt_unit_handle_t unit, const pcnt_clear_s
         int io_num = config->clear_signal_gpio_num;
         ESP_RETURN_ON_FALSE(GPIO_IS_VALID_GPIO(io_num), ESP_ERR_INVALID_ARG, TAG, "gpio num is invalid");
 
-        if (!config->flags.invert_clear_signal) {
-            gpio_pulldown_en(io_num);
-            gpio_pullup_dis(io_num);
-        } else {
-            gpio_pullup_en(io_num);
-            gpio_pulldown_dis(io_num);
-        }
         gpio_func_sel(io_num, PIN_FUNC_GPIO);
         gpio_input_enable(io_num);
         esp_rom_gpio_connect_in_signal(io_num, clear_signal_idx, config->flags.invert_clear_signal);
         unit->clear_signal_gpio_num = config->clear_signal_gpio_num;
-
-        // io_loop_back is a deprecated flag, workaround for compatibility
-        if (config->flags.io_loop_back) {
-            gpio_ll_output_enable(&GPIO, io_num);
-        }
     } else {
         ESP_RETURN_ON_FALSE(unit->clear_signal_gpio_num >= 0, ESP_ERR_INVALID_STATE, TAG, "clear signal not set yet");
         esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ZERO_INPUT, clear_signal_idx, 0);
-        gpio_pullup_dis(unit->clear_signal_gpio_num);
-        gpio_pulldown_dis(unit->clear_signal_gpio_num);
         unit->clear_signal_gpio_num = -1;
     }
     return ESP_OK;
@@ -423,10 +388,12 @@ esp_err_t pcnt_unit_enable(pcnt_unit_handle_t unit)
     ESP_RETURN_ON_FALSE(unit, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(unit->fsm == PCNT_UNIT_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "unit not in init state");
 
+#if CONFIG_PM_ENABLE
     // acquire power manager lock
-    if (unit->pm_lock) {
-        ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(unit->pm_lock), TAG, "acquire pm_lock failed");
+    if (unit->group->pm_lock) {
+        ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(unit->group->pm_lock), TAG, "acquire pm_lock failed");
     }
+#endif
     // enable interrupt service
     if (unit->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_enable(unit->intr), TAG, "enable interrupt service failed");
@@ -445,10 +412,12 @@ esp_err_t pcnt_unit_disable(pcnt_unit_handle_t unit)
     if (unit->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_disable(unit->intr), TAG, "disable interrupt service failed");
     }
+#if CONFIG_PM_ENABLE
     // release power manager lock
-    if (unit->pm_lock) {
-        ESP_RETURN_ON_ERROR(esp_pm_lock_release(unit->pm_lock), TAG, "release APB_FREQ_MAX lock failed");
+    if (unit->group->pm_lock) {
+        ESP_RETURN_ON_ERROR(esp_pm_lock_release(unit->group->pm_lock), TAG, "release APB_FREQ_MAX lock failed");
     }
+#endif
 
     unit->fsm = PCNT_UNIT_FSM_INIT;
     return ESP_OK;
@@ -798,18 +767,11 @@ esp_err_t pcnt_new_channel(pcnt_unit_handle_t unit, const pcnt_chan_config_t *co
 
     // GPIO configuration
     if (config->edge_gpio_num >= 0) {
-        gpio_pullup_en(config->edge_gpio_num);
-        gpio_pulldown_dis(config->edge_gpio_num);
         gpio_func_sel(config->edge_gpio_num, PIN_FUNC_GPIO);
         gpio_input_enable(config->edge_gpio_num);
         esp_rom_gpio_connect_in_signal(config->edge_gpio_num,
                                        pcnt_periph_signals.groups[group_id].units[unit_id].channels[channel_id].pulse_sig,
                                        config->flags.invert_edge_input);
-
-        // io_loop_back is a deprecated flag, workaround for compatibility
-        if (config->flags.io_loop_back) {
-            gpio_ll_output_enable(&GPIO, config->edge_gpio_num);
-        }
     } else {
         // using virtual IO
         esp_rom_gpio_connect_in_signal(config->flags.virt_edge_io_level ? GPIO_MATRIX_CONST_ONE_INPUT : GPIO_MATRIX_CONST_ZERO_INPUT,
@@ -818,18 +780,11 @@ esp_err_t pcnt_new_channel(pcnt_unit_handle_t unit, const pcnt_chan_config_t *co
     }
 
     if (config->level_gpio_num >= 0) {
-        gpio_pullup_en(config->level_gpio_num);
-        gpio_pulldown_dis(config->level_gpio_num);
         gpio_func_sel(config->level_gpio_num, PIN_FUNC_GPIO);
         gpio_input_enable(config->level_gpio_num);
         esp_rom_gpio_connect_in_signal(config->level_gpio_num,
                                        pcnt_periph_signals.groups[group_id].units[unit_id].channels[channel_id].control_sig,
                                        config->flags.invert_level_input);
-
-        // io_loop_back is a deprecated flag, workaround for compatibility
-        if (config->flags.io_loop_back) {
-            gpio_ll_output_enable(&GPIO, config->level_gpio_num);
-        }
     } else {
         // using virtual IO
         esp_rom_gpio_connect_in_signal(config->flags.virt_level_io_level ? GPIO_MATRIX_CONST_ONE_INPUT : GPIO_MATRIX_CONST_ZERO_INPUT,
@@ -869,15 +824,11 @@ esp_err_t pcnt_del_channel(pcnt_channel_handle_t chan)
         esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT,
                                        pcnt_periph_signals.groups[group_id].units[unit_id].channels[channel_id].control_sig,
                                        0);
-        gpio_pullup_dis(chan->level_gpio_num);
-        gpio_pulldown_dis(chan->level_gpio_num);
     }
     if (chan->edge_gpio_num >= 0) {
         esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT,
                                        pcnt_periph_signals.groups[group_id].units[unit_id].channels[channel_id].pulse_sig,
                                        0);
-        gpio_pullup_dis(chan->edge_gpio_num);
-        gpio_pulldown_dis(chan->edge_gpio_num);
     }
 
     free(chan);
@@ -966,6 +917,14 @@ static pcnt_group_t *pcnt_acquire_group_handle(int group_id)
     _lock_release(&s_platform.mutex);
 
     if (new_group) {
+#if CONFIG_PM_ENABLE
+        // PCNT uses the APB as its function clock,
+        // and its filter module is sensitive to the clock frequency
+        // thus we choose the APM_MAX lock to prevent the function clock from being changed
+        if (esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, pcnt_periph_signals.groups[group_id].module_name, &group->pm_lock) != ESP_OK) {
+            ESP_LOGW(TAG, "create pm lock failed");
+        }
+#endif
         ESP_LOGD(TAG, "new group (%d) at %p", group_id, group);
     }
 
@@ -986,16 +945,21 @@ static void pcnt_release_group_handle(pcnt_group_t *group)
         PCNT_RCC_ATOMIC() {
             pcnt_ll_enable_bus_clock(group_id, false);
         }
-    }
-    _lock_release(&s_platform.mutex);
-
-    if (do_deinitialize) {
 #if PCNT_USE_RETENTION_LINK
         const periph_retention_module_t module_id = pcnt_reg_retention_info[group_id].retention_module;
         if (sleep_retention_is_module_inited(module_id)) {
             sleep_retention_module_deinit(module_id);
         }
 #endif // PCNT_USE_RETENTION_LINK
+    }
+    _lock_release(&s_platform.mutex);
+
+    if (do_deinitialize) {
+#if CONFIG_PM_ENABLE
+        if (group->pm_lock) {
+            esp_pm_lock_delete(group->pm_lock);
+        }
+#endif
         free(group);
         ESP_LOGD(TAG, "del group (%d)", group_id);
     }
@@ -1122,3 +1086,11 @@ static esp_err_t pcnt_create_sleep_retention_link_cb(void *arg)
     return ESP_OK;
 }
 #endif // PCNT_USE_RETENTION_LINK
+
+#if CONFIG_PCNT_ENABLE_DEBUG_LOG
+__attribute__((constructor))
+static void pcnt_override_default_log_level(void)
+{
+    esp_log_level_set(TAG, ESP_LOG_VERBOSE);
+}
+#endif

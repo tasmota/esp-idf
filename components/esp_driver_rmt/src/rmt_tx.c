@@ -7,7 +7,6 @@
 #include "esp_rom_gpio.h"
 #include "esp_memory_utils.h"
 #include "soc/rtc.h"
-#include "hal/gpio_hal.h"
 #include "esp_cache.h"
 #include "driver/gpio.h"
 #include "driver/rmt_tx.h"
@@ -203,9 +202,11 @@ static esp_err_t rmt_tx_destroy(rmt_tx_channel_t *tx_channel)
     if (tx_channel->base.intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(tx_channel->base.intr), TAG, "delete interrupt service failed");
     }
+#if CONFIG_PM_ENABLE
     if (tx_channel->base.pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_delete(tx_channel->base.pm_lock), TAG, "delete pm_lock failed");
     }
+#endif
 #if SOC_RMT_SUPPORT_DMA
     if (tx_channel->base.dma_chan) {
         ESP_RETURN_ON_ERROR(gdma_del_channel(tx_channel->base.dma_chan), TAG, "delete dma channel failed");
@@ -346,14 +347,6 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
                                     rmt_periph_signals.groups[group_id].channels[channel_id + RMT_TX_CHANNEL_OFFSET_IN_GROUP].tx_sig,
                                     config->flags.invert_out, false);
     tx_channel->base.gpio_num = config->gpio_num;
-
-    // deprecated, to be removed in in esp-idf v6.0
-    if (config->flags.io_loop_back) {
-        gpio_ll_input_enable(&GPIO, config->gpio_num);
-    }
-    if (config->flags.io_od_mode) {
-        gpio_ll_od_enable(&GPIO, config->gpio_num);
-    }
 
     portMUX_INITIALIZE(&tx_channel->base.spinlock);
     atomic_init(&tx_channel->base.fsm, RMT_FSM_INIT);
@@ -766,10 +759,12 @@ static esp_err_t rmt_tx_enable(rmt_channel_handle_t channel)
                         ESP_ERR_INVALID_STATE, TAG, "channel not in init state");
     rmt_tx_channel_t *tx_chan = __containerof(channel, rmt_tx_channel_t, base);
 
+#if CONFIG_PM_ENABLE
     // acquire power manager lock
     if (channel->pm_lock) {
         esp_pm_lock_acquire(channel->pm_lock);
     }
+#endif
 
 #if SOC_RMT_SUPPORT_DMA
     rmt_group_t *group = channel->group;
@@ -860,10 +855,12 @@ static esp_err_t rmt_tx_disable(rmt_channel_handle_t channel)
     }
     tx_chan->cur_trans = NULL;
 
+#if CONFIG_PM_ENABLE
     // release power manager lock
     if (channel->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_release(channel->pm_lock), TAG, "release pm_lock failed");
     }
+#endif
 
     // finally we switch to the INIT state
     atomic_store(&channel->fsm, RMT_FSM_INIT);

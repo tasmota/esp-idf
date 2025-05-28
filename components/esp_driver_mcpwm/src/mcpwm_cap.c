@@ -11,7 +11,6 @@
 #include "driver/mcpwm_cap.h"
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
-#include "hal/gpio_ll.h"
 
 static void mcpwm_capture_default_isr(void *args);
 
@@ -52,7 +51,7 @@ static void mcpwm_cap_timer_unregister_from_group(mcpwm_cap_timer_t *cap_timer)
 
 static esp_err_t mcpwm_cap_timer_destroy(mcpwm_cap_timer_t *cap_timer)
 {
-#if !SOC_MCPWM_CAPTURE_CLK_FROM_GROUP
+#if !SOC_MCPWM_CAPTURE_CLK_FROM_GROUP && CONFIG_PM_ENABLE
     if (cap_timer->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_delete(cap_timer->pm_lock), TAG, "delete pm_lock failed");
     }
@@ -87,7 +86,9 @@ esp_err_t mcpwm_new_capture_timer(const mcpwm_capture_timer_config_t *config, mc
 #if SOC_MCPWM_CAPTURE_CLK_FROM_GROUP
     // capture timer clock source is same as the MCPWM group
     ESP_GOTO_ON_ERROR(mcpwm_select_periph_clock(group, (soc_module_clk_t)clk_src), err, TAG, "set group clock failed");
+#if CONFIG_PM_ENABLE
     cap_timer->pm_lock = group->pm_lock;
+#endif
     uint32_t periph_src_clk_hz = 0;
     ESP_GOTO_ON_ERROR(esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &periph_src_clk_hz), err, TAG, "get clock source freq failed");
     ESP_LOGD(TAG, "periph_src_clk_hz %"PRIu32"", periph_src_clk_hz);
@@ -157,9 +158,11 @@ esp_err_t mcpwm_capture_timer_enable(mcpwm_cap_timer_handle_t cap_timer)
 {
     ESP_RETURN_ON_FALSE(cap_timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(cap_timer->fsm == MCPWM_CAP_TIMER_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "timer not in init state");
+#if CONFIG_PM_ENABLE
     if (cap_timer->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_acquire(cap_timer->pm_lock), TAG, "acquire pm_lock failed");
     }
+#endif
     cap_timer->fsm = MCPWM_CAP_TIMER_FSM_ENABLE;
     return ESP_OK;
 }
@@ -168,9 +171,11 @@ esp_err_t mcpwm_capture_timer_disable(mcpwm_cap_timer_handle_t cap_timer)
 {
     ESP_RETURN_ON_FALSE(cap_timer, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(cap_timer->fsm == MCPWM_CAP_TIMER_FSM_ENABLE, ESP_ERR_INVALID_STATE, TAG, "timer not in enable state");
+#if CONFIG_PM_ENABLE
     if (cap_timer->pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_release(cap_timer->pm_lock), TAG, "release pm_lock failed");
     }
+#endif
     cap_timer->fsm = MCPWM_CAP_TIMER_FSM_INIT;
     return ESP_OK;
 }
@@ -283,21 +288,6 @@ esp_err_t mcpwm_new_capture_channel(mcpwm_cap_timer_handle_t cap_timer, const mc
         gpio_func_sel(config->gpio_num, PIN_FUNC_GPIO);
         gpio_input_enable(config->gpio_num);
         esp_rom_gpio_connect_in_signal(config->gpio_num, mcpwm_periph_signals.groups[group->group_id].captures[cap_chan_id].cap_sig, 0);
-        if (config->flags.pull_down) {
-            gpio_pulldown_en(config->gpio_num);
-        } else {
-            gpio_pulldown_dis(config->gpio_num);
-        }
-        if (config->flags.pull_up) {
-            gpio_pullup_en(config->gpio_num);
-        } else {
-            gpio_pullup_dis(config->gpio_num);
-        }
-
-        // deprecated, to be removed in in esp-idf v6.0
-        if (config->flags.io_loop_back) {
-            gpio_ll_output_enable(&GPIO, config->gpio_num);
-        }
     }
 
     cap_chan->gpio_num = config->gpio_num;

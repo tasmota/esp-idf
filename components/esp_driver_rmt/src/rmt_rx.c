@@ -8,7 +8,6 @@
 #include "esp_cache.h"
 #include "esp_rom_gpio.h"
 #include "soc/rmt_periph.h"
-#include "hal/gpio_hal.h"
 #include "driver/gpio.h"
 #include "driver/rmt_rx.h"
 #include "rmt_private.h"
@@ -148,9 +147,11 @@ static esp_err_t rmt_rx_destroy(rmt_rx_channel_t *rx_channel)
     if (rx_channel->base.intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(rx_channel->base.intr), TAG, "delete interrupt service failed");
     }
+#if CONFIG_PM_ENABLE
     if (rx_channel->base.pm_lock) {
         ESP_RETURN_ON_ERROR(esp_pm_lock_delete(rx_channel->base.pm_lock), TAG, "delete pm_lock failed");
     }
+#endif
 #if SOC_RMT_SUPPORT_DMA
     if (rx_channel->base.dma_chan) {
         ESP_RETURN_ON_ERROR(gdma_del_channel(rx_channel->base.dma_chan), TAG, "delete dma channel failed");
@@ -292,16 +293,10 @@ esp_err_t rmt_new_rx_channel(const rmt_rx_channel_config_t *config, rmt_channel_
     // GPIO Matrix/MUX configuration
     gpio_func_sel(config->gpio_num, PIN_FUNC_GPIO);
     gpio_input_enable(config->gpio_num);
-    gpio_pullup_en(config->gpio_num);
     esp_rom_gpio_connect_in_signal(config->gpio_num,
                                    rmt_periph_signals.groups[group_id].channels[channel_id + RMT_RX_CHANNEL_OFFSET_IN_GROUP].rx_sig,
                                    config->flags.invert_in);
     rx_channel->base.gpio_num = config->gpio_num;
-
-    // deprecated, to be removed in in esp-idf v6.0
-    if (config->flags.io_loop_back) {
-        gpio_ll_output_enable(&GPIO, config->gpio_num);
-    }
 
     // initialize other members of rx channel
     portMUX_INITIALIZE(&rx_channel->base.spinlock);
@@ -499,10 +494,13 @@ static esp_err_t rmt_rx_enable(rmt_channel_handle_t channel)
     rmt_hal_context_t *hal = &group->hal;
     int channel_id = channel->channel_id;
 
+#if CONFIG_PM_ENABLE
     // acquire power manager lock
     if (channel->pm_lock) {
         esp_pm_lock_acquire(channel->pm_lock);
     }
+#endif
+
     if (channel->dma_chan) {
 #if SOC_RMT_SUPPORT_DMA
         // enable the DMA access mode
@@ -560,10 +558,12 @@ static esp_err_t rmt_rx_disable(rmt_channel_handle_t channel)
         portEXIT_CRITICAL(&group->spinlock);
     }
 
+#if CONFIG_PM_ENABLE
     // release power manager lock
     if (channel->pm_lock) {
         esp_pm_lock_release(channel->pm_lock);
     }
+#endif
 
     // now we can switch the state to init
     atomic_store(&channel->fsm, RMT_FSM_INIT);

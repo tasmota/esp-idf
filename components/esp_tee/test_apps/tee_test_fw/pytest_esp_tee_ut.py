@@ -1,42 +1,58 @@
 # SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
+import re
 from enum import Enum
-from typing import Any
 from typing import Dict
+from typing import Tuple
 
 import pytest
 from pytest_embedded_idf import IdfDut
 from pytest_embedded_idf.utils import idf_parametrize
 
-CONFIGS_DEFAULT = [pytest.param('default', marks=[pytest.mark.esp32c6])]
+# ---------------- Pytest build parameters ----------------
 
-CONFIGS_OTA = [pytest.param('ota', marks=[pytest.mark.esp32c6])]
+SUPPORTED_TARGETS = ['esp32c6', 'esp32h2']
 
-CONFIGS_ALL = [pytest.param('default', marks=[pytest.mark.esp32c6]), pytest.param('ota', marks=[pytest.mark.esp32c6])]
+CONFIG_DEFAULT = [
+    # 'config, target, markers',
+    ('default', target, (pytest.mark.generic,))
+    for target in SUPPORTED_TARGETS
+]
 
-TEE_VIOLATION_TEST_EXC_RSN: Dict[str, Any] = {
-    'esp32c6': {
-        ('Reserved', 'W1'): 'Store access fault',
-        ('Reserved', 'X1'): 'Instruction access fault',
-        ('IRAM', 'W1'): 'Store access fault',
-        ('IRAM', 'W2'): 'Store access fault',
-        ('DRAM', 'X1'): 'Instruction access fault',
-        ('DRAM', 'X2'): 'Instruction access fault',
-    }
+CONFIG_OTA = [
+    # 'config, target, skip_autoflash, markers',
+    ('ota', target, 'y', (pytest.mark.host_test,))
+    for target in SUPPORTED_TARGETS
+]
+
+CONFIG_ALL = [
+    # 'config, target, markers',
+    (config, target, (pytest.mark.generic,))
+    for config in ['default', 'ota']
+    for target in SUPPORTED_TARGETS
+]
+
+# ---------------- Exception test-cases reasons  ----------------
+
+TEE_VIOLATION_TEST_EXC_RSN: Dict[Tuple[str, str], str] = {
+    ('Reserved', 'W1'): 'Store access fault',
+    ('Reserved', 'X1'): 'Instruction access fault',
+    ('IRAM', 'W1'): 'Store access fault',
+    ('IRAM', 'W2'): 'Store access fault',
+    ('DRAM', 'X1'): 'Instruction access fault',
+    ('DRAM', 'X2'): 'Instruction access fault',
 }
 
-REE_ISOLATION_TEST_EXC_RSN: Dict[str, Any] = {
-    'esp32c6': {
-        ('DRAM', 'R1'): 'Load access fault',
-        ('DRAM', 'W1'): 'Store access fault',
-        ('IRAM', 'R1'): 'Load access fault',
-        ('IRAM', 'W1'): 'Store access fault',
-        ('IROM', 'R1'): 'Load access fault',
-        ('IROM', 'W1'): 'Store access fault',
-        ('DROM', 'R1'): 'Load access fault',
-        ('DROM', 'W1'): 'Store access fault',
-        ('SWDT/BOD', 'W'): 'Store access fault',
-    }
+REE_ISOLATION_TEST_EXC_RSN: Dict[Tuple[str, str], str] = {
+    ('DRAM', 'R1'): 'Load access fault',
+    ('DRAM', 'W1'): 'Store access fault',
+    ('IRAM', 'R1'): 'Load access fault',
+    ('IRAM', 'W1'): 'Store access fault',
+    ('IROM', 'R1'): 'Load access fault',
+    ('IROM', 'W1'): 'Store access fault',
+    ('DROM', 'R1'): 'Load access fault',
+    ('DROM', 'W1'): 'Store access fault',
+    ('SWDT/BOD', 'W'): 'Store access fault',
 }
 
 TEE_APM_VIOLATION_EXC_CHK = ['eFuse', 'MMU', 'AES', 'HMAC', 'DS', 'SHA PCR', 'ECC PCR']
@@ -44,34 +60,42 @@ TEE_APM_VIOLATION_EXC_CHK = ['eFuse', 'MMU', 'AES', 'HMAC', 'DS', 'SHA PCR', 'EC
 # ---------------- TEE default tests ----------------
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_DEFAULT,
+    indirect=['config', 'target'],
+)
 def test_esp_tee(dut: IdfDut) -> None:
     dut.run_all_single_board_cases(group='basic')
     dut.run_all_single_board_cases(group='heap')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default', 'ota'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_ALL,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_crypto_aes(dut: IdfDut) -> None:
     dut.run_all_single_board_cases(group='aes')
     dut.run_all_single_board_cases(group='aes-gcm')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default', 'ota'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_ALL,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_crypto_sha(dut: IdfDut) -> None:
     dut.run_all_single_board_cases(group='mbedtls')
     dut.run_all_single_board_cases(group='hw_crypto')
 
 
 # NOTE: Stress testing the AES performance case for interrupt-related edge-cases
-@pytest.mark.generic
-@idf_parametrize('config', ['default', 'ota'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_ALL,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_aes_perf(dut: IdfDut) -> None:
     # start test
     for i in range(24):
@@ -86,21 +110,29 @@ def test_esp_tee_aes_perf(dut: IdfDut) -> None:
 # ---------------- TEE Exceptions generation Tests ----------------
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_DEFAULT,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_apm_violation(dut: IdfDut) -> None:
     for check in TEE_APM_VIOLATION_EXC_CHK:
         dut.expect_exact('Press ENTER to see the list of tests')
         dut.write(f'"Test APM violation interrupt: {check}"')
         exc = dut.expect(r'Core ([01]) panic\'ed \(([^)]+)\)', timeout=30).group(2).decode()
-        if exc != 'APM - Authority exception':
+        if dut.target == 'esp32h2' and check == 'eFuse':
+            exp_str = 'APM - Space exception'
+        else:
+            exp_str = 'APM - Authority exception'
+        if exc != exp_str:
             raise RuntimeError('Incorrect exception received!')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_DEFAULT,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_illegal_instruction(dut: IdfDut) -> None:
     dut.expect_exact('Press ENTER to see the list of tests')
     dut.write('"Test TEE-TEE violation: Illegal Instruction"')
@@ -109,11 +141,13 @@ def test_esp_tee_illegal_instruction(dut: IdfDut) -> None:
         raise RuntimeError('Incorrect exception received!')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_DEFAULT,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_violation_checks(dut: IdfDut) -> None:
-    checks_list = TEE_VIOLATION_TEST_EXC_RSN[dut.target]
+    checks_list = TEE_VIOLATION_TEST_EXC_RSN
     for test in checks_list:
         memory, access_type = test
         expected_exc = checks_list[test]
@@ -126,11 +160,13 @@ def test_esp_tee_violation_checks(dut: IdfDut) -> None:
             raise RuntimeError('Incorrect exception received!')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['default'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, markers',
+    CONFIG_DEFAULT,
+    indirect=['config', 'target'],
+)
 def test_esp_tee_isolation_checks(dut: IdfDut) -> None:
-    checks_list = REE_ISOLATION_TEST_EXC_RSN[dut.target]
+    checks_list = REE_ISOLATION_TEST_EXC_RSN
     for test in checks_list:
         memory, access_type = test
         expected_exc = checks_list[test]
@@ -163,8 +199,18 @@ def expect_panic_rsn(dut: IdfDut, expected_rsn: str) -> None:
 
 def run_multiple_stages(dut: IdfDut, test_case_num: int, stages: int, api: TeeFlashAccessApi) -> None:
     expected_ops = {
-        TeeFlashAccessApi.ESP_PARTITION: ['read', 'program_page', 'program_page', 'erase_sector'],
-        TeeFlashAccessApi.ESP_FLASH: ['program_page', 'read', 'erase_sector', 'program_page'],
+        TeeFlashAccessApi.ESP_PARTITION: [
+            'read',
+            'program_page|common_command',
+            'program_page|common_command',
+            'erase_sector|common_command',
+        ],
+        TeeFlashAccessApi.ESP_FLASH: [
+            'program_page|common_command',
+            'read',
+            'erase_sector|common_command',
+            'program_page|common_command',
+        ],
     }
 
     flash_enc_enabled = dut.app.sdkconfig.get('SECURE_FLASH_ENC_ENABLED', True)
@@ -190,7 +236,7 @@ def run_multiple_stages(dut: IdfDut, test_case_num: int, stages: int, api: TeeFl
                         r'\[_ss_spi_flash_hal_(\w+)\] Illegal flash access at \s*(0x[0-9a-fA-F]+)', timeout=10
                     )
                     actual_op = match.group(1).decode()
-                    if actual_op != curr_op:
+                    if not re.fullmatch(curr_op, actual_op):
                         raise RuntimeError(f'Unexpected flash operation: {actual_op} (expected: {curr_op})')
             elif api == TeeFlashAccessApi.ESP_ROM_SPIFLASH:
                 expect_panic_rsn(dut, 'APM - Authority exception')
@@ -199,10 +245,11 @@ def run_multiple_stages(dut: IdfDut, test_case_num: int, stages: int, api: TeeFl
             dut.expect_exact('Press ENTER to see the list of tests.')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_flash_prot_esp_partition_mmap(dut: IdfDut) -> None:
     # Flash the bootloader, TEE and REE firmware
     dut.serial.custom_flash()
@@ -216,10 +263,11 @@ def test_esp_tee_flash_prot_esp_partition_mmap(dut: IdfDut) -> None:
             continue
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_flash_prot_spi_flash_mmap(dut: IdfDut) -> None:
     # Flash the bootloader, TEE and REE firmware
     dut.serial.custom_flash()
@@ -233,10 +281,11 @@ def test_esp_tee_flash_prot_spi_flash_mmap(dut: IdfDut) -> None:
             continue
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_flash_prot_esp_rom_spiflash(dut: IdfDut) -> None:
     # Flash the bootloader, TEE and REE firmware
     dut.serial.custom_flash()
@@ -250,10 +299,11 @@ def test_esp_tee_flash_prot_esp_rom_spiflash(dut: IdfDut) -> None:
             continue
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_flash_prot_esp_partition(dut: IdfDut) -> None:
     # Flash the bootloader, TEE and REE firmware
     dut.serial.custom_flash()
@@ -267,10 +317,11 @@ def test_esp_tee_flash_prot_esp_partition(dut: IdfDut) -> None:
             continue
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_flash_prot_esp_flash(dut: IdfDut) -> None:
     # Flash the bootloader, TEE and REE firmware
     dut.serial.custom_flash()
@@ -289,7 +340,7 @@ def test_esp_tee_flash_prot_esp_flash(dut: IdfDut) -> None:
 
 @pytest.mark.generic
 @idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize('target', ['esp32c6', 'esp32h2'], indirect=['target'])
 def test_esp_tee_ota_negative(dut: IdfDut) -> None:
     # start test
     dut.expect_exact('Press ENTER to see the list of tests')
@@ -300,10 +351,11 @@ def test_esp_tee_ota_negative(dut: IdfDut) -> None:
     dut.serial.erase_partition('tee_otadata')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_ota_corrupted_img(dut: IdfDut) -> None:
     # Flashing the TEE app to the non-secure app's passive partition
     dut.serial.custom_flash_w_test_tee_img_gen()
@@ -338,10 +390,11 @@ def tee_ota_stage_checks(dut: IdfDut, stage: TeeOtaStage, offset: str) -> None:
         raise ValueError('Undefined stage!')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_ota_reboot_without_ota_end(dut: IdfDut) -> None:
     # Flashing the TEE app to the non-secure app's passive partition
     dut.serial.custom_flash_w_test_tee_img_gen()
@@ -363,10 +416,11 @@ def test_esp_tee_ota_reboot_without_ota_end(dut: IdfDut) -> None:
     dut.serial.erase_partition('tee_otadata')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_ota_valid_img(dut: IdfDut) -> None:
     # Flashing the TEE app to the non-secure app's passive partition
     dut.serial.custom_flash_w_test_tee_img_gen()
@@ -396,10 +450,11 @@ def test_esp_tee_ota_valid_img(dut: IdfDut) -> None:
     dut.serial.erase_partition('tee_otadata')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_ota_rollback(dut: IdfDut) -> None:
     # Flashing the TEE app to the non-secure app's passive partition
     dut.serial.custom_flash_w_test_tee_img_rb()
@@ -434,10 +489,11 @@ def test_esp_tee_ota_rollback(dut: IdfDut) -> None:
 # ---------------- TEE Secure Storage tests ----------------
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_secure_storage(dut: IdfDut) -> None:
     # Flash image and erase the secure_storage partition
     dut.serial.custom_flash_with_empty_sec_stg()
@@ -445,10 +501,11 @@ def test_esp_tee_secure_storage(dut: IdfDut) -> None:
     dut.run_all_single_board_cases(group='sec_storage')
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_secure_storage_with_host_img(dut: IdfDut) -> None:
     # Flash image and write the secure_storage partition with host-generated keys
     dut.serial.custom_flash_with_host_gen_sec_stg_img()
@@ -459,10 +516,11 @@ def test_esp_tee_secure_storage_with_host_img(dut: IdfDut) -> None:
 # ---------------- TEE Attestation tests ----------------
 
 
-@pytest.mark.generic
-@idf_parametrize('config', ['ota'], indirect=['config'])
-@idf_parametrize('skip_autoflash', ['y'], indirect=['skip_autoflash'])
-@idf_parametrize('target', ['esp32c6'], indirect=['target'])
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
 def test_esp_tee_attestation(dut: IdfDut) -> None:
     # Flash image and erase the secure_storage partition
     dut.serial.custom_flash_with_empty_sec_stg()

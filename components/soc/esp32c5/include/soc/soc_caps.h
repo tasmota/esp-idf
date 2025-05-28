@@ -472,6 +472,8 @@
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 #define SOC_SPI_MEM_SUPPORT_WB_MODE_INDEPENDENT_CONTROL   (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+#define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
+#define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
@@ -655,8 +657,6 @@
 #define SOC_CLK_LP_FAST_SUPPORT_XTAL_D2           (1)     /*!< Support XTAL_D2 clock as the LP_FAST clock source */
 
 #define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control is independent, thanks to the PCR registers */
-
-#define SOC_CLK_ANA_I2C_MST_HAS_ROOT_GATE         (1)     /*!< Any regi2c operation needs enable the analog i2c master clock first */
 
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)

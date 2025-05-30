@@ -23,7 +23,7 @@ pm_check_state = 0x40001b6c;
 pm_dream = 0x40001b78;
 pm_on_beacon_rx = 0x40001ba0;
 //pm_parse_beacon = 0x40001bac;
-pm_process_tim = 0x40001bb0;
+//pm_process_tim = 0x40001bb0;
 pm_rx_beacon_process = 0x40001bb4;
 pm_rx_data_process = 0x40001bb8;
 pm_sleep = 0x40001bbc;
@@ -130,7 +130,7 @@ s_trans_id = 0x3fcdfac4;
 
 /* Functions */
 coex_core_event_duration_get = 0x40002178;
-coex_core_timer_idx_get = 0x4000218c;
+/* coex_core_timer_idx_get = 0x4000218c; */
 coex_hw_timer_tick_get = 0x400021b8;
 
 

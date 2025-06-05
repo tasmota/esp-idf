@@ -1427,6 +1427,10 @@ config SOC_APM_LP_APM0_SUPPORTED
     bool
     default y
 
+config SOC_APM_SUPPORT_TEE_PERI_ACCESS_CTRL
+    bool
+    default y
+
 config SOC_CRYPTO_DPA_PROTECTION_SUPPORTED
     bool
     default y
@@ -1756,5 +1760,9 @@ config SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR
     default y
 
 config SOC_LP_CORE_SUPPORT_ETM
+    bool
+    default y
+
+config SOC_LP_CORE_SUPPORT_STORE_LOAD_EXCEPTIONS
     bool
     default y

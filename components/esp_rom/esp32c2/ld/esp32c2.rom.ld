@@ -528,7 +528,7 @@ pm_mac_sleep = 0x40001b80;
 pm_enable_active_timer = 0x40001b84;
 pm_enable_sleep_delay_timer = 0x40001b88;
 pm_local_tsf_process = 0x40001b8c;
-pm_set_beacon_filter = 0x40001b90;
+//pm_set_beacon_filter = 0x40001b90;
 /*pm_is_in_wifi_slice_threshold = 0x40001b94;*/
 pm_is_waked = 0x40001b98;
 /*pm_keep_alive = 0x40001b9c;*/
@@ -949,7 +949,7 @@ ieee80211_getcapinfo = 0x40002130;
 /* sta_recv_sa_query_resp = 0x40002144; */
 ieee80211_set_max_rate = 0x4000214c;
 ic_set_sta = 0x40002150;
-ieee80211_parse_wpa = 0x40002158;
+//ieee80211_parse_wpa = 0x40002158;
 ieee80211_add_assoc_req_ies = 0x40002160;
 ieee80211_add_probe_req_ies = 0x40002164;
 /* Data (.data, .bss, .rodata) */

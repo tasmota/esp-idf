@@ -1615,6 +1615,10 @@ config SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN
     bool
     default y
 
+config SOC_PM_TOP_PD_NOT_ALLOWED
+    bool
+    default y
+
 config SOC_PM_PAU_LINK_NUM
     int
     default 5
@@ -1693,7 +1697,7 @@ config SOC_WIFI_HW_TSF
 
 config SOC_WIFI_FTM_SUPPORT
     bool
-    default n
+    default y
 
 config SOC_WIFI_GCMP_SUPPORT
     bool

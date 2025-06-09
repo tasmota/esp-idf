@@ -171,6 +171,7 @@
 #define SOC_CPU_HAS_FPU                 1
 #define SOC_CPU_HAS_FPU_EXT_ILL_BUG     1       // EXT_ILL CSR doesn't support FLW/FSW
 #define SOC_CPU_HAS_HWLOOP              1
+#define SOC_CPU_HAS_HWLOOP_STATE_BUG    1       // HWLOOP state doesn't go to DIRTY after executing the last instruction of a loop
 /* PIE coprocessor assembly is only supported with GCC compiler  */
 #ifndef __clang__
 #define SOC_CPU_HAS_PIE                 1
@@ -424,6 +425,7 @@
 
 // USB PHY Caps
 #define SOC_USB_UTMI_PHY_NUM            (1U)
+#define SOC_USB_UTMI_PHY_NO_POWER_OFF_ISO    1
 
 /*-------------------------- PARLIO CAPS --------------------------------------*/
 #define SOC_PARLIO_GROUPS                    1U  /*!< Number of parallel IO peripherals */
@@ -515,6 +517,7 @@
 // host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
 #define SOC_SPI_PERIPH_SUPPORT_MULTILINE_MODE(host_id)  ({(void)host_id; 1;})
 
+#define SOC_MSPI_HAS_INDEPENT_IOMUX 1
 #define SOC_MEMSPI_IS_INDEPENDENT   1
 #define SOC_SPI_MAX_PRE_DIVIDER     16
 

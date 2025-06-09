@@ -424,7 +424,7 @@ esp_err_t spi_bus_add_device(spi_host_device_t host_id, const spi_device_interfa
     spi_clock_source_t clk_src = dev_config->clock_source ? dev_config->clock_source : SPI_CLK_SRC_DEFAULT;
     uint32_t clock_source_hz = 0;
     uint32_t clock_source_div = 1;
-    esp_clk_tree_enable_src(clk_src, true);
+    SPI_CHECK(esp_clk_tree_enable_src(clk_src, true) == ESP_OK, "clock source enable failed", ESP_ERR_INVALID_STATE);
     esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clock_source_hz);
 #if SPI_LL_SUPPORT_CLK_SRC_PRE_DIV
     SPI_CHECK((dev_config->clock_speed_hz > 0) && (dev_config->clock_speed_hz <= MIN(clock_source_hz / 2, (80 * 1000000))), "invalid sclk speed", ESP_ERR_INVALID_ARG);
@@ -527,7 +527,7 @@ esp_err_t spi_bus_add_device(spi_host_device_t host_id, const spi_device_interfa
 
     //Set CS pin, CS options
     if (dev_config->spics_io_num >= 0) {
-        spicommon_cs_initialize(host_id, dev_config->spics_io_num, freecs, use_gpio);
+        spicommon_cs_initialize(host_id, dev_config->spics_io_num, freecs, use_gpio, (uint64_t *)&bus_attr->gpio_reserve);
     }
 
     //save a pointer to device in spi_host_t
@@ -601,12 +601,13 @@ esp_err_t spi_bus_remove_device(spi_device_handle_t handle)
         periph_rtc_dig_clk8m_disable();
     }
 #endif
-    esp_clk_tree_enable_src(handle->hal_dev.timing_conf.clock_source, false);
+    SPI_CHECK(esp_clk_tree_enable_src(handle->hal_dev.timing_conf.clock_source, false) == ESP_OK, "clock source disable failed", ESP_ERR_INVALID_STATE);
 
     //return
     int spics_io_num = handle->cfg.spics_io_num;
+    const spi_bus_attr_t* bus_attr = handle->host->bus_attr;
     if (spics_io_num >= 0) {
-        spicommon_cs_free_io(spics_io_num);
+        spicommon_cs_free_io(spics_io_num, (uint64_t *)&bus_attr->gpio_reserve);
     }
 
     //Kill queues

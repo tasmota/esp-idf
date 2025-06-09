@@ -92,6 +92,9 @@ uint8_t __meshlib_var_BLE_MESH_ADV_RELAY_DATA = BLE_MESH_ADV_RELAY_DATA;
 #endif
 uint8_t __meshlib_var_BLE_MESH_ADV_BEACON = BLE_MESH_ADV_BEACON;
 uint8_t __meshlib_var_BLE_MESH_ADV_URI = BLE_MESH_ADV_URI;
+#if CONFIG_BLE_MESH_PROXY_SOLIC_PDU_TX
+uint8_t __meshlib_var_BLE_MESH_ADV_PROXY_SOLIC = BLE_MESH_ADV_PROXY_SOLIC;
+#endif
 #if CONFIG_BLE_MESH_SUPPORT_BLE_ADV
 uint8_t __meshlib_var_BLE_MESH_ADV_BLE = BLE_MESH_ADV_BLE;
 #endif
@@ -1175,17 +1178,17 @@ uint8_t *bt_mesh_ext_net_get_dev_key_ca(void)
     return bt_mesh.dev_key_ca;
 }
 
-uint8_t bt_mesh_ext_net_get_rpl_count(void)
+uint16_t bt_mesh_ext_net_get_rpl_count(void)
 {
     return ARRAY_SIZE(bt_mesh.rpl);
 }
 
-uint16_t bt_mesh_ext_net_get_rpl_src(uint8_t index)
+uint16_t bt_mesh_ext_net_get_rpl_src(uint16_t index)
 {
     return bt_mesh.rpl[index].src;
 }
 
-void bt_mesh_ext_net_reset_rpl(uint8_t index)
+void bt_mesh_ext_net_reset_rpl(uint16_t index)
 {
     memset(&bt_mesh.rpl[index], 0, sizeof(bt_mesh.rpl[index]));
 }
@@ -3813,7 +3816,7 @@ void *bt_mesh_ext_brc_srv_get_bridge_table_entry(void *srv, uint8_t index)
 #endif /* CONFIG_BLE_MESH_BRC_SRV */
 }
 
-void *bt_mesh_ext_brc_srv_get_bridge_rpl(uint8_t index)
+void *bt_mesh_ext_brc_srv_get_bridge_rpl(uint16_t index)
 {
 #if CONFIG_BLE_MESH_BRC_SRV
     return &bridge_rpl[index];
@@ -4584,7 +4587,7 @@ typedef struct {
     uint16_t (*_bt_mesh_ext_sub_get_sbr_net_idx)(void *sub);
     void (*_bt_mesh_ext_sub_set_sbr_net_idx)(void *sub, uint16_t sbr_net_idx);
     void *(*_bt_mesh_ext_brc_srv_get_bridge_table_entry)(void *srv, uint8_t index);
-    void *(*_bt_mesh_ext_brc_srv_get_bridge_rpl)(uint8_t index);
+    void *(*_bt_mesh_ext_brc_srv_get_bridge_rpl)(uint16_t index);
 /* CONFIG_BLE_MESH_BRC_SRV */
 
 /* CONFIG_BLE_MESH_AGG_CLI */

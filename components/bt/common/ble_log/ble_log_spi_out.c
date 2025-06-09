@@ -183,7 +183,7 @@ static void spi_out_log_flush(void);
 static int spi_out_ul_log_init(void);
 static void spi_out_ul_log_deinit(void);
 static void spi_out_ul_log_write(uint8_t source, const uint8_t *addr, uint16_t len, bool with_ts);
-static bool spi_out_ul_log_printf(uint8_t source, const char *format, va_list args);
+static bool spi_out_ul_log_printf(uint8_t source, const char *format, va_list args, int offset);
 
 #if SPI_OUT_LL_ENABLED
 static int spi_out_ll_log_init(void);
@@ -589,12 +589,14 @@ static void spi_out_ul_log_write(uint8_t source, const uint8_t *addr, uint16_t l
     spi_out_log_cb_write_loss(ul_log_cb);
 }
 
-static bool spi_out_ul_log_printf(uint8_t source, const char *format, va_list args)
+static bool spi_out_ul_log_printf(uint8_t source, const char *format, va_list args, int offset)
 {
-    int len = vsnprintf((char *)ul_log_str_buf, SPI_OUT_UL_LOG_STR_BUF_SIZE, format, args);
+    int len = vsnprintf((char *)(ul_log_str_buf + offset),
+                        SPI_OUT_UL_LOG_STR_BUF_SIZE - offset, format, args);
     if (len < 0) {
         return false;
     }
+    len += offset;
 
     // Truncate string if overflowed
     if (len >= SPI_OUT_UL_LOG_STR_BUF_SIZE) {
@@ -716,6 +718,7 @@ static int spi_out_ts_sync_init(void)
 gpio_init_failed:
 #if !SPI_OUT_TS_SYNC_SLEEP_SUPPORT
     esp_timer_delete(ts_sync_timer);
+    ts_sync_timer = NULL;
 timer_init_failed:
 #endif // !SPI_OUT_TS_SYNC_SLEEP_SUPPORT
     return -1;
@@ -731,6 +734,7 @@ static void spi_out_ts_sync_deinit(void)
     // Deinitialize timestamp synchronizer
     esp_timer_stop(ts_sync_timer);
     esp_timer_delete(ts_sync_timer);
+    ts_sync_timer = NULL;
 #endif // !SPI_OUT_TS_SYNC_SLEEP_SUPPORT
 
     // Deinitialize sync IO
@@ -745,10 +749,6 @@ static void spi_out_ts_sync_deinit(void)
 
 static void spi_out_ts_sync_enable(bool enable)
 {
-    // Reset ts sync io
-    ts_sync_data.io_level = false;
-    gpio_set_level(SPI_OUT_SYNC_IO_NUM, (uint32_t)ts_sync_data.io_level);
-
     // Update ts sync status
     ts_sync_enabled = enable;
     if (enable) {
@@ -769,7 +769,12 @@ static void spi_out_ts_sync_enable(bool enable)
             }
         }
 #endif // !SPI_OUT_TS_SYNC_SLEEP_SUPPORT
+        if (!ts_sync_data.io_level) {
+            gpio_set_level(SPI_OUT_SYNC_IO_NUM, 1);
+        }
     }
+    ts_sync_data.io_level = 0;
+    gpio_set_level(SPI_OUT_SYNC_IO_NUM, (uint32_t)ts_sync_data.io_level);
 }
 
 static void spi_out_ts_sync_toggle(void)
@@ -956,6 +961,7 @@ void ble_log_spi_out_deinit(void)
 #if SPI_OUT_FLUSH_TIMER_ENABLED
     esp_timer_stop(flush_timer);
     esp_timer_delete(flush_timer);
+    flush_timer = NULL;
 #endif // SPI_OUT_FLUSH_TIMER_ENABLED
 
     // Drain all queued transactions
@@ -1051,7 +1057,7 @@ IRAM_ATTR void ble_log_spi_out_ll_write(uint32_t len, const uint8_t *addr, uint3
 
 #if SPI_OUT_TS_SYNC_SLEEP_SUPPORT
             if (ts_sync_inited && ts_sync_enabled) {
-                if ((last_tx_done_ts - ts_sync_data.esp_ts) >= SPI_OUT_TS_SYNC_TIMEOUT) {
+                if (last_tx_done_ts >= (SPI_OUT_TS_SYNC_TIMEOUT + ts_sync_data.esp_ts)) {
                     if (spi_out_log_cb_check_trans(ll_task_log_cb, sizeof(ts_sync_data_t), &need_append)) {
                         spi_out_ts_sync_toggle();
                         spi_out_log_cb_write(ll_task_log_cb, (const uint8_t *)&ts_sync_data,
@@ -1103,16 +1109,23 @@ int ble_log_spi_out_printf(uint8_t source, const char *format, ...)
         return -1;
     }
 
+    if (!format) {
+        return -1;
+    }
+
     // Get arguments
     va_list args;
     va_start(args, format);
 
+    va_list args_copy;
+    va_copy(args_copy, args);
+
     xSemaphoreTake(ul_log_mutex, portMAX_DELAY);
-    bool ret = spi_out_ul_log_printf(source, format, args);
+    bool ret = spi_out_ul_log_printf(source, format, args_copy, 0);
     xSemaphoreGive(ul_log_mutex);
 
+    va_end(args_copy);
     va_end(args);
-
     return ret? 0: -1;
 }
 
@@ -1122,18 +1135,29 @@ int ble_log_spi_out_printf_enh(uint8_t source, uint8_t level, const char *tag, c
         return -1;
     }
 
+    if (!tag || !format) {
+        return -1;
+    }
+
     va_list args;
     va_start(args, format);
 
+    va_list args_copy;
+    va_copy(args_copy, args);
+
     // Create log prefix in the format: "[level][tag] "
+    bool ret = false;
     xSemaphoreTake(ul_log_mutex, portMAX_DELAY);
-    snprintf((char *)ul_log_str_buf, SPI_OUT_UL_LOG_STR_BUF_SIZE,
-             "[%d][%s] %s", level, tag? tag: "NULL", format);
-    bool ret = spi_out_ul_log_printf(source, (const char *)ul_log_str_buf, args);
+    int prefix_len = snprintf((char *)ul_log_str_buf, SPI_OUT_UL_LOG_STR_BUF_SIZE,
+                              "[%d][%s]", level, tag? tag: "NULL");
+    if ((prefix_len < 0) || (prefix_len >= SPI_OUT_UL_LOG_STR_BUF_SIZE)) {
+        goto exit;
+    }
+    ret = spi_out_ul_log_printf(source, format, args_copy, prefix_len);
+exit:
     xSemaphoreGive(ul_log_mutex);
-
+    va_end(args_copy);
     va_end(args);
-
     return ret? 0: -1;
 }
 

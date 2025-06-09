@@ -56,9 +56,6 @@
 #include "portmacro.h"
 #include "port_systick.h"
 #include "esp_memory_utils.h"
-#if CONFIG_IDF_TARGET_ESP32P4
-#include "soc/hp_system_reg.h"
-#endif
 
 #if SOC_CPU_HAS_HWLOOP
 #include "riscv/csr.h"
@@ -717,7 +714,7 @@ static void vPortTLSPointersDelCb( void *pxTCB )
         if ( pvThreadLocalStoragePointersDelCallback[ x ] != NULL ) {  //If del cb is set
             /* In case the TLSP deletion callback has been overwritten by a TLS pointer, gracefully abort. */
             if ( !esp_ptr_executable( pvThreadLocalStoragePointersDelCallback[ x ] ) ) {
-                ESP_LOGE("FreeRTOS", "Fatal error: TLSP deletion callback at index %d overwritten with non-excutable pointer %p", x, pvThreadLocalStoragePointersDelCallback[ x ]);
+                ESP_EARLY_LOGE("FreeRTOS", "Fatal error: TLSP deletion callback at index %d overwritten with non-excutable pointer %p", x, pvThreadLocalStoragePointersDelCallback[ x ]);
                 abort();
             }
 

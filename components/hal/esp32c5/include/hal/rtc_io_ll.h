@@ -60,12 +60,16 @@ static inline void rtcio_ll_iomux_func_sel(int rtcio_num, int func)
 static inline void _rtcio_ll_enable_io_clock(bool enable)
 {
     LPPERI.clk_en.lp_io_ck_en = enable;
-    while (LPPERI.clk_en.lp_io_ck_en != enable) {
+    LP_GPIO.clock_gate.clk_en = enable;
+    while ((LPPERI.clk_en.lp_io_ck_en != enable) || (LP_GPIO.clock_gate.clk_en != enable)) {
         ;
     }
 }
 
-#define rtcio_ll_enable_io_clock(...) (void)__DECLARE_RCC_ATOMIC_ENV; _rtcio_ll_enable_io_clock(__VA_ARGS__)
+#define rtcio_ll_enable_io_clock(...) do { \
+        (void)__DECLARE_RCC_ATOMIC_ENV; \
+        _rtcio_ll_enable_io_clock(__VA_ARGS__); \
+    } while(0)
 
 /**
  * @brief Select the rtcio function.

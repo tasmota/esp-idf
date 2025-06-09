@@ -165,9 +165,8 @@ static inline int wpa_auth_set_key(struct wpa_authenticator *wpa_auth,
 	if (key) {
 	    wpa_printf (MSG_DEBUG, "%s : igtk idx %d", __func__, idx);
 	    wifi_wpa_igtk_t *igtk = os_malloc(sizeof(wifi_wpa_igtk_t));
-
 	    if (igtk != NULL) {
-		memcpy(&igtk->igtk[0], key, WPA_IGTK_LEN);
+		memcpy(&igtk->igtk[0], key, key_len);
 		memset((uint8_t*)&igtk->pn[0],0,6);
 		igtk->keyid[0] = idx;
 		igtk->keyid[1] = 0;
@@ -1644,6 +1643,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
     SM_ENTRY_MA(WPA_PTK, PTKCALCNEGOTIATING, wpa_ptk);
     sm->EAPOLKeyReceived = FALSE;
     sm->update_snonce = FALSE;
+    os_memset(&PTK, 0, sizeof(PTK));
     pmk_len = PMK_LEN;
 
     /* WPA with IEEE 802.1X: use the derived PMK from EAP
@@ -2483,6 +2483,8 @@ static int wpa_group_config_group_keys(struct wpa_authenticator *wpa_auth,
                        struct wpa_group *group)
 {
     int ret = 0;
+    size_t len;
+    len = wpa_cipher_key_len(wpa_auth->conf.group_mgmt_cipher);
     if (wpa_auth_set_key(wpa_auth, group->vlan_id,
                  wpa_cipher_to_alg(wpa_auth->conf.wpa_group),
                  (uint8_t *)broadcast_ether_addr, group->GN,
@@ -2494,7 +2496,7 @@ static int wpa_group_config_group_keys(struct wpa_authenticator *wpa_auth,
         wpa_auth_set_key(wpa_auth, group->vlan_id, WIFI_WPA_ALG_IGTK,
                  broadcast_ether_addr, group->GN_igtk,
                  group->IGTK[group->GN_igtk - 4],
-                 WPA_IGTK_LEN) < 0)
+                 len) < 0)
         ret = -1;
 
 #endif /* CONFIG_IEEE80211W */

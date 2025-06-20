@@ -63,7 +63,7 @@ SPECIAL_MARKERS = {
 ENV_MARKERS = {
     # special markers
     'qemu': 'build and test using qemu, not real target',
-    'macos_shell': 'tests should be run on macos hosts',
+    'macos': 'tests should be run on macos hosts',
     # single-dut markers
     'generic': 'tests should be run on generic runners',
     'flash_suspend': 'support flash suspend feature',
@@ -147,6 +147,7 @@ ENV_MARKERS = {
     'ram_app': 'ram_app runners',
     'esp32c3eco7': 'esp32c3 major version(v1.1) chips',
     'esp32c2eco4': 'esp32c2 major version(v2.0) chips',
+    'recovery_bootloader': 'Runner with recovery bootloader offset set in eFuse',
 }
 
 # by default the timeout is 1h, for some special cases we need to extend it

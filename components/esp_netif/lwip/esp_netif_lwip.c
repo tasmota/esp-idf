@@ -1123,15 +1123,15 @@ static void esp_netif_dhcps_cb(void* arg, uint8_t ip[4], uint8_t mac[6])
 {
     esp_netif_t *esp_netif = arg;
     ESP_LOGD(TAG, "%s esp_netif:%p", __func__, esp_netif);
-    ip_event_ap_staipassigned_t evt = { .esp_netif = esp_netif };
+    ip_event_assigned_ip_to_client_t evt = { .esp_netif = esp_netif };
     memcpy((char *)&evt.ip.addr, (char *)ip, sizeof(evt.ip.addr));
     memcpy((char *)&evt.mac, mac, sizeof(evt.mac));
     ESP_LOGI(TAG, "DHCP server assigned IP to a client, IP is: " IPSTR, IP2STR(&evt.ip));
     ESP_LOGD(TAG, "Client's MAC: %x:%x:%x:%x:%x:%x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    int ret = esp_event_post(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &evt, sizeof(evt), 0);
+    int ret = esp_event_post(IP_EVENT, IP_EVENT_ASSIGNED_IP_TO_CLIENT, &evt, sizeof(evt), 0);
     if (ESP_OK != ret) {
-        ESP_LOGE(TAG, "dhcps cb: failed to post IP_EVENT_AP_STAIPASSIGNED (%x)", ret);
+        ESP_LOGE(TAG, "dhcps cb: failed to post IP_EVENT_ASSIGNED_IP_TO_CLIENT (%x)", ret);
     }
 }
 #endif
@@ -1470,11 +1470,12 @@ static void esp_netif_internal_dhcpc_cb(struct netif *netif)
     } else {
         if (!ip4_addr_cmp(&ip_info->ip, IP4_ADDR_ANY4)) {
             esp_netif_start_ip_lost_timer(esp_netif);
-            // synchronize lwip netif with esp_netif setting ip_info to 0,
-            // so the next time we get a valid IP we can raise the event
-            ip4_addr_set(&ip_info->ip, ip_2_ip4(&netif->ip_addr));
-            ip4_addr_set(&ip_info->netmask, ip_2_ip4(&netif->netmask));
-            ip4_addr_set(&ip_info->gw, ip_2_ip4(&netif->gw));
+            if (esp_netif->flags & ESP_NETIF_DHCP_CLIENT && esp_netif->dhcpc_status == ESP_NETIF_DHCP_STARTED) {
+                // Only for active DHCP client (in case of static IP, we keep the last configure value in ip_info)
+                // synchronize lwip netif with esp_netif setting ip_info to 0,
+                // so the next time we get a valid IP we can raise the event
+                esp_netif_reset_ip_info(esp_netif);
+            }
         }
     }
 }
@@ -1502,7 +1503,10 @@ static void esp_netif_ip_lost_timer(void *arg)
         esp_netif_update_default_netif(esp_netif, ESP_NETIF_LOST_IP);
         ESP_LOGD(TAG, "if%p ip lost tmr: raise ip lost event", esp_netif);
         memset(esp_netif->ip_info_old, 0, sizeof(esp_netif_ip_info_t));
-        memset(esp_netif->ip_info, 0, sizeof(esp_netif_ip_info_t));
+        if (esp_netif->flags & ESP_NETIF_DHCP_CLIENT && esp_netif->dhcpc_status == ESP_NETIF_DHCP_STARTED) {
+            // Reset IP info if using DHCP client (static IP is supposed to be restored based on the ip_info)
+            esp_netif_reset_ip_info(esp_netif);
+        }
         if (esp_netif->lost_ip_event) {
             ret = esp_event_post(IP_EVENT, esp_netif->lost_ip_event,
                                           &evt, sizeof(evt), 0);

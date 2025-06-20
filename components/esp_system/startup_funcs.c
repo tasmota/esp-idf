@@ -74,7 +74,7 @@ ESP_SYSTEM_INIT_FN(init_show_cpu_freq, CORE, BIT(0), 10)
  * It is protected from all REE accesses through memory protection mechanisms,
  * as it is a critical module for device functioning.
  */
-#if !CONFIG_SECURE_ENABLE_TEE
+#if SOC_BOD_SUPPORTED && !CONFIG_SECURE_ENABLE_TEE
 ESP_SYSTEM_INIT_FN(init_brownout, CORE, BIT(0), 104)
 {
     // [refactor-todo] leads to call chain rtc_is_register (driver) -> esp_intr_alloc (esp32/esp32s2) ->
@@ -162,6 +162,17 @@ ESP_SYSTEM_INIT_FN(init_coexist, SECONDARY, BIT(0), 204)
     return ESP_OK;
 }
 #endif // CONFIG_SW_COEXIST_ENABLE || CONFIG_EXTERNAL_COEX_ENABLE
+
+#if SOC_RECOVERY_BOOTLOADER_SUPPORTED
+ESP_SYSTEM_INIT_FN(init_bootloader_offset, SECONDARY, BIT(0), 205)
+{
+    // The bootloader offset variable in ROM is stored in a memory that will be reclaimed by heap component.
+    // Reading it before the heap is initialized helps to preserve the value.
+    volatile int bootloader_offset = esp_rom_get_bootloader_offset();
+    (void)bootloader_offset;
+    return ESP_OK;
+}
+#endif // SOC_RECOVERY_BOOTLOADER_SUPPORTED
 
 #ifndef CONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE
 ESP_SYSTEM_INIT_FN(init_disable_rtc_wdt, SECONDARY, BIT(0), 999)

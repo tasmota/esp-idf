@@ -30,6 +30,11 @@ The ``pull_up`` and ``pull_down`` members have been removed from the following c
     - :cpp:type:`mcpwm_gpio_sync_src_config_t`
     - :cpp:type:`mcpwm_capture_channel_config_t`
 
+GPIO
+----
+
+:func:`gpio_iomux_in` and :func:`gpio_iomux_out` have been replaced by :func:`gpio_iomux_input` and :func:`gpio_iomux_output`, and have been moved to ``esp_private/gpio.h`` header file as private APIs for internal use only.
+
 I2C
 ---
 
@@ -49,3 +54,49 @@ Major Changes in Usage
 - ``i2c_slave_transmit`` has been replaced by ``i2c_slave_write``.
 - ``i2c_slave_write_ram`` has been removed。
 - ``i2c_slave_read_ram`` has been removed。
+
+Legacy Timer Group Driver is Removed
+------------------------------------
+
+The legacy timer group driver ``driver/timer.h`` is deprecated since version 5.0 (see :ref:`deprecate_gptimer_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_gptimer`, and the header file path is ``driver/gptimer.h``.
+
+.. only:: SOC_I2S_SUPPORTED
+
+    Legacy I2S Driver is Removed
+    ------------------------------------
+
+    The legacy i2s driver ``driver/i2s.h`` is deprecated since version 5.0 (see :ref:`deprecate_i2s_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_i2s`, and the header file path is ``driver/i2s_std.h``, ``driver/i2s_pdm.h`` and ``driver/i2s_tdm.h``.
+
+.. only:: SOC_PCNT_SUPPORTED
+
+    Legacy PCNT Driver is Removed
+    ------------------------------------
+
+    The legacy PCNT driver ``driver/pcnt.h`` is deprecated since version 5.0 (see :ref:`deprecate_pcnt_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_pcnt`, and the header file path is ``driver/pulse_cnt.h``.
+
+GDMA
+----
+
+- The ``GDMA_ISR_IRAM_SAFE`` Kconfig option has been removed due to potential risks. Now, the interrupt behavior of different DMA channels during Cache disabled periods are independent of each other.
+- ``gdma_new_channel`` is removed. When requesting a GDMA channel, use either ``gdma_new_ahb_channel`` or ``gdma_new_axi_channel`` according to the bus type.
+- The ``sram_trans_align`` and ``psram_trans_align`` members have been removed from :cpp:type:`async_memcpy_config_t`. Use :cpp:member:`async_memcpy_config_t::dma_burst_size` to set the DMA burst transfer size.
+- The ``esp_dma_capable_malloc`` and ``esp_dma_capable_calloc`` functions have been removed. Use :cpp:func:`heap_caps_malloc` and :cpp:func:`heap_caps_calloc` from :component_file:`heap/include/esp_heap_caps.h` with ``MALLOC_CAP_DMA|MALLOC_CAP_CACHE_ALIGNED`` to allocate memory suitable for DMA and cache alignment.
+
+SDMMC
+-----
+
+- The ``get_dma_info`` member in the :cpp:type:`sdmmc_host_t` structure, as well as the ``sdspi_host_get_dma_info`` and ``sdmmc_host_get_dma_info`` functions, have been removed. DMA configuration is now handled internally by the driver.
+
+.. only:: SOC_DAC_SUPPORTED
+
+    Legacy DAC Driver is Removed
+    ------------------------------------
+
+    The legacy DAC driver ``driver/dac.h`` is deprecated since version 5.1 (see :ref:`deprecate_dac_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_dac`, and the header file path is ``driver/dac_oneshot.h``, ``driver/dac_continuous.h`` and ``driver/dac_cosine.h``.
+
+.. only:: SOC_TEMP_SENSOR_SUPPORTED
+
+    Legacy Temperature Sensor Driver is Removed
+    -------------------------------------------
+
+    The legacy temperature sensor driver ``driver/temp_sensor.h`` is deprecated since version 5.0 (see :ref:`deprecate_tsens_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_tsens`, and the header file path is ``driver/temperature_sensor.h``.

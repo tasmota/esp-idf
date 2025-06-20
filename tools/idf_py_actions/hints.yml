@@ -434,7 +434,7 @@
 
 -
     re: "unplaced orphan section"
-    hint: "Avoid creating custom sections. Please refer to the 'Linker Script Generation' article in the IDF documentation to address this. Or set option CONFIG_COMPILER_ORPHAN_SECTIONS_PLACE (not recommended)."
+    hint: "An orphan section was detected during linking stage. For more information run 'idf.py docs -sp migration-guides/release-6.x/build-system.html#linker-orphan-handling-behavior-changed-to-error'."
 
 -
     re: "the current mclk multiple cannot perform integer division"
@@ -469,3 +469,43 @@
 -
     re: "spi_hal: The clock_speed_hz should less than"
     hint: "When operating in full-duplex mode at high frequencies, the device may not read data correctly.\nTry using IOMUX pins to increase the frequency limit or switch to half-duplex mode.\nNote that the SPI master can only operate at divisors of 80 MHz, and the driver always selects the closest available frequency to your configuration.\nSpecify SPI_DEVICE_NO_DUMMY to bypass this check. This allows higher output speeds but may result in unreliable data reads."
+
+-
+    re: "has no member named 'io_loop_back'"
+    hint: "If you want to bind different driver objects to the same GPIO, just set them with the same GPIO number."
+
+-
+    re: "has no member named '{}'"
+    hint: "Please include 'driver/gpio.h' and call 'gpio_set_pull_mode' to set the correct pull mode."
+    variables:
+        -
+            re_variables: ['pull_up']
+            hint_variables: []
+        -
+            re_variables: ['pull_down']
+            hint_variables: []
+
+-
+    re: "has no member named 'io_od_mode'"
+    hint: "Please include 'driver/gpio.h' and call 'gpio_od_enable' to enable the open-drain mode."
+
+-
+    re: "error: implicit declaration of function '(esp_dma_capable_malloc|esp_dma_capable_calloc|esp_cache_aligned_malloc|esp_cache_aligned_calloc)'"
+    hint: "Use the memory allocation functions from the esp_heap_caps.h with proper capability flags.\nFor example, use heap_caps_malloc() with the MALLOC_CAP_CACHE_ALIGNED flag to allocate memory that is aligned to cache line."
+
+-
+    re: "fatal error: {}: No such file or directory"
+    hint: "The {} driver is removed. It should be replaced by '{}' in the '{}' component. Please read the migration guide for more details."
+    variables:
+        -
+            re_variables: ['driver/timer.h']
+            hint_variables: ['legacy timer group', 'driver/gptimer.h', 'esp_driver_gptimer']
+        -
+            re_variables: ['driver/i2s.h']
+            hint_variables: ['legacy I2S', 'driver/i2s_std.h, driver/i2s_pdm.h, driver/i2s_tdm.h', 'esp_driver_i2s']
+        -
+            re_variables: ['driver/pcnt.h']
+            hint_variables: ['legacy pcnt', 'driver/pulse_cnt.h', 'esp_driver_pcnt']
+        -
+            re_variables: ['driver/dac.h']
+            hint_variables: ['legacy DAC', 'driver/dac_oneshot.h, driver/dac_continuous.h, driver/dac_cosine.h', 'esp_driver_dac']

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -53,7 +53,7 @@ uint32_t esp_efuse_rtc_calib_get_init_code(int version, uint32_t adc_unit, int a
     uint32_t init_code = 0;
     ESP_ERROR_CHECK(esp_efuse_read_field_blob(init_code_efuse, &init_code, init_code_size));
 
-    return init_code + 1400;    // version 1 logic
+    return init_code + 1600;    // version 1 logic
 
 }
 
@@ -143,23 +143,5 @@ esp_err_t esp_efuse_rtc_calib_get_cal_voltage(int version, uint32_t adc_unit, in
     *out_digi = chk_offset + RTC_CALIB_GET_SIGNED_VAL(cal_vol, 9);
     *out_vol_mv = input_vout_mv[VER2IDX(version)][atten];
 
-    return ESP_OK;
-}
-
-esp_err_t esp_efuse_rtc_calib_get_tsens_val(float* tsens_cal)
-{
-    const esp_efuse_desc_t** cal_temp_efuse;
-    cal_temp_efuse = ESP_EFUSE_TEMPERATURE_SENSOR;
-    int cal_temp_size = esp_efuse_get_field_size(cal_temp_efuse);
-    assert(cal_temp_size == 9);
-
-    uint32_t cal_temp = 0;
-    esp_err_t err = esp_efuse_read_field_blob(cal_temp_efuse, &cal_temp, cal_temp_size);
-    if (err != ESP_OK) {
-        *tsens_cal = 0.0;
-        return err;
-    }
-    // BIT(8) stands for sign: 1: negative, 0: positive
-    *tsens_cal = ((cal_temp & BIT(8)) != 0)? -(uint8_t)cal_temp: (uint8_t)cal_temp;
     return ESP_OK;
 }

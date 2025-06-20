@@ -119,12 +119,18 @@ GPIO
     - Channel configuration was done by channel allocation, in :cpp:func:`sdm_new_channel`. In the new driver, only the ``density`` can be changed at runtime, by :cpp:func:`sdm_channel_set_pulse_density`. Other parameters like ``gpio number`` and ``prescale`` are only allowed to set during channel allocation.
     - Before further channel operations, users should **enable** the channel in advance, by calling :cpp:func:`sdm_channel_enable`. This function helps to manage some system level services, like **Power Management**.
 
-Timer Group Driver
-------------------
+    .. _deprecate_gptimer_legacy_driver:
+
+.. only:: not SOC_SDM_SUPPORTED
+
+    .. _deprecate_gptimer_legacy_driver:
+
+Legacy Timer Group Driver is Deprecated
+---------------------------------------
 
 Timer Group driver has been redesigned into :doc:`GPTimer <../../../api-reference/peripherals/gptimer>`, which aims to unify and simplify the usage of general purpose timer.
 
-Although it is recommended to use the new driver APIs, the legacy driver is still available in the previous include path ``driver/timer.h``. However, by default, including ``driver/timer.h`` triggers the build warning below. The warning can be suppressed by the Kconfig option :ref:`CONFIG_GPTIMER_SUPPRESS_DEPRECATE_WARN`.
+Although it is recommended to use the new driver APIs, the legacy driver is still available in the previous include path ``driver/timer.h``. However, by default, including ``driver/timer.h`` triggers the build warning below. The warning can be suppressed by the Kconfig option ``CONFIG_GPTIMER_SUPPRESS_DEPRECATE_WARN``.
 
 .. code-block:: text
 
@@ -242,12 +248,14 @@ LEDC
 
 .. only:: SOC_PCNT_SUPPORTED
 
-    Pulse Counter Driver
-    --------------------
+    .. _deprecate_pcnt_legacy_driver:
+
+    Legacy PCNT Driver is Deprecated
+    --------------------------------
 
     Pulse counter driver has been redesigned (see :doc:`PCNT <../../../api-reference/peripherals/pcnt>`), which aims to unify and simplify the usage of PCNT peripheral.
 
-    Although it is recommended to use the new driver APIs, the legacy driver is still available in the previous include path ``driver/pcnt.h``. However, including ``driver/pcnt.h`` triggers the build warning below by default. The warning can be suppressed by the Kconfig option :ref:`CONFIG_PCNT_SUPPRESS_DEPRECATE_WARN`.
+    Although it is recommended to use the new driver APIs, the legacy driver is still available in the previous include path ``driver/pcnt.h``. However, including ``driver/pcnt.h`` triggers the build warning below by default. The warning can be suppressed by the Kconfig option ``CONFIG_PCNT_SUPPRESS_DEPRECATE_WARN``.
 
     .. code-block:: text
 
@@ -286,12 +294,14 @@ LEDC
 
 .. only:: SOC_TEMP_SENSOR_SUPPORTED
 
-    Temperature Sensor Driver
-    -------------------------
+    .. _deprecate_tsens_legacy_driver:
+
+    Legacy Temperature Sensor Driver is Deprecated
+    ----------------------------------------------
 
     The temperature sensor driver has been redesigned and it is recommended to use the new driver. However, the old driver is still available but cannot be used with the new driver simultaneously.
 
-    The new driver can be included via ``driver/temperature_sensor.h``. The old driver is still available in the previous include path ``driver/temp_sensor.h``. However, including ``driver/temp_sensor.h`` triggers the build warning below by default. The warning can be suppressed by enabling the menuconfig option :ref:`CONFIG_TEMP_SENSOR_SUPPRESS_DEPRECATE_WARN`.
+    The new driver can be included via ``driver/temperature_sensor.h``. The old driver is still available in the previous include path ``driver/temp_sensor.h``. However, including ``driver/temp_sensor.h`` triggers the build warning below by default. The warning can be suppressed by enabling the menuconfig option ``CONFIG_TEMP_SENSOR_SUPPRESS_DEPRECATE_WARN``.
 
     .. code-block:: text
 
@@ -456,12 +466,14 @@ LCD
 
 .. only:: SOC_I2S_SUPPORTED
 
+    .. _deprecate_i2s_legacy_driver:
+
     I2S Driver
     ----------
 
     The I2S driver has been redesigned (see :doc:`I2S Driver <../../../api-reference/peripherals/i2s>`), which aims to rectify the shortcomings of the driver that were exposed when supporting all the new features of ESP32-C3 & ESP32-S3. The new driver's APIs are available by including corresponding I2S mode's header files :component_file:`esp_driver_i2s/include/driver/i2s_std.h`, :component_file:`esp_driver_i2s/include/driver/i2s_pdm.h`, or :component_file:`esp_driver_i2s/include/driver/i2s_tdm.h`.
 
-    Meanwhile, the old driver's APIs in :component_file:`driver/deprecated/driver/i2s.h` are still supported for backward compatibility. But there will be warnings if users keep using the old APIs in their projects, these warnings can be suppressed by the Kconfig option :ref:`CONFIG_I2S_SUPPRESS_DEPRECATE_WARN`.
+    Meanwhile, the old driver's APIs in ``driver/i2s.h`` are still supported for backward compatibility. But there will be warnings if users keep using the old APIs in their projects, these warnings can be suppressed by the Kconfig option ``CONFIG_I2S_SUPPRESS_DEPRECATE_WARN``.
 
     Here is the general overview of the current I2S files:
 

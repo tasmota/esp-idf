@@ -25,35 +25,14 @@ if(CONFIG_SOC_ADC_SUPPORTED)
     endif()
 endif()
 
-# DAC related source files
-if(CONFIG_SOC_DAC_SUPPORTED)
-    list(APPEND srcs "deprecated/dac_common_legacy.c"
-                     "deprecated/${target}/dac_legacy.c")
-endif()
-
-# GPTimer legacy driver
-if(CONFIG_SOC_GPTIMER_SUPPORTED)
-    list(APPEND srcs "deprecated/timer_legacy.c")
-endif()
-
 # I2C related source files
 if(CONFIG_SOC_I2C_SUPPORTED)
     list(APPEND srcs "i2c/i2c.c")
 endif()
 
-# I2S related source files
-if(CONFIG_SOC_I2S_SUPPORTED)
-    list(APPEND srcs "deprecated/i2s_legacy.c")
-endif()
-
 # MCPWM legacy driver
 if(CONFIG_SOC_MCPWM_SUPPORTED)
     list(APPEND srcs "deprecated/mcpwm_legacy.c")
-endif()
-
-# PCNT legacy driver
-if(CONFIG_SOC_PCNT_SUPPORTED)
-    list(APPEND srcs "deprecated/pcnt_legacy.c")
 endif()
 
 # RMT legacy driver
@@ -64,11 +43,6 @@ endif()
 # Sigma-Delta Modulation legacy driver
 if(CONFIG_SOC_SDM_SUPPORTED)
     list(APPEND srcs "deprecated/sigma_delta_legacy.c")
-endif()
-
-# Temperature Sensor related source files
-if(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
-    list(APPEND srcs "deprecated/rtc_temperature_legacy.c")
 endif()
 
 # Touch Sensor related source files

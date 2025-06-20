@@ -392,6 +392,7 @@
 #define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
 #define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION 1  /*!< Support loop transmission */
+#define SOC_PARLIO_TX_SUPPORT_EOF_FROM_DMA   1   /*!< Support to treat DMA EOF as TX unit EOF */
 #define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
 #define SOC_PARLIO_SUPPORT_SPI_LCD           1   /*!< Support to drive SPI interfaced LCD */
 #define SOC_PARLIO_SUPPORT_I80_LCD           1   /*!< Support to drive I80 interfaced LCD */
@@ -422,6 +423,11 @@
 #define SOC_SHA_SUPPORT_SHA1            (1)
 #define SOC_SHA_SUPPORT_SHA224          (1)
 #define SOC_SHA_SUPPORT_SHA256          (1)
+#define SOC_SHA_SUPPORT_SHA384          (1)
+#define SOC_SHA_SUPPORT_SHA512          (1)
+#define SOC_SHA_SUPPORT_SHA512_224      (1)
+#define SOC_SHA_SUPPORT_SHA512_256      (1)
+#define SOC_SHA_SUPPORT_SHA512_T        (1)
 
 /*--------------------------- ECC CAPS ---------------------------------------*/
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
@@ -475,6 +481,7 @@
 #define SOC_SPI_MEM_SUPPORT_WB_MODE_INDEPENDENT_CONTROL   (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
+#define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
@@ -557,14 +564,17 @@
 
 /*------------------------Bootloader CAPS---------------------------------*/
 /* Support Recovery Bootloader */
-#define SOC_RECOVERY_BOOTLOADER_SUPPORTED             (0)
+#define SOC_RECOVERY_BOOTLOADER_SUPPORTED             (1)
 /* Support Anti-rollback */
-#define SOC_BOOTLOADER_ANTI_ROLLBACK_SUPPORTED        (0)
+#define SOC_BOOTLOADER_ANTI_ROLLBACK_SUPPORTED        (1)
 
 /*-------------------------- APM CAPS-----------------------------------------*/
-#define SOC_APM_CTRL_FILTER_SUPPORTED        1 /*!< Support for APM control filter */
-#define SOC_APM_LP_APM0_SUPPORTED            1 /*!< Support for LP APM0 control filter */
-#define SOC_APM_SUPPORT_TEE_PERI_ACCESS_CTRL 1 /*!< Support for TEE controller per-peripheral access control */
+#define SOC_APM_CTRL_FILTER_SUPPORTED         1    /*!< Support for APM control filter */
+#define SOC_APM_LP_APM0_SUPPORTED             1    /*!< Support for LP APM0 control filter */
+#define SOC_APM_CPU_APM_SUPPORTED             1    /*!< Support for CPU APM control filter */
+#define SOC_APM_SUPPORT_LP_TEE_CTRL           1    /*!< Support for LP TEE controller */
+#define SOC_APM_SUPPORT_CTRL_CFG_LOCK         1    /*!< Support for APM controller configuration lock */
+#define SOC_APM_SUPPORT_TEE_PERI_ACCESS_CTRL  1    /*!< Support for TEE controller per-peripheral access control */
 
 /*------------------------ Anti DPA (Security) CAPS --------------------------*/
 #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
@@ -691,6 +701,7 @@
 #define SOC_BLE_POWER_CONTROL_SUPPORTED     (1)    /*!< Support Bluetooth Power Control */
 #define SOC_BLE_MULTI_CONN_OPTIMIZATION     (1)    /*!< Support multiple connections optimization */
 #define SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED  (1)    /*!< Support For BLE Periodic Adv Enhancements */
+#define SOC_BLE_CTE_SUPPORTED               (1)    /*!< Support Bluetooth LE Constant Tone Extension (CTE) */
 
 /*------------------------------------- PHY CAPS -------------------------------------*/
 // #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/

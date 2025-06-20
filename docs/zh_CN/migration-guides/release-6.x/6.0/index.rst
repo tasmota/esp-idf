@@ -6,5 +6,7 @@
 .. toctree::
     :maxdepth: 1
 
+    build-system
     peripherals
+    security
     tools

@@ -151,6 +151,8 @@ typedef enum {
 typedef struct {
     bool hidd_inited;                      /*!< HID device initialization */
     uint8_t conn_num;                      /*!< Number of connections */
+    uint8_t plug_vc_dev_num;               /*!< Number of plugged virtual cable devices */
+    uint8_t reg_app_num;                   /*!< Number of HID device application registrations */
 } esp_hidd_profile_status_t;
 
 /**
@@ -342,6 +344,11 @@ esp_err_t esp_bt_hid_device_unregister_app(void);
  *                  esp_bluedroid_init()/esp_bluedroid_init_with_cfg() and esp_bluedroid_enable() success, and should be
  *                  called after esp_bt_hid_device_init(). When the operation is complete, the callback function will
  *                  be called with ESP_HIDD_OPEN_EVT.
+ *
+ * @note            The connection between the HID Host and the HID Device is established as a virtual cable by default.
+ *                  A new HID Host connection request will only be accepted after the previous HID Host has been
+ *                  explicitly unplugged. For details on disconnection and virtual cable unplugging, please refer to API
+ *                  `esp_bt_hid_device_disconnect` and `esp_bt_hid_device_virtual_cable_unplug`.
  *
  * @param[in]       bd_addr: Remote host bluetooth device address.
  *

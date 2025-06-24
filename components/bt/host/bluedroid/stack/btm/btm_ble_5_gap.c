@@ -613,6 +613,7 @@ tBTM_STATUS BTM_BleStartExtAdvRestart(uint8_t con_handle)
     }
 
     if((index >= MAX_BLE_ADV_INSTANCE) || (!adv_record[index].invalid)) {
+        BTM_TRACE_WARNING("%s failed to find extend adv, adv_handle %u con_handle %u", __func__, index, con_handle);
         return BTM_WRONG_MODE;
     }
 
@@ -830,10 +831,10 @@ tBTM_STATUS BTM_BlePeriodicAdvCreateSync(tBTM_BLE_Periodic_Sync_Params *params)
 
     if ((params->sync_timeout < 0x0a || params->sync_timeout > 0x4000)
         || (params->filter_policy > 0x01)
-        #if (CONFIG_BT_BLE_FEAT_CREATE_SYNC_ENH)
+#if (BLE_FEAT_CREATE_SYNC_ENH == TRUE)
         || (params->reports_disabled > 0x01)
         || (params->filter_duplicates > 0x01)
-        #endif
+#endif // (BLE_FEAT_CREATE_SYNC_ENH == TRUE)
         /*If the Periodic Advertiser List is not used,
         the Advertising_SID, Advertiser Address_Type, and Advertiser Address
         parameters specify the periodic advertising device to listen to; otherwise they
@@ -850,17 +851,17 @@ tBTM_STATUS BTM_BlePeriodicAdvCreateSync(tBTM_BLE_Periodic_Sync_Params *params)
         SET_BIT(option, 0);
     }
 
-    #if (CONFIG_BT_BLE_FEAT_CREATE_SYNC_ENH)
+#if (BLE_FEAT_CREATE_SYNC_ENH == TRUE)
     if (params->reports_disabled) {
         SET_BIT(option, 1);
     }
     if (params->filter_duplicates) {
         SET_BIT(option, 2);
     }
-    #endif
+#endif // (BLE_FEAT_CREATE_SYNC_ENH == TRUE)
 
     if (!btsnd_hcic_ble_periodic_adv_create_sync(option, params->sid, params->addr_type,
-                                            params->addr, params->sync_timeout, 0)) {
+                                            params->addr, params->sync_timeout, params->sync_cte_type)) {
         BTM_TRACE_ERROR("LE PA CreateSync cmd failed");
         status = BTM_ILLEGAL_VALUE;
     }
@@ -1254,7 +1255,7 @@ void btm_ble_adv_set_terminated_evt(tBTM_BLE_ADV_TERMINAT *params)
     }
 
     // adv terminated due to connection, save the adv handle and connection handle
-    if(params->completed_event == 0x00) {
+    if(params->status == 0x00) {
         adv_record[params->adv_handle].ter_con_handle = params->conn_handle;
     } else {
         adv_record[params->adv_handle].ter_con_handle = INVALID_VALUE;

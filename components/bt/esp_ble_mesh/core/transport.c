@@ -388,8 +388,9 @@ static void schedule_retransmit(struct seg_tx *tx)
      * the seg_pending of this segment.
      * See BLEMESH25-92 for details */
     if (tx->dst == BLE_MESH_ADDR_UNASSIGNED) {
-        assert(tx->seg_pending == 1);
-        tx->seg_pending = 0;
+        if (tx->seg_pending) {
+            tx->seg_pending--;
+        }
         return;
     }
 
@@ -1560,7 +1561,7 @@ static int trans_seg(struct net_buf_simple *buf, struct bt_mesh_net_rx *net_rx,
          * eventually be freed up and we'll be able to process
          * this one.
          */
-        BT_WARN("No free slots for new incoming segmented messages");
+        BT_WARN("No free slots for new incoming segmented messages, src: %04x", net_rx->ctx.addr);
         return -ENOMEM;
     }
 

@@ -166,9 +166,9 @@ uint32_t btc_get_ble_status(void)
 
     #if (SMP_INCLUDED == TRUE)
     // Number of recorded devices
-    extern uint8_t btm_ble_sec_dev_active_count(void);
-    if (btm_ble_sec_dev_active_count()) {
-        status |= BIT(BTC_BLE_STATUS_KEYS);
+    extern uint8_t btm_ble_sec_dev_record_count(void);
+    if (btm_ble_sec_dev_record_count()) {
+        status |= BIT(BTC_BLE_STATUS_DEVICE_REC);
     }
 
     // Number of saved bonded devices
@@ -213,6 +213,13 @@ uint32_t btc_get_ble_status(void)
     extern uint8_t bta_gatts_srvc_active_count(void);
     if (bta_gatts_srvc_active_count()) {
         status |= BIT(BTC_BLE_STATUS_GATTS_SRVC);
+    }
+    #endif
+
+    #if SMP_INCLUDED == TRUE
+    extern uint8_t smp_get_state(void);
+    if (smp_get_state()) {
+        status |= BIT(BTC_BLE_STATUS_SMP_STATE);
     }
     #endif
 

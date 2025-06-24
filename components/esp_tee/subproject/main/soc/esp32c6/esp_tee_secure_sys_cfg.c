@@ -8,6 +8,7 @@
 
 #include "riscv/rv_utils.h"
 #include "riscv/encoding.h"
+#include "esp_private/interrupt_plic.h"
 
 #include "esp_cpu.h"
 #include "esp_log.h"
@@ -27,9 +28,6 @@
     register uintptr_t a1 asm("a1") = (uintptr_t)(arg1);    \
     asm volatile("ecall" : :"r"(ra), "r"(a1) : );                       \
   })
-
-#define SET_BIT(t, n)  (t |= (1UL << (n)))
-#define CLR_BIT(t, n)  (t &= ~(1UL << (n)))
 
 static const char *TAG = "esp_tee_secure_sys_cfg";
 
@@ -58,9 +56,8 @@ void esp_tee_soc_secure_sys_init(void)
     RV_WRITE_CSR(uie, 0x00);
 
     /* All interrupts except the TEE secure interrupt are delegated to the U-mode */
-    uint32_t mideleg_val = UINT32_MAX;
-    CLR_BIT(mideleg_val, TEE_SECURE_INUM);
-    RV_WRITE_CSR(mideleg, mideleg_val);
+    RV_WRITE_CSR(mideleg, UINT32_MAX);
+    RV_CLEAR_CSR(mideleg, TEE_SECURE_INUM);
 
     /* TODO: IDF-8958
      * The values for the secure interrupt number and priority and
@@ -71,7 +68,7 @@ void esp_tee_soc_secure_sys_init(void)
     /* TODO: Currently, we do not allow interrupts to be set up with a priority greater than 7, see intr_alloc.c */
     esprv_int_set_priority(TEE_SECURE_INUM, 7);
     esprv_int_set_type(TEE_SECURE_INUM, ESP_CPU_INTR_TYPE_LEVEL);
-    esprv_int_set_threshold(1);
+    esprv_int_set_threshold(RVHAL_INTR_ENABLE_THRESH);
     esprv_int_enable(BIT(TEE_SECURE_INUM));
 #endif
 
@@ -93,7 +90,6 @@ void esp_tee_soc_secure_sys_init(void)
     esp_tee_protect_intr_src(ETS_HP_APM_M2_INTR_SOURCE);    // HP_APM_M2
     esp_tee_protect_intr_src(ETS_HP_APM_M3_INTR_SOURCE);    // HP_APM_M3
     esp_tee_protect_intr_src(ETS_LP_APM0_INTR_SOURCE);      // LP_APM0
-    esp_tee_protect_intr_src(ETS_EFUSE_INTR_SOURCE);        // eFuse
     esp_tee_protect_intr_src(ETS_AES_INTR_SOURCE);          // AES
     esp_tee_protect_intr_src(ETS_SHA_INTR_SOURCE);          // SHA
     esp_tee_protect_intr_src(ETS_ECC_INTR_SOURCE);          // ECC

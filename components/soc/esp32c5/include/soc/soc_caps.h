@@ -420,6 +420,11 @@
 #define SOC_SHA_SUPPORT_SHA1            (1)
 #define SOC_SHA_SUPPORT_SHA224          (1)
 #define SOC_SHA_SUPPORT_SHA256          (1)
+#define SOC_SHA_SUPPORT_SHA384          (1)
+#define SOC_SHA_SUPPORT_SHA512          (1)
+#define SOC_SHA_SUPPORT_SHA512_224      (1)
+#define SOC_SHA_SUPPORT_SHA512_256      (1)
+#define SOC_SHA_SUPPORT_SHA512_T        (1)
 
 /*--------------------------- ECC CAPS ---------------------------------------*/
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
@@ -472,6 +477,8 @@
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 #define SOC_SPI_MEM_SUPPORT_WB_MODE_INDEPENDENT_CONTROL   (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+#define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
+#define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1

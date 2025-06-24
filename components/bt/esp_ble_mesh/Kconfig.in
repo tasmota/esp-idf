@@ -25,7 +25,6 @@ if BLE_MESH
     menuconfig BLE_MESH_USE_BLE_50
         bool "Support using BLE 5.0 APIs for BLE Mesh"
         depends on BLE_MESH_EXPERIMENTAL
-        depends on IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3
         select BT_NIMBLE_50_FEATURE_SUPPORT if BT_NIMBLE_ENABLED
         select BT_NIMBLE_EXT_ADV if BT_NIMBLE_ENABLED
         select BT_BLE_50_FEATURES_SUPPORTED if BT_BLUEDROID_ENABLED
@@ -477,7 +476,7 @@ if BLE_MESH
         int "Maximum capacity of solicitation replay protection list"
         depends on BLE_MESH_PROXY_SOLIC_PDU_RX
         default 2
-        range 1 255
+        range 1 65536
         help
             This option specifies the maximum capacity of the solicitation replay
             protection list. The solicitation replay protection list is used to

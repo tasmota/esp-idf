@@ -561,7 +561,6 @@ esp_err_t hub_install(hub_config_t *hub_config, void **client_ret)
 
     // Install HCD port
     hcd_port_config_t port_config = {
-        .fifo_bias = HUB_ROOT_HCD_PORT_FIFO_BIAS,
         .callback = root_port_callback,
         .callback_arg = NULL,
         .context = NULL,
@@ -767,7 +766,7 @@ esp_err_t hub_port_disable(usb_device_handle_t parent_dev_hdl, uint8_t parent_po
     return ret;
 }
 
-esp_err_t hub_notify_new_dev(uint8_t dev_addr)
+esp_err_t hub_dev_new(uint8_t dev_addr)
 {
     HUB_DRIVER_ENTER_CRITICAL();
     HUB_DRIVER_CHECK_FROM_CRIT(p_hub_driver_obj != NULL, ESP_ERR_INVALID_STATE);
@@ -790,15 +789,15 @@ esp_err_t hub_notify_new_dev(uint8_t dev_addr)
             }
         }
         // Close device
-        usbh_dev_close(dev_hdl);
+        ESP_ERROR_CHECK(usbh_dev_close(dev_hdl));
     }
-    // Logic should not stop the flow, so no error to return
-    ret = ESP_OK;
+    // Nothing to do, while Hubs support is not enabled
+    ret = ESP_ERR_NOT_SUPPORTED;
 #endif // ENABLE_USB_HUBS
     return ret;
 }
 
-esp_err_t hub_notify_dev_gone(uint8_t dev_addr)
+esp_err_t hub_dev_gone(uint8_t dev_addr)
 {
     HUB_DRIVER_ENTER_CRITICAL();
     HUB_DRIVER_CHECK_FROM_CRIT(p_hub_driver_obj != NULL, ESP_ERR_INVALID_STATE);
@@ -809,7 +808,7 @@ esp_err_t hub_notify_dev_gone(uint8_t dev_addr)
     ret = ext_hub_dev_gone(dev_addr);
 #else
     // Nothing to do, while Hubs support is not enabled
-    ret = ESP_OK;
+    ret = ESP_ERR_NOT_SUPPORTED;
 #endif // ENABLE_USB_HUBS
     return ret;
 }
@@ -821,7 +820,9 @@ esp_err_t hub_notify_all_free(void)
     HUB_DRIVER_CHECK_FROM_CRIT(p_hub_driver_obj != NULL, ESP_ERR_INVALID_STATE);
     HUB_DRIVER_EXIT_CRITICAL();
 
-    return ext_hub_all_free();
+    ext_hub_mark_all_free();
+
+    return ESP_OK;
 }
 #endif // ENABLE_USB_HUBS
 

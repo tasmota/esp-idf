@@ -202,6 +202,11 @@ int __wrap_esp_sha_block(esp_sha_type sha_type, const void *data_block, bool is_
     return esp_tee_service_call(4, SS_ESP_SHA_BLOCK, sha_type, data_block, is_first_block);
 }
 
+void __wrap_esp_sha_set_mode(esp_sha_type sha_type)
+{
+    esp_tee_service_call(2, SS_ESP_SHA_SET_MODE, sha_type);
+}
+
 void __wrap_esp_sha_read_digest_state(esp_sha_type sha_type, void *digest_state)
 {
     esp_tee_service_call(3, SS_ESP_SHA_READ_DIGEST_STATE, sha_type, digest_state);
@@ -330,6 +335,13 @@ int __wrap_esp_ecc_point_verify(const ecc_point_t *point)
     esp_crypto_ecc_lock_release();
     return err;
 }
+
+#if SOC_ECDSA_SUPPORTED
+void __wrap_esp_crypto_ecc_enable_periph_clk(bool enable)
+{
+    esp_tee_service_call(2, SS_ESP_CRYPTO_ECC_ENABLE_PERIPH_CLK, enable);
+}
+#endif
 
 /* ---------------------------------------------- MMU HAL ------------------------------------------------- */
 

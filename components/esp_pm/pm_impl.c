@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2016-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2016-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_cpu.h"
 
+#include "esp_private/esp_sleep_internal.h"
 #include "esp_private/crosscore_int.h"
 
 #include "soc/rtc.h"
@@ -461,6 +462,7 @@ esp_err_t esp_pm_configure(const void* vconfig)
         // Enable the wakeup source here because the `esp_sleep_disable_wakeup_source` in the `else`
         // branch must be called if corresponding wakeup source is already enabled.
         esp_sleep_enable_timer_wakeup(0);
+        esp_sleep_overhead_out_time_refresh();
     } else if (s_light_sleep_en) {
         // Since auto light-sleep will enable the timer wakeup source, to avoid affecting subsequent possible
         // deepsleep requests, disable the timer wakeup source here.
@@ -551,13 +553,6 @@ void IRAM_ATTR esp_pm_impl_switch_mode(pm_mode_t mode,
  */
 static void IRAM_ATTR on_freq_update(uint32_t old_ticks_per_us, uint32_t ticks_per_us)
 {
-    uint32_t old_apb_ticks_per_us = MIN(old_ticks_per_us, 80);
-    uint32_t apb_ticks_per_us = MIN(ticks_per_us, 80);
-    /* Update APB frequency value used by the timer */
-    if (old_apb_ticks_per_us != apb_ticks_per_us) {
-        esp_timer_private_update_apb_freq(apb_ticks_per_us);
-    }
-
 #ifdef CONFIG_FREERTOS_SYSTICK_USES_CCOUNT
 #ifdef XT_RTOS_TIMER_INT
     /* Calculate new tick divisor */

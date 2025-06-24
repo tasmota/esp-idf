@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -25,6 +25,8 @@
 #if CONFIG_OPENTHREAD_FTD
 #include "openthread/dataset_ftd.h"
 #endif
+
+static bool s_ot_mainloop_running = false;
 
 static int hex_digit_to_int(char hex)
 {
@@ -158,13 +160,24 @@ esp_err_t esp_openthread_auto_start(otOperationalDatasetTlvs *datasetTlvs)
     return ESP_OK;
 }
 
+static void mainloop_safe_exit(void *ctx)
+{
+    s_ot_mainloop_running = false;
+}
+
+esp_err_t esp_openthread_mainloop_exit(void)
+{
+    return esp_openthread_task_queue_post(mainloop_safe_exit, NULL);
+}
+
 esp_err_t esp_openthread_launch_mainloop(void)
 {
     esp_openthread_mainloop_context_t mainloop;
     otInstance *instance = esp_openthread_get_instance();
     esp_err_t error = ESP_OK;
+    s_ot_mainloop_running = true;
 
-    while (true) {
+    while (s_ot_mainloop_running) {
         FD_ZERO(&mainloop.read_fds);
         FD_ZERO(&mainloop.write_fds);
         FD_ZERO(&mainloop.error_fds);
@@ -187,9 +200,6 @@ esp_err_t esp_openthread_launch_mainloop(void)
         if (select(mainloop.max_fd + 1, &mainloop.read_fds, &mainloop.write_fds, &mainloop.error_fds,
                    &mainloop.timeout) >= 0) {
             esp_openthread_lock_acquire(portMAX_DELAY);
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE && CONFIG_OPENTHREAD_RADIO_NATIVE
-            esp_openthread_wakeup_process();
-#endif /* CONFIG_FREERTOS_USE_TICKLESS_IDLE && CONFIG_OPENTHREAD_RADIO_NATIVE */
             error = esp_openthread_platform_process(instance, &mainloop);
             while (otTaskletsArePending(instance)) {
                 otTaskletsProcess(instance);

@@ -20,6 +20,7 @@
 #include "esp_private/esp_sleep_internal.h"
 #include "esp_private/esp_timer_private.h"
 #include "esp_private/rtc_clk.h"
+#include "soc/rtc.h"
 #include "esp_private/sleep_event.h"
 #include "esp_private/system_internal.h"
 #include "esp_private/io_mux.h"
@@ -741,6 +742,9 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
         regi2c_tsens_reg_read();
 #endif
     }
+#if CONFIG_ESP_ENABLE_PVT
+    pvt_func_enable(false);
+#endif
 
     if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE] == 0) {
         // TODO: IDF-7370
@@ -753,6 +757,10 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
  */
 static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
 {
+#if CONFIG_ESP_ENABLE_PVT
+    pvt_func_enable(true);
+#endif
+
 #if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
     if (sleep_flags & PMU_SLEEP_PD_TOP) {
         // There is no driver to manage the flashboot watchdog, and it is definitely be in off state when
@@ -2391,6 +2399,9 @@ int32_t* esp_sleep_sub_mode_dump_config(FILE *stream) {
                                 [ESP_SLEEP_DIG_USE_XTAL_MODE]           = "ESP_SLEEP_DIG_USE_XTAL_MODE",
                                 [ESP_SLEEP_LP_USE_XTAL_MODE]            = "ESP_SLEEP_LP_USE_XTAL_MODE",
                                 [ESP_SLEEP_VBAT_POWER_DEEPSLEEP_MODE]   = "ESP_SLEEP_VBAT_POWER_DEEPSLEEP_MODE",
+#if CONFIG_IDF_TARGET_ESP32
+                                [ESP_SLEEP_ANALOG_LOW_POWER_MODE]       = "ESP_SLEEP_ANALOG_LOW_POWER_MODE",
+#endif
                             }[mode],
                             s_sleep_sub_mode_ref_cnt[mode] ? "ENABLED" : "DISABLED",
                             s_sleep_sub_mode_ref_cnt[mode]);
@@ -2670,6 +2681,12 @@ static SLEEP_FN_ATTR uint32_t get_sleep_flags(uint32_t sleep_flags, bool deepsle
     }
 #endif
 
+#if CONFIG_IDF_TARGET_ESP32
+    if (s_sleep_sub_mode_ref_cnt[ESP_SLEEP_ANALOG_LOW_POWER_MODE]) {
+        sleep_flags |= RTC_SLEEP_WITH_LOWPOWER_ANALOG;
+    }
+#endif
+
 #ifdef CONFIG_ESP_SLEEP_RTC_BUS_ISO_WORKAROUND
     if (!deepsleep) {
         sleep_flags &= ~RTC_SLEEP_PD_RTC_PERIPH;
@@ -2732,6 +2749,13 @@ esp_deep_sleep_disable_rom_logging(void)
 {
     rtc_suppress_rom_log();
 }
+
+#if CONFIG_IDF_TARGET_ESP32
+void esp_sleep_enable_lowpower_analog_mode(bool enable)
+{
+    esp_sleep_sub_mode_config(ESP_SLEEP_ANALOG_LOW_POWER_MODE, enable);
+}
+#endif
 
 __attribute__((deprecated("Please use esp_sleep_sub_mode_config instead"))) void esp_sleep_periph_use_8m(bool use_or_not)
 {

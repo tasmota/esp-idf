@@ -78,6 +78,7 @@ static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src);
 
 static const char *TAG = "clk";
 
+// This function must be allocated in IRAM.
 void IRAM_ATTR esp_rtc_init(void)
 {
 #if SOC_PMU_SUPPORTED
@@ -380,7 +381,10 @@ __attribute__((weak)) void esp_perip_clk_init(void)
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL1_REG, HP_SYS_CLKRST_REG_REF_50M_CLK_EN);
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL1_REG, HP_SYS_CLKRST_REG_REF_25M_CLK_EN);
         // 240M CLK is for Key Management use, should not be gated
+#if !CONFIG_ESP_ENABLE_PVT
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL2_REG, HP_SYS_CLKRST_REG_REF_160M_CLK_EN);
+#endif
+        // 160M CLK is for PVT use, should not be gated
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL2_REG, HP_SYS_CLKRST_REG_REF_120M_CLK_EN);
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL2_REG, HP_SYS_CLKRST_REG_REF_80M_CLK_EN);
         REG_CLR_BIT(HP_SYS_CLKRST_REF_CLK_CTRL2_REG, HP_SYS_CLKRST_REG_REF_20M_CLK_EN);

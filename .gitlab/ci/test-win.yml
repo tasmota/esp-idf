@@ -3,8 +3,7 @@
   extends: .rules:test:host_test
   stage: host_test
   image: $ESP_ENV_IMAGE
-  tags:
-    - windows-build
+  tags: [windows-build, brew]
   dependencies: # set dependencies to null to avoid missing artifacts issue
   # run host_test jobs immediately, only after upload cache
   needs:
@@ -14,6 +13,8 @@
     - job: upload-submodules-cache
       optional: true
       artifacts: false
+  variables:
+    GIT_STRATEGY: fetch  # use brew local mirror first
   before_script: []
   after_script: []
 
@@ -89,8 +90,7 @@ pytest_build_system_win:
     - .rules:labels:windows_pytest_build_system
   parallel: 2
   needs: []
-  tags:
-    - windows-build
+  tags: [windows-build, brew]
   artifacts:
     paths:
       - XUNIT_RESULT.xml

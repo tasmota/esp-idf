@@ -174,7 +174,7 @@ uint32_t btc_get_ble_status(void)
     #endif
     #endif
 
-    #if (BLE_50_FEATURE_SUPPORT == TRUE)
+    #if (BLE_50_EXTEND_ADV_EN == TRUE)
     // Number of active extended advertsing
     extern uint8_t btm_ble_ext_adv_active_count(void);
     if (btm_ble_ext_adv_active_count()) {
@@ -213,6 +213,13 @@ uint32_t btc_get_ble_status(void)
     extern uint8_t bta_gatts_srvc_active_count(void);
     if (bta_gatts_srvc_active_count()) {
         status |= BIT(BTC_BLE_STATUS_GATTS_SRVC);
+    }
+    #endif
+
+    #if SMP_INCLUDED == TRUE
+    extern uint8_t smp_get_state(void);
+    if (smp_get_state()) {
+        status |= BIT(BTC_BLE_STATUS_SMP_STATE);
     }
     #endif
 

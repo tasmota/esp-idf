@@ -7,6 +7,7 @@
 #include "sdkconfig.h"
 #include "unity.h"
 #include "esp_cam_ctlr_dvp.h"
+#include "esp_private/esp_cam_dvp.h"
 #include "esp_cam_ctlr.h"
 
 TEST_CASE("TEST DVP driver allocation", "[DVP]")
@@ -17,7 +18,7 @@ TEST_CASE("TEST DVP driver allocation", "[DVP]")
         .h_res = 800,
         .v_res = 640,
         .input_data_color_type = CAM_CTLR_COLOR_RGB565,
-        .dma_burst_size = 128,
+        .dma_burst_size = 64,
         .byte_swap_en = false,
         .pin_dont_init = true,
         .external_xtal = true,
@@ -42,7 +43,7 @@ TEST_CASE("TEST DVP driver allocation with JPEG input", "[DVP]")
         .clk_src = CAM_CLK_SRC_DEFAULT,
         .h_res = 800,
         .v_res = 640,
-        .dma_burst_size = 128,
+        .dma_burst_size = 64,
         .byte_swap_en = false,
         .pin_dont_init = true,
         .pic_format_jpeg = true,
@@ -69,7 +70,7 @@ TEST_CASE("TEST DVP driver no backup buffer usage", "[DVP]")
         .h_res = 800,
         .v_res = 640,
         .input_data_color_type = CAM_CTLR_COLOR_RGB565,
-        .dma_burst_size = 128,
+        .dma_burst_size = 64,
         .byte_swap_en = false,
         .bk_buffer_dis = true,
         .pin_dont_init = true,
@@ -96,7 +97,7 @@ TEST_CASE("TEST DVP driver intern/extern init", "[DVP]")
         .h_res = 800,
         .v_res = 640,
         .input_data_color_type = CAM_CTLR_COLOR_RGB565,
-        .dma_burst_size = 128,
+        .dma_burst_size = 64,
         .byte_swap_en = false,
         .external_xtal = true,
     };
@@ -128,7 +129,7 @@ TEST_CASE("TEST DVP driver intern/extern generate xclk", "[DVP]")
         .h_res = 800,
         .v_res = 640,
         .input_data_color_type = CAM_CTLR_COLOR_RGB565,
-        .dma_burst_size = 128,
+        .dma_burst_size = 64,
         .byte_swap_en = false,
         .external_xtal = true,
     };
@@ -170,4 +171,15 @@ TEST_CASE("TEST DVP driver intern/extern generate xclk", "[DVP]")
     dvp_config.pin = &pin_cfg;
     TEST_ESP_OK(esp_cam_new_dvp_ctlr(&dvp_config, &handle));
     TEST_ESP_OK(esp_cam_ctlr_del(handle));
+}
+
+TEST_CASE("TEST DVP driver only output xclk signal", "[DVP]")
+{
+    TEST_ESP_OK(esp_cam_ctlr_dvp_start_clock(0, 20, CAM_CLK_SRC_DEFAULT, 20000000));
+    TEST_ESP_OK(esp_cam_ctlr_dvp_deinit(0));
+
+#if CONFIG_IDF_TARGET_ESP32S3
+    TEST_ESP_OK(esp_cam_ctlr_dvp_start_clock(0, 20, CAM_CLK_SRC_PLL240M, 24000000));
+    TEST_ESP_OK(esp_cam_ctlr_dvp_deinit(0));
+#endif
 }

@@ -38,3 +38,13 @@ remove_duplicated_flags("--ld-path=xtensa-esp32s2-elf-clang-ld -z noexecstack \
 set(CMAKE_EXE_LINKER_FLAGS "${UNIQ_CMAKE_EXE_LINKER_FLAGS}"
     CACHE STRING "Linker Base Flags"
     FORCE)
+
+# Filter out GCC-specific flags that are incompatible with clang
+# These flags will be ignored silently when using clang
+set(CMAKE_C_FLAGS "${UNIQ_CMAKE_C_FLAGS} -Wno-unknown-warning-option"
+    CACHE STRING "C Compiler Base Flags"
+    FORCE)
+
+set(CMAKE_CXX_FLAGS "${UNIQ_CMAKE_CXX_FLAGS} -Wno-unknown-warning-option"
+    CACHE STRING "C++ Compiler Base Flags"
+    FORCE)

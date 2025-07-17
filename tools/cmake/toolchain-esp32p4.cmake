@@ -17,3 +17,13 @@ set(CMAKE_ASM_FLAGS "${UNIQ_CMAKE_CXX_FLAGS}" CACHE STRING "Asm Compiler Base Fl
 remove_duplicated_flags("-nostartfiles -march=rv32imafc_zicsr_zifencei_xesppie -mabi=ilp32f ${CMAKE_EXE_LINKER_FLAGS}"
                         UNIQ_CMAKE_SAFE_EXE_LINKER_FLAGS)
 set(CMAKE_EXE_LINKER_FLAGS "${UNIQ_CMAKE_SAFE_EXE_LINKER_FLAGS}" CACHE STRING "Linker Base Flags" FORCE)
+
+# Filter out GCC-specific flags that are incompatible with clang
+# These flags will be ignored silently when using clang
+set(CMAKE_C_FLAGS "${UNIQ_CMAKE_C_FLAGS} -Wno-unknown-warning-option"
+    CACHE STRING "C Compiler Base Flags"
+    FORCE)
+
+set(CMAKE_CXX_FLAGS "${UNIQ_CMAKE_CXX_FLAGS} -Wno-unknown-warning-option"
+    CACHE STRING "C++ Compiler Base Flags"
+    FORCE)

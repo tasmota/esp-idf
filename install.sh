@@ -28,7 +28,7 @@ done
 TARGETS=$("${ESP_PYTHON}" "${IDF_PATH}/tools/install_util.py" extract targets "$@")
 
 echo "Installing ESP-IDF tools"
-"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" --non-interactive install esp-clang"
+"${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" --non-interactive install esp-clang
 "${ESP_PYTHON}" "${IDF_PATH}/tools/idf_tools.py" --non-interactive install --targets="${TARGETS}"
 
 FEATURES=$("${ESP_PYTHON}" "${IDF_PATH}/tools/install_util.py" extract features "$@")

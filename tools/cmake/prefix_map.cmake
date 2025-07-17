@@ -35,7 +35,7 @@ function(__generate_prefix_map compile_options_var)
 
         # Mapping for toolchain path
         execute_process(
-            COMMAND ${CMAKE_C_COMPILER} -print-sysroot
+            COMMAND ${CMAKE_C_COMPILER}
             OUTPUT_VARIABLE compiler_sysroot
         )
         if(compiler_sysroot STREQUAL "")

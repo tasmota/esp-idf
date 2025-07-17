@@ -171,6 +171,7 @@ endif()
 # clang produces an unreachable-code warning.
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     target_compile_options(mbedcrypto PRIVATE "-Wno-unreachable-code")
+    target_compile_options(mbedtls PRIVATE "-Wno-unreachable-code")
 endif()
 
 # net_sockets.c should only be compiled if BSD socket functions are available.

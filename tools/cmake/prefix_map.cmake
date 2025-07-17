@@ -34,15 +34,60 @@ function(__generate_prefix_map compile_options_var)
         endforeach()
 
         # Mapping for toolchain path
-        execute_process(
-            COMMAND ${CMAKE_C_COMPILER}
-            OUTPUT_VARIABLE compiler_sysroot
-        )
-        if(compiler_sysroot STREQUAL "")
-            message(FATAL_ERROR "Failed to determine toolchain sysroot")
+        # For clang, we need to use proper target flags to determine the sysroot
+        if(CMAKE_C_COMPILER MATCHES ".*clang.*")
+            # Get the target from the compiler flags
+            string(REGEX MATCH "--target=([^ ]+)" TARGET_MATCH "${CMAKE_C_FLAGS}")
+            if(TARGET_MATCH)
+                set(CLANG_TARGET_FLAG "--target=${CMAKE_MATCH_1}")
+            else()
+                set(CLANG_TARGET_FLAG "--target=riscv32-esp-elf")
+            endif()
+            
+            # Get the march flag
+            string(REGEX MATCH "-march=([^ ]+)" MARCH_MATCH "${CMAKE_C_FLAGS}")
+            if(MARCH_MATCH)
+                set(CLANG_MARCH_FLAG "-march=${CMAKE_MATCH_1}")
+            else()
+                set(CLANG_MARCH_FLAG "-march=rv32imac_zicsr_zifencei")
+            endif()
+            
+            # Get the mabi flag
+            string(REGEX MATCH "-mabi=([^ ]+)" MABI_MATCH "${CMAKE_C_FLAGS}")
+            if(MABI_MATCH)
+                set(CLANG_MABI_FLAG "-mabi=${CMAKE_MATCH_1}")
+            else()
+                set(CLANG_MABI_FLAG "-mabi=ilp32")
+            endif()
+            
+            execute_process(
+                COMMAND ${CMAKE_C_COMPILER} ${CLANG_TARGET_FLAG} ${CLANG_MARCH_FLAG} ${CLANG_MABI_FLAG} -print-file-name=libc.a
+                OUTPUT_VARIABLE compiler_sysroot
+                ERROR_QUIET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+            
+            if(compiler_sysroot AND NOT compiler_sysroot STREQUAL "libc.a")
+                # Extract the sysroot from the library path
+                get_filename_component(compiler_sysroot "${compiler_sysroot}" DIRECTORY)
+                get_filename_component(compiler_sysroot "${compiler_sysroot}/.." REALPATH)
+            else()
+                # Fallback: use relative path from compiler
+                get_filename_component(compiler_sysroot "${CMAKE_C_COMPILER}/../.." REALPATH)
+            endif()
+        else()
+            # For GCC and other compilers, use the original approach
+            execute_process(
+                COMMAND ${CMAKE_C_COMPILER} -print-sysroot
+                OUTPUT_VARIABLE compiler_sysroot
+                ERROR_QUIET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+            if(compiler_sysroot STREQUAL "")
+                # Fallback: use relative path from compiler
+                get_filename_component(compiler_sysroot "${CMAKE_C_COMPILER}/../.." REALPATH)
+            endif()
         endif()
-        string(STRIP "${compiler_sysroot}" compiler_sysroot)
-        get_filename_component(compiler_sysroot "${compiler_sysroot}/.." REALPATH)
         list(APPEND compile_options "-fdebug-prefix-map=${compiler_sysroot}=/TOOLCHAIN")
         string(APPEND gdbinit_file_lines "set substitute-path /TOOLCHAIN ${compiler_sysroot}\n")
 

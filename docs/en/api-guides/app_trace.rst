@@ -31,7 +31,7 @@ The library supports two modes of operation:
 
 **Post-mortem mode:** This is the default mode. The mode does not need interaction with the host side. In this mode, tracing module does not check whether the host has read all the data from *HW UP BUFFER*, but directly overwrites old data with the new ones. This mode is useful when only the latest trace data is interesting to the user, e.g., for analyzing program's behavior just before the crash. The host can read the data later on upon user request, e.g., via special OpenOCD command in case of working via JTAG interface.
 
-**Streaming mode:** Tracing module enters this mode when the host connects to {IDF_TARGET_NAME}. In this mode, before writing new data to *HW UP BUFFER*, the tracing module checks that whether there is enough space in it and if necessary, waits for the host to read data and free enough memory. Maximum waiting time is controlled via timeout values passed by users to corresponding API routines. So when application tries to write data to the trace buffer using the finite value of the maximum waiting time, it is possible that this data will be dropped. This is especially true for tracing from time critical code (ISRs, OS scheduler code, etc.) where infinite timeouts can lead to system malfunction. In order to avoid loss of such critical data, developers can enable additional data buffering via menuconfig option :ref:`CONFIG_APPTRACE_PENDING_DATA_SIZE_MAX`. This macro specifies the size of data which can be buffered in above conditions. The option can also help to overcome situation when data transfer to the host is temporarily slowed down, e.g., due to USB bus congestions. But it will not help when the average bitrate of the trace data stream exceeds the hardware interface capabilities.
+**Streaming mode:** Tracing module enters this mode when the host connects to {IDF_TARGET_NAME}. In this mode, before writing new data to *HW UP BUFFER*, the tracing module checks that whether there is enough space in it and if necessary, waits for the host to read data and free enough memory. Maximum waiting time is controlled via timeout values passed by users to corresponding API routines. So when application tries to write data to the trace buffer using the finite value of the maximum waiting time, it is possible that this data will be dropped. This is especially true for tracing from time critical code (ISRs, OS scheduler code, etc.) where infinite timeouts can lead to system malfunction.
 
 
 Configuration Options and Dependencies
@@ -78,7 +78,7 @@ In general, users should decide what type of data should be transferred in every
         #include "esp_app_trace.h"
         ...
         char buf[] = "Hello World!";
-        esp_err_t res = esp_apptrace_write(ESP_APPTRACE_DEST_TRAX, buf, strlen(buf), ESP_APPTRACE_TMO_INFINITE);
+        esp_err_t res = esp_apptrace_write(ESP_APPTRACE_DEST_JTAG, buf, strlen(buf), ESP_APPTRACE_TMO_INFINITE);
         if (res != ESP_OK) {
             ESP_LOGE(TAG, "Failed to write data to host!");
             return res;
@@ -91,13 +91,13 @@ In general, users should decide what type of data should be transferred in every
         #include "esp_app_trace.h"
         ...
         int number = 10;
-        char *ptr = (char *)esp_apptrace_buffer_get(ESP_APPTRACE_DEST_TRAX, 32, 100/*tmo in us*/);
+        char *ptr = (char *)esp_apptrace_buffer_get(ESP_APPTRACE_DEST_JTAG, 32, 100/*tmo in us*/);
         if (ptr == NULL) {
             ESP_LOGE(TAG, "Failed to get buffer!");
             return ESP_FAIL;
         }
         sprintf(ptr, "Here is the number %d", number);
-        esp_err_t res = esp_apptrace_buffer_put(ESP_APPTRACE_DEST_TRAX, ptr, 100/*tmo in us*/);
+        esp_err_t res = esp_apptrace_buffer_put(ESP_APPTRACE_DEST_JTAG, ptr, 100/*tmo in us*/);
         if (res != ESP_OK) {
             /* in case of error host tracing tool (e.g., OpenOCD) will report incomplete user buffer */
             ESP_LOGE(TAG, "Failed to put buffer!");
@@ -115,9 +115,13 @@ In general, users should decide what type of data should be transferred in every
         size_t sz = sizeof(buf);
 
         /* config down buffer */
-        esp_apptrace_down_buffer_config(down_buf, sizeof(down_buf));
+        esp_err_t res = esp_apptrace_down_buffer_config(ESP_APPTRACE_DEST_JTAG, down_buf, sizeof(down_buf));
+        if (res != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to config down buffer!");
+            return res;
+        }
         /* check for incoming data and read them if any */
-        esp_err_t res = esp_apptrace_read(ESP_APPTRACE_DEST_TRAX, buf, &sz, 0/*do not wait*/);
+        res = esp_apptrace_read(ESP_APPTRACE_DEST_JTAG, buf, &sz, 0/*do not wait*/);
         if (res != ESP_OK) {
             ESP_LOGE(TAG, "Failed to read data from host!");
             return res;
@@ -138,8 +142,12 @@ In general, users should decide what type of data should be transferred in every
         size_t sz = 32;
 
         /* config down buffer */
-        esp_apptrace_down_buffer_config(down_buf, sizeof(down_buf));
-        char *ptr = (char *)esp_apptrace_down_buffer_get(ESP_APPTRACE_DEST_TRAX, &sz, 100/*tmo in us*/);
+        esp_err_t res = esp_apptrace_down_buffer_config(ESP_APPTRACE_DEST_JTAG, down_buf, sizeof(down_buf));
+        if (res != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to config down buffer!");
+            return res;
+        }
+        char *ptr = (char *)esp_apptrace_down_buffer_get(ESP_APPTRACE_DEST_JTAG, &sz, 100/*tmo in us*/);
         if (ptr == NULL) {
             ESP_LOGE(TAG, "Failed to get buffer!");
             return ESP_FAIL;
@@ -150,7 +158,7 @@ In general, users should decide what type of data should be transferred in every
         } else {
             printf("No data");
         }
-        esp_err_t res = esp_apptrace_down_buffer_put(ESP_APPTRACE_DEST_TRAX, ptr, 100/*tmo in us*/);
+        res = esp_apptrace_down_buffer_put(ESP_APPTRACE_DEST_JTAG, ptr, 100/*tmo in us*/);
         if (res != ESP_OK) {
             /* in case of error host tracing tool (e.g., OpenOCD) will report incomplete user buffer */
             ESP_LOGE(TAG, "Failed to put buffer!");

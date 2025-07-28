@@ -18,7 +18,7 @@
 #include "esp_private/cache_err_int.h"
 #include "esp_clk_internal.h"
 
-#include "esp_rom_uart.h"
+#include "esp_rom_serial_output.h"
 #include "esp_rom_sys.h"
 #include "esp_rom_caps.h"
 #include "sdkconfig.h"
@@ -97,6 +97,7 @@
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
 #include "hal/efuse_ll.h"
+#include "hal/uart_ll.h"
 #include "hal/cpu_utility_ll.h"
 #include "soc/periph_defs.h"
 #include "esp_cpu.h"
@@ -122,13 +123,13 @@
 #include "esp_private/startup_internal.h"
 #include "esp_private/system_internal.h"
 
-#if SOC_MEM_NON_CONTIGUOUS_SRAM
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V2
 extern int _bss_start_low, _bss_start_high;
 extern int _bss_end_low, _bss_end_high;
 #else
 extern int _bss_start;
 extern int _bss_end;
-#endif // SOC_MEM_NON_CONTIGUOUS_SRAM
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V2
 extern int _rtc_bss_start;
 extern int _rtc_bss_end;
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
@@ -416,12 +417,12 @@ FORCE_INLINE_ATTR IRAM_ATTR void get_reset_reason(soc_reset_reason_t *rst_reas)
 
 FORCE_INLINE_ATTR IRAM_ATTR void init_bss(const soc_reset_reason_t *rst_reas)
 {
-#if SOC_MEM_NON_CONTIGUOUS_SRAM
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V2
     memset(&_bss_start_low, 0, (uintptr_t)&_bss_end_low - (uintptr_t)&_bss_start_low);
     memset(&_bss_start_high, 0, (uintptr_t)&_bss_end_high - (uintptr_t)&_bss_start_high);
 #else
     memset(&_bss_start, 0, (uintptr_t)&_bss_end - (uintptr_t)&_bss_start);
-#endif // SOC_MEM_NON_CONTIGUOUS_SRAM
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V2
 
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
     // Clear Bluetooth bss
@@ -488,12 +489,6 @@ FORCE_INLINE_ATTR IRAM_ATTR void cache_init(void)
     rom_config_data_cache_mode(CONFIG_ESP32S3_DATA_CACHE_SIZE, CONFIG_ESP32S3_DCACHE_ASSOCIATED_WAYS, CONFIG_ESP32S3_DATA_CACHE_LINE_SIZE);
     Cache_Resume_DCache(0);
 #endif // CONFIG_IDF_TARGET_ESP32S3
-
-#if CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-5670, add cache init API
-    extern void esp_config_l2_cache_mode(void);
-    esp_config_l2_cache_mode();
-#endif
 
     // For RAM loadable ELF case, we don't need to reserve IROM/DROM as instructions and data
     // are all in internal RAM. If the RAM loadable ELF has any requirement to memory map the
@@ -764,9 +759,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
 #endif
     esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
 
-    // In a single thread mode, the freertos is not started yet. So don't have to use a critical section.
-    int __DECLARE_RCC_ATOMIC_ENV __attribute__((unused));  // To avoid build errors about spinlock's __DECLARE_RCC_ATOMIC_ENV
-    esp_rom_uart_set_clock_baudrate(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM, clock_hz, CONFIG_ESP_CONSOLE_UART_BAUDRATE);
+    _uart_ll_set_baudrate(UART_LL_GET_HW(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM), CONFIG_ESP_CONSOLE_UART_BAUDRATE, clock_hz);
 #endif
 #endif
 

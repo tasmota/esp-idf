@@ -16,6 +16,12 @@
 
 #pragma once
 
+#if __has_include("soc/soc_caps_eval.h")
+#include "soc/soc_caps_eval.h"
+#endif
+
+#define _SOC_CAPS_TARGET_IS_ESP32H21  1 // [gen_soc_caps:ignore]
+
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 // #define SOC_ADC_SUPPORTED               1    //TODO: [ESP32H21] IDF-11589, IDF-11592
 // #define SOC_ANA_CMPR_SUPPORTED          1
@@ -409,16 +415,12 @@
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
-// #define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1) //TODO: [ESP32H21] IDF-11526
+#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
 #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
-
-#define SOC_MEMSPI_SRC_FREQ_64M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_32M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_16M_SUPPORTED         1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -436,12 +438,6 @@
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
-#define SOC_TIMER_GROUPS                  (2)
-#define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (1U)
-#define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
-#define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
-#define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
-#define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
 // #define SOC_TIMER_SUPPORT_ETM             (1)    //TODO: [ESP32H21] IDF-11576
 #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 

@@ -8,7 +8,7 @@ menu "Application Level Tracing"
 
         config APPTRACE_DEST_JTAG
             bool "JTAG"
-            select APPTRACE_DEST_TRAX if IDF_TARGET_ARCH_XTENSA
+            select APPTRACE_TRAX_ENABLE if IDF_TARGET_ARCH_XTENSA
             select APPTRACE_MEMBUFS_APPTRACE_PROTO_ENABLE
             select APPTRACE_ENABLE
 
@@ -135,7 +135,7 @@ menu "Application Level Tracing"
             UART task priority. In case of high events rate,
             this parameter could be changed up to (configMAX_PRIORITIES-1).
 
-    config APPTRACE_DEST_TRAX
+    config APPTRACE_TRAX_ENABLE
         bool
         depends on IDF_TARGET_ARCH_XTENSA && !ESP32_TRAX && !ESP32S2_TRAX && !ESP32S3_TRAX
         select ESP32_MEMMAP_TRACEMEM
@@ -186,19 +186,10 @@ menu "Application Level Tracing"
 
     config APPTRACE_BUF_SIZE
         int "Size of the apptrace buffer"
-        depends on APPTRACE_MEMBUFS_APPTRACE_PROTO_ENABLE && !APPTRACE_DEST_TRAX
+        depends on APPTRACE_MEMBUFS_APPTRACE_PROTO_ENABLE && !APPTRACE_TRAX_ENABLE
         default 16384
         help
             Size of the memory buffer for trace data in bytes.
-
-    config APPTRACE_PENDING_DATA_SIZE_MAX
-        int "Size of the pending data buffer"
-        depends on APPTRACE_MEMBUFS_APPTRACE_PROTO_ENABLE
-        default 0
-        help
-            Size of the buffer for events in bytes. It is useful for buffering events from
-            the time critical code (scheduler, ISRs etc). If this parameter is 0 then
-            events will be discarded when main HW buffer is full.
 
     menu "FreeRTOS SystemView Tracing"
         depends on APPTRACE_ENABLE

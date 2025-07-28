@@ -81,10 +81,11 @@ void IRAM_ATTR bootloader_configure_spi_pins(int drv)
 
 static void IRAM_ATTR bootloader_flash_clock_init(void)
 {
-    // To raise the MSPI clock to 64MHz, needs to enable the 64MHz clock source, which is XTAL_X2_CLK
-    // (FPGA image fixed MSPI0/1 clock to 64MHz)
-    clk_ll_xtal_x2_enable();
-    _mspi_timing_ll_set_flash_clk_src(0, FLASH_CLK_SRC_PLL_F64M);
+    // // To raise the MSPI clock to 64MHz, needs to enable the 64MHz clock source, which is XTAL_X2_CLK
+    // // (FPGA image fixed MSPI0/1 clock to 64MHz)
+    // clk_ll_xtal_x2_enable();
+    // _mspi_timing_ll_set_flash_clk_src(0, FLASH_CLK_SRC_PLL_F64M);
+    _mspi_timing_ll_set_flash_clk_src(0, FLASH_CLK_SRC_PLL_F48M);
 }
 
 static void update_flash_config(const esp_image_header_t *bootloader_hdr)
@@ -124,16 +125,10 @@ static void print_flash_info(const esp_image_header_t *bootloader_hdr)
     const char *str;
     switch (bootloader_hdr->spi_speed) {
     case ESP_IMAGE_SPI_SPEED_DIV_2:
-        str = "32MHz";
-        break;
-    case ESP_IMAGE_SPI_SPEED_DIV_3:
-        str = "21.3MHz";
-        break;
-    case ESP_IMAGE_SPI_SPEED_DIV_4:
-        str = "16MHz";
+        str = "24MHz";
         break;
     case ESP_IMAGE_SPI_SPEED_DIV_1:
-        str = "64MHz";
+        str = "48MHz";
         break;
     default:
         str = "16MHz";

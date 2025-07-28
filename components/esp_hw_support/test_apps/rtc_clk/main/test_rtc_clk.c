@@ -19,7 +19,7 @@
 #include "freertos/task.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
-#include "esp_rom_uart.h"
+#include "esp_rom_serial_output.h"
 #include "test_utils.h"
 #include "esp_random.h"
 #include "esp_sleep.h"
@@ -327,8 +327,8 @@ TEST_CASE("Test starting 'External 32kHz XTAL' on the board without it.", "[rtc_
             "will switch to the internal RC circuit. If the switch to the internal RC circuit "
             "was successful then the test succeeded.\n");
 
-    start_freq(SOC_RTC_SLOW_CLK_SRC_RC_SLOW, 200);
-    start_freq(SOC_RTC_SLOW_CLK_SRC_RC_SLOW, 0);
+    start_freq(SOC_RTC_SLOW_CLK_SRC_DEFAULT, 200);
+    start_freq(SOC_RTC_SLOW_CLK_SRC_DEFAULT, 0);
 }
 
 #endif // !defined(CONFIG_IDF_CI_BUILD) || !CONFIG_SPIRAM_BANKSWITCH_ENABLE

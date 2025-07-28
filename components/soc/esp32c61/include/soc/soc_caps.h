@@ -16,6 +16,12 @@
 
 #pragma once
 
+#if __has_include("soc/soc_caps_eval.h")
+#include "soc/soc_caps_eval.h"
+#endif
+
+#define _SOC_CAPS_TARGET_IS_ESP32C61    1 // [gen_soc_caps:ignore]
+
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_ADC_SUPPORTED               1
 #define SOC_ANA_CMPR_SUPPORTED          1
@@ -30,7 +36,7 @@
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
 #define SOC_PHY_SUPPORTED               1
-// #define SOC_WIFI_SUPPORTED              1    //TODO: IDF-13138, re-open on c61 eco3
+#define SOC_WIFI_SUPPORTED              1
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1
 #define SOC_EFUSE_SUPPORTED             1
@@ -58,7 +64,7 @@
 #define SOC_MODEM_CLOCK_SUPPORTED       1
 #define SOC_REG_I2C_SUPPORTED           1
 #define SOC_ETM_SUPPORTED               1
-//  \#define SOC_SDIO_SLAVE_SUPPORTED        0
+#define SOC_SDIO_SLAVE_SUPPORTED        1
 #define SOC_PAU_SUPPORTED               1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
 #define SOC_DEEP_SLEEP_SUPPORTED        1
@@ -98,10 +104,10 @@
 #define SOC_ADC_RTC_MIN_BITWIDTH                (12)
 #define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
-// /*!< Calibration */  // TODO: [ESP32C61] IDF-9303
-//  \#define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
-//  \#define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
-//  \#define SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED (1) /*!< support channel compensation to the HW offset calibration */
+/*!< Calibration */
+#define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
+#define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
+#define SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED (1) /*!< support channel compensation to the HW offset calibration */
 
 /*!< Interrupt */
 #define SOC_ADC_TEMPERATURE_SHARE_INTR          (1)
@@ -369,12 +375,6 @@
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
-#define SOC_TIMER_GROUPS                  (2)
-#define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (1U)
-#define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
-#define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
-#define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
-#define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
 #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 #define SOC_TIMER_SUPPORT_ETM             (1)
 
@@ -412,6 +412,7 @@
 
 /*-------------------------- APM CAPS ----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
+#define SOC_APM_CPU_APM_SUPPORTED       1 /*!< Support for CPU APM control filter */
 #define SOC_APM_SUPPORT_CTRL_CFG_LOCK   1 /*!< Support for APM controller configuration lock */
 
 /*------------------------ Anti DPA (Security) CAPS --------------------------*/
@@ -510,15 +511,15 @@
 
 /*------------------------------------ WI-FI CAPS ------------------------------------*/
 //TODO: IDF-13138, re-open on c61 eco3
-// #define SOC_WIFI_HW_TSF                     (1)    /*!< Support hardware TSF */
-// #define SOC_WIFI_FTM_SUPPORT                (0)    /*!< Support FTM */
-// #define SOC_WIFI_GCMP_SUPPORT               (1)    /*!< Support GCMP(GCMP128 and GCMP256) */
-// #define SOC_WIFI_WAPI_SUPPORT               (1)    /*!< Support WAPI */
-// #define SOC_WIFI_CSI_SUPPORT                (1)    /*!< Support CSI */
-// #define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
-// #define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
-// #define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
-// #define SOC_WIFI_NAN_SUPPORT                (1)    /*!< Support WIFI Aware (NAN) */
+#define SOC_WIFI_HW_TSF                     (1)    /*!< Support hardware TSF */
+#define SOC_WIFI_FTM_SUPPORT                (0)    /*!< Support FTM */
+#define SOC_WIFI_GCMP_SUPPORT               (1)    /*!< Support GCMP(GCMP128 and GCMP256) */
+#define SOC_WIFI_WAPI_SUPPORT               (1)    /*!< Support WAPI */
+#define SOC_WIFI_CSI_SUPPORT                (1)    /*!< Support CSI */
+#define SOC_WIFI_MESH_SUPPORT               (1)    /*!< Support WIFI MESH */
+#define SOC_WIFI_HE_SUPPORT                 (1)    /*!< Support Wi-Fi 6 */
+#define SOC_WIFI_MAC_VERSION_NUM            (3)    /*!< Wi-Fi MAC version num is 3 */
+#define SOC_WIFI_NAN_SUPPORT                (1)    /*!< Support WIFI Aware (NAN) */
 
 // /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */

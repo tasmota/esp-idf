@@ -19,7 +19,7 @@
 
 #include "esp_log.h"
 #include "esp_rom_sys.h"
-#include "esp_rom_uart.h"
+#include "esp_rom_serial_output.h"
 
 static const char *TAG = "fpga_clk";
 
@@ -55,7 +55,12 @@ void bootloader_clock_configure(void)
 void esp_rtc_init(void)
 {
 #if SOC_PMU_SUPPORTED
+#if CONFIG_ESP32P4_REV_MIN_200
+    //TODO: IDF-13453
+    ESP_EARLY_LOGW(TAG, "pmu_init not supported\n");
+#else
     pmu_init();
+#endif
 #endif
 }
 

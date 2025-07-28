@@ -13,14 +13,16 @@
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "riscv/rv_utils.h"
-#include "esp_rom_uart.h"
+#include "esp_rom_serial_output.h"
 #include "soc/gpio_reg.h"
 #include "esp_cpu.h"
 #include "soc/rtc.h"
 #include "esp_private/rtc_clk.h"
 #include "soc/rtc_periph.h"
 #include "soc/uart_reg.h"
+#include "hal/uart_ll.h"
 #include "hal/wdt_hal.h"
+#include "hal/uart_ll.h"
 #include "esp_private/cache_err_int.h"
 
 #if SOC_MODEM_CLOCK_SUPPORTED
@@ -82,6 +84,10 @@ void esp_system_reset_modules_on_exit(void)
     CLEAR_PERI_REG_MASK(PCR_RSA_CONF_REG, PCR_RSA_RST_EN);
     SET_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
+
+    // UART's sclk is controlled in the PCR register and does not reset with the UART module. The ROM missed enabling
+    // it when initializing the ROM UART. If it is not turned on, it will trigger LP_WDT in the ROM.
+    uart_ll_sclk_enable(&UART0);
 }
 
 /* "inner" restart function for after RTOS, interrupts & anything else on this

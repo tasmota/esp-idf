@@ -24,6 +24,12 @@
 
 #pragma once
 
+#if __has_include("soc/soc_caps_eval.h")
+#include "soc/soc_caps_eval.h"
+#endif
+
+#define _SOC_CAPS_TARGET_IS_ESP32H4        1 // [gen_soc_caps:ignore]
+
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 // #define SOC_ADC_SUPPORTED               1    // TODO: [ESP32H4] IDF-12368 IDF-12370
 // #define SOC_ANA_CMPR_SUPPORTED          1    // TODO: [ESP32H4] IDF-12395 big change!!
@@ -35,7 +41,7 @@
 // #define SOC_PCNT_SUPPORTED              1    // TODO: [ESP32H4] IDF-12338
 // #define SOC_MCPWM_SUPPORTED             1    // TODO: [ESP32H4] IDF-12380
 // #define SOC_TWAI_SUPPORTED              1    // TODO: [ESP32H4] IDF-12352
-// #define SOC_ETM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12355
+#define SOC_ETM_SUPPORTED               1
 // #define SOC_PARLIO_SUPPORTED            1    // TODO: [ESP32H4] IDF-12345 IDF-12347
 // #define SOC_BT_SUPPORTED                1
 // #define SOC_IEEE802154_SUPPORTED        1
@@ -48,12 +54,12 @@
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1       // TODO: [ESP32H4] IDF-12268
 #define SOC_EFUSE_SUPPORTED             1       // TODO: [ESP32H4] IDF-12268
 // #define SOC_RTC_MEM_SUPPORTED           1    // TODO: [ESP32H4] IDF-12313
-// #define SOC_I2S_SUPPORTED               1    // TODO: [ESP32H4] IDF-12385
+#define SOC_I2S_SUPPORTED               1
 // #define SOC_RMT_SUPPORTED               1    // TODO: [ESP32H4] IDF-12402
 // #define SOC_SDM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12348
 // #define SOC_GPSPI_SUPPORTED             1    // TODO: [ESP32H4] IDF-12362 IDF-12364 IDF-12366
 // #define SOC_LEDC_SUPPORTED              1    // TODO: [ESP32H4] IDF-12343
-// #define SOC_I2C_SUPPORTED               1    // TODO: [ESP32H4] IDF-12357 IDF-12359
+#define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1       // TODO: [ESP32H4] IDF-12375 IDF-12377
 // #define SOC_SUPPORT_COEXISTENCE         1    // TODO: [ESP32H4] IDF-12251 IDF-12252 IDF-12253
 // #define SOC_AES_SUPPORTED               0    // TODO: [ESP32H4] IDF-12266
@@ -76,7 +82,7 @@
 // #define SOC_LP_I2C_SUPPORTED            1    // TODO: [ESP32H4] IDF-12449
 // #define SOC_ULP_LP_UART_SUPPORTED       1    // TODO: [ESP32H4] IDF-12445 IDF-12451
 #define SOC_REG_I2C_SUPPORTED           1
-// #define SOC_CLK_TREE_SUPPORTED          1    // TODO: [ESP32H4] IDF-12285
+#define SOC_CLK_TREE_SUPPORTED          1
 // #define SOC_ASSIST_DEBUG_SUPPORTED      1    // TODO: [ESP32H4] IDF-12310
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1       // TODO: [ESP32H4] IDF-12388
@@ -142,8 +148,8 @@
 // #define SOC_BROWNOUT_RESET_SUPPORTED 1
 
 /*-------------------------- CACHE CAPS --------------------------------------*/
-// #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
-// #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_WRITEBACK_SUPPORTED           1
+#define SOC_CACHE_FREEZE_SUPPORTED              1
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (2U)
@@ -185,13 +191,14 @@
 #define SOC_AHB_GDMA_VERSION                2
 #define SOC_GDMA_NUM_GROUPS_MAX             1U
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX        5
-// #define SOC_GDMA_SUPPORT_ETM                1  // Support ETM submodule  TODO: [ESP32H4] IDF-12383
+#define SOC_GDMA_SUPPORT_ETM                1  // Support ETM submodule
 #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 #define SOC_AHB_GDMA_SUPPORT_PSRAM 1
 
 /*-------------------------- ETM CAPS --------------------------------------*/
-// #define SOC_ETM_GROUPS                  1U  // Number of ETM groups
-// #define SOC_ETM_CHANNELS_PER_GROUP      50  // Number of ETM channels in the group
+#define SOC_ETM_GROUPS                  1U  // Number of ETM groups
+#define SOC_ETM_CHANNELS_PER_GROUP      50  // Number of ETM channels in the group
+#define SOC_ETM_SUPPORT_SLEEP_RETENTION 1
 
 /*-------------------------- GPIO CAPS ---------------------------------------*/
 // ESP32-H4 has 1 GPIO peripheral
@@ -206,9 +213,9 @@
 // #define SOC_GPIO_FLEX_GLITCH_FILTER_NUM    8  // TODO: [ESP32H4] IDF-12391
 
 // GPIO peripheral has the ETM extension
-// #define SOC_GPIO_SUPPORT_ETM          1  // TODO: [ESP32H4] IDF-12394
-// #define SOC_GPIO_ETM_EVENTS_PER_GROUP 8
-// #define SOC_GPIO_ETM_TASKS_PER_GROUP  8
+#define SOC_GPIO_SUPPORT_ETM          1
+#define SOC_GPIO_ETM_EVENTS_PER_GROUP 8
+#define SOC_GPIO_ETM_TASKS_PER_GROUP  8
 
 // Target has the full LP IO subsystem
 // On ESP32-H4, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
@@ -242,39 +249,45 @@
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-H4 has 2 I2C
-// #define SOC_I2C_NUM                 (2)
+#define SOC_I2C_NUM                 (2U)
+#define SOC_HP_I2C_NUM              (2U)
 
-// #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
-// #define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
-// #define SOC_I2C_SUPPORT_SLAVE       (1)
+#define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
+#define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
+#define SOC_I2C_SUPPORT_SLAVE       (1)
 
-// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
-// #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
+#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
+#define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
 
-// #define SOC_I2C_SUPPORT_XTAL        (1)
-// #define SOC_I2C_SUPPORT_RTC         (1)
-// #define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
-// #define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
-// #define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
-// #define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
-// #define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
-
-/*-------------------------- LP_I2C CAPS -------------------------------------*/
-// ESP32-H4 has 1 LP_I2C
-// #define SOC_LP_I2C_NUM              (1U)
-
-// #define SOC_LP_I2C_FIFO_LEN         (16) /*!< LP_I2C hardware FIFO depth */
+#define SOC_I2C_SUPPORT_XTAL        (1)
+#define SOC_I2C_SUPPORT_RTC         (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
+#define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
+#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
+#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
+#define SOC_I2C_SUPPORT_SLEEP_RETENTION (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
-// #define SOC_I2S_NUM                 (1U)
-// #define SOC_I2S_HW_VERSION_2        (1)
-// #define SOC_I2S_SUPPORTS_XTAL       (1)
-// #define SOC_I2S_SUPPORTS_PLL_F160M  (1)
-// #define SOC_I2S_SUPPORTS_PCM        (1)
-// #define SOC_I2S_SUPPORTS_PDM        (1)
-// #define SOC_I2S_SUPPORTS_PDM_TX     (1)
-// #define SOC_I2S_PDM_MAX_TX_LINES    (2)
-// #define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_NUM                 (1U)
+#define SOC_I2S_HW_VERSION_2        (1)
+#define SOC_I2S_SUPPORTS_ETM        (1)
+#define SOC_I2S_SUPPORTS_XTAL       (1)
+#define SOC_I2S_SUPPORTS_PLL_F96M   (1)
+#define SOC_I2S_SUPPORTS_PLL_F64M   (1)
+#define SOC_I2S_SUPPORTS_PCM        (1)
+#define SOC_I2S_SUPPORTS_PDM        (1)
+#define SOC_I2S_SUPPORTS_PDM_TX     (1)     // Support to output raw PDM format data
+#define SOC_I2S_SUPPORTS_PCM2PDM    (1)     // Support to write PCM format but output PDM format data with the help of PCM to PDM filter
+#define SOC_I2S_SUPPORTS_PDM_RX     (1)     // Support to input raw PDM format data
+#define SOC_I2S_SUPPORTS_TX_SYNC_CNT (1)
+#define SOC_I2S_SUPPORTS_TX_FIFO_SYNC (1)
+#define SOC_I2S_PDM_MAX_TX_LINES    (2)
+#define SOC_I2S_PDM_MAX_RX_LINES    (1U)
+#define SOC_I2S_SUPPORTS_TDM        (1)
+#define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
+
+#define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 // #define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK      (1)
@@ -405,16 +418,12 @@
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
-// #define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1) // TODO: [ESP32H4] IDF-12290
+#define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
 #define SOC_SPI_MEM_SUPPORT_AUTO_RESUME                   (1)
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
-
-#define SOC_MEMSPI_SRC_FREQ_64M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_32M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_16M_SUPPORTED         1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -425,20 +434,15 @@
 #define SOC_SYSTIMER_SUPPORT_RC_FAST        1  // Systimer can use RC_FAST clock source
 #define SOC_SYSTIMER_INT_LEVEL              1  // Systimer peripheral uses level interrupt
 #define SOC_SYSTIMER_ALARM_MISS_COMPENSATE  1  // Systimer peripheral can generate interrupt immediately if t(target) > t(current)
-// #define SOC_SYSTIMER_SUPPORT_ETM            1  // Systimer comparator can generate ETM event
+#define SOC_SYSTIMER_SUPPORT_ETM            1  // Systimer comparator can generate ETM event
 
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
-#define SOC_TIMER_GROUPS                  (2)
-#define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (1U)
-#define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
-#define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
-#define SOC_TIMER_GROUP_SUPPORT_RC_FAST   (1)
-#define SOC_TIMER_GROUP_TOTAL_TIMERS      (2)
 // #define SOC_TIMER_SUPPORT_ETM             (1)     // TODO: [ESP32H4] IDF-12355
+#define SOC_TIMER_SUPPORT_ETM             (1)
 #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
@@ -536,12 +540,14 @@
 #define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
-// #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)  // TODO: [ESP32H4] IDF-12285
+#define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
+
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
-#define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
+
+#define SOC_CLK_LP_FAST_SUPPORT_XTAL_D2           (1)     /*!< Support XTAL_D2 clock as the LP_FAST clock source */
 
 #define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control is independent, thanks to the PCR registers */
 

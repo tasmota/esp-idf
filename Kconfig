@@ -123,6 +123,8 @@ mainmenu "Espressif IoT Development Framework Configuration"
         bool
         default "y" if IDF_TARGET="esp32p4"
         select IDF_TARGET_ARCH_RISCV
+        select IDF_ENV_FPGA if ESP32P4_REV_MIN_200
+        select IDF_ENV_BRINGUP if ESP32P4_REV_MIN_200
 
     config IDF_TARGET_ESP32H2
         bool
@@ -147,7 +149,6 @@ mainmenu "Espressif IoT Development Framework Configuration"
         bool
         default "y" if IDF_TARGET="esp32h4"
         select IDF_TARGET_ARCH_RISCV
-        select IDF_ENV_FPGA
         select IDF_ENV_BRINGUP
 
     config IDF_TARGET_LINUX
@@ -716,3 +717,4 @@ mainmenu "Espressif IoT Development Framework Configuration"
             - CONFIG_USB_HOST_EXT_PORT_RESET_ATTEMPTS
             - CONFIG_LIBC_PICOLIBC
             - CONFIG_GDMA_ENABLE_WEIGHTED_ARBITRATION
+            - CONFIG_I3C_MASTER_ENABLED

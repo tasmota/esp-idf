@@ -31,7 +31,7 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
 
 **后验模式：** 后验模式为默认模式，该模式不需要和主机进行交互。在这种模式下，跟踪模块不会检查主机是否已经从 *HW UP BUFFER* 缓冲区读走所有数据，而是直接使用新数据覆盖旧数据。如果用户仅对最新的跟踪数据感兴趣，例如想要分析程序在崩溃之前的行为，则推荐使用该模式。主机可以稍后根据用户的请求来读取数据，例如在使用 JTAG 接口的情况下，通过特殊的 OpenOCD 命令进行读取。
 
-**流模式：** 当主机连接到 {IDF_TARGET_NAME} 时，跟踪模块会进入此模式。在这种模式下，跟踪模块在新数据写入 *HW UP BUFFER* 之前会检查其中是否有足够的空间，并在必要的时候等待主机读取数据并释放足够的内存。最大等待时间是由用户传递给相应 API 函数的超时时间参数决定的。因此当应用程序尝试使用有限的最大等待时间值来将数据写入跟踪缓冲区时，这些数据可能会被丢弃。尤其需要注意的是，如果在对时效要求严格的代码中（如中断处理函数、操作系统调度等）指定了无限的超时时间，将会导致系统故障。为了避免丢失此类关键数据，开发人员可以在 menuconfig 中开启 :ref:`CONFIG_APPTRACE_PENDING_DATA_SIZE_MAX` 选项，以启用额外的数据缓冲区。此宏还指定了在上述条件下可以缓冲的数据大小，它有助于缓解由于 USB 总线拥塞等原因导致的向主机传输数据间歇性减缓的状况。但是，当跟踪数据流的平均比特率超出硬件接口的能力时，该选项无法发挥作用。
+**流模式：** 当主机连接到 {IDF_TARGET_NAME} 时，跟踪模块会进入此模式。在这种模式下，跟踪模块在新数据写入 *HW UP BUFFER* 之前会检查其中是否有足够的空间，并在必要的时候等待主机读取数据并释放足够的内存。最大等待时间是由用户传递给相应 API 函数的超时时间参数决定的。因此当应用程序尝试使用有限的最大等待时间值来将数据写入跟踪缓冲区时，这些数据可能会被丢弃。尤其需要注意的是，如果在对时效要求严格的代码中（如中断处理函数、操作系统调度等）指定了无限的超时时间，将会导致系统故障。
 
 
 配置选项与依赖项
@@ -78,7 +78,7 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
       #include "esp_app_trace.h"
       ...
       char buf[] = "Hello World!";
-      esp_err_t res = esp_apptrace_write(ESP_APPTRACE_DEST_TRAX, buf, strlen(buf), ESP_APPTRACE_TMO_INFINITE);
+      esp_err_t res = esp_apptrace_write(ESP_APPTRACE_DEST_JTAG, buf, strlen(buf), ESP_APPTRACE_TMO_INFINITE);
       if (res != ESP_OK) {
           ESP_LOGE(TAG, "Failed to write data to host!");
           return res;
@@ -91,13 +91,13 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
       #include "esp_app_trace.h"
       ...
       int number = 10;
-      char *ptr = (char *)esp_apptrace_buffer_get(ESP_APPTRACE_DEST_TRAX, 32, 100/*tmo in us*/);
+      char *ptr = (char *)esp_apptrace_buffer_get(ESP_APPTRACE_DEST_JTAG, 32, 100/*tmo in us*/);
       if (ptr == NULL) {
           ESP_LOGE(TAG, "Failed to get buffer!");
           return ESP_FAIL;
       }
       sprintf(ptr, "Here is the number %d", number);
-      esp_err_t res = esp_apptrace_buffer_put(ESP_APPTRACE_DEST_TRAX, ptr, 100/*tmo in us*/);
+      esp_err_t res = esp_apptrace_buffer_put(ESP_APPTRACE_DEST_JTAG, ptr, 100/*tmo in us*/);
       if (res != ESP_OK) {
           /* in case of error host tracing tool (e.g. OpenOCD) will report incomplete user buffer */
           ESP_LOGE(TAG, "Failed to put buffer!");
@@ -115,9 +115,13 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
       size_t sz = sizeof(buf);
 
       /* config down buffer */
-      esp_apptrace_down_buffer_config(down_buf, sizeof(down_buf));
+      esp_err_t res = esp_apptrace_down_buffer_config(ESP_APPTRACE_DEST_JTAG, down_buf, sizeof(down_buf));
+      if (res != ESP_OK) {
+          ESP_LOGE(TAG, "Failed to config down buffer!");
+          return res;
+      }
       /* check for incoming data and read them if any */
-      esp_err_t res = esp_apptrace_read(ESP_APPTRACE_DEST_TRAX, buf, &sz, 0/*do not wait*/);
+      res = esp_apptrace_read(ESP_APPTRACE_DEST_JTAG, buf, &sz, 0/*do not wait*/);
       if (res != ESP_OK) {
           ESP_LOGE(TAG, "Failed to read data from host!");
           return res;
@@ -138,8 +142,12 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
       size_t sz = 32;
 
       /* config down buffer */
-      esp_apptrace_down_buffer_config(down_buf, sizeof(down_buf));
-      char *ptr = (char *)esp_apptrace_down_buffer_get(ESP_APPTRACE_DEST_TRAX, &sz, 100/*tmo in us*/);
+      esp_err_t res = esp_apptrace_down_buffer_config(ESP_APPTRACE_DEST_JTAG, down_buf, sizeof(down_buf));
+      if (res != ESP_OK) {
+          ESP_LOGE(TAG, "Failed to config down buffer!");
+          return res;
+      }
+      char *ptr = (char *)esp_apptrace_down_buffer_get(ESP_APPTRACE_DEST_JTAG, &sz, 100/*tmo in us*/);
       if (ptr == NULL) {
           ESP_LOGE(TAG, "Failed to get buffer!");
           return ESP_FAIL;
@@ -150,7 +158,7 @@ ESP-IDF 中提供了应用层跟踪功能，用于分析应用程序的行为。
       } else {
           printf("No data");
       }
-      esp_err_t res = esp_apptrace_down_buffer_put(ESP_APPTRACE_DEST_TRAX, ptr, 100/*tmo in us*/);
+      res = esp_apptrace_down_buffer_put(ESP_APPTRACE_DEST_JTAG, ptr, 100/*tmo in us*/);
       if (res != ESP_OK) {
           /* in case of error host tracing tool (e.g. OpenOCD) will report incomplete user buffer */
           ESP_LOGE(TAG, "Failed to put buffer!");

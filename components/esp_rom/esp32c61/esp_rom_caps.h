@@ -10,12 +10,13 @@
 #define ESP_ROM_HAS_CRC_BE                  (1) // ROM CRC library supports Big Endian
 #define ESP_ROM_HAS_JPEG_DECODE             (1) // ROM has JPEG decode library
 #define ESP_ROM_UART_CLK_IS_XTAL            (1) // UART clock source is selected to XTAL in ROM
-#define ESP_ROM_USB_SERIAL_DEVICE_NUM       (3) // UART uses USB_SERIAL_JTAG port in ROM.
+#define ESP_ROM_USB_SERIAL_DEVICE_NUM       (4) // UART uses USB_SERIAL_JTAG port in ROM.
 #define ESP_ROM_HAS_RETARGETABLE_LOCKING    (1) // ROM was built with retargetable locking
 #define ESP_ROM_GET_CLK_FREQ                (1) // Get clk frequency with rom function `ets_get_cpu_frequency`
 #define ESP_ROM_HAS_RVFPLIB                 (1) // ROM has the rvfplib
 #define ESP_ROM_HAS_HAL_WDT                 (1) // ROM has the implementation of Watchdog HAL driver
 #define ESP_ROM_HAS_HAL_SYSTIMER            (1) // ROM has the implementation of Systimer HAL driver
+#define ESP_ROM_SYSTIMER_INIT_PATCH         (1) // ROM version initializes SYSTIMER without ETM
 #define ESP_ROM_HAS_HEAP_TLSF               (1) // ROM has the implementation of the tlsf and multi-heap library
 #define ESP_ROM_TLSF_CHECK_PATCH            (1) // ROM does not contain the patch of tlsf_check_pool()
 #define ESP_ROM_MULTI_HEAP_WALK_PATCH       (1) // ROM does not contain the patch of multi_heap_walk()

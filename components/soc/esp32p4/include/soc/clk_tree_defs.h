@@ -106,6 +106,8 @@ typedef enum {
     SOC_RTC_SLOW_CLK_SRC_XTAL32K = 1,                 /*!< Select XTAL32K_CLK as RTC_SLOW_CLK source */
     SOC_RTC_SLOW_CLK_SRC_RC32K = 2,                   /*!< Select RC32K_CLK as RTC_SLOW_CLK source */
     SOC_RTC_SLOW_CLK_SRC_INVALID,                     /*!< Invalid RTC_SLOW_CLK source */
+
+    SOC_RTC_SLOW_CLK_SRC_DEFAULT = SOC_RTC_SLOW_CLK_SRC_RC_SLOW, /*!< RC_SLOW_CLK is the default clock source for RTC_SLOW_CLK */
 } soc_rtc_slow_clk_src_t;
 
 /**
@@ -163,6 +165,7 @@ typedef enum {
     SOC_MOD_CLK_PLL_F50M,                      /*!< PLL_F50M_CLK is derived from MPLL (clock gating + configurable divider 10), it will have a frequency of 50MHz */
     SOC_MOD_CLK_PLL_F80M,                      /*!< PLL_F80M_CLK is derived from SPLL (clock gating + default divider 6), its default frequency is 80MHz */
     SOC_MOD_CLK_PLL_F160M,                     /*!< PLL_F160M_CLK is derived from SPLL (clock gating + default divider 3), its default frequency is 160MHz */
+    SOC_MOD_CLK_PLL_F120M,                     /*!< PLL_F120M_CLK is derived from SPLL (clock gating + default divider 4), its default frequency is 120MHz */
     SOC_MOD_CLK_PLL_F240M,                     /*!< PLL_F240M_CLK is derived from SPLL (clock gating + default divider 2), its default frequency is 240MHz */
     SOC_MOD_CLK_CPLL,                          /*!< CPLL is from 40MHz XTAL oscillator frequency multipliers */
     SOC_MOD_CLK_SPLL,                          /*!< SPLL is from 40MHz XTAL oscillator frequency multipliers, its default frequency is 480MHz */
@@ -294,7 +297,7 @@ typedef enum {
 typedef enum {
     LP_UART_SCLK_LP_FAST = SOC_MOD_CLK_RTC_FAST,        /*!< LP_UART source clock is LP(RTC)_FAST */
     LP_UART_SCLK_XTAL_D2 = SOC_MOD_CLK_XTAL_D2,         /*!< LP_UART source clock is XTAL_D2 */
-    // LP_UART_SCLK_LP_PLL  = SOC_MOD_CLK_LP_PLL,          /*!< LP_UART source clock is LP_PLL (8M PLL) */ TODO: LP_PLL clock requires extra support
+    // LP_UART_SCLK_LP_PLL  = SOC_MOD_CLK_LP_PLL,       /*!< LP_UART source clock is LP_PLL (8M PLL) */ TODO: IDF-9581
     LP_UART_SCLK_DEFAULT = SOC_MOD_CLK_RTC_FAST,        /*!< LP_UART source clock default choice is LP(RTC)_FAST */
 } soc_periph_lp_uart_clk_src_t;
 
@@ -756,6 +759,7 @@ typedef enum {
 typedef enum {
     I3C_MASTER_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,
     I3C_MASTER_CLK_SRC_PLL_F160M = SOC_MOD_CLK_PLL_F160M,
+    I3C_MASTER_CLK_SRC_PLL_F120M = SOC_MOD_CLK_PLL_F120M,
     I3C_MASTER_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,
 } soc_periph_i3c_master_clk_src_t;
 

@@ -10,25 +10,11 @@
 examples/peripherals/adc/continuous_read:
   disable:
     - if: SOC_ADC_DMA_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: lack of runners, TODO IDF-9573
-    - if: IDF_TARGET == "esp32c61"
-      temporary: true
-      reason: lack of runner
   <<: *adc_dependencies
 
 examples/peripherals/adc/oneshot_read:
   disable:
     - if: SOC_ADC_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: lack of runner, TODO IDF-9573
-    - if: IDF_TARGET == "esp32c61"
-      temporary: true
-      reason: lack of runner
   <<: *adc_dependencies
 
 examples/peripherals/analog_comparator:
@@ -191,6 +177,12 @@ examples/peripherals/i2s/i2s_recorder:
   depends_components:
     - esp_driver_spi
     - esp_driver_i2s
+
+examples/peripherals/i3c/i3c_i2c_basic:
+  disable:
+    - if: SOC_I3C_MASTER_SUPPORTED != 1
+  depends_components:
+    - esp_driver_i3c
 
 examples/peripherals/isp/multi_pipelines:
   disable:
@@ -486,7 +478,7 @@ examples/peripherals/timer_group/gptimer_capture_hc_sr04:
 
 examples/peripherals/timer_group/wiegand_interface:
   disable:
-    - if: SOC_GPTIMER_SUPPORTED != 1 or SOC_TIMER_GROUP_TOTAL_TIMERS < 2
+    - if: SOC_GPTIMER_SUPPORTED != 1 or IDF_TARGET in ["esp32c2"]
   depends_components:
     - esp_driver_gptimer
 
@@ -594,6 +586,8 @@ examples/peripherals/usb/host:
     - components/soc/include/soc/usb*.h
     - components/soc/esp32*/include/soc/usb_dwc_*.h
     - components/soc/esp32*/include/soc/usb_wrap_*.h
+    - components/esp_hw_support/usb_phy/usb_phy.c
+    - components/esp_hw_support/include/esp_private/usb_phy.h
     - examples/peripherals/usb/host/**/*
 
 examples/peripherals/usb_serial_jtag/usb_serial_jtag_echo:

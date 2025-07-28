@@ -16,7 +16,6 @@ ADC
 
 The legacy ADC driver ``driver/adc.h`` is deprecated since version 5.0 (see :ref:`deprecate_adc_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_adc`, and the header file path is ``esp_adc/adc_oneshot.h``, ``esp_adc/adc_continuous.h``, ``esp_adc/adc_cali.h`` and ``esp_adc/adc_cali_scheme.h``.
 
-
 RMT
 ---
 
@@ -116,3 +115,10 @@ SDMMC
     -------------------------------------------
 
     The legacy temperature sensor driver ``driver/temp_sensor.h`` is deprecated since version 5.0 (see :ref:`deprecate_tsens_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_tsens`, and the header file path is ``driver/temperature_sensor.h``.
+
+.. only:: SOC_SDM_SUPPORTED
+
+    Legacy Sigma-Delta Modulator Driver is Removed
+    ----------------------------------------------
+
+    The legacy Sigma-Delta Modulator driver ``driver/sigmadelta.h`` is deprecated since version 5.0 (see :ref:`deprecate_sdm_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_sdm`, and the header file path is ``driver/sdm.h``.

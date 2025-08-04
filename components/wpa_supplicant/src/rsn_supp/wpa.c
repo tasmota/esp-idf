@@ -375,8 +375,14 @@ static void wpa_sm_pmksa_free_cb(struct rsn_pmksa_cache_entry *entry,
     }
 
     if (deauth) {
+    /* For upstream supplicant, reconnection is handled internally, whereas in ESP-IDF, the user needs to initiate a new connection.
+       To mitigate this, simply flush the PMK without disconnecting. This will prevent the device from disconnecting,
+       while allowing it to derive a new PMK during the next connection attempt. */
+
+#ifndef ESP_SUPPLICANT
         os_memset(sm->pmk, 0, sizeof(sm->pmk));
         wpa_sm_deauthenticate(sm, WLAN_REASON_UNSPECIFIED);
+#endif
     }
 }
 
@@ -2265,7 +2271,7 @@ void wpa_set_profile(u32 wpa_proto, u8 auth_mode)
     struct wpa_sm *sm = &gWpaSm;
 
     sm->proto = wpa_proto;
-    if (auth_mode == WPA2_AUTH_ENT) {
+    if (auth_mode == WPA2_AUTH_ENT || (auth_mode == WPA_AUTH_UNSPEC)) {
         sm->key_mgmt = WPA_KEY_MGMT_IEEE8021X; /* for wpa2 enterprise */
     } else if (auth_mode == WPA2_AUTH_ENT_SHA256) {
         sm->key_mgmt = WPA_KEY_MGMT_IEEE8021X_SHA256; /* for wpa2 enterprise sha256 */

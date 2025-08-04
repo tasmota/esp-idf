@@ -137,13 +137,13 @@ esp_err_t usb_serial_jtag_driver_install(usb_serial_jtag_driver_config_t *usb_se
     ESP_RETURN_ON_FALSE((usb_serial_jtag_config->rx_buffer_size > USB_SER_JTAG_RX_MAX_SIZE), ESP_ERR_INVALID_ARG, USB_SERIAL_JTAG_TAG, "RX buffer prepared is so small, should larger than 64");
     ESP_RETURN_ON_FALSE((usb_serial_jtag_config->tx_buffer_size > 0), ESP_ERR_INVALID_ARG, USB_SERIAL_JTAG_TAG, "TX buffer is not prepared");
     p_usb_serial_jtag_obj = (usb_serial_jtag_obj_t*) heap_caps_calloc(1, sizeof(usb_serial_jtag_obj_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    p_usb_serial_jtag_obj->tx_stash_cnt = 0;
     if (p_usb_serial_jtag_obj == NULL) {
         ESP_LOGE(USB_SERIAL_JTAG_TAG, "memory allocate error");
         // no `goto _exit` here as there's nothing to clean up and that would make the uninstall
         // routine unhappy.
         return ESP_ERR_NO_MEM;
     }
+    p_usb_serial_jtag_obj->tx_stash_cnt = 0;
 
     p_usb_serial_jtag_obj->rx_ring_buf = xRingbufferCreate(usb_serial_jtag_config->rx_buffer_size, RINGBUF_TYPE_BYTEBUF);
     if (p_usb_serial_jtag_obj->rx_ring_buf == NULL) {
@@ -255,4 +255,34 @@ esp_err_t usb_serial_jtag_driver_uninstall(void)
     heap_caps_free(p_usb_serial_jtag_obj);
     p_usb_serial_jtag_obj = NULL;
     return ESP_OK;
+}
+
+bool usb_serial_jtag_is_driver_installed(void)
+{
+    return (p_usb_serial_jtag_obj != NULL);
+}
+
+size_t usb_serial_jtag_get_read_bytes_available(void)
+{
+    // sign the the driver is read ready is that data is waiting in the RX ringbuffer
+    UBaseType_t bytes_available = 0;
+    if (usb_serial_jtag_is_driver_installed()) {
+        vRingbufferGetInfo(p_usb_serial_jtag_obj->rx_ring_buf, NULL, NULL, NULL, NULL, &bytes_available);
+        if (bytes_available <= 0) {
+            return 0;
+        }
+    }
+
+    return (size_t)bytes_available;
+}
+
+bool usb_serial_jtag_read_ready(void)
+{
+    return usb_serial_jtag_get_read_bytes_available() != 0;
+}
+
+bool usb_serial_jtag_write_ready(void)
+{
+    // sign that the driver is write ready is that the TX ring buffer is not full
+    return (xRingbufferGetCurFreeSize(p_usb_serial_jtag_obj->tx_ring_buf) > 0);
 }

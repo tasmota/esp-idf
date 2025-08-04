@@ -152,9 +152,9 @@ if(CONFIG_COMPILER_DUMP_RTL_FILES)
     list(APPEND compile_options "-fdump-rtl-expand")
 endif()
 
-idf_build_set_property(GDBINIT_FILES_PREFIX_MAP "${BUILD_DIR}/gdbinit/prefix_map")
-file(MAKE_DIRECTORY "${BUILD_DIR}/gdbinit")
-file(WRITE "${BUILD_DIR}/gdbinit/prefix_map" "")
+# idf_build_set_property(GDBINIT_FILES_PREFIX_MAP "${BUILD_DIR}/gdbinit/prefix_map")
+# file(MAKE_DIRECTORY "${BUILD_DIR}/gdbinit")
+# file(WRITE "${BUILD_DIR}/gdbinit/prefix_map" "")
 
 if(NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS 8.0.0)
     if(CONFIG_COMPILER_HIDE_PATHS_MACROS)
@@ -209,6 +209,21 @@ if(CONFIG_COMPILER_DISABLE_GCC13_WARNINGS)
                                     "-Wno-dangling-reference")
 endif()
 
+if(CONFIG_COMPILER_ENABLE_LTO)
+    set(CMAKE_AR ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar)
+    set(CMAKE_RANLIB ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib)
+    list(APPEND compile_options     "-flto=auto"
+                                    "-ffat-lto-objects"
+                                    "-flto-compression-level=9")
+    list(APPEND link_options        "-flto"
+                                    "-fuse-linker-plugin"
+                                    "-ffat-lto-objects"
+                                    "-flto-partition=max")
+else()
+    list(APPEND compile_options     "-fno-lto")
+    list(APPEND link_options        "-fno-lto")
+endif()
+
 # GCC-specific options
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     list(APPEND compile_options "-fstrict-volatile-bitfields"
@@ -219,8 +234,6 @@ if(CONFIG_ESP_SYSTEM_USE_EH_FRAME)
   list(APPEND compile_options "-fasynchronous-unwind-tables")
   list(APPEND link_options "-Wl,--eh-frame-hdr")
 endif()
-
-list(APPEND link_options "-fno-lto")
 
 if(CONFIG_IDF_TARGET_LINUX AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
     # Not all versions of the MacOS linker support the -warn_commons flag.

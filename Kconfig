@@ -578,6 +578,13 @@ mainmenu "Espressif IoT Development Framework Configuration"
                 Enable this option if use GCC 13 or newer, and want to disable warnings which don't appear with
                 GCC 12.
 
+        config COMPILER_ENABLE_LTO
+            bool "Enable LTO compile and linking"
+            default "n"
+            help
+                The overall aim of LTO is better runtime performance through whole-program analysis
+                and cross-module optimisation.
+
         config COMPILER_DUMP_RTL_FILES
             bool "Dump RTL files during compilation"
             help

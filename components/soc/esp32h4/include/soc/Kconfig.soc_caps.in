@@ -27,6 +27,10 @@ config SOC_ASYNC_MEMCPY_SUPPORTED
     bool
     default y
 
+config SOC_USB_SERIAL_JTAG_SUPPORTED
+    bool
+    default y
+
 config SOC_EFUSE_KEY_PURPOSE_FIELD
     bool
     default y
@@ -36,6 +40,10 @@ config SOC_EFUSE_SUPPORTED
     default y
 
 config SOC_I2S_SUPPORTED
+    bool
+    default y
+
+config SOC_RMT_SUPPORTED
     bool
     default y
 
@@ -80,6 +88,10 @@ config SOC_WDT_SUPPORTED
     default y
 
 config SOC_SPI_FLASH_SUPPORTED
+    bool
+    default y
+
+config SOC_SPIRAM_SUPPORTED
     bool
     default y
 
@@ -267,11 +279,51 @@ config SOC_GPIO_ETM_TASKS_PER_GROUP
     int
     default 8
 
+config SOC_GPIO_SUPPORT_RTC_INDEPENDENT
+    bool
+    default y
+
+config SOC_LP_IO_CLOCK_IS_INDEPENDENT
+    bool
+    default y
+
+config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    bool
+    default y
+
+config SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK
+    int
+    default 0
+
+config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
+    int
+    default 6
+
 config SOC_GPIO_SUPPORT_FORCE_HOLD
     bool
     default y
 
 config SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+    bool
+    default y
+
+config SOC_RTCIO_PIN_COUNT
+    int
+    default 6
+
+config SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_HOLD_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_WAKE_SUPPORTED
+    bool
+    default y
+
+config SOC_RTCIO_EDGE_WAKE_SUPPORTED
     bool
     default y
 
@@ -420,6 +472,66 @@ config SOC_MMU_LINEAR_ADDRESS_REGION_NUM
     default 1
 
 config SOC_MMU_DI_VADDR_SHARED
+    bool
+    default y
+
+config SOC_RMT_GROUPS
+    int
+    default 1
+
+config SOC_RMT_TX_CANDIDATES_PER_GROUP
+    int
+    default 2
+
+config SOC_RMT_RX_CANDIDATES_PER_GROUP
+    int
+    default 2
+
+config SOC_RMT_CHANNELS_PER_GROUP
+    int
+    default 4
+
+config SOC_RMT_MEM_WORDS_PER_CHANNEL
+    int
+    default 48
+
+config SOC_RMT_SUPPORT_RX_PINGPONG
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_RX_DEMODULATION
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_ASYNC_STOP
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_LOOP_COUNT
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_SYNCHRO
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_RC_FAST
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -632,6 +744,14 @@ config SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
     default y
 
 config SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE
+    bool
+    default y
+
+config SOC_SPIRAM_XIP_SUPPORTED
+    bool
+    default y
+
+config SOC_PSRAM_DMA_CAPABLE
     bool
     default y
 

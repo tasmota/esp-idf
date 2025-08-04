@@ -603,6 +603,14 @@ config SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
     bool
     default y
 
+config SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX
+    bool
+    default y
+
+config SOC_CLOCKOUT_HAS_SOURCE_GATE
+    bool
+    default y
+
 config SOC_GPIO_CLOCKOUT_CHANNEL_NUM
     int
     default 3
@@ -1119,6 +1127,10 @@ config SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP
     bool
     default y
 
+config SOC_ECDSA_SUPPORT_CURVE_P384
+    bool
+    default y
+
 config SOC_SDM_GROUPS
     int
     default 1
@@ -1244,6 +1256,10 @@ config SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR
     default y
 
 config SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED
     bool
     default y
 
@@ -1491,6 +1507,14 @@ config SOC_CRYPTO_DPA_PROTECTION_SUPPORTED
     bool
     default y
 
+config SOC_RNG_BUF_CHAIN_ENTROPY_SOURCE
+    bool
+    default y
+
+config SOC_RNG_RTC_TIMER_ENTROPY_SOURCE
+    bool
+    default y
+
 config SOC_UART_NUM
     int
     default 3
@@ -1700,6 +1724,10 @@ config SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
     default y
 
 config SOC_MODEM_CLOCK_IS_INDEPENDENT
+    bool
+    default y
+
+config SOC_RNG_CLOCK_IS_INDEPENDENT
     bool
     default y
 

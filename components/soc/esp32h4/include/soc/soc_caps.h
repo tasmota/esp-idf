@@ -46,7 +46,7 @@
 // #define SOC_BT_SUPPORTED                1
 // #define SOC_IEEE802154_SUPPORTED        1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
-// #define SOC_USB_SERIAL_JTAG_SUPPORTED   1    // TODO: [ESP32H4] IDF-12396
+#define SOC_USB_SERIAL_JTAG_SUPPORTED   1
 // #define SOC_TEMP_SENSOR_SUPPORTED       1    // TODO: [ESP32H4] IDF-12404
 // #define SOC_SUPPORTS_SECURE_DL_MODE     1
 // #define SOC_ULP_SUPPORTED               0    // TODO: [ESP32H4] IDF-12396
@@ -55,7 +55,7 @@
 #define SOC_EFUSE_SUPPORTED             1       // TODO: [ESP32H4] IDF-12268
 // #define SOC_RTC_MEM_SUPPORTED           1    // TODO: [ESP32H4] IDF-12313
 #define SOC_I2S_SUPPORTED               1
-// #define SOC_RMT_SUPPORTED               1    // TODO: [ESP32H4] IDF-12402
+#define SOC_RMT_SUPPORTED               1
 // #define SOC_SDM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12348
 // #define SOC_GPSPI_SUPPORTED             1    // TODO: [ESP32H4] IDF-12362 IDF-12364 IDF-12366
 // #define SOC_LEDC_SUPPORTED              1    // TODO: [ESP32H4] IDF-12343
@@ -86,7 +86,7 @@
 // #define SOC_ASSIST_DEBUG_SUPPORTED      1    // TODO: [ESP32H4] IDF-12310
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1       // TODO: [ESP32H4] IDF-12388
-// #define SOC_SPIRAM_SUPPORTED            1    // TODO: [ESP32H4] IDF-12351
+#define SOC_SPIRAM_SUPPORTED            1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_32M                        1
@@ -219,9 +219,14 @@
 
 // Target has the full LP IO subsystem
 // On ESP32-H4, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
-// #define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    1
-// #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   1
-// #define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK    (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
+#define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    1
+
+// LP IO peripherals have independent clock gating to manage
+#define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
+
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   1
+#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
+#define SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT      (6)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_6~GPIO_NUM_39)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK  (SOC_GPIO_VALID_GPIO_MASK & ~((1ULL<<6) - 1))
@@ -235,12 +240,13 @@
 // #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX    1 TODO: [ESP32H4] IDF-12361
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
-// #define SOC_RTCIO_PIN_COUNT                 6
-// #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1   // This macro indicates that the target has separate RTC IOMUX hardware feature,
-//                                                 // so it supports unique IOMUX configuration (including IE, OE, PU, PD, DRV etc.)
-//                                                 // when the pins are switched to RTC function.
-// #define SOC_RTCIO_HOLD_SUPPORTED            1
-// #define SOC_RTCIO_WAKE_SUPPORTED            1
+#define SOC_RTCIO_PIN_COUNT                 6
+#define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1   /*!< This macro indicates that the target has separate RTC IOMUX hardware feature,
+                                                     so it supports unique IOMUX configuration (including IE, OE, PU, PD, DRV etc.)
+                                                     when the pins are switched to RTC function. */
+#define SOC_RTCIO_HOLD_SUPPORTED            1
+#define SOC_RTCIO_WAKE_SUPPORTED            1
+#define SOC_RTCIO_EDGE_WAKE_SUPPORTED       1
 
 /*-------------------------- Dedicated GPIO CAPS -----------------------------*/
 // #define SOC_DEDIC_GPIO_OUT_CHANNELS_NUM (8) /*!< 8 outward channels on each CPU core */
@@ -320,20 +326,21 @@
 // #define SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE 1
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
-// #define SOC_RMT_GROUPS                        1U /*!< One RMT group */
-// #define SOC_RMT_TX_CANDIDATES_PER_GROUP       2  /*!< Number of channels that capable of Transmit */
-// #define SOC_RMT_RX_CANDIDATES_PER_GROUP       2  /*!< Number of channels that capable of Receive */
-// #define SOC_RMT_CHANNELS_PER_GROUP            4  /*!< Total 4 channels */
-// #define SOC_RMT_MEM_WORDS_PER_CHANNEL         48 /*!< Each channel owns 48 words memory (1 word = 4 Bytes) */
-// #define SOC_RMT_SUPPORT_RX_PINGPONG           1  /*!< Support Ping-Pong mode on RX path */
-// #define SOC_RMT_SUPPORT_RX_DEMODULATION       1  /*!< Support signal demodulation on RX path (i.e. remove carrier) */
-// #define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
-// #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
-// #define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */
-// #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
-// #define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
-// #define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
-// #define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST as the RMT clock source */
+#define SOC_RMT_GROUPS                        1U /*!< One RMT group */
+#define SOC_RMT_TX_CANDIDATES_PER_GROUP       2  /*!< Number of channels that capable of Transmit */
+#define SOC_RMT_RX_CANDIDATES_PER_GROUP       2  /*!< Number of channels that capable of Receive */
+#define SOC_RMT_CHANNELS_PER_GROUP            4  /*!< Total 4 channels */
+#define SOC_RMT_MEM_WORDS_PER_CHANNEL         48 /*!< Each channel owns 48 words memory (1 word = 4 Bytes) */
+#define SOC_RMT_SUPPORT_RX_PINGPONG           1  /*!< Support Ping-Pong mode on RX path */
+#define SOC_RMT_SUPPORT_RX_DEMODULATION       1  /*!< Support signal demodulation on RX path (i.e. remove carrier) */
+#define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
+#define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
+#define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */
+#define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
+#define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
+#define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
+#define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST as the RMT clock source */
+#define SOC_RMT_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up RMT registers before sleep */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
 // #define SOC_MCPWM_GROUPS                     (1U)   ///< 1 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
@@ -499,6 +506,10 @@
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
 #define SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE (1)
+
+/*-------------------------- SPIRAM CAPS -------------------------------------*/
+#define SOC_SPIRAM_XIP_SUPPORTED      1
+#define SOC_PSRAM_DMA_CAPABLE         1
 
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)

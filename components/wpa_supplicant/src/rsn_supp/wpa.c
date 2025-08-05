@@ -108,6 +108,12 @@ wifi_cipher_type_t cipher_type_map_supp_to_public(unsigned wpa_cipher)
     case WPA_CIPHER_AES_128_CMAC:
         return WIFI_CIPHER_TYPE_AES_CMAC128;
 
+    case WPA_CIPHER_BIP_GMAC_128:
+        return WIFI_CIPHER_TYPE_AES_GMAC128;
+
+    case WPA_CIPHER_BIP_GMAC_256:
+        return WIFI_CIPHER_TYPE_AES_GMAC256;
+
     case WPA_CIPHER_SMS4:
         return WIFI_CIPHER_TYPE_SMS4;
 
@@ -370,8 +376,14 @@ static void wpa_sm_pmksa_free_cb(struct rsn_pmksa_cache_entry *entry,
     }
 
     if (deauth) {
+    /* For upstream supplicant, reconnection is handled internally, whereas in ESP-IDF, the user needs to initiate a new connection.
+       To mitigate this, simply flush the PMK without disconnecting. This will prevent the device from disconnecting,
+       while allowing it to derive a new PMK during the next connection attempt. */
+
+#ifndef ESP_SUPPLICANT
         os_memset(sm->pmk, 0, sizeof(sm->pmk));
         wpa_sm_deauthenticate(sm, WLAN_REASON_UNSPECIFIED);
+#endif
     }
 }
 
@@ -2337,15 +2349,11 @@ int wpa_set_bss(char *macddr, char * bssid, u8 pairwise_cipher, u8 group_cipher,
     }
     sm->pairwise_cipher = BIT(pairwise_cipher);
     sm->group_cipher = BIT(group_cipher);
-    sm->rx_replay_counter_set = 0;  //init state not intall replay counter value
-    memset(sm->rx_replay_counter, 0, WPA_REPLAY_COUNTER_LEN);
-    sm->wpa_ptk_rekey = 0;
     sm->renew_snonce = 1;
     memcpy(sm->own_addr, macddr, ETH_ALEN);
     memcpy(sm->bssid, bssid, ETH_ALEN);
     sm->ap_notify_completed_rsne = esp_wifi_sta_is_ap_notify_completed_rsne_internal();
     sm->use_ext_key_id = (sm->proto == WPA_PROTO_WPA);
-    pmksa_cache_clear_current(sm);
     sm->sae_pwe = esp_wifi_get_config_sae_pwe_h2e_internal(WIFI_IF_STA);
 
     struct rsn_pmksa_cache_entry *pmksa = NULL;
@@ -2364,7 +2372,6 @@ int wpa_set_bss(char *macddr, char * bssid, u8 pairwise_cipher, u8 group_cipher,
         }
     }
 
-    sm->eapol1_count = 0;
 #ifdef CONFIG_IEEE80211W
     if (esp_wifi_sta_pmf_enabled()) {
         wifi_config_t wifi_cfg;

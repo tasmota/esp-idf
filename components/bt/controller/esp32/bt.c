@@ -248,6 +248,7 @@ extern uint32_t _bt_controller_data_end;
 extern void config_bt_funcs_reset(void);
 extern void config_ble_funcs_reset(void);
 extern void config_btdm_funcs_reset(void);
+extern void btdm_aa_check_enhance_enable(void);
 
 #ifdef CONFIG_BT_BLUEDROID_ENABLED
 extern void bt_stack_enableSecCtrlVsCmd(bool en);
@@ -257,6 +258,7 @@ extern void bt_stack_enableCoexVsCmd(bool en);
 extern void scan_stack_enableAdvFlowCtrlVsCmd(bool en);
 extern void adv_stack_enableClearLegacyAdvVsCmd(bool en);
 extern void advFilter_stack_enableDupExcListVsCmd(bool en);
+extern void arr_stack_enableMultiConnVsCmd(bool en);
 #endif // (CONFIG_BT_NIMBLE_ENABLED) || (CONFIG_BT_BLUEDROID_ENABLED)
 
 /* Local Function Declare
@@ -1722,6 +1724,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     scan_stack_enableAdvFlowCtrlVsCmd(true);
     adv_stack_enableClearLegacyAdvVsCmd(true);
     advFilter_stack_enableDupExcListVsCmd(true);
+    arr_stack_enableMultiConnVsCmd(true);
 #endif // (CONFIG_BT_NIMBLE_ENABLED) || (CONFIG_BT_BLUEDROID_ENABLED)
 
     btdm_controller_status = ESP_BT_CONTROLLER_STATUS_INITED;
@@ -1761,6 +1764,7 @@ esp_err_t esp_bt_controller_deinit(void)
     scan_stack_enableAdvFlowCtrlVsCmd(false);
     adv_stack_enableClearLegacyAdvVsCmd(false);
     advFilter_stack_enableDupExcListVsCmd(false);
+    arr_stack_enableMultiConnVsCmd(false);
 #endif // (CONFIG_BT_NIMBLE_ENABLED) || (CONFIG_BT_BLUEDROID_ENABLED)
 
     return ESP_OK;
@@ -1846,6 +1850,10 @@ static void patch_apply(void)
 
 #ifndef CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY
     config_ble_funcs_reset();
+#endif
+
+#if BTDM_CTRL_CHECK_CONNECT_IND_ACCESS_ADDRESS_ENABLED
+    btdm_aa_check_enhance_enable();
 #endif
 }
 

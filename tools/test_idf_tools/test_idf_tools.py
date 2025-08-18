@@ -313,6 +313,32 @@ class TestUsage(TestUsageBase):
 
         self.assertIn(os.path.join(tool_to_test, tool_version), output)
 
+    def test_export_supported_version_cmake(self):
+        tool_to_test = 'cmake'
+        supported_version = ''
+        recommended_version = ''
+        for tool in self.tools_dict['tools']:
+            if tool['name'] != tool_to_test:
+                continue
+            for version in tool['versions']:
+                if version['status'] == 'supported':
+                    supported_version = version['name']
+                elif version['status'] == 'recommended':
+                    recommended_version = version['name']
+
+        self.run_idf_tools_with_action(['install'])
+        output = self.run_idf_tools_with_action(['install', f'{tool_to_test}@{supported_version}'])
+        self.assert_tool_installed(output, tool_to_test, supported_version)
+
+        # Remove the recommended version folder installed by install command (in case of Windows)
+        recommended_version_folder = os.path.join(self.temp_tools_dir, 'tools', tool_to_test, recommended_version)
+        if os.path.exists(recommended_version_folder):
+            shutil.rmtree(recommended_version_folder)
+
+        output = self.run_idf_tools_with_action(['export'])
+        self.assertIn(os.path.join(tool_to_test, supported_version), output)
+        self.assertNotIn(os.path.join(tool_to_test, recommended_version), output)
+
     def test_export_prefer_system_cmake(self):
         tool_to_test = 'cmake'
         self.run_idf_tools_with_action(['install'])
@@ -713,7 +739,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertIn(
             os.path.join(self.temp_tools_dir, 'tools', DFU_UTIL, DFU_UTIL_VERSION, 'dfu-util-0.11-win64'), output
@@ -817,7 +843,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertNotIn(
             os.path.join(self.temp_tools_dir, 'tools', DFU_UTIL, DFU_UTIL_VERSION, 'dfu-util-0.11-win64'), output
@@ -889,7 +915,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertNotIn(
             os.path.join(self.temp_tools_dir, 'tools', DFU_UTIL, DFU_UTIL_VERSION, 'dfu-util-0.11-win64'), output
@@ -967,7 +993,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertIn(
             os.path.join(self.temp_tools_dir, 'tools', DFU_UTIL, DFU_UTIL_VERSION, 'dfu-util-0.11-win64'), output
@@ -1047,7 +1073,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertIn(
             os.path.join(self.temp_tools_dir, 'tools', DFU_UTIL, DFU_UTIL_VERSION, 'dfu-util-0.11-win64'), output
@@ -1097,7 +1123,7 @@ class TestUsageWin(TestUsage):
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', NINJA, NINJA_VERSION), output)
         self.assertIn(os.path.join(self.temp_tools_dir, 'tools', IDF_EXE, IDF_EXE_VERSION), output)
         self.assertIn(
-            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.10.2-windows-x86_64'), output
+            os.path.join(self.temp_tools_dir, 'tools', CCACHE, CCACHE_VERSION, 'ccache-4.11.2-windows-x86_64'), output
         )
         self.assertNotIn(
             os.path.join(self.temp_tools_dir, 'tools', XTENSA_ELF, XTENSA_ELF_VERSION, XTENSA_ELF, 'bin'), output

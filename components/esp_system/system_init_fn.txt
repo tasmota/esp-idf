@@ -72,8 +72,8 @@ SECONDARY: 100: esp_timer_init_os in components/esp_timer/src/esp_timer.c on ESP
 # HW stack guard via assist-debug module.
 SECONDARY: 101: esp_hw_stack_guard_init in components/esp_system/hw_stack_guard.c on ESP_SYSTEM_INIT_ALL_CORES
 
-# RNG module clock was disabled in `esp_perip_clk_init`, if hw_random is used, need to re-ebnabled it in startup
-SECONDARY: 102: init_rng_clock in components/esp_hw_support/hw_random.c on BIT(0)
+# Initialize RNG (enable clock which is disabled in `esp_perip_clk_init`, configure entropy sources)
+SECONDARY: 102: init_rng in components/esp_hw_support/hw_random.c on BIT(0)
 
 # Security specific initializations
 SECONDARY: 103: esp_security_init in components/esp_security/src/init.c on BIT(0)
@@ -88,7 +88,6 @@ SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/p
 SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32p4/sleep_clock.c on BIT(0)
 SECONDARY: 107: sleep_sys_periph_startup_init in components/esp_hw_support/sleep_system_peripheral.c on BIT(0)
 SECONDARY: 108: sleep_mmu_startup_init in components/esp_hw_support/lowpower/port/esp32c5/sleep_mmu.c on BIT(0)
-SECONDARY: 108: sleep_mmu_startup_init in components/esp_hw_support/lowpower/port/esp32c61/sleep_mmu.c on BIT(0)
 
 # app_trace has to be initialized before systemview
 SECONDARY: 115: esp_apptrace_init in components/app_trace/app_trace.c on ESP_SYSTEM_INIT_ALL_CORES
@@ -109,6 +108,7 @@ SECONDARY: 151: nvs_sec_provider_register_hmac_scheme in components/nvs_sec_prov
 SECONDARY: 201: init_pm in components/esp_system/startup_funcs.c on BIT(0)
 SECONDARY: 203: init_apb_dma in components/esp_system/startup_funcs.c on BIT(0)
 SECONDARY: 204: init_coexist in components/esp_system/startup_funcs.c on BIT(0)
+SECONDARY: 205: init_bootloader_offset in components/esp_system/startup_funcs.c on BIT(0)
 
 # usb_console needs to create an esp_timer at startup.
 # This can be done only after esp_timer initialization (esp_timer_init_os).

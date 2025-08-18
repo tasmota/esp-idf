@@ -34,6 +34,8 @@ static const char *TAG = "HTTP_CLIENT";
 
 ESP_STATIC_ASSERT((int)ESP_HTTP_CLIENT_TLS_VER_ANY == (int)ESP_TLS_VER_ANY, "Enum mismatch in esp_http_client and esp-tls");
 ESP_STATIC_ASSERT((int)ESP_HTTP_CLIENT_TLS_VER_MAX <= (int)ESP_TLS_VER_TLS_MAX, "HTTP client supported TLS is not supported in esp-tls");
+ESP_STATIC_ASSERT((int)HTTP_TLS_DYN_BUF_RX_STATIC == (int)ESP_TLS_DYN_BUF_RX_STATIC, "Enum mismatch in esp_http_client and esp-tls");
+ESP_STATIC_ASSERT((int)HTTP_TLS_DYN_BUF_STRATEGY_MAX <= (int)ESP_TLS_DYN_BUF_STRATEGY_MAX, "HTTP client supported TLS is not supported in esp-tls");
 
 #if CONFIG_ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT == -1
 #define ESP_HTTP_CLIENT_EVENT_POST_TIMEOUT portMAX_DELAY
@@ -617,10 +619,10 @@ static esp_err_t esp_http_client_prepare_basic_auth(esp_http_client_handle_t cli
     esp_err_t ret = ESP_FAIL;
 
     auth_response = http_auth_basic(client->connection_info.username, client->connection_info.password);
-    ESP_GOTO_ON_FALSE(auth_response, ESP_FAIL, error, TAG, "Failed to generate basic auth response");
-
-    ESP_LOGD(TAG, "auth_response=%s", auth_response);
-    ESP_GOTO_ON_FALSE(ESP_OK == esp_http_client_set_header(client, "Authorization", auth_response), ESP_FAIL, error, TAG, "Failed to set Authorization header");
+    if (auth_response) {
+        ESP_LOGD(TAG, "auth_response=%s", auth_response);
+        ESP_GOTO_ON_FALSE(ESP_OK == esp_http_client_set_header(client, "Authorization", auth_response), ESP_FAIL, error, TAG, "Failed to set Authorization header");
+    }
 
     ret = ESP_OK;
 
@@ -649,10 +651,10 @@ static esp_err_t esp_http_client_prepare_digest_auth(esp_http_client_handle_t cl
 
     client->auth_data->cnonce = ((uint64_t)esp_random() << 32) + esp_random();
     auth_response = http_auth_digest(client->connection_info.username, client->connection_info.password, client->auth_data);
-    ESP_GOTO_ON_FALSE(auth_response, ESP_FAIL, error, TAG, "Failed to generate digest auth response");
-
-    ESP_LOGD(TAG, "auth_response=%s", auth_response);
-    ESP_GOTO_ON_FALSE(ESP_OK == esp_http_client_set_header(client, "Authorization", auth_response), ESP_FAIL, error, TAG, "Failed to set Authorization header");
+    if (auth_response) {
+        ESP_LOGD(TAG, "auth_response=%s", auth_response);
+        ESP_GOTO_ON_FALSE(ESP_OK == esp_http_client_set_header(client, "Authorization", auth_response), ESP_FAIL, error, TAG, "Failed to set Authorization header");
+    }
 
     ret = ESP_OK;
 
@@ -841,6 +843,14 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
         }
     }
     esp_transport_ssl_set_tls_version(ssl, config->tls_version);
+
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+    /* When tls_dyn_buf_strategy is 0, mbedTLS dynamic buffer allocation uses default behavior.
+     * No need to call esp_transport_ssl_set_esp_tls_dyn_buf_strategy() in this case */
+    if (config->tls_dyn_buf_strategy != 0 && config->tls_dyn_buf_strategy < HTTP_TLS_DYN_BUF_STRATEGY_MAX) {
+        esp_transport_ssl_set_esp_tls_dyn_buf_strategy(ssl, config->tls_dyn_buf_strategy);
+    }
+#endif
 
 #if CONFIG_ESP_TLS_USE_SECURE_ELEMENT
     if (config->use_secure_element) {
@@ -1031,6 +1041,7 @@ esp_err_t esp_http_client_cleanup(esp_http_client_handle_t client)
     _clear_auth_data(client);
     free(client->auth_data);
     free(client->current_header_key);
+    free(client->current_header_value);
     free(client->location);
     free(client->auth_header);
     free(client);
@@ -1722,11 +1733,17 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t client, int write_len)
     client->post_len = write_len;
     esp_err_t err;
     if ((err = esp_http_client_connect(client)) != ESP_OK) {
+        if (client->is_async && err == ESP_ERR_HTTP_CONNECTING) {
+            return ESP_ERR_HTTP_EAGAIN;
+        }
         http_dispatch_event(client, HTTP_EVENT_ERROR, esp_transport_get_error_handle(client->transport), 0);
         http_dispatch_event_to_event_loop(HTTP_EVENT_ERROR, &client, sizeof(esp_http_client_handle_t));
         return err;
     }
     if ((err = esp_http_client_request_send(client, write_len)) != ESP_OK) {
+        if (client->is_async && errno == EAGAIN) {
+            return ESP_ERR_HTTP_EAGAIN;
+        }
         http_dispatch_event(client, HTTP_EVENT_ERROR, esp_transport_get_error_handle(client->transport), 0);
         http_dispatch_event_to_event_loop(HTTP_EVENT_ERROR, &client, sizeof(esp_http_client_handle_t));
         return err;

@@ -155,6 +155,10 @@ config SOC_ETM_SUPPORTED
     bool
     default y
 
+config SOC_SDIO_SLAVE_SUPPORTED
+    bool
+    default y
+
 config SOC_PAU_SUPPORTED
     bool
     default y
@@ -262,6 +266,18 @@ config SOC_ADC_RTC_MIN_BITWIDTH
 config SOC_ADC_RTC_MAX_BITWIDTH
     int
     default 12
+
+config SOC_ADC_CALIBRATION_V1_SUPPORTED
+    bool
+    default y
+
+config SOC_ADC_SELF_HW_CALI_SUPPORTED
+    bool
+    default y
+
+config SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED
+    bool
+    default y
 
 config SOC_ADC_TEMPERATURE_SHARE_INTR
     bool
@@ -379,6 +395,10 @@ config SOC_GDMA_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
+config SOC_AHB_GDMA_SUPPORT_PSRAM
+    bool
+    default y
+
 config SOC_ETM_GROUPS
     int
     default 1
@@ -397,7 +417,7 @@ config SOC_GPIO_PORT
 
 config SOC_GPIO_PIN_COUNT
     int
-    default 25
+    default 30
 
 config SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER
     bool
@@ -421,11 +441,11 @@ config SOC_LP_IO_CLOCK_IS_INDEPENDENT
 
 config SOC_GPIO_IN_RANGE_MAX
     int
-    default 24
+    default 29
 
 config SOC_GPIO_OUT_RANGE_MAX
     int
-    default 24
+    default 29
 
 config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
     bool
@@ -441,7 +461,7 @@ config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
 
 config SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK
     hex
-    default 0x1FFFF80
+    default 0x3FFFFF80
 
 config SOC_GPIO_SUPPORT_FORCE_HOLD
     bool
@@ -791,6 +811,10 @@ config SOC_SPIRAM_XIP_SUPPORTED
     bool
     default y
 
+config SOC_PSRAM_DMA_CAPABLE
+    bool
+    default y
+
 config SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE
     bool
     default y
@@ -816,6 +840,18 @@ config SOC_SPI_MEM_SUPPORT_CHECK_SUS
     default y
 
 config SOC_SPI_MEM_SUPPORT_WRAP
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_TIMING_TUNING
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR
+    bool
+    default y
+
+config SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY
     bool
     default y
 
@@ -975,7 +1011,23 @@ config SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND
     bool
     default y
 
+config SOC_RECOVERY_BOOTLOADER_SUPPORTED
+    bool
+    default y
+
+config SOC_BOOTLOADER_ANTI_ROLLBACK_SUPPORTED
+    bool
+    default y
+
 config SOC_APM_CTRL_FILTER_SUPPORTED
+    bool
+    default y
+
+config SOC_APM_CPU_APM_SUPPORTED
+    bool
+    default y
+
+config SOC_APM_SUPPORT_CTRL_CFG_LOCK
     bool
     default y
 
@@ -1225,7 +1277,7 @@ config SOC_WIFI_HW_TSF
 
 config SOC_WIFI_FTM_SUPPORT
     bool
-    default n
+    default y
 
 config SOC_WIFI_GCMP_SUPPORT
     bool
@@ -1256,10 +1308,6 @@ config SOC_WIFI_NAN_SUPPORT
     default y
 
 config SOC_BLE_SUPPORTED
-    bool
-    default y
-
-config SOC_BLE_MESH_SUPPORTED
     bool
     default y
 

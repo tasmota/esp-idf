@@ -22,6 +22,28 @@ void conn_stack_deinitEnv(void);
 int conn_stack_enable(void);
 void conn_stack_disable(void);
 
+int adv_stack_initEnv(void);
+void adv_stack_deinitEnv(void);
+int adv_stack_enable(void);
+void adv_stack_disable(void);
+
+int extAdv_stack_initEnv(void);
+void extAdv_stack_deinitEnv(void);
+int extAdv_stack_enable(void);
+void extAdv_stack_disable(void);
+
+int sync_stack_initEnv(void);
+void sync_stack_deinitEnv(void);
+int sync_stack_enable(void);
+void sync_stack_disable(void);
+
+#if CONFIG_BT_LE_DTM_ENABLED
+int dtm_stack_initEnv(void);
+void dtm_stack_deinitEnv(void);
+int dtm_stack_enable(void);
+void dtm_stack_disable(void);
+#endif // CONFIG_BT_LE_DTM_ENABLED
+
 #if CONFIG_BT_LE_ERROR_SIM_ENABLED
 int conn_errorSim_initEnv(void);
 void conn_errorSim_deinitEnv(void);
@@ -85,6 +107,28 @@ int ble_stack_initEnv(void)
         return rc;
     }
 
+    rc = adv_stack_initEnv();
+    if (rc) {
+        return rc;
+    }
+
+    rc = extAdv_stack_initEnv();
+    if (rc) {
+        return rc;
+    }
+
+    rc = sync_stack_initEnv();
+    if (rc) {
+        return rc;
+    }
+
+#if CONFIG_BT_LE_DTM_ENABLED
+    rc = dtm_stack_initEnv();
+    if (rc) {
+        return rc;
+    }
+#endif // CONFIG_BT_LE_DTM_ENABLED
+
 #if DEFAULT_BT_LE_MAX_CONNECTIONS
     rc = conn_stack_initEnv();
     if (rc) {
@@ -109,7 +153,12 @@ void ble_stack_deinitEnv(void)
 #endif // CONFIG_BT_LE_ERROR_SIM_ENABLED
     conn_stack_deinitEnv();
 #endif // DEFAULT_BT_LE_MAX_CONNECTIONS
-
+#if CONFIG_BT_LE_DTM_ENABLED
+    dtm_stack_deinitEnv();
+#endif // CONFIG_BT_LE_DTM_ENABLED
+    sync_stack_deinitEnv();
+    extAdv_stack_deinitEnv();
+    adv_stack_deinitEnv();
     base_stack_deinitEnv();
 }
 
@@ -121,6 +170,28 @@ int ble_stack_enable(void)
     if (rc) {
         return rc;
     }
+
+    rc = adv_stack_enable();
+    if (rc) {
+        return rc;
+    }
+
+    rc = extAdv_stack_enable();
+    if (rc) {
+        return rc;
+    }
+
+    rc = sync_stack_enable();
+    if (rc) {
+        return rc;
+    }
+
+#if CONFIG_BT_LE_DTM_ENABLED
+    rc = dtm_stack_enable();
+    if (rc) {
+        return rc;
+    }
+#endif // CONFIG_BT_LE_DTM_ENABLED
 
 #if DEFAULT_BT_LE_MAX_CONNECTIONS
     rc = conn_stack_enable();
@@ -160,6 +231,11 @@ void ble_stack_disable(void)
 #endif // CONFIG_BT_LE_ERROR_SIM_ENABLED
     conn_stack_disable();
 #endif // DEFAULT_BT_LE_MAX_CONNECTIONS
-
+#if CONFIG_BT_LE_DTM_ENABLED
+    dtm_stack_disable();
+#endif // CONFIG_BT_LE_DTM_ENABLED
+    sync_stack_disable();
+    extAdv_stack_disable();
+    adv_stack_disable();
     base_stack_disable();
 }

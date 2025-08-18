@@ -355,6 +355,16 @@ menu "Controller debug features"
         help
             Output ble controller logs to SPI bus
 
+    config BT_LE_CONTROLLER_LOG_UHCI_OUT_ENABLED
+        bool "Output ble controller logs via UART DMA (Experimental)"
+        depends on BT_LE_CONTROLLER_LOG_ENABLED
+        depends on !BT_LE_CONTROLLER_LOG_DUMP_ONLY
+        depends on !BT_LE_CONTROLLER_LOG_SPI_OUT_ENABLED
+        select BT_BLE_LOG_UHCI_OUT_ENABLED
+        default y
+        help
+            Output ble controller logs via UART DMA
+
     config BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
         bool "Store ble controller logs to flash(Experimental)"
         depends on !BT_LE_CONTROLLER_LOG_DUMP_ONLY
@@ -441,6 +451,12 @@ menu "Controller debug features"
     config BT_LE_PTR_CHECK_ENABLED
         bool "Enable boundary check for internal memory"
         default n
+
+    config BT_LE_MEM_CHECK_ENABLED
+        bool "Enable memory allocation check"
+        default n
+        help
+            Used in internal tests only. Enable the memory allocation check.
 endmenu
 
 config BT_LE_LL_RESOLV_LIST_SIZE
@@ -850,3 +866,38 @@ config BT_LE_CTRL_FAST_CONN_DATA_TX_EN
     help
         If this option is enabled, The Controller will continue to
         Send an empty PDU after sending valid connection data within an interval.
+
+menu "Reserved Memory Config"
+    config BT_LE_EXT_ADV_RESERVED_MEMORY_COUNT
+        int "The value of reserved EXT ADV memory count at initialization"
+        range 0 4
+        default 2
+        help
+            This value sets the number the Controller will allocate for extended advertisement
+            instances at initialization process. If more extended advertisement instances are
+            enabled, those memory will be dynamically allocated.
+            Using reduced amount of reserved memory will save heap size at the cost of extra
+            time consumption at advertising start process and possible advertising start failure
+            due to memory shortage.
+            The actual reserved memory count will be the minimum value between the maximum
+            extended advertisement instances and the BT_LE_EXT_ADV_RESERVED_MEMORY_COUNT.
+
+
+    config BT_LE_CONN_RESERVED_MEMORY_COUNT
+        int "The value of reserved CONN memory count at initialization"
+        range 0 70
+        default 2
+        help
+            This value sets the number the Controller will allocate for connection instances
+            at the initialization process. If more connection instances are enabled, those
+            memory will be dynamically allocated.
+            Using reduced amount of reserved memory will save heap size at the cost of extra
+            time consumption at connection establishment process and possible connection
+            establishment failure due to memory shortage.
+            The actual reserved memory count will be the minimum value between the maximum connection instances and
+            the BT_LE_CONN_RESERVED_MEMORY_COUNT.
+endmenu
+
+config BT_LE_DTM_ENABLED
+    bool "Enable Direct Test Mode (DTM) feature"
+    default n

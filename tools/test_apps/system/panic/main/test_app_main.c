@@ -126,10 +126,13 @@ void app_main(void)
     HANDLE_TEST(test_name, test_tcb_corrupted);
     HANDLE_TEST(test_name, test_panic_handler_stuck0);
     HANDLE_TEST(test_name, test_panic_handler_crash0);
+#if CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT
+    HANDLE_TEST(test_name, test_panic_halt);
+#endif /* CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT */
 #if CONFIG_ESP_SYSTEM_USE_FRAME_POINTER
     HANDLE_TEST(test_name, test_panic_print_backtrace);
 #endif
-#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
     HANDLE_TEST(test_name, test_setup_coredump_summary);
     HANDLE_TEST(test_name, test_coredump_summary);
 #endif
@@ -171,7 +174,7 @@ void app_main(void)
     HANDLE_TEST(test_name, test_rtc_slow_reg2_execute_violation);
 #endif
 
-#if CONFIG_ESP_SYSTEM_PMP_IDRAM_SPLIT
+#if CONFIG_ESP_SYSTEM_MEMPROT
     HANDLE_TEST(test_name, test_irom_reg_write_violation);
     HANDLE_TEST(test_name, test_drom_reg_write_violation);
     HANDLE_TEST(test_name, test_drom_reg_execute_violation);

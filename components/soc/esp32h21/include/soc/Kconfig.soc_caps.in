@@ -115,6 +115,14 @@ config SOC_REG_I2C_SUPPORTED
     bool
     default y
 
+config SOC_PCNT_SUPPORTED
+    bool
+    default y
+
+config SOC_TWAI_SUPPORTED
+    bool
+    default y
+
 config SOC_RMT_SUPPORTED
     bool
     default y
@@ -463,6 +471,34 @@ config SOC_LEDC_CHANNEL_NUM
     int
     default 6
 
+config SOC_PCNT_GROUPS
+    int
+    default 1
+
+config SOC_PCNT_UNITS_PER_GROUP
+    int
+    default 4
+
+config SOC_PCNT_CHANNELS_PER_UNIT
+    int
+    default 2
+
+config SOC_PCNT_THRES_POINT_PER_UNIT
+    int
+    default 2
+
+config SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_CLEAR_SIGNAL
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_STEP_NOTIFY
+    bool
+    default y
+
 config SOC_RMT_GROUPS
     int
     default 1
@@ -491,7 +527,7 @@ config SOC_RMT_SUPPORT_RX_DEMODULATION
     bool
     default y
 
-config SOC_RMT_SUPPORT_TX_ASYNC_STOP
+config SOC_RMT_SUPPORT_ASYNC_STOP
     bool
     default y
 
@@ -711,6 +747,34 @@ config SOC_MWDT_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
+config SOC_TWAI_CONTROLLER_NUM
+    int
+    default 1
+
+config SOC_TWAI_MASK_FILTER_NUM
+    int
+    default 1
+
+config SOC_TWAI_CLK_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_TWAI_BRP_MIN
+    int
+    default 2
+
+config SOC_TWAI_BRP_MAX
+    int
+    default 32768
+
+config SOC_TWAI_SUPPORTS_RX_STATUS
+    bool
+    default y
+
+config SOC_TWAI_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_EFUSE_DIS_PAD_JTAG
     bool
     default y
@@ -728,10 +792,6 @@ config SOC_EFUSE_SOFT_DIS_JTAG
     default y
 
 config SOC_EFUSE_DIS_ICACHE
-    bool
-    default y
-
-config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
     bool
     default y
 

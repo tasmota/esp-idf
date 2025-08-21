@@ -83,7 +83,6 @@ api-reference/protocols/esp_crt_bundle.rst
 api-reference/protocols/mdns.rst
 api-reference/protocols/asio.rst
 api-reference/protocols/mbedtls.rst
-api-reference/protocols/modbus.rst
 api-reference/protocols/icmp_echo.rst
 api-reference/protocols/esp_https_server.rst
 api-reference/protocols/esp_local_ctrl.rst
@@ -143,7 +142,6 @@ api-reference/peripherals/mcpwm.rst
 api-reference/peripherals/usb_host.rst
 api-reference/peripherals/camera_driver.rst
 api-reference/peripherals/adc_oneshot.rst
-api-reference/peripherals/twai.rst
 api-reference/peripherals/etm.rst
 api-reference/peripherals/sdspi_share.rst
 api-reference/peripherals/ana_cmpr.rst
@@ -179,7 +177,6 @@ api-reference/peripherals/lcd/i2c_lcd.rst
 api-reference/peripherals/lcd/spi_lcd.rst
 api-reference/peripherals/lcd/rgb_lcd.rst
 api-reference/peripherals/lcd/parl_lcd.rst
-api-reference/peripherals/pcnt.rst
 api-reference/peripherals/spi_features.rst
 api-reference/peripherals/ppa.rst
 api-reference/peripherals/ledc.rst

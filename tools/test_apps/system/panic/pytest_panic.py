@@ -2,12 +2,9 @@
 # SPDX-License-Identifier: CC0-1.0
 import itertools
 import re
+from collections.abc import Sequence
+from re import Pattern
 from typing import Any
-from typing import List
-from typing import Optional
-from typing import Pattern
-from typing import Sequence
-from typing import Union
 
 import pexpect
 import pytest
@@ -34,11 +31,9 @@ CONFIGS = list(
     itertools.chain(
         itertools.product(
             [
-                'coredump_flash_bin_crc',
-                'coredump_flash_elf_sha',
-                'coredump_flash_elf_soft_sha',
-                'coredump_uart_bin_crc',
-                'coredump_uart_elf_crc',
+                'coredump_flash_default',
+                'coredump_flash_soft_sha',
+                'coredump_uart_default',
                 'gdbstub',
                 'panic',
             ],
@@ -50,6 +45,7 @@ CONFIGS = list(
 
 CONFIG_PANIC = list(itertools.chain(itertools.product(['panic'], ['supported_targets'])))
 CONFIG_PANIC_DUAL_CORE = list(itertools.chain(itertools.product(['panic'], TARGETS_DUAL_CORE)))
+CONFIG_PANIC_HALT = list(itertools.chain(itertools.product(['panic_halt'], TARGETS_ALL)))
 
 CONFIGS_BACKTRACE = list(
     itertools.chain(
@@ -62,10 +58,8 @@ CONFIGS_DUAL_CORE = list(
     itertools.chain(
         itertools.product(
             [
-                'coredump_flash_bin_crc',
-                'coredump_flash_elf_sha',
-                'coredump_uart_bin_crc',
-                'coredump_uart_elf_crc',
+                'coredump_flash_default',
+                'coredump_uart_default',
                 'gdbstub',
                 'panic',
             ],
@@ -77,7 +71,7 @@ CONFIGS_DUAL_CORE = list(
 CONFIGS_HW_STACK_GUARD = list(
     itertools.chain(
         itertools.product(
-            ['coredump_flash_bin_crc', 'coredump_uart_bin_crc', 'coredump_uart_elf_crc', 'gdbstub', 'panic'],
+            ['coredump_uart_default', 'gdbstub', 'panic'],
             TARGETS_RISCV,
         )
     )
@@ -86,7 +80,7 @@ CONFIGS_HW_STACK_GUARD = list(
 CONFIGS_HW_STACK_GUARD_DUAL_CORE = list(
     itertools.chain(
         itertools.product(
-            ['coredump_flash_bin_crc', 'coredump_uart_bin_crc', 'coredump_uart_elf_crc', 'gdbstub', 'panic'],
+            ['coredump_uart_default', 'gdbstub', 'panic'],
             TARGETS_RISCV_DUAL_CORE,
         )
     )
@@ -96,7 +90,7 @@ CONFIG_CAPTURE_DRAM = list(
     itertools.chain(itertools.product(['coredump_flash_capture_dram', 'coredump_uart_capture_dram'], TARGETS_ALL))
 )
 
-CONFIG_COREDUMP_SUMMARY = list(itertools.chain(itertools.product(['coredump_flash_elf_sha'], TARGETS_ALL)))
+CONFIG_COREDUMP_SUMMARY = list(itertools.chain(itertools.product(['coredump_flash_default'], TARGETS_ALL)))
 
 CONFIG_COREDUMP_SUMMARY_FLASH_ENCRYPTED = list(
     itertools.chain(
@@ -109,11 +103,11 @@ CONFIG_COREDUMP_SUMMARY_FLASH_ENCRYPTED = list(
 PANIC_ABORT_PREFIX = 'Panic reason: '
 
 
-def get_default_backtrace(config: str) -> List[str]:
+def get_default_backtrace(config: str) -> list[str]:
     return [config, 'app_main', 'main_task', 'vPortTaskWrapper']
 
 
-def expect_coredump_flash_write_logs(dut: PanicTestDut, config: str, check_cpu_reset: Optional[bool] = True) -> None:
+def expect_coredump_flash_write_logs(dut: PanicTestDut, config: str, check_cpu_reset: bool | None = True) -> None:
     dut.expect_exact('Save core dump to flash...')
     if 'extram_stack' in config:
         dut.expect_exact('Backing up stack @')
@@ -124,7 +118,7 @@ def expect_coredump_flash_write_logs(dut: PanicTestDut, config: str, check_cpu_r
         dut.expect_cpu_reset()
 
 
-def expect_coredump_uart_write_logs(dut: PanicTestDut, check_cpu_reset: Optional[bool] = True) -> Any:
+def expect_coredump_uart_write_logs(dut: PanicTestDut, check_cpu_reset: bool | None = True) -> Any:
     # ================= CORE DUMP START =================
     # B8AAAMAEgAGAAAAXAEAAAAAAABkAAAA
     # ...
@@ -148,9 +142,9 @@ def expect_coredump_uart_write_logs(dut: PanicTestDut, check_cpu_reset: Optional
 def common_test(
     dut: PanicTestDut,
     config: str,
-    expected_backtrace: Optional[List[str]] = None,
-    check_cpu_reset: Optional[bool] = True,
-    expected_coredump: Optional[Sequence[Union[str, Pattern[Any]]]] = None,
+    expected_backtrace: list[str] | None = None,
+    check_cpu_reset: bool | None = True,
+    expected_coredump: Sequence[str | Pattern[Any]] | None = None,
 ) -> None:
     if 'gdbstub' in config:
         if 'coredump' in config:
@@ -164,11 +158,6 @@ def common_test(
             dut.verify_gdb_backtrace(frames, expected_backtrace)
         dut.revert_log_level()
         return  # don't expect "Rebooting" output below
-
-    # We will only perform comparisons for ELF files,
-    # as we are not introducing any new fields to the binary file format.
-    if 'bin' in config:
-        expected_coredump = None
 
     if 'uart' in config:
         coredump_base64 = expect_coredump_uart_write_logs(dut, check_cpu_reset)
@@ -1210,7 +1199,7 @@ def test_coredump_summary_flash_encrypted(dut: PanicTestDut, config: str) -> Non
 
 
 @pytest.mark.generic
-@idf_parametrize('config', ['coredump_flash_elf_sha'], indirect=['config'])
+@idf_parametrize('config', ['coredump_flash_default'], indirect=['config'])
 @idf_parametrize('target', TARGETS_ALL, indirect=['target'])
 def test_tcb_corrupted(dut: PanicTestDut, target: str, config: str, test_func_name: str) -> None:
     dut.run_test_func(test_func_name)
@@ -1254,3 +1243,11 @@ def test_panic_print_backtrace(dut: PanicTestDut, config: str, test_func_name: s
 
     coredump_pattern = re.compile(PANIC_ABORT_PREFIX + regex_pattern.decode('utf-8'))
     common_test(dut, config, expected_backtrace=None, expected_coredump=[coredump_pattern])
+
+
+@pytest.mark.generic
+@idf_parametrize('config, target', CONFIG_PANIC_HALT, indirect=['config', 'target'])
+def test_panic_halt(dut: PanicTestDut) -> None:
+    dut.run_test_func('test_panic_halt')
+    dut.expect_exact('CPU halted.', timeout=30)
+    dut.expect_none(dut.REBOOT, timeout=3)

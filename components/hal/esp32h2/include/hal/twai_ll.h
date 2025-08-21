@@ -190,7 +190,7 @@ static inline void twai_ll_set_clock_source(int group_id, twai_clock_source_t cl
 {
     (void)group_id;
     switch (clk_src) {
-    case TWAI_CLK_SRC_DEFAULT:
+    case TWAI_CLK_SRC_XTAL:
         PCR.twai0_func_clk_conf.twai0_func_clk_sel = 0;
         break;
     default:

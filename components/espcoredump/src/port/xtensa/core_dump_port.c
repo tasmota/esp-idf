@@ -9,6 +9,10 @@
  * @brief Core dump port implementation for Xtensa based boards.
  */
 
+#include "sdkconfig.h"
+
+#if CONFIG_ESP_COREDUMP_ENABLE
+
 #include <string.h>
 #include <stdbool.h>
 #include "soc/soc_memory_layout.h"
@@ -120,8 +124,6 @@ typedef struct {
     // but gdb complains when it less than 129
     uint32_t reserved;
 } __attribute__((packed)) xtensa_elf_reg_dump_t;
-
-#if CONFIG_ESP_COREDUMP_ENABLE
 
 static XtExcFrame s_fake_stack_frame = {
     .pc   = (UBaseType_t) COREDUMP_FAKE_STACK_START,                        // task entrypoint fake_ptr
@@ -470,7 +472,7 @@ uint32_t esp_core_dump_get_extra_info(void **info)
     return sizeof(s_extra_info);
 }
 
-#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
 
 void esp_core_dump_summary_parse_extra_info(esp_core_dump_summary_t *summary, void *ei_data)
 {
@@ -563,6 +565,6 @@ void esp_core_dump_summary_parse_backtrace_info(esp_core_dump_bt_info_t *bt_info
     bt_info->corrupted = corrupted;
 }
 
-#endif /* #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF */
+#endif /* #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH */
 
-#endif
+#endif /* CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH */

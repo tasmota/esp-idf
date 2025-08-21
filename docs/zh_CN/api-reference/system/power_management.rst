@@ -122,16 +122,6 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
     :SOC_SDM_SUPPORTED: - **Sigma-delta**：从调用 :cpp:func:`sdm_channel_enable` 至 :cpp:func:`sdm_channel_disable` 期间。
     :SOC_MCPWM_SUPPORTED: - **MCPWM**: 从调用 :cpp:func:`mcpwm_timer_enable` 至 :cpp:func:`mcpwm_timer_disable` 期间，以及调用 :cpp:func:`mcpwm_capture_timer_enable` 至 :cpp:func:`mcpwm_capture_timer_disable` 期间。
 
-以下外设驱动程序无法感知动态调频，应用程序需自己获取/释放管理锁：
-
-.. list::
-
-    :SOC_PCNT_SUPPORTED: - 旧版 PCNT 驱动
-    :SOC_SDM_SUPPORTED: - 旧版 Sigma-delta 驱动
-    - 旧版定时器驱动 (Timer Group)
-    :SOC_MCPWM_SUPPORTED: - 旧版 MCPWM 驱动
-
-
 .. only:: SOC_PM_SUPPORT_TOP_PD
 
     Light-sleep 外设下电
@@ -162,6 +152,7 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
             :SOC_TWAI_SUPPORT_SLEEP_RETENTION: - All TWAIs
             :SOC_PARLIO_SUPPORT_SLEEP_RETENTION: - PARL_IO
             :SOC_SPI_SUPPORT_SLEEP_RETENTION: - All GPSPIs
+            :SOC_EMAC_SUPPORT_SLEEP_RETENTION: - EMAC
 
         一些外设尚未支持睡眠上下文恢复，或者寄存器丢失后根本无法恢复。即使外设下电功能被启用，它们也会阻止外设下电的发生：
 

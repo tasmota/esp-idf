@@ -177,13 +177,13 @@ static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src)
              * will time out, returning 0.
              */
             ESP_EARLY_LOGD(TAG, "waiting for 32k oscillator to start up");
-            rtc_cal_sel_t cal_sel = 0;
+            soc_clk_freq_calculation_src_t cal_sel = -1;
             if (rtc_slow_clk_src == SOC_RTC_SLOW_CLK_SRC_XTAL32K) {
                 rtc_clk_32k_enable(true);
-                cal_sel = RTC_CAL_32K_XTAL;
+                cal_sel = CLK_CAL_32K_XTAL;
             } else if (rtc_slow_clk_src == SOC_RTC_SLOW_CLK_SRC_OSC_SLOW) {
                 rtc_clk_32k_enable_external();
-                cal_sel = RTC_CAL_32K_OSC_SLOW;
+                cal_sel = CLK_CAL_32K_OSC_SLOW;
             }
             // When SLOW_CLK_CAL_CYCLES is set to 0, clock calibration will not be performed at startup.
             if (SLOW_CLK_CAL_CYCLES > 0) {
@@ -208,7 +208,7 @@ static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src)
             /* TODO: 32k XTAL oscillator has some frequency drift at startup.
              * Improve calibration routine to wait until the frequency is stable.
              */
-            cal_val = rtc_clk_cal(RTC_CAL_RTC_MUX, SLOW_CLK_CAL_CYCLES);
+            cal_val = rtc_clk_cal(CLK_CAL_RTC_SLOW, SLOW_CLK_CAL_CYCLES);
         } else {
             const uint64_t cal_dividend = (1ULL << RTC_CLK_CAL_FRACT) * 1000000ULL;
             cal_val = (uint32_t)(cal_dividend / rtc_clk_slow_freq_get_hz());
@@ -305,6 +305,7 @@ __attribute__((weak)) void esp_perip_clk_init(void)
         assist_debug_ll_enable_bus_clock(false);
 #endif
         mpi_ll_enable_bus_clock(false);
+#if !CONFIG_SECURE_ENABLE_TEE
         aes_ll_enable_bus_clock(false);
         sha_ll_enable_bus_clock(false);
         ecc_ll_enable_bus_clock(false);
@@ -312,9 +313,10 @@ __attribute__((weak)) void esp_perip_clk_init(void)
         ds_ll_enable_bus_clock(false);
         apm_ll_hp_tee_enable_clk_gating(true);
         apm_ll_lp_tee_enable_clk_gating(true);
-        uhci_ll_enable_bus_clock(0, false);
         apm_ll_hp_apm_enable_ctrl_clk_gating(true);
         apm_ll_cpu_apm_enable_ctrl_clk_gating(true);
+#endif
+        uhci_ll_enable_bus_clock(0, false);
 
         // TODO: Replace with hal implementation
         REG_CLR_BIT(PCR_TRACE_CONF_REG, PCR_TRACE_CLK_EN);
@@ -346,8 +348,10 @@ __attribute__((weak)) void esp_perip_clk_init(void)
         _lp_clkrst_ll_enable_lp_ana_i2c_clock(false);
         _lp_clkrst_ll_enable_lp_ext_i2c_clock(false);
 
+#if !CONFIG_SECURE_ENABLE_TEE
         apm_ll_lp_apm_enable_ctrl_clk_gating(true);
         apm_ll_lp_apm0_enable_ctrl_clk_gating(true);
+#endif
         WRITE_PERI_REG(LP_CLKRST_LP_CLK_PO_EN_REG, 0);
     }
 }

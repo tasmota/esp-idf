@@ -647,6 +647,10 @@ config SOC_DEDIC_PERIPH_ALWAYS_ENABLE
     bool
     default y
 
+config SOC_SDM_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_ANA_CMPR_NUM
     int
     default 1
@@ -871,10 +875,6 @@ config SOC_PCNT_SUPPORT_STEP_NOTIFY
     bool
     default y
 
-config SOC_PCNT_SUPPORT_SLEEP_RETENTION
-    bool
-    default y
-
 config SOC_RMT_GROUPS
     int
     default 1
@@ -903,7 +903,7 @@ config SOC_RMT_SUPPORT_RX_DEMODULATION
     bool
     default y
 
-config SOC_RMT_SUPPORT_TX_ASYNC_STOP
+config SOC_RMT_SUPPORT_ASYNC_STOP
     bool
     default y
 
@@ -1131,19 +1131,7 @@ config SOC_ECDSA_SUPPORT_CURVE_P384
     bool
     default y
 
-config SOC_SDM_GROUPS
-    int
-    default 1
-
-config SOC_SDM_CHANNELS_PER_GROUP
-    int
-    default 4
-
-config SOC_SDM_CLK_SUPPORT_PLL_F80M
-    bool
-    default y
-
-config SOC_SDM_CLK_SUPPORT_XTAL
+config SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES
     bool
     default y
 
@@ -1538,10 +1526,6 @@ config SOC_LP_UART_FIFO_LEN
 config SOC_UART_BITRATE_MAX
     int
     default 5000000
-
-config SOC_UART_SUPPORT_PLL_F80M_CLK
-    bool
-    default y
 
 config SOC_UART_SUPPORT_RTC_CLK
     bool

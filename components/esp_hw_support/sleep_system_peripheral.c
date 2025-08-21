@@ -287,12 +287,16 @@ bool peripheral_domain_pd_allowed(void)
     mask.bitmap[SLEEP_RETENTION_MODULE_LEDC >> 5] |= BIT(SLEEP_RETENTION_MODULE_LEDC % 32);
 #endif
 
-#if SOC_PCNT_SUPPORT_SLEEP_RETENTION
-    mask.bitmap[SLEEP_RETENTION_MODULE_PCNT0 >> 5] |= BIT(SLEEP_RETENTION_MODULE_PCNT0 % 32);
-#endif
-
 #if SOC_MCPWM_SUPPORT_SLEEP_RETENTION
     mask.bitmap[SLEEP_RETENTION_MODULE_MCPWM0 >> 5] |= BIT(SLEEP_RETENTION_MODULE_MCPWM0 % 32);
+#endif
+
+#if SOC_SDM_SUPPORT_SLEEP_RETENTION
+    mask.bitmap[SLEEP_RETENTION_MODULE_SDM0 >> 5] |= BIT(SLEEP_RETENTION_MODULE_SDM0 % 32);
+#endif
+
+#if SOC_EMAC_SUPPORT_SLEEP_RETENTION
+    mask.bitmap[SLEEP_RETENTION_MODULE_EMAC >> 5] |= BIT(SLEEP_RETENTION_MODULE_EMAC % 32);
 #endif
 
     const sleep_retention_module_bitmap_t peripheral_domain_inited_modules = sleep_retention_module_bitmap_and(inited_modules, mask);

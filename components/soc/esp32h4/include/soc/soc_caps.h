@@ -34,7 +34,7 @@
 // #define SOC_ADC_SUPPORTED               1    // TODO: [ESP32H4] IDF-12368 IDF-12370
 // #define SOC_ANA_CMPR_SUPPORTED          1    // TODO: [ESP32H4] IDF-12395 big change!!
 // #define SOC_DEDICATED_GPIO_SUPPORTED    1    // TODO: [ESP32H4] IDF-12401
-#define SOC_UART_SUPPORTED              1       // TODO: [ESP32H4] IDF-12398
+#define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_GPTIMER_SUPPORTED           1
@@ -56,8 +56,8 @@
 // #define SOC_RTC_MEM_SUPPORTED           1    // TODO: [ESP32H4] IDF-12313
 #define SOC_I2S_SUPPORTED               1
 #define SOC_RMT_SUPPORTED               1
-// #define SOC_SDM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12348
-// #define SOC_GPSPI_SUPPORTED             1    // TODO: [ESP32H4] IDF-12362 IDF-12364 IDF-12366
+#define SOC_SDM_SUPPORTED               1
+#define SOC_GPSPI_SUPPORTED             1
 // #define SOC_LEDC_SUPPORTED              1    // TODO: [ESP32H4] IDF-12343
 #define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1       // TODO: [ESP32H4] IDF-12375 IDF-12377
@@ -161,6 +161,7 @@
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
 #define SOC_CPU_HAS_FPU                 1
 #define SOC_CPU_HAS_FPU_EXT_ILL_BUG     0       // EXT_ILL CSR doesn't support FLW/FSW
+#define SOC_CPU_HAS_DSP                 1
 #define SOC_CPU_COPROC_NUM              2
 
 #define SOC_CPU_BREAKPOINTS_NUM         4
@@ -253,6 +254,8 @@
 // #define SOC_DEDIC_GPIO_IN_CHANNELS_NUM  (8) /*!< 8 inward channels on each CPU core */
 // #define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
+#define SOC_SDM_SUPPORT_SLEEP_RETENTION 1
+
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-H4 has 2 I2C
 #define SOC_I2C_NUM                 (2U)
@@ -306,7 +309,8 @@
 // #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
-// #define SOC_MMU_PAGE_SIZE_CONFIGURABLE        (1)
+#define SOC_MMU_PAGE_SIZE_CONFIGURABLE        (1)
+#define SOC_MMU_PAGE_SIZE_8KB_SUPPORTED       (1)
 #define SOC_MMU_PERIPH_NUM                    (1U)
 #define SOC_MMU_LINEAR_ADDRESS_REGION_NUM     (1U)
 #define SOC_MMU_DI_VADDR_SHARED               (1) /*!< D/I vaddr are shared */
@@ -333,7 +337,7 @@
 #define SOC_RMT_MEM_WORDS_PER_CHANNEL         48 /*!< Each channel owns 48 words memory (1 word = 4 Bytes) */
 #define SOC_RMT_SUPPORT_RX_PINGPONG           1  /*!< Support Ping-Pong mode on RX path */
 #define SOC_RMT_SUPPORT_RX_DEMODULATION       1  /*!< Support signal demodulation on RX path (i.e. remove carrier) */
-#define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
+#define SOC_RMT_SUPPORT_ASYNC_STOP            1  /*!< Support stop transmission asynchronously */
 #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
 #define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
@@ -394,27 +398,19 @@
 // #define SOC_SHA_SUPPORT_SHA224          (1)
 // #define SOC_SHA_SUPPORT_SHA256          (1)
 
-/*-------------------------- Sigma Delta Modulator CAPS -----------------*/
-// #define SOC_SDM_GROUPS               1U
-// #define SOC_SDM_CHANNELS_PER_GROUP   4
-// #define SOC_SDM_CLK_SUPPORT_PLL_F80M 1
-// #define SOC_SDM_CLK_SUPPORT_XTAL     1
-
 /*-------------------------- SPI CAPS ----------------------------------------*/
 #define SOC_SPI_PERIPH_NUM              3
 #define SOC_SPI_PERIPH_CS_NUM(i)        (((i)==0)? 2: (((i)==1)? 6: 3))
-#define SOC_SPI_MAX_CS_NUM          6
+#define SOC_SPI_MAX_CS_NUM              6
 
-// #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
-
-// #define SOC_SPI_SUPPORT_DDRCLK              1
-// #define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
-// #define SOC_SPI_SUPPORT_CD_SIG              1
-// #define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
-// #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
-// #define SOC_SPI_SUPPORT_CLK_XTAL            1
-// #define SOC_SPI_SUPPORT_CLK_PLL_F80M        1
-// #define SOC_SPI_SUPPORT_CLK_RC_FAST         1
+#define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
+#define SOC_SPI_SUPPORT_DDRCLK              1
+#define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
+#define SOC_SPI_SUPPORT_CD_SIG              1
+#define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
+#define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
+#define SOC_SPI_SUPPORT_CLK_XTAL            1
+#define SOC_SPI_SUPPORT_CLK_RC_FAST         1
 
 // Peripheral supports DIO, DOUT, QIO, or QOUT
 // host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
@@ -495,9 +491,7 @@
 #define SOC_UART_NUM                    (2)
 #define SOC_UART_HP_NUM                 (2)
 #define SOC_UART_FIFO_LEN               (128)       /*!< The UART hardware FIFO length */
-#define SOC_LP_UART_FIFO_LEN            (16)        /*!< The LP UART hardware FIFO length */
 #define SOC_UART_BITRATE_MAX            (5000000)   /*!< Max bit rate supported by UART */
-#define SOC_UART_SUPPORT_PLL_F80M_CLK   (1)         /*!< Support PLL_F80M as the clock source */
 #define SOC_UART_SUPPORT_RTC_CLK        (1)         /*!< Support RTC clock as the clock source */
 #define SOC_UART_SUPPORT_XTAL_CLK       (1)         /*!< Support XTAL clock as the clock source */
 #define SOC_UART_SUPPORT_WAKEUP_INT     (1)         /*!< Support UART wakeup interrupt */
@@ -505,7 +499,13 @@
 // UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
+#define SOC_UART_SUPPORT_SLEEP_RETENTION   (1)         /*!< Support back up registers before sleep */
+
+#define SOC_UART_WAKEUP_CHARS_SEQ_MAX_LEN 5
 #define SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE (1)
+#define SOC_UART_WAKEUP_SUPPORT_FIFO_THRESH_MODE   (1)
+#define SOC_UART_WAKEUP_SUPPORT_START_BIT_MODE     (1)
+#define SOC_UART_WAKEUP_SUPPORT_CHAR_SEQ_MODE      (1)
 
 /*-------------------------- SPIRAM CAPS -------------------------------------*/
 #define SOC_SPIRAM_XIP_SUPPORTED      1

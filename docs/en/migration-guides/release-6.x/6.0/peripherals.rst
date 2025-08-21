@@ -62,6 +62,13 @@ LEDC
 
 - :cpp:member:`ledc_channel_config_t::intr_type` has been deprecated. `LEDC_INTR_FADE_END` interrupt enable / disable control is handled by the driver internally. Users can still register a callback for this interrupt by :cpp:func:`ledc_cb_register`.
 
+- :cpp:enumerator:`soc_periph_ledc_clk_src_legacy_t::LEDC_USE_RTC8M_CLK` has been removed. Please use ``LEDC_USE_RC_FAST_CLK`` instead.
+
+UART
+----
+
+``UART_FIFO_LEN`` macro has been removed. Please use ``UART_HW_FIFO_LEN`` instead.
+
 I2C
 ---
 
@@ -135,3 +142,28 @@ SDMMC
     ----------------------------------------------
 
     The legacy Sigma-Delta Modulator driver ``driver/sigmadelta.h`` is deprecated since version 5.0 (see :ref:`deprecate_sdm_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_sdm`, and the header file path is ``driver/sdm.h``.
+
+LCD
+---
+
+- The GPIO number type in the LCD driver has been changed from ``int`` to the more type-safe ``gpio_num_t``. For example, instead of using ``5`` as the GPIO number, you now need to use ``GPIO_NUM_5``.
+- The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_i80_bus_config_t` structure have been replaced by the :cpp:member:`esp_lcd_i80_bus_config_t::dma_burst_size` member, which sets the DMA burst transfer size.
+- The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_rgb_panel_config_t` structure have also been replaced by the :cpp:member:`esp_lcd_rgb_panel_config_t::dma_burst_size` member for configuring the DMA burst transfer size.
+- The ``octal_mode`` and ``quad_mode`` flags in the :cpp:type:`esp_lcd_panel_io_spi_config_t` structure have been removed. The driver now automatically detects the data line mode of the current SPI bus.
+- The ``color_space`` and ``rgb_endian`` configuration options in the :cpp:type:`esp_lcd_panel_dev_config_t` structure have been replaced by the :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` member, which sets the RGB element order. The corresponding types ``lcd_color_rgb_endian_t`` and ``esp_lcd_color_space_t`` have also been removed; use :cpp:type:`lcd_rgb_element_order_t` instead.
+- The ``esp_lcd_panel_disp_off`` function has been removed. Please use the :func:`esp_lcd_panel_disp_on_off` function to control display on/off.
+- The ``on_bounce_frame_finish`` member in :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` has been replaced by :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete`, which indicates that a complete frame buffer has been sent to the LCD controller.
+
+SPI
+---
+
+The :ref:`CONFIG_SPI_MASTER_IN_IRAM` option is now invisible by default in menuconfig and depends on :ref:`CONFIG_FREERTOS_IN_IRAM`. This change was made to prevent potential crashes when SPI functions in IRAM call FreeRTOS functions that are placed in Flash.
+
+To enable SPI master IRAM optimization:
+
+1. Navigate to ``Component config`` → ``FreeRTOS`` → ``Port`` in menuconfig
+2. Enable ``Place FreeRTOS functions in IRAM`` (:ref:`CONFIG_FREERTOS_IN_IRAM`)
+3. Navigate to ``Component config`` → ``ESP-Driver:SPI Configurations``
+4. Enable ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
+
+Note that enabling :ref:`CONFIG_FREERTOS_IN_IRAM` will increase IRAM usage. Consider this trade-off when optimizing for SPI performance.

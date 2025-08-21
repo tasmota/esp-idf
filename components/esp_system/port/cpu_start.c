@@ -172,8 +172,13 @@ static volatile bool s_resume_cores;
 
 static void core_intr_matrix_clear(void)
 {
-    uint32_t core_id = esp_cpu_get_core_id();
+    __attribute__((unused)) uint32_t core_id = esp_cpu_get_core_id();
 
+    /* NOTE: With ESP-TEE enabled, each iteration in this loop results in a service call.
+    * To accelerate the boot-up process, the interrupt configuration is pre-cleared in the TEE,
+    * allowing this step to be safely skipped here.
+    */
+#if !CONFIG_SECURE_ENABLE_TEE
     for (int i = 0; i < ETS_MAX_INTR_SOURCE; i++) {
 #if SOC_INT_CLIC_SUPPORTED
         interrupt_clic_ll_route(core_id, i, ETS_INVALID_INUM);
@@ -181,6 +186,7 @@ static void core_intr_matrix_clear(void)
         esp_rom_route_intr_matrix(core_id, i, ETS_INVALID_INUM);
 #endif  // SOC_INT_CLIC_SUPPORTED
     }
+#endif  // !CONFIG_SECURE_ENABLE_TEE
 
 #if SOC_INT_CLIC_SUPPORTED
     for (int i = 0; i < 32; i++) {
@@ -382,6 +388,15 @@ FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
     );
 #endif
 
+    /* NOTE: When ESP-TEE is enabled, this sets up the callback function
+     * which redirects all the interrupt management for the REE (user app)
+     * to the TEE by raising the appropriate service calls.
+     */
+#if CONFIG_SECURE_ENABLE_TEE
+    extern uint32_t esp_tee_service_call(int argc, ...);
+    esprv_int_setup_mgmt_cb((void *)esp_tee_service_call);
+#endif
+
 #if SOC_BRANCH_PREDICTOR_SUPPORTED
     esp_cpu_branch_prediction_enable();
 #endif
@@ -391,19 +406,12 @@ FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
     /* When hardware vectored interrupts are enabled in CLIC,
      * the CPU jumps to this base address + 4 * interrupt_id.
      */
-    esp_cpu_intr_set_mtvt_addr(&_mtvt_table);
+    /* NOTE: When ESP-TEE is enabled, this sets up the U-mode
+     * interrupt vector table (UTVT) */
+    esp_cpu_intr_set_xtvt_addr(&_mtvt_table);
 #endif
 #if SOC_CPU_SUPPORT_WFE
-    rv_utils_disable_wfe_mode();
-#endif
-
-    /* NOTE: When ESP-TEE is enabled, this sets up the callback function
-     * which redirects all the interrupt management for the REE (user app)
-     * to the TEE by raising the appropriate service calls.
-     */
-#if CONFIG_SECURE_ENABLE_TEE
-    extern uint32_t esp_tee_service_call(int argc, ...);
-    esprv_int_setup_mgmt_cb((void *)esp_tee_service_call);
+    esp_cpu_disable_wfe_mode();
 #endif
 }
 
@@ -782,7 +790,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     esp_cache_err_int_init();
 #endif
 
-#if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE && !CONFIG_ESP_SYSTEM_MEMPROT_TEST
+#if CONFIG_ESP_SYSTEM_MEMPROT && CONFIG_ESP_SYSTEM_MEMPROT_PMS && !CONFIG_ESP_SYSTEM_MEMPROT_PMS_TEST
     // Memprot cannot be locked during OS startup as the lock-on prevents any PMS changes until a next reboot
     // If such a situation appears, it is likely an malicious attempt to bypass the system safety setup -> print error & reset
 
@@ -799,14 +807,14 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     //default configuration of PMS Memprot
     esp_err_t memp_err = ESP_OK;
 #if CONFIG_IDF_TARGET_ESP32S2 //specific for ESP32S2 unless IDF-3024 is merged
-#if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE_LOCK
+#if CONFIG_ESP_SYSTEM_MEMPROT_PMS_LOCK
     memp_err = esp_memprot_set_prot(PANIC_HNDL_ON, MEMPROT_LOCK, NULL);
 #else
     memp_err = esp_memprot_set_prot(PANIC_HNDL_ON, MEMPROT_UNLOCK, NULL);
 #endif
 #else //CONFIG_IDF_TARGET_ESP32S2 specific end
     esp_memp_config_t memp_cfg = ESP_MEMPROT_DEFAULT_CONFIG();
-#if !CONFIG_ESP_SYSTEM_MEMPROT_FEATURE_LOCK
+#if !CONFIG_ESP_SYSTEM_MEMPROT_PMS_LOCK
     memp_cfg.lock_feature = false;
 #endif
     memp_err = esp_mprot_set_prot(&memp_cfg);
@@ -816,7 +824,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
         ESP_EARLY_LOGE(TAG, "Failed to set Memprot feature (0x%08X: %s), rebooting.", memp_err, esp_err_to_name(memp_err));
         esp_restart_noos();
     }
-#endif //CONFIG_ESP_SYSTEM_MEMPROT_FEATURE && !CONFIG_ESP_SYSTEM_MEMPROT_TEST
+#endif //CONFIG_ESP_SYSTEM_MEMPROT && CONFIG_ESP_SYSTEM_MEMPROT_PMS && !CONFIG_ESP_SYSTEM_MEMPROT_PMS_TEST
 
 #if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
     // External devices (including SPI0/1, cache) should be initialized

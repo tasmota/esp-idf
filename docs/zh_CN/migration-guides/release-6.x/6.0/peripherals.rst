@@ -62,6 +62,13 @@ LEDC
 
 - :cpp:member:`ledc_channel_config_t::intr_type` 已被弃用。`LEDC_INTR_FADE_END` 中断使能/禁用控制由驱动内部处理。用户仍可以通过 :cpp:func:`ledc_cb_register` 注册该中断的回调。
 
+- :cpp:enumerator:`soc_periph_ledc_clk_src_legacy_t::LEDC_USE_RTC8M_CLK` 已被移除。请使用 ``LEDC_USE_RC_FAST_CLK`` 代替。
+
+UART
+----
+
+``UART_FIFO_LEN`` 已被移除。请使用 ``UART_HW_FIFO_LEN`` 代替。
+
 I2C
 ---
 
@@ -135,3 +142,28 @@ SDMMC
     ---------------------------------
 
     旧版的 Sigma-Delta 调制器驱动 ``driver/sigmadelta.h`` 在 5.0 的版本中就已经被弃用（请参考 :ref:`deprecate_sdm_legacy_driver`）。从 6.0 版本开始，旧版驱动被完全移除。新驱动位于 :component:`esp_driver_sdm` 组件中，头文件引用路径为 ``driver/sdm.h``。
+
+LCD
+---
+
+- LCD 驱动中的 GPIO 编号已经从 ``int`` 类型修改为更加类型安全的 ``gpio_num_t`` 类型。比如原来使用 ``5`` 作为 GPIO 编号，现在需要使用 ``GPIO_NUM_5``。
+- :cpp:type:`esp_lcd_i80_bus_config_t` 结构体中的 ``psram_trans_align`` 和 ``sram_trans_align`` 均已被 :cpp:member:`esp_lcd_i80_bus_config_t::dma_burst_size` 成员取代，用来设置 DMA 的突发传输大小。
+- :cpp:type:`esp_lcd_rgb_panel_config_t` 结构体中的 ``psram_trans_align`` 和 ``sram_trans_align`` 均已被 :cpp:member:`esp_lcd_rgb_panel_config_t::dma_burst_size` 成员取代，用来设置 DMA 的突发传输大小。
+- :cpp:type:`esp_lcd_panel_io_spi_config_t` 结构体中的 ``octal_mode`` 和 ``quad_mode`` 标志均已删除，驱动已经可以自动探测到当前 SPI 总线的数据线模式。
+- :cpp:type:`esp_lcd_panel_dev_config_t` 结构体中的 ``color_space`` 和 ``rgb_endian`` 配置均已被 :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` 成员取代，用来设置 RGB 元素的排列顺序。对应的类型 ``lcd_color_rgb_endian_t`` 和 ``esp_lcd_color_space_t`` 也已被移除，请使用 :cpp:type:`lcd_rgb_element_order_t` 替代。
+- ``esp_lcd_panel_disp_off`` 函数已被移除。请使用 :func:`esp_lcd_panel_disp_on_off` 函数来控制显示内容的开关。
+- :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` 中的 ``on_bounce_frame_finish`` 成员已被 :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete` 成员取代，用于指示一个完整的帧缓冲区已被发送给 LCD 控制器。
+
+SPI
+---
+
+:ref:`CONFIG_SPI_MASTER_IN_IRAM` 选项现在在 menuconfig 中默认不可见，并且依赖于 :ref:`CONFIG_FREERTOS_IN_IRAM`。此更改是为了防止位于 IRAM 中的 SPI 函数调用位于 Flash 中的 FreeRTOS 函数时可能发生的崩溃。
+
+要启用 SPI 主机 IRAM 优化：
+
+1. 在 menuconfig 中导航到 ``Component config`` → ``FreeRTOS`` → ``Port``
+2. 启用 ``Place FreeRTOS functions in IRAM`` (:ref:`CONFIG_FREERTOS_IN_IRAM`)
+3. 导航到 ``Component config`` → ``ESP-Driver:SPI Configurations``
+4. 启用 ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
+
+请注意，启用 :ref:`CONFIG_FREERTOS_IN_IRAM` 会显著增加 IRAM 使用量。在为 SPI 性能进行优化时，请考虑此权衡。

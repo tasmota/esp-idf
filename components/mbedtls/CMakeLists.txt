@@ -23,6 +23,7 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
     set(priv_requires soc esp_hw_support)
     if(NOT BOOTLOADER_BUILD)
         list(APPEND priv_requires esp_pm)
+        set(requires esp_security)
     endif()
 endif()
 
@@ -41,6 +42,7 @@ endif()
 idf_component_register(SRCS "${mbedtls_srcs}"
     INCLUDE_DIRS "${mbedtls_include_dirs}"
     PRIV_REQUIRES "${priv_requires}"
+    REQUIRES "${requires}"
     )
 
 # Determine the type of mbedtls component library
@@ -378,7 +380,6 @@ if(CONFIG_MBEDTLS_DYNAMIC_BUFFER)
         mbedtls_ssl_handshake_server_step
         mbedtls_ssl_read
         mbedtls_ssl_write
-        mbedtls_ssl_session_reset
         mbedtls_ssl_free
         mbedtls_ssl_setup
         mbedtls_ssl_send_alert_message

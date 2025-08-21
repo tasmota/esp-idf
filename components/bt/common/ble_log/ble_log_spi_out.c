@@ -242,9 +242,9 @@ extern uint32_t r_ble_lll_timer_current_tick_get(void);
 #elif defined(CONFIG_IDF_TARGET_ESP32C2)
 extern uint32_t r_os_cputime_get32(void);
 #define SPI_OUT_GET_LC_TIME r_os_cputime_get32()
-#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
-extern uint32_t lld_read_clock_us(void);
-#define SPI_OUT_GET_LC_TIME lld_read_clock_us()
+// #elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+// extern uint32_t lld_read_clock_us(void);
+// #define SPI_OUT_GET_LC_TIME lld_read_clock_us()
 #else
 #define SPI_OUT_GET_LC_TIME esp_timer_get_time()
 #endif
@@ -860,8 +860,8 @@ static int spi_out_ts_sync_init(void)
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = BIT(SPI_OUT_SYNC_IO_NUM),
-        .pull_down_en = 0,
-        .pull_up_en = 0
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE
     };
     if (gpio_config(&io_conf) != ESP_OK) {
         goto failed;

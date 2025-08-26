@@ -85,9 +85,20 @@ I2C 从机在 v5.4 上已经被重新设计。在当前版本上，老的 I2C �
 ~~~~~~~~~~~~~~~~~~
 
 - ``i2c_slave_receive`` 被移除， 在新驱动中使用回调接收数据。
-- ``i2c_slave_transmit`` 已被 ``i2c_slave_write`` 取代.
+- ``i2c_slave_transmit`` 已被 ``i2c_slave_write`` 取代。
 - ``i2c_slave_write_ram`` 被移除。
 - ``i2c_slave_read_ram`` 被移除。
+
+同时，I2C的主机驱动也有一些API用法上的改动
+
+主要用法更新
+~~~~~~~~~~~~~~~~~~
+
+当主机在I2C总线上检测到NACK，以下的函数目前会返回 ``ESP_ERR_INVALID_RESPONSE``，而不是像之前一样返回 ``ESP_ERR_INVALID_STATE``：
+- ``i2c_master_transmit``
+- ``i2c_master_multi_buffer_transmit``
+- ``i2c_master_transmit_receive``
+- ``i2c_master_execute_defined_operations``
 
 旧版定时器组驱动被移除
 ----------------------
@@ -157,13 +168,13 @@ LCD
 SPI
 ---
 
-:ref:`CONFIG_SPI_MASTER_IN_IRAM` 选项现在在 menuconfig 中默认不可见，并且依赖于 :ref:`CONFIG_FREERTOS_IN_IRAM`。此更改是为了防止位于 IRAM 中的 SPI 函数调用位于 Flash 中的 FreeRTOS 函数时可能发生的崩溃。
+:ref:`CONFIG_SPI_MASTER_IN_IRAM` 选项在 menuconfig 中默认不可见，并且依赖于 :ref:`CONFIG_FREERTOS_IN_IRAM`。这样修改是为了防止位于 IRAM 中的 SPI 函数调用位于 flash 中的 FreeRTOS 函数时可能发生的崩溃。
 
 要启用 SPI 主机 IRAM 优化：
 
-1. 在 menuconfig 中导航到 ``Component config`` → ``FreeRTOS`` → ``Port``
+1. 在 menuconfig 中进入 ``Component config`` → ``FreeRTOS`` → ``Port``
 2. 启用 ``Place FreeRTOS functions in IRAM`` (:ref:`CONFIG_FREERTOS_IN_IRAM`)
-3. 导航到 ``Component config`` → ``ESP-Driver:SPI Configurations``
+3. 在 menuconfig 中进入 ``Component config`` → ``ESP-Driver:SPI Configurations``
 4. 启用 ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
 
-请注意，启用 :ref:`CONFIG_FREERTOS_IN_IRAM` 会显著增加 IRAM 使用量。在为 SPI 性能进行优化时，请考虑此权衡。
+请注意，启用 :ref:`CONFIG_FREERTOS_IN_IRAM` 会显著增加 IRAM 使用量。在优化 SPI 性能时，需进行权衡。

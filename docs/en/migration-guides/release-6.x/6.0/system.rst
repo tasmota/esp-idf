@@ -106,7 +106,9 @@ The function :cpp:func:`pxTaskGetStackStart` has been deprecated. Use :cpp:func:
 **Memory Placement**
 
 To reduce IRAM usage, the default placement for most FreeRTOS functions has been changed from IRAM to Flash. Consequently, the ``CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH`` option has been removed. This change saves a significant amount of IRAM but may have a slight performance impact. For performance-critical applications, the previous behavior can be restored by enabling the new :ref:`CONFIG_FREERTOS_IN_IRAM` option.
+
 When deciding whether to enable ``CONFIG_FREERTOS_IN_IRAM``, consider conducting performance testing to measure the actual impact on your specific use case. Performance differences between Flash and IRAM configurations can vary depending on flash cache efficiency, API usage patterns, and system load.
+
 A baseline performance test is provided in ``components/freertos/test_apps/freertos/performance/test_freertos_api_performance.c`` that measures the execution time of commonly used FreeRTOS APIs. This test can help you evaluate the performance impact of memory placement for your target hardware and application requirements.
 
 Ring Buffer
@@ -145,6 +147,15 @@ OTA Updates
 The partial download functionality in ESP HTTPS OTA has been moved under a configuration option in order to reduce the memory footprint if partial download is not used.
 
 To use partial download features in your OTA applications, you need to enable the component-level configuration :ref:`CONFIG_ESP_HTTPS_OTA_ENABLE_PARTIAL_DOWNLOAD` in menuconfig (``Component config`` → ``ESP HTTPS OTA`` → ``Enable partial HTTP download for OTA``).
+
+**Removed Deprecated APIs**
+
+The following deprecated functions have been removed from the ``app_update`` component:
+
+- :cpp:func:`esp_ota_get_app_description` – Use :cpp:func:`esp_app_get_description` instead.
+- :cpp:func:`esp_ota_get_app_elf_sha256` – Use :cpp:func:`esp_app_get_elf_sha256` instead.
+
+These functions have moved to the ``esp_app_format`` component. Update your include from ``esp_ota_ops.h`` to ``esp_app_desc.h`` and add ``esp_app_format`` to your component dependencies if needed.
 
 Gcov
 ----

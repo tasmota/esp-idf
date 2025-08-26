@@ -86,8 +86,19 @@ Major Changes in Usage
 
 - ``i2c_slave_receive`` has been removed. In the new driver, data reception is handled via callbacks.
 - ``i2c_slave_transmit`` has been replaced by ``i2c_slave_write``.
-- ``i2c_slave_write_ram`` has been removed。
-- ``i2c_slave_read_ram`` has been removed。
+- ``i2c_slave_write_ram`` has been removed.
+- ``i2c_slave_read_ram`` has been removed.
+
+Meanwhile, I2C master also has some change in its APIs' definitions.
+
+Major Changes in Usage
+~~~~~~~~~~~~~~~~~~~~~~
+
+Following functions now will return ``ESP_ERR_INVALID_RESPONSE`` instead of ``ESP_ERR_INVALID_STATE`` when NACK from the bus is detected:
+- ``i2c_master_transmit``
+- ``i2c_master_multi_buffer_transmit``
+- ``i2c_master_transmit_receive``
+- ``i2c_master_execute_defined_operations``
 
 Legacy Timer Group Driver is Removed
 ------------------------------------
@@ -157,7 +168,7 @@ LCD
 SPI
 ---
 
-The :ref:`CONFIG_SPI_MASTER_IN_IRAM` option is now invisible by default in menuconfig and depends on :ref:`CONFIG_FREERTOS_IN_IRAM`. This change was made to prevent potential crashes when SPI functions in IRAM call FreeRTOS functions that are placed in Flash.
+The :ref:`CONFIG_SPI_MASTER_IN_IRAM` option is now invisible by default in menuconfig and depends on :ref:`CONFIG_FREERTOS_IN_IRAM`. This change was made to prevent potential crashes when SPI functions in IRAM call FreeRTOS functions that are placed in flash.
 
 To enable SPI master IRAM optimization:
 

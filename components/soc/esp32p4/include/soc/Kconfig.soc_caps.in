@@ -635,18 +635,6 @@ config SOC_DMA2D_RX_CHANNELS_PER_GROUP
     int
     default 2
 
-config SOC_ETM_GROUPS
-    int
-    default 1
-
-config SOC_ETM_CHANNELS_PER_GROUP
-    int
-    default 50
-
-config SOC_ETM_SUPPORT_SLEEP_RETENTION
-    bool
-    default y
-
 config SOC_GPIO_PORT
     int
     default 1
@@ -768,6 +756,10 @@ config SOC_DEDIC_PERIPH_ALWAYS_ENABLE
     default y
 
 config SOC_SDM_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_ETM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -1796,6 +1788,14 @@ config SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
     default y
 
 config SOC_KEY_MANAGER_FE_KEY_DEPLOY
+    bool
+    default y
+
+config SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128
+    bool
+    default y
+
+config SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256
     bool
     default y
 

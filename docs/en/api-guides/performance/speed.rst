@@ -87,7 +87,6 @@ The following optimizations improve the execution of nearly all code, including 
     :SOC_CPU_HAS_FPU: - Avoid using floating point arithmetic ``float``. Even though {IDF_TARGET_NAME} has a single precision hardware floating point unit, floating point calculations are always slower than integer calculations. If possible then use fixed point representations, a different method of integer representation, or convert part of the calculation to be integer only before switching to floating point.
     :not SOC_CPU_HAS_FPU: - Avoid using floating point arithmetic ``float``. On {IDF_TARGET_NAME} these calculations are emulated in software and are very slow. If possible, use fixed point representations, a different method of integer representation, or convert part of the calculation to be integer only before switching to floating point.
     - Avoid using double precision floating point arithmetic ``double``. These calculations are emulated in software and are very slow. If possible then use an integer-based representation, or single-precision floating point.
-    :CONFIG_ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY: - Avoid misaligned 4-byte memory accesses in performance-critical code sections. For potential performance improvements, consider enabling :ref:`CONFIG_LIBC_OPTIMIZED_MISALIGNED_ACCESS`, which requires approximately 190 bytes of IRAM and 870 bytes of flash memory. Note that properly aligned memory operations will always execute at full speed without performance penalties.
 
 
 .. only:: esp32s2 or esp32s3 or esp32p4
@@ -154,7 +153,7 @@ The following changes increase the speed of a chosen part of the firmware applic
 
       IRAM is a limited resource, and using more IRAM may reduce available DRAM, so a strategic approach is needed when moving code to IRAM. See :ref:`iram` for more information.
 
-    -  Jump table optimizations can be re-enabled for individual source files that do not need to be placed in IRAM. For hot paths in large ``switch cases``, this improves performance. For instructions on how to add the ``-fjump-tables`` and ``-ftree-switch-conversion`` options when compiling individual source files, see :ref:`component_build_control`
+    -  Jump table optimizations can be re-enabled for individual source files that do not need to be placed in IRAM. For hot paths in large ``switch cases``, this improves performance. For instructions on how to add the ``-fjump-tables`` and ``-ftree-switch-conversion`` options when compiling individual source files, see :ref:`component_build_control`.
 
     - Many ESP-IDF components and drivers provide configuration options to place performance-critical functions in IRAM for reduced latency and improved speed. These options typically have names like ``CONFIG_*_IN_IRAM``, ``CONFIG_*_ISR_IN_IRAM``, or ``CONFIG_*_IRAM_OPT``. Some examples are :ref:`CONFIG_FREERTOS_IN_IRAM` for FreeRTOS functions, :ref:`CONFIG_ESP_WIFI_IRAM_OPT` for Wi-Fi operations, :ref:`CONFIG_UART_ISR_IN_IRAM` for UART interrupt handling, and :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` for SPI operations. These options trade IRAM usage for speed, so they should be used selectively based on your application's performance requirements and available IRAM space.
 

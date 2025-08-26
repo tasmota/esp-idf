@@ -427,6 +427,10 @@ config SOC_CPU_PMP_REGION_GRANULARITY
     int
     default 4
 
+config SOC_CPU_MISALIGNED_ACCESS_ON_PMP_MISMATCH_ISSUE
+    bool
+    default y
+
 config SOC_MMU_PAGE_SIZE_CONFIGURABLE
     bool
     default y
@@ -476,18 +480,6 @@ config SOC_GDMA_SUPPORT_ETM
     default y
 
 config SOC_GDMA_SUPPORT_SLEEP_RETENTION
-    bool
-    default y
-
-config SOC_ETM_GROUPS
-    int
-    default 1
-
-config SOC_ETM_CHANNELS_PER_GROUP
-    int
-    default 50
-
-config SOC_ETM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
@@ -584,6 +576,10 @@ config SOC_DEDIC_PERIPH_ALWAYS_ENABLE
     default y
 
 config SOC_SDM_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_ETM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 

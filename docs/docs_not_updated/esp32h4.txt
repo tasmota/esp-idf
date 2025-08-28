@@ -134,7 +134,6 @@ api-reference/bluetooth/esp_hf_defs.rst
 api-reference/peripherals/cap_touch_sens.rst
 api-reference/peripherals/index.rst
 api-reference/peripherals/rmt.rst
-api-reference/peripherals/ds.rst
 api-reference/peripherals/gptimer.rst
 api-reference/peripherals/sdio_slave.rst
 api-reference/peripherals/bitscrambler.rst
@@ -145,7 +144,6 @@ api-reference/peripherals/mcpwm.rst
 api-reference/peripherals/usb_host.rst
 api-reference/peripherals/camera_driver.rst
 api-reference/peripherals/adc_oneshot.rst
-api-reference/peripherals/twai.rst
 api-reference/peripherals/sdspi_share.rst
 api-reference/peripherals/ana_cmpr.rst
 api-reference/peripherals/adc_continuous.rst

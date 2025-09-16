@@ -177,11 +177,11 @@ esp_err_t esp_vfs_fat_spiflash_mount_rw_wl(const char* base_path,
         .fat_drive = drv,
         .max_files = mount_config->max_files,
     };
-    ret = esp_vfs_fat_register_cfg(&conf, &fs);
+    ret = esp_vfs_fat_register(&conf, &fs);
     if (ret == ESP_ERR_INVALID_STATE) {
         // it's okay, already registered with VFS
     } else if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "esp_vfs_fat_register_cfg failed 0x(%x)", ret);
+        ESP_LOGD(TAG, "esp_vfs_fat_register failed 0x(%x)", ret);
         goto fail;
     }
 
@@ -367,11 +367,11 @@ esp_err_t esp_vfs_fat_spiflash_mount_ro(const char* base_path,
         .fat_drive = drv,
         .max_files = mount_config->max_files,
     };
-    ret = esp_vfs_fat_register_cfg(&conf, &fs);
+    ret = esp_vfs_fat_register(&conf, &fs);
     if (ret == ESP_ERR_INVALID_STATE) {
         // it's okay, already registered with VFS
     } else if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "esp_vfs_fat_register_cfg failed 0x(%x)", ret);
+        ESP_LOGD(TAG, "esp_vfs_fat_register failed 0x(%x)", ret);
         goto fail;
     }
 

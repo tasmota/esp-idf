@@ -149,12 +149,18 @@ ESP_STATIC_ASSERT(sizeof(twai_ll_frame_buffer_t) == 13, "TX/RX buffer type shoul
  */
 static inline void twai_ll_enable_bus_clock(int group_id, bool enable)
 {
-    switch (group_id)
-    {
-    case 0: HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai0_apb_clk_en = enable; break;
-    case 1: HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai1_apb_clk_en = enable; break;
-    case 2: HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai2_apb_clk_en = enable; break;
-    default: HAL_ASSERT(false);
+    switch (group_id) {
+    case 0:
+        HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai0_apb_clk_en = enable;
+        break;
+    case 1:
+        HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai1_apb_clk_en = enable;
+        break;
+    case 2:
+        HP_SYS_CLKRST.soc_clk_ctrl2.reg_twai2_apb_clk_en = enable;
+        break;
+    default:
+        HAL_ASSERT(false);
     }
 }
 
@@ -169,17 +175,19 @@ static inline void twai_ll_enable_bus_clock(int group_id, bool enable)
  */
 static inline void twai_ll_reset_register(int group_id)
 {
-    switch (group_id)
-    {
-    case 0: HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai0 = 1;
-            HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai0 = 0;
-            break;
-    case 1: HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai1 = 1;
-            HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai1 = 0;
-            break;
-    case 2: HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai2 = 1;
-            HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai2 = 0;
-            break;
+    switch (group_id) {
+    case 0:
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai0 = 1;
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai0 = 0;
+        break;
+    case 1:
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai1 = 1;
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai1 = 0;
+        break;
+    case 2:
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai2 = 1;
+        HP_SYS_CLKRST.hp_rst_en1.reg_rst_en_twai2 = 0;
+        break;
     default: HAL_ASSERT(false);
     }
 }
@@ -220,21 +228,23 @@ static inline void twai_ll_enable_clock(int group_id, bool en)
 __attribute__((always_inline))
 static inline void twai_ll_set_clock_source(int group_id, twai_clock_source_t clk_src)
 {
+    // We do not plan to support the TWAI_CLK_SRC_RC_FAST clock source,
+    // as the accuracy of this clock does not meet the requirements for the baud rate
+    HAL_ASSERT(clk_src == TWAI_CLK_SRC_XTAL);
     uint32_t clk_id = 0;
 
-    switch (clk_src) {
-    case TWAI_CLK_SRC_XTAL: clk_id = 0; break;
-#if SOC_CLK_TREE_SUPPORTED
-    case TWAI_CLK_SRC_RC_FAST: clk_id = 1; break;
-#endif
-    default: HAL_ASSERT(false);
-    }
-
     switch (group_id) {
-    case 0: HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai0_clk_src_sel = clk_id; break;
-    case 1: HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai1_clk_src_sel = clk_id; break;
-    case 2: HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai2_clk_src_sel = clk_id; break;
-    default: HAL_ASSERT(false);
+    case 0:
+        HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai0_clk_src_sel = clk_id;
+        break;
+    case 1:
+        HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai1_clk_src_sel = clk_id;
+        break;
+    case 2:
+        HP_SYS_CLKRST.peri_clk_ctrl115.reg_twai2_clk_src_sel = clk_id;
+        break;
+    default:
+        HAL_ASSERT(false);
     }
 }
 
@@ -542,9 +552,9 @@ __attribute__((always_inline))
 static inline void twai_ll_parse_err_code_cap(twai_dev_t *hw, twai_ll_err_type_t *type, twai_ll_err_dir_t *dir, twai_ll_err_seg_t *seg)
 {
     uint32_t ecc = hw->err_code_cap.val;
-    *type = (twai_ll_err_type_t) ((ecc >> 6) & 0x3);
-    *dir = (twai_ll_err_dir_t) ((ecc >> 5) & 0x1);
-    *seg = (twai_ll_err_seg_t) (ecc & 0x1F);
+    *type = (twai_ll_err_type_t)((ecc >> 6) & 0x3);
+    *dir = (twai_ll_err_dir_t)((ecc >> 5) & 0x1);
+    *seg = (twai_ll_err_seg_t)(ecc & 0x1F);
 }
 
 /* ----------------------------- EWL Register ------------------------------- */
@@ -684,7 +694,7 @@ static inline void twai_ll_set_tx_buffer(twai_dev_t *hw, twai_ll_frame_buffer_t 
  * @param hw Start address of the TWAI registers
  * @param rx_frame Pointer to store formatted frame
  *
- * @note Call twai_ll_parse_frame_buffer() to parse the formatted frame
+ * @note Call twai_hal_parse_frame() to parse the formatted frame
  */
 __attribute__((always_inline))
 static inline void twai_ll_get_rx_buffer(twai_dev_t *hw, twai_ll_frame_buffer_t *rx_frame)
@@ -757,47 +767,55 @@ static inline bool twai_ll_frame_is_ext_format(twai_ll_frame_buffer_t *rx_frame)
 }
 
 /**
- * @brief   Parse formatted TWAI frame (RX Buffer Layout) into its constituent contents
+ * @brief   Parse formatted TWAI frame header (RX Buffer Layout) into twai_frame_header_t
  *
  * @param[in] rx_frame Pointer to formatted frame
- * @param[out] id 11 or 29bit ID
- * @param[out] dlc Data length code
- * @param[out] data Data. Left over bytes set to 0.
- * @param[out] format Type of TWAI frame
+ * @param[out] header Pointer to frame header structure
  */
 __attribute__((always_inline))
-static inline void twai_ll_parse_frame_buffer(twai_ll_frame_buffer_t *rx_frame, uint32_t *id, uint8_t *dlc,
-        uint8_t *data, uint32_t buf_sz, uint32_t *flags)
+static inline void twai_ll_parse_frame_header(const twai_ll_frame_buffer_t *rx_frame, twai_frame_header_t *header)
 {
-    //Copy frame information
-    *dlc = rx_frame->dlc;
-    uint32_t flags_temp = 0;
-    flags_temp |= (rx_frame->frame_format) ? TWAI_MSG_FLAG_EXTD : 0;
-    flags_temp |= (rx_frame->rtr) ? TWAI_MSG_FLAG_RTR : 0;
-    flags_temp |= (rx_frame->dlc > TWAI_FRAME_MAX_DLC) ? TWAI_MSG_FLAG_DLC_NON_COMP : 0;
-    *flags = flags_temp;
+    // Copy frame information
+    header->dlc = rx_frame->dlc;
+    header->ide = rx_frame->frame_format;
+    header->rtr = rx_frame->rtr;
+    header->fdf = 0;
+    header->brs = 0;
+    header->esi = 0;
+    header->timestamp = 0;
 
-    //Copy ID. The ID registers are big endian and left aligned, therefore a bswap will be required
+    // Copy ID. The ID registers are big endian and left aligned, therefore a bswap will be required
     if (rx_frame->frame_format) {
         uint32_t id_temp = 0;
         for (int i = 0; i < 4; i++) {
             id_temp |= rx_frame->extended.id[i] << (8 * i);
         }
         id_temp = HAL_SWAP32(id_temp) >> 3;  //((byte[i] << 8*(3-i)) >> 3)
-        *id = id_temp & TWAI_EXTD_ID_MASK;
+        header->id = id_temp & TWAI_EXTD_ID_MASK;
     } else {
         uint32_t id_temp = 0;
         for (int i = 0; i < 2; i++) {
             id_temp |= rx_frame->standard.id[i] << (8 * i);
         }
         id_temp = HAL_SWAP16(id_temp) >> 5;  //((byte[i] << 8*(1-i)) >> 5)
-        *id = id_temp & TWAI_STD_ID_MASK;
+        header->id = id_temp & TWAI_STD_ID_MASK;
     }
+}
 
-    uint8_t *data_buffer = (rx_frame->frame_format) ? rx_frame->extended.data : rx_frame->standard.data;
-    //Only copy data if the frame is a data frame (i.e. not a remote frame)
+/**
+ * @brief   Parse formatted TWAI frame data (RX Buffer Layout) into data buffer
+ *
+ * @param[in] rx_frame Pointer to formatted frame
+ * @param[out] data Pointer to data buffer
+ * @param[in] data_len_limit The data length limit, if less than frame data length, over length data will be dropped
+ */
+__attribute__((always_inline))
+static inline void twai_ll_parse_frame_data(const twai_ll_frame_buffer_t *rx_frame, uint8_t *data, uint8_t data_len_limit)
+{
+    const uint8_t *data_buffer = (rx_frame->frame_format) ? rx_frame->extended.data : rx_frame->standard.data;
+    // Only copy data if the frame is a data frame (i.e. not a remote frame)
     int data_length = (rx_frame->rtr) ? 0 : ((rx_frame->dlc > TWAI_FRAME_MAX_DLC) ? TWAI_FRAME_MAX_DLC : rx_frame->dlc);
-    data_length = (data_length < buf_sz) ? data_length : buf_sz;
+    data_length = (data_length < data_len_limit) ? data_length : data_len_limit;
     for (int i = 0; i < data_length; i++) {
         data[i] = data_buffer[i];
     }

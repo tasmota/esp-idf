@@ -19,6 +19,10 @@ config SOC_GPTIMER_SUPPORTED
     bool
     default y
 
+config SOC_PCNT_SUPPORTED
+    bool
+    default y
+
 config SOC_TWAI_SUPPORTED
     bool
     default y
@@ -80,6 +84,10 @@ config SOC_PAU_SUPPORTED
     default y
 
 config SOC_LP_TIMER_SUPPORTED
+    bool
+    default y
+
+config SOC_LP_AON_SUPPORTED
     bool
     default y
 
@@ -264,6 +272,18 @@ config SOC_GDMA_SUPPORT_SLEEP_RETENTION
     default y
 
 config SOC_AHB_GDMA_SUPPORT_PSRAM
+    bool
+    default y
+
+config SOC_ETM_GROUPS
+    int
+    default 1
+
+config SOC_ETM_CHANNELS_PER_GROUP
+    int
+    default 50
+
+config SOC_MODEM_SUPPORT_ETM
     bool
     default y
 
@@ -504,6 +524,18 @@ config SOC_MMU_LINEAR_ADDRESS_REGION_NUM
     default 1
 
 config SOC_MMU_DI_VADDR_SHARED
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_CLEAR_SIGNAL
+    bool
+    default y
+
+config SOC_PCNT_SUPPORT_STEP_NOTIFY
     bool
     default y
 
@@ -765,7 +797,7 @@ config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
 
 config SOC_EFUSE_ECDSA_KEY
     bool
-    default y
+    default n
 
 config SOC_SECURE_BOOT_V2_RSA
     bool
@@ -835,6 +867,10 @@ config SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
     bool
     default y
 
+config SOC_UART_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_UART_WAKEUP_SUPPORT_ACTIVE_THRESH_MODE
     bool
     default y
@@ -863,7 +899,23 @@ config SOC_PHY_DIG_REGS_MEM_SIZE
     int
     default 21
 
+config SOC_PM_SUPPORT_EXT1_WAKEUP
+    bool
+    default y
+
+config SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN
+    bool
+    default y
+
 config SOC_PM_SUPPORT_TOUCH_WAKEUP
+    bool
+    default y
+
+config SOC_PM_SUPPORT_CPU_PD
+    bool
+    default y
+
+config SOC_PM_SUPPORT_MODEM_PD
     bool
     default y
 
@@ -883,11 +935,27 @@ config SOC_PM_SUPPORT_VDDSDIO_PD
     bool
     default y
 
+config SOC_PM_SUPPORT_TOP_PD
+    bool
+    default y
+
 config SOC_PM_SUPPORT_HP_AON_PD
     bool
     default y
 
 config SOC_PM_SUPPORT_MAC_BB_PD
+    bool
+    default y
+
+config SOC_PM_CPU_RETENTION_BY_SW
+    bool
+    default y
+
+config SOC_PM_MODEM_RETENTION_BY_REGDMA
+    bool
+    default y
+
+config SOC_PM_MODEM_CLK_CONF_RETENTION
     bool
     default y
 

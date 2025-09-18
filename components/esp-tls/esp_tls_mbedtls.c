@@ -20,6 +20,7 @@
 #include <errno.h>
 #include "esp_log.h"
 #include "esp_check.h"
+#include "soc/soc_caps.h"
 #include "mbedtls/esp_mbedtls_dynamic.h"
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
 #include "mbedtls/ecp.h"
@@ -49,7 +50,7 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki);
 static const char *TAG = "esp-tls-mbedtls";
 static mbedtls_x509_crt *global_cacert = NULL;
 
-#if CONFIG_NEWLIB_NANO_FORMAT
+#if CONFIG_LIBC_NEWLIB_NANO_FORMAT
 #define NEWLIB_NANO_SSIZE_T_COMPAT_FORMAT           "X"
 #define NEWLIB_NANO_SIZE_T_COMPAT_FORMAT            PRIu32
 #define NEWLIB_NANO_SIZE_T_COMPAT_CAST(size_t_var)  (uint32_t)size_t_var
@@ -72,9 +73,11 @@ static esp_err_t esp_tls_ecdsa_curve_to_mbedtls_group_id(esp_tls_ecdsa_curve_t c
         case ESP_TLS_ECDSA_CURVE_SECP256R1:
             *grp_id = MBEDTLS_ECP_DP_SECP256R1;
             break;
+#if SOC_ECDSA_SUPPORT_CURVE_P384
         case ESP_TLS_ECDSA_CURVE_SECP384R1:
             *grp_id = MBEDTLS_ECP_DP_SECP384R1;
             break;
+#endif
         default:
             return ESP_ERR_INVALID_ARG;
     }

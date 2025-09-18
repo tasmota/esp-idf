@@ -11,6 +11,16 @@
 
 不同的驱动对象可以共享同一个 GPIO 编号，联合起来可以实现更加复杂的功能。比如将 RMT 外设的 TX 通道和 RX 通道绑定在同一个 GPIO 上，进而模拟单总线的读写时序。在以前的版本中，你需要在驱动的配置中额外设置 ``io_loop_back`` 来实现这种“回环”功能，现在，这个配置已经被移除。不同的驱动只需要在配置中设置相同的 GPIO 编号就能实现这个功能。
 
+外设时钟门控
+~~~~~~~~~~~~
+
+外设的时钟门控现在由驱动层统一管理，用户无需手动控制外设模块的时钟开关。相关的 API 位于私有头文件 ``esp_private/periph_ctrl.h`` 中。原先用于同样目的的头文件 ``driver/periph_ctrl.h`` 已被移除。
+
+RTC 子系统控制
+~~~~~~~~~~~~~~
+
+低功耗模块通常会共享一些资源，比如中断号。为避免资源冲突，私有头文件 ``esp_private/rtc_ctrl.h`` 提供了相关 API 方便管理这些共享资源。原先用于同样目的的头文件 ``driver/rtc_cntl.h`` 已被移除。
+
 ADC
 ---
 
@@ -160,10 +170,10 @@ LCD
 - LCD 驱动中的 GPIO 编号已经从 ``int`` 类型修改为更加类型安全的 ``gpio_num_t`` 类型。比如原来使用 ``5`` 作为 GPIO 编号，现在需要使用 ``GPIO_NUM_5``。
 - :cpp:type:`esp_lcd_i80_bus_config_t` 结构体中的 ``psram_trans_align`` 和 ``sram_trans_align`` 均已被 :cpp:member:`esp_lcd_i80_bus_config_t::dma_burst_size` 成员取代，用来设置 DMA 的突发传输大小。
 - :cpp:type:`esp_lcd_rgb_panel_config_t` 结构体中的 ``psram_trans_align`` 和 ``sram_trans_align`` 均已被 :cpp:member:`esp_lcd_rgb_panel_config_t::dma_burst_size` 成员取代，用来设置 DMA 的突发传输大小。
-- :cpp:type:`esp_lcd_panel_io_spi_config_t` 结构体中的 ``octal_mode`` 和 ``quad_mode`` 标志均已删除，驱动已经可以自动探测到当前 SPI 总线的数据线模式。
 - :cpp:type:`esp_lcd_panel_dev_config_t` 结构体中的 ``color_space`` 和 ``rgb_endian`` 配置均已被 :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` 成员取代，用来设置 RGB 元素的排列顺序。对应的类型 ``lcd_color_rgb_endian_t`` 和 ``esp_lcd_color_space_t`` 也已被移除，请使用 :cpp:type:`lcd_rgb_element_order_t` 替代。
 - ``esp_lcd_panel_disp_off`` 函数已被移除。请使用 :func:`esp_lcd_panel_disp_on_off` 函数来控制显示内容的开关。
 - :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` 中的 ``on_bounce_frame_finish`` 成员已被 :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete` 成员取代，用于指示一个完整的帧缓冲区已被发送给 LCD 控制器。
+- 基于旧版 I2C 的 LCD 驱动 ``driver/lcd.h`` 在 5.2 的版本中就已经被弃用。从 6.0 版本开始，基于旧版 I2C 的 LCD 驱动被完全移除并只使用基于 ``driver/i2c_master.h`` 的新驱动。
 
 SPI
 ---
@@ -178,3 +188,11 @@ SPI
 4. 启用 ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
 
 请注意，启用 :ref:`CONFIG_FREERTOS_IN_IRAM` 会显著增加 IRAM 使用量。在优化 SPI 性能时，需进行权衡。
+
+Touch Element
+-------------
+
+``touch_element`` 组件已移至 [ESP Component Registry](https://components.espressif.com/components/espressif/touch_element/versions/1.0.0/readme)。
+
+您可以通过运行 ``idf.py add-dependency "espressif/touch_element"`` 将这个依赖添加到您的项目中。
+

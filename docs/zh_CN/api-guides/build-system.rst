@@ -603,7 +603,7 @@ Spark Plug 组件
 
 为避免重复性工作，各组件都用自动依赖一些“通用” IDF 组件，即使它们没有被明确提及。这些组件的头文件会一直包含在构建系统中。
 
-通用组件包括：cxx、newlib、freertos、esp_hw_support、heap、log、soc、hal、esp_rom、esp_common、esp_system。
+通用组件包括：cxx、esp_libc、freertos、esp_hw_support、heap、log、soc、hal、esp_rom、esp_common、esp_system。
 
 
 在构建中导入组件
@@ -1248,9 +1248,9 @@ ESP-IDF 提供了一个模板 CMake 项目，可以基于此轻松创建应用�
   idf_build_process(esp32)
 
   # 创建项目可执行文件
-  # 使用其别名 idf::newlib 将其链接到 newlib 组件
+  # 使用其别名 idf::esp_libc 将其链接到 esp_libc 组件
   add_executable(${CMAKE_PROJECT_NAME}.elf main.c)
-  target_link_libraries(${CMAKE_PROJECT_NAME}.elf idf::newlib)
+  target_link_libraries(${CMAKE_PROJECT_NAME}.elf idf::esp_libc)
 
   # 让构建系统知道项目到可执行文件是什么，从而添加更多的目标以及依赖关系等
   idf_build_executable(${CMAKE_PROJECT_NAME}.elf)
@@ -1341,6 +1341,51 @@ ESP-IDF 构建命令
   idf_build_get_config(var config [GENERATOR_EXPRESSION])
 
 获取指定配置的值。就像构建属性一样，特定 *GENERATOR_EXPRESSION* 将检索该配置的生成器表达式字符串，而不是实际值，即可以与支持生成器表达式的 CMake 命令一起使用。然而，实际的配置值只有在调用 ``idf_build_process`` 后才能知道。
+
+.. code-block:: none
+
+  idf_build_add_post_elf_dependency(elf_filename dep_target)
+
+注册一个依赖项，该依赖必须在 ELF 链接完成之后 (post-ELF)、生成二进制镜像之前运行，适用于组件在执行 ``elf2image`` 之前需要对 ELF 进行就地处理的场景（例如，插入元数据、剥离段或生成额外的符号文件）。依赖目标 ``dep_target`` 必须是一个有效的 CMake 目标。如果你的规则需要读取或修改 ELF 文件，请在自定义命令中将 ELF 文件声明为 ``DEPENDS``。
+
+.. important::
+
+   创建 post-ELF 步骤时，请确保构建图保持无环性：
+
+   - 不要将 ELF 本身作为自定义命令的输出，应生成一个单独的输出（例如，``app.elf.post``、``app.elf.symbols`` 或简单的标记文件）。
+   - 如果必须就地修改 ELF，还需要生成一个额外的输出文件，并更新其时间戳，使其晚于 ELF 的修改时间（例如，使用 ``cmake -E touch``）。这样可以确保输出文件的时间戳比修改后的 ELF 文件更新，从而使 CMake 认为规则已满足，不会在后续构建中反复执行。
+
+   遵循这些规则可确保 post-ELF 钩子按预期顺序运行，而不会触发无限重建循环。
+
+示例：
+
+.. code-block:: cmake
+
+    # 创建一个自定义命令，在 ELF 链接完成后处理 ELF 文件
+    idf_build_get_property(elf_target EXECUTABLE GENERATOR_EXPRESSION)
+    add_custom_command(
+        OUTPUT "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stripped_marker"
+        COMMAND ${CMAKE_OBJCOPY} --strip-debug
+                "$<TARGET_FILE:$<GENEX_EVAL:${elf_target}>>"
+        COMMAND ${CMAKE_COMMAND} -E touch
+                "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stripped_marker"
+        DEPENDS "$<TARGET_FILE:$<GENEX_EVAL:${elf_target}>>"
+    )
+
+    # 将其封装为自定义目标
+    add_custom_target(strip_elf DEPENDS
+        "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stripped_marker"
+    )
+
+    # 注册该依赖，使其在 ELF 链接完成后、BIN 生成之前运行
+    idf_build_add_post_elf_dependency("${CMAKE_PROJECT_NAME}.elf" strip_elf)
+
+
+.. code-block:: none
+
+  idf_build_get_post_elf_dependencies(elf_filename out_var)
+
+获取已为指定 ELF 文件注册的 post-ELF 依赖列表，并将其存储在 ``out_var`` 中。
 
 
 .. _cmake-build-properties:

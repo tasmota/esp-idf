@@ -11,6 +11,16 @@ All drivers' ``io_loop_back`` configuration have been removed
 
 Different driver objects can share the same GPIO number, enabling more complex functionalities. For example, you can bind the TX and RX channels of the RMT peripheral to the same GPIO to simulate 1-Wire bus read and write timing. In previous versions, you needed to configure the ``io_loop_back`` setting in the driver to achieve this "loopback" functionality. Now, this configuration has been removed. Simply configuring the same GPIO number in different drivers will achieve the same functionality.
 
+Peripheral Clock Gating
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Peripheral clock gating is managed within the driver layer. Users do not need to manually handle peripheral module clock gating. Its corresponding APIs are included via a private header file ``esp_private/periph_ctrl.h``. There used to be another header file ``driver/periph_ctrl.h`` for the same purpose, which is now removed.
+
+RTC Subsystem Control
+~~~~~~~~~~~~~~~~~~~~~~
+
+Low power modules usually share some common resources like interrupt number. To avoid conflicts, some private APIs are created in the ``esp_private/rtc_ctrl.h`` header file to manage these shared resources with ease. There used to be another header file ``driver/rtc_cntl.h`` for the same purpose, which is now removed.
+
 ADC
 ---
 
@@ -160,10 +170,10 @@ LCD
 - The GPIO number type in the LCD driver has been changed from ``int`` to the more type-safe ``gpio_num_t``. For example, instead of using ``5`` as the GPIO number, you now need to use ``GPIO_NUM_5``.
 - The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_i80_bus_config_t` structure have been replaced by the :cpp:member:`esp_lcd_i80_bus_config_t::dma_burst_size` member, which sets the DMA burst transfer size.
 - The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_rgb_panel_config_t` structure have also been replaced by the :cpp:member:`esp_lcd_rgb_panel_config_t::dma_burst_size` member for configuring the DMA burst transfer size.
-- The ``octal_mode`` and ``quad_mode`` flags in the :cpp:type:`esp_lcd_panel_io_spi_config_t` structure have been removed. The driver now automatically detects the data line mode of the current SPI bus.
 - The ``color_space`` and ``rgb_endian`` configuration options in the :cpp:type:`esp_lcd_panel_dev_config_t` structure have been replaced by the :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` member, which sets the RGB element order. The corresponding types ``lcd_color_rgb_endian_t`` and ``esp_lcd_color_space_t`` have also been removed; use :cpp:type:`lcd_rgb_element_order_t` instead.
 - The ``esp_lcd_panel_disp_off`` function has been removed. Please use the :func:`esp_lcd_panel_disp_on_off` function to control display on/off.
 - The ``on_bounce_frame_finish`` member in :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` has been replaced by :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete`, which indicates that a complete frame buffer has been sent to the LCD controller.
+- The legacy I2C driver ``driver/i2c.h`` is deprecated since version 5.2. Starting from version 6.0, LCD driver based on legacy I2C is removed and LCD driver would only based on new I2C driver ``driver/i2c_master.h``.
 
 SPI
 ---
@@ -178,3 +188,10 @@ To enable SPI master IRAM optimization:
 4. Enable ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
 
 Note that enabling :ref:`CONFIG_FREERTOS_IN_IRAM` will increase IRAM usage. Consider this trade-off when optimizing for SPI performance.
+
+Touch Element
+-------------
+
+The ``touch_element`` component is moved to [ESP Component Registry](https://components.espressif.com/components/espressif/touch_element/versions/1.0.0/readme).
+
+You can add this dependency to your project by running ``idf.py add-dependency "espressif/touch_element"``.

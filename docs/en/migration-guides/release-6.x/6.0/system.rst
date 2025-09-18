@@ -56,6 +56,15 @@ HW-Support
 
 The deprecated ``soc_memory_types.h`` header file has been removed. Please include the replacement ``esp_memory_utils.h`` instead.
 
+The deprecated ``intr_types.h`` header file has been removed. Please include the replacement ``esp_intr_types.h`` instead.
+
+The deprecated ``esp_private/interrupt_deprecated.h`` header file, which was available to users through the ``riscv/interrupt.h`` header, has been removed. The deprecated functions are no longer available, please use the non-deprecated versions instead.
+
+ROM Headers
+-----------
+
+The deprecated ``STATUS`` type has been removed from ``ets_sys.h`` ROM header files. Please use ``ETS_STATUS`` instead.
+
 App Trace
 ----------
 
@@ -80,6 +89,28 @@ Update to:
         ESP_LOGE(TAG, "Failed to config down buffer!");
         return res;
     }
+
+The UART destination configuration has been simplified:
+
+- Removed: Individual UART selection via ``CONFIG_APPTRACE_DEST_UARTx=y``
+- Added: Single UART port selection via ``CONFIG_APPTRACE_DEST_UART_NUM``
+
+To migrate, update your sdkconfig:
+
+Old configuration:
+
+.. code-block:: none
+
+    CONFIG_APPTRACE_DEST_UART0=y
+    # or
+    CONFIG_APPTRACE_DEST_UART1=y
+
+New configuration:
+
+.. code-block:: none
+
+    CONFIG_APPTRACE_DEST_UART=y
+    CONFIG_APPTRACE_DEST_UART_NUM=0  # or 1, 2 depending on target
 
 FreeRTOS
 --------
@@ -131,6 +162,12 @@ The following deprecated Log functions have been removed in ESP-IDF v6.0:
 **Removed Headers**
 
 - ``esp_log_internal.h`` - Use ``esp_log_buffer.h`` instead.
+
+ESP-Event
+---------
+
+Unnecessary FreeRTOS headers have been removed from ``esp_event.h``. Code that previously depended on these implicit includes must now include the headers explicitly: ``#include "freertos/queue.h"`` and ``#include "freertos/semphr.h"`` to your files.
+
 
 Core Dump
 ---------

@@ -56,6 +56,15 @@ Xtensa 特殊寄存器头文件已更新，使用新的命名约定。旧的 ``s
 
 已弃用的头文件 ``soc_memory_types.h`` 已被移除，请改用替代头文件 ``esp_memory_utils.h``。
 
+已弃用的头文件 ``intr_types.h`` 已被移除，请改用替代头文件 ``esp_intr_types.h``。
+
+已弃用的头文件 ``esp_private/interrupt_deprecated.h`` 已被移除，已弃用的函数不再可用，请改用非弃用版本。
+
+ROM 头文件
+-----------
+
+已从 ``ets_sys.h`` ROM 头文件中移除了已弃用的 ``STATUS`` 类型。请改用 ``ETS_STATUS``。
+
 App 追踪
 ----------
 
@@ -80,6 +89,28 @@ App 追踪
         ESP_LOGE(TAG, "Failed to config down buffer!");
         return res;
     }
+
+UART 目标配置已简化：
+
+- 移除：通过 ``CONFIG_APPTRACE_DEST_UARTx=y`` 选择单个 UART
+- 新增：通过 ``CONFIG_APPTRACE_DEST_UART_NUM`` 选择 UART 端口
+
+迁移方法，更新你的 sdkconfig 配置：
+
+旧配置：
+
+.. code-block:: none
+
+    CONFIG_APPTRACE_DEST_UART0=y
+    # 或
+    CONFIG_APPTRACE_DEST_UART1=y
+
+新配置：
+
+.. code-block:: none
+
+    CONFIG_APPTRACE_DEST_UART=y
+    CONFIG_APPTRACE_DEST_UART_NUM=0  # 或 1、2，具体取决于目标芯片
 
 FreeRTOS
 --------
@@ -131,6 +162,11 @@ Log
 **已移除的头文件**
 
 - ``esp_log_internal.h`` – 请使用 ``esp_log_buffer.h`` 替代。
+
+ESP-Event
+---------
+
+不必要的 FreeRTOS 头文件已从 ``esp_event.h`` 中移除。此前依赖这些隐式包含的代码，现在必须显式添加以下头文件：``#include "freertos/queue.h"`` 和 ``#include "freertos/semphr.h"``。
 
 核心转储
 --------

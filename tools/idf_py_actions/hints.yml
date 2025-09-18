@@ -111,6 +111,12 @@
         -   re_variables: ['driver/can.h']
             hint_variables: ['driver/can.h', 'driver/twai.h']
 
+        -   re_variables: ['driver/periph_ctrl.h']
+            hint_variables: ['driver/periph_ctrl.h', 'esp_private/periph_ctrl.h']
+
+        -   re_variables: ['driver/rtc_cntl.h']
+            hint_variables: ['driver/rtc_cntl.h', 'esp_private/rtc_ctrl.h']
+
 -
     re: "error: implicit declaration of function 'esp_int_wdt_\\w+'"
     hint: 'The Interrupt Watchdog API has been made private, it shall not be used anymore. You can still force its inclusion with #include "esp_private/esp_int_wdt.h" (not recommended)'
@@ -203,8 +209,19 @@
     hint: "The issue is better to resolve by replacing format specifiers to 'PRI'-family macros (include <inttypes.h> header file)."
 
 -
-    re: "Failed to resolve component 'esp_ipc'"
-    hint: "IPC component has been moved to esp_system. Any `REQUIRES esp_ipc` can simply be deleted as esp_system is REQUIRED by default."
+    re: "Failed to resolve component '{}'"
+    hint: "The {} component has been moved to {}. You can {}."
+    variables:
+        -
+            re_variables: ['esp_ipc']
+            hint_variables: ['IPC', 'esp_system', 'simply delete any `REQUIRES esp_ipc` as esp_system is REQUIRED by default']
+        -
+            re_variables: ['touch_element']
+            hint_variables: ['touch_element', 'ESP Component Registry', 'add this dependency by running `idf.py add-dependency "espressif/touch_element"`']
+
+-
+    re: "Failed to resolve component 'newlib'"
+    hint: "newlib component has been renamed to esp_libc. Any `REQUIRES newlib` can simply be deleted as esp_libc is REQUIRED by default."
 
 -
     re: "error: invalid use of incomplete typedef 'esp_tls_t'"
@@ -215,7 +232,7 @@
     hint: "The event handler, specified in the 'event_handler' element, of the 'esp_http_client_config_t' struct now needs to handle the new 'HTTP_EVENT_REDIRECT' event case."
 
 -
-    re: "Failed to resolve component '(?!esp_ipc)(\\w+)'"
+    re: "Failed to resolve component '(?!esp_ipc|newlib)(\\w+)'"
     hint: "The component '{}' could not be found. This could be because: component name was misspelled, the component was not added to the build, the component has been moved to the IDF component manager, the component has been removed and refactored into some other component or the component may not be supported by the selected target.\nPlease look out for component in 'https://components.espressif.com' and add using 'idf.py add-dependency' command.\nRefer to the migration guide for more details about moved components.\nRefer to the build-system guide for more details about how components are found and included in the build."
     match_to_output: True
 
@@ -433,7 +450,7 @@
     match_to_output: True
 
 -
-    re: "implicit declaration of function '(opendir|readdir|telldir|seekdir|rewinddir|closedir|readdir_r|scandir|alphasort)'"
+    re: "implicit declaration of function '(opendir|readdir|telldir|seekdir|rewinddir|closedir|readdir_r|scandir|alphasort|dirfd|fdclosedir|fdopendir|scandirat|versionsort|posix_getdents)'"
     hint: "Please include <dirent.h> (not <sys/dirent.h>)"
 
 -

@@ -42,7 +42,7 @@ typedef enum {
     HTTP_EVENT_ON_HEADERS_COMPLETE, /*!< Occurs when all headers are received on the client side */
     HTTP_EVENT_ON_STATUS_CODE,  /*!< Occurs when receiving the HTTP status code from the server */
     HTTP_EVENT_ON_DATA,         /*!< Occurs when receiving data from the server, possibly multiple portions of the packet */
-    HTTP_EVENT_ON_FINISH,       /*!< Occurs when finish a HTTP session */
+    HTTP_EVENT_ON_FINISH,       /*!< Occurs when complete data is received */
     HTTP_EVENT_DISCONNECTED,    /*!< The connection has been disconnected */
     HTTP_EVENT_REDIRECT,        /*!< Intercepting HTTP redirects to handle them manually */
 } esp_http_client_event_id_t;
@@ -369,7 +369,8 @@ esp_err_t esp_http_client_set_url(esp_http_client_handle_t client, const char *u
 
 /**
  * @brief      Set post data, this function must be called before `esp_http_client_perform`.
- *             Note: The data parameter passed to this function is a pointer and this function will not copy the data
+ *             Note: Post data persists between requests and must be cleared manually.
+ *             To avoid post data carryover, set the post data to NULL before starting any subsequent requests.
  *
  * @param[in]  client  The esp_http_client handle
  * @param[in]  data    post data pointer

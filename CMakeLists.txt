@@ -175,6 +175,9 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0)
     list(APPEND c_compile_options "-fzero-init-padding-bits=all" "-fno-malloc-dce")
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER MATCHES "riscv" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0)    
     list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set
 endif()
 

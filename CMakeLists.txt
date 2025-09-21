@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(esp-idf C CXX ASM)
 
 if(CMAKE_CURRENT_LIST_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -23,6 +23,9 @@ if(BOOTLOADER_BUILD)
         endif()
         if(CMAKE_C_COMPILER_ID MATCHES "GNU")
             list(APPEND compile_options "-freorder-blocks")
+            if(CONFIG_IDF_TARGET_ARCH_XTENSA)
+                list(APPEND compile_options "-mno-target-align")
+            endif()
         endif()
     elseif(CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_DEBUG)
         list(APPEND compile_options "-Og")
@@ -54,6 +57,9 @@ else()
         endif()
         if(CMAKE_C_COMPILER_ID MATCHES "GNU")
             list(APPEND compile_options "-freorder-blocks")
+            if(CONFIG_IDF_TARGET_ARCH_XTENSA)
+                list(APPEND compile_options "-mno-target-align")
+            endif()
         endif()
     elseif(CONFIG_COMPILER_OPTIMIZATION_DEBUG)
         list(APPEND compile_options "-Og")
@@ -105,8 +111,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     list(APPEND compile_options "-Wno-char-subscripts")
     # Clang seems to notice format string issues which GCC doesn't.
     list(APPEND compile_options "-Wno-format-security")
-    # Logic bug in essl component
-    list(APPEND compile_options "-Wno-tautological-overlap-compare")
     # Some pointer checks in mDNS component check addresses which can't be NULL
     list(APPEND compile_options "-Wno-tautological-pointer-compare")
     # Similar to the above, in tcp_transport
@@ -169,6 +173,14 @@ if(CONFIG_COMPILER_DUMP_RTL_FILES)
     list(APPEND compile_options "-fdump-rtl-expand")
 endif()
 
+if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0)
+    list(APPEND c_compile_options "-fzero-init-padding-bits=all" "-fno-malloc-dce")
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0 AND CONFIG_IDF_TARGET_ARCH_RISCV)
+    list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set
+endif()
+
 __generate_prefix_map(prefix_map_compile_options)
 list(APPEND compile_options ${prefix_map_compile_options})
 
@@ -188,19 +200,13 @@ if(CONFIG_COMPILER_DISABLE_GCC14_WARNINGS)
     list(APPEND compile_options "-Wno-calloc-transposed-args")
 endif()
 
-if(CONFIG_COMPILER_ENABLE_LTO)
-    set(CMAKE_AR ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar)
-    set(CMAKE_RANLIB ${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib)
-    list(APPEND compile_options     "-flto=auto"
-                                    "-ffat-lto-objects"
-                                    "-flto-compression-level=9")
-    list(APPEND link_options        "-flto"
-                                    "-fuse-linker-plugin"
-                                    "-ffat-lto-objects"
-                                    "-flto-partition=max")
-else()
-    list(APPEND compile_options     "-fno-lto")
-    list(APPEND link_options        "-fno-lto")
+if(CONFIG_COMPILER_DISABLE_GCC15_WARNINGS)
+    list(APPEND c_compile_options "-Wno-unterminated-string-initialization")
+    list(APPEND c_compile_options "-Wno-header-guard")
+    list(APPEND cxx_compile_options "-Wno-self-move")
+    list(APPEND cxx_compile_options "-Wno-template-body")
+    list(APPEND cxx_compile_options "-Wno-dangling-reference")
+    list(APPEND cxx_compile_options "-Wno-defaulted-function-deleted")
 endif()
 
 if(CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS)

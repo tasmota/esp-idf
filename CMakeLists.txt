@@ -16,11 +16,7 @@ endif()
 if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_COMPILER_OPTIMIZATION_SIZE)
-        if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-            list(APPEND compile_options "-Oz")
-        else()
-            list(APPEND compile_options "-Os")
-        endif()
+        list(APPEND compile_options "-Os")
         if(CMAKE_C_COMPILER_ID MATCHES "GNU")
             list(APPEND compile_options "-freorder-blocks")
         endif()
@@ -38,11 +34,7 @@ if(NOT BOOTLOADER_BUILD)
 else()  # BOOTLOADER_BUILD
 
     if(CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_SIZE)
-        if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-            list(APPEND compile_options "-Oz")
-        else()
-            list(APPEND compile_options "-Os")
-        endif()
+        list(APPEND compile_options "-Os")
         if(CMAKE_C_COMPILER_ID MATCHES "GNU")
             list(APPEND compile_options "-freorder-blocks")
         endif()
@@ -96,6 +88,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     list(APPEND compile_options "-Wno-char-subscripts")
     # Clang seems to notice format string issues which GCC doesn't.
     list(APPEND compile_options "-Wno-format-security")
+    # Logic bug in essl component
+    list(APPEND compile_options "-Wno-tautological-overlap-compare")
     # Some pointer checks in mDNS component check addresses which can't be NULL
     list(APPEND compile_options "-Wno-tautological-pointer-compare")
     # Similar to the above, in tcp_transport
@@ -244,22 +238,13 @@ endif()
 
 # GCC-specific options
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    list(APPEND compile_options "-fstrict-volatile-bitfields")
-    if(CONFIG_COMPILER_STATIC_ANALYZER)
-        list(APPEND compile_options "-fanalyzer")
-    endif()
+    list(APPEND compile_options "-fstrict-volatile-bitfields"
+                                )
 endif()
 
 if(CONFIG_ESP_SYSTEM_USE_EH_FRAME)
   list(APPEND compile_options "-fasynchronous-unwind-tables")
   list(APPEND link_options "-Wl,--eh-frame-hdr")
-endif()
-
-if(CONFIG_ESP_SYSTEM_USE_FRAME_POINTER)
-    list(APPEND compile_options "-fno-omit-frame-pointer")
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-        list(APPEND compile_options "-mno-omit-leaf-frame-pointer")
-    endif()
 endif()
 
 list(APPEND link_options "-fno-lto")
@@ -315,9 +300,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU")
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    list(APPEND compile_options "-fno-use-cxa-atexit")  # TODO IDF-10934
-else()
-    list(APPEND cxx_compile_options "-fuse-cxa-atexit")
+    list(APPEND compile_options "-fno-use-cxa-atexit")
 endif()
 
 if(COMPILER_RT_LIB_NAME)

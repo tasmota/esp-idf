@@ -19,11 +19,7 @@ set(ldfragments "")
 # I2C related source files
 if(CONFIG_SOC_I2C_SUPPORTED)
     list(APPEND srcs "i2c/i2c.c")
-endif()
-
-# RMT legacy driver
-if(CONFIG_SOC_RMT_SUPPORTED)
-    list(APPEND srcs "deprecated/rmt_legacy.c")
+    list(APPEND ldfragments "i2c/linker.lf")
 endif()
 
 # Touch Sensor related source files

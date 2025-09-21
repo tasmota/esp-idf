@@ -66,6 +66,8 @@ LEDC
 
 - ``LEDC_APB_CLK_HZ`` 和 ``LEDC_REF_CLK_HZ`` 已被移除。
 
+- ``LEDC_SLOW_CLK_RTC8M`` 宏已被移除。请使用 ``LEDC_SLOW_CLK_RC_FAST`` 代替。
+
 - esp_driver_gpio 不再作为 esp_driver_ledc 的公共依赖组件。
 
 - :func:`ledc_isr_register` 已被弃用。LEDC 中断处理由驱动内部实现，如果需要注册中断回调，仅需要注册事件回调即可。
@@ -130,6 +132,13 @@ I2C 从机在 v5.4 上已经被重新设计。在当前版本上，老的 I2C �
 
     旧版的 PCNT 驱动 ``driver/pcnt.h`` 在 5.0 的版本中就已经被弃用 （参考 :ref:`deprecate_pcnt_legacy_driver`）。从 6.0 版本开始，旧版驱动被完全移除。新驱动位于 :component:`esp_driver_pcnt` 组件中，头文件引用路径为 ``driver/pulse_cnt.h``。
 
+.. only:: SOC_RMT_SUPPORTED
+
+    旧版 RMT 驱动被移除
+    ----------------------
+
+    旧版的 RMT 驱动 ``driver/rmt.h`` 在 5.0 的版本中就已经被弃用（请参考 :ref:`deprecate_rmt_legacy_driver`）。从 6.0 版本开始，旧版驱动被完全移除。新驱动位于 :component:`esp_driver_rmt` 组件中，头文件引用路径为 ``driver/rmt_tx.h``, ``driver/rmt_rx.h`` 和 ``driver/rmt_encoder.h``。
+
 GDMA
 ----
 
@@ -173,7 +182,8 @@ LCD
 - :cpp:type:`esp_lcd_panel_dev_config_t` 结构体中的 ``color_space`` 和 ``rgb_endian`` 配置均已被 :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` 成员取代，用来设置 RGB 元素的排列顺序。对应的类型 ``lcd_color_rgb_endian_t`` 和 ``esp_lcd_color_space_t`` 也已被移除，请使用 :cpp:type:`lcd_rgb_element_order_t` 替代。
 - ``esp_lcd_panel_disp_off`` 函数已被移除。请使用 :func:`esp_lcd_panel_disp_on_off` 函数来控制显示内容的开关。
 - :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` 中的 ``on_bounce_frame_finish`` 成员已被 :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete` 成员取代，用于指示一个完整的帧缓冲区已被发送给 LCD 控制器。
-- 基于旧版 I2C 的 LCD 驱动 ``driver/lcd.h`` 在 5.2 的版本中就已经被弃用。从 6.0 版本开始，基于旧版 I2C 的 LCD 驱动被完全移除并只使用基于 ``driver/i2c_master.h`` 的新驱动。
+- I2C 接口的 LCD IO 层驱动有两套实现，分别基于新、旧 I2C Master 总线驱动。由于旧版的 I2C Master 驱动逐渐被弃用，遂 LCD 的 IO 层也移除对旧版的支持，只使用 ``driver/i2c_master.h`` 中提供的 API。
+- :cpp:member:`esp_lcd_dpi_panel_config_t::pixel_format` 成员已经被废弃。建议仅使用 :cpp:member:`esp_lcd_dpi_panel_config_t::in_color_format` 来设定 MIPI DSI 驱动输入的像素数据格式。
 
 SPI
 ---
@@ -196,3 +206,7 @@ Touch Element
 
 您可以通过运行 ``idf.py add-dependency "espressif/touch_element"`` 将这个依赖添加到您的项目中。
 
+Touch Sensor
+------------
+
+第三版触摸传感器的驱动配置项 ``touch_sensor_sample_config_t::bypass_shield_output`` 已被移除，因为第三版触摸传感器硬件已不支持该功能。

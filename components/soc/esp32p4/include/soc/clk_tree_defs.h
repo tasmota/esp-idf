@@ -248,15 +248,6 @@ typedef enum {
     RMT_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F80M,  /*!< Select PLL_F80M as the default choice */
 } soc_periph_rmt_clk_src_t;
 
-/**
- * @brief Type of RMT clock source, reserved for the legacy RMT driver
- */
-typedef enum {
-    RMT_BASECLK_PLL_F80M = SOC_MOD_CLK_PLL_F80M, /*!< RMT source clock is PLL_F80M */
-    RMT_BASECLK_XTAL = SOC_MOD_CLK_XTAL,         /*!< RMT source clock is XTAL */
-    RMT_BASECLK_DEFAULT = SOC_MOD_CLK_PLL_F80M,  /*!< RMT source clock default choice is PLL_F80M */
-} soc_periph_rmt_clk_src_legacy_t;
-
 //////////////////////////////////////////////////PCNT//////////////////////////////////////////////////////////////////
 
 /**
@@ -353,13 +344,14 @@ typedef enum {
 /**
  * @brief Array initializer for all supported clock sources of I2S
  */
-#define SOC_I2S_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_APLL, I2S_CLK_SRC_EXTERNAL}
+#define SOC_I2S_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_APLL, I2S_CLK_SRC_EXTERNAL}
 
 /**
  * @brief I2S clock source enum
  */
 typedef enum {
     I2S_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,             /*!< Select XTAL as the default source clock  */
+    I2S_CLK_SRC_PLL_160M = SOC_MOD_CLK_PLL_F160M,       /*!< Select PLL_F160M as the source clock (only supported on P4 hw_ver3) */
     I2S_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,                /*!< Select XTAL as the source clock */
     I2S_CLK_SRC_APLL = SOC_MOD_CLK_APLL,                /*!< Select APLL as the source clock */
     I2S_CLK_SRC_EXTERNAL = -1,                          /*!< Select external clock as source clock */
@@ -413,7 +405,7 @@ typedef enum {
     CAM_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
 } soc_periph_cam_clk_src_t;
 
-/////////////////////////////////////////////////MIPI///////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////MIPI CSI///////////////////////////////////////////////////////////////
 
 /**
  * @brief Array initializer for all supported clock sources of MIPI CSI PHY interface
@@ -430,10 +422,12 @@ typedef enum {
     MIPI_CSI_PHY_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F20M,   /*!< Select PLL_F20M as default clock */
 } soc_periph_mipi_csi_phy_clk_src_t;
 
+/////////////////////////////////////////////////MIPI DSI///////////////////////////////////////////////////////////////
+
 /**
  * @brief Array initializer for all supported clock sources of MIPI DSI DPI interface
  */
-#define SOC_MIPI_DSI_DPI_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_PLL_F240M}
+#define SOC_MIPI_DSI_DPI_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_PLL_F240M, SOC_MOD_CLK_APLL}
 
 /**
  * @brief Type of MIPI DSI DPI clock source
@@ -442,23 +436,46 @@ typedef enum {
     MIPI_DSI_DPI_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,            /*!< Select XTAL as MIPI DSI DPI source clock */
     MIPI_DSI_DPI_CLK_SRC_PLL_F160M = SOC_MOD_CLK_PLL_F160M,  /*!< Select PLL_F160M as MIPI DSI DPI source clock */
     MIPI_DSI_DPI_CLK_SRC_PLL_F240M = SOC_MOD_CLK_PLL_F240M,  /*!< Select PLL_F240M as MIPI DSI DPI source clock */
+    MIPI_DSI_DPI_CLK_SRC_APLL = SOC_MOD_CLK_APLL,            /*!< Select APLL as MIPI DSI DPI source clock */
     MIPI_DSI_DPI_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F240M,    /*!< Select PLL_F240M as default clock */
 } soc_periph_mipi_dsi_dpi_clk_src_t;
 
 /**
- * @brief Array initializer for all supported clock sources of MIPI DSI PHY interface
- */
-#define SOC_MIPI_DSI_PHY_CLKS {SOC_MOD_CLK_RC_FAST, SOC_MOD_CLK_PLL_F25M, SOC_MOD_CLK_PLL_F20M}
-
-/**
- * @brief Type of MIPI DSI PHY clock source
+ * @brief Type of MIPI DSI PHY configuration clock source
  */
 typedef enum {
-    MIPI_DSI_PHY_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,    /*!< Select RC_FAST as MIPI DSI PHY source clock */
-    MIPI_DSI_PHY_CLK_SRC_PLL_F25M = SOC_MOD_CLK_PLL_F25M,  /*!< Select PLL_F25M as MIPI DSI PHY source clock */
-    MIPI_DSI_PHY_CLK_SRC_PLL_F20M = SOC_MOD_CLK_PLL_F20M,  /*!< Select PLL_F20M as MIPI DSI PHY source clock */
-    MIPI_DSI_PHY_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F20M,   /*!< Select PLL_F20M as default clock */
-} soc_periph_mipi_dsi_phy_clk_src_t;
+    MIPI_DSI_PHY_CFG_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,   /*!< Select RC_FAST as MIPI DSI PHY configuration source clock */
+    MIPI_DSI_PHY_CFG_CLK_SRC_PLL_F25M = SOC_MOD_CLK_PLL_F25M, /*!< Select PLL_F25M as MIPI DSI PHY configuration source clock */
+    MIPI_DSI_PHY_CFG_CLK_SRC_PLL_F20M = SOC_MOD_CLK_PLL_F20M, /*!< Select PLL_F20M as MIPI DSI PHY configuration source clock */
+    MIPI_DSI_PHY_CFG_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F20M,  /*!< Select PLL_F20M as default clock */
+} soc_periph_mipi_dsi_phy_cfg_clk_src_t;
+
+/**
+ * @brief Type of MIPI DSI PHY PLL reference clock source
+ */
+typedef enum {
+    // only available on esp32p4 version < 3.0
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,   /*!< Select RC_FAST as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_PLL_F25M = SOC_MOD_CLK_PLL_F25M, /*!< Select PLL_F25M as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_PLL_F20M = SOC_MOD_CLK_PLL_F20M, /*!< Select PLL_F20M as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_DEFAULT_LEGACY = SOC_MOD_CLK_PLL_F20M,  /*!< Select PLL_F20M as default clock */
+
+    // only available on esp32p4 version >= 3.0
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,    /*!< Select XTAL as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_APLL = SOC_MOD_CLK_APLL,    /*!< Select APLL as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_CPLL = SOC_MOD_CLK_CPLL,    /*!< Select CPLL as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_SPLL = SOC_MOD_CLK_SPLL,    /*!< Select SPLL as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_MPLL = SOC_MOD_CLK_MPLL,    /*!< Select MPLL as MIPI DSI PHY PLL reference clock */
+    MIPI_DSI_PHY_PLLREF_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL, /*!< Select XTAL as default clock */
+} soc_periph_mipi_dsi_phy_pllref_clk_src_t;
+
+/**
+ * @brief For backward compatibility, old macro definitions are kept. Remove it in the next major release (esp-idf v7.0)
+ */
+#define MIPI_DSI_PHY_CLK_SRC_RC_FAST SOC_MOD_CLK_RC_FAST
+#define MIPI_DSI_PHY_CLK_SRC_PLL_F25M SOC_MOD_CLK_PLL_F25M
+#define MIPI_DSI_PHY_CLK_SRC_PLL_F20M SOC_MOD_CLK_PLL_F20M
+#define MIPI_DSI_PHY_CLK_SRC_DEFAULT SOC_MOD_CLK_PLL_F20M
 
 /////////////////////////////////////////////////I2C////////////////////////////////////////////////////////////////////
 

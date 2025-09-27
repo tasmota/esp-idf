@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#if CONFIG_NEWLIB_NANO_FORMAT
+#if CONFIG_LIBC_NEWLIB_NANO_FORMAT
 #define NEWLIB_NANO_COMPAT_FORMAT            PRIu32
 #define NEWLIB_NANO_COMPAT_CAST(size_t_var)  (uint32_t)size_t_var
 #else
@@ -36,6 +36,19 @@ extern "C" {
 
 /* Formats a log string to prepend context function name */
 #define LOG_FMT(x)      "%s: " x, __func__
+
+/**
+ * @brief Control message data structure for internal use. Sent to control socket.
+ */
+struct httpd_ctrl_data {
+    enum httpd_ctrl_msg {
+        HTTPD_CTRL_SHUTDOWN,
+        HTTPD_CTRL_WORK,
+        HTTPD_CTRL_MAX,
+    } hc_msg;
+    httpd_work_fn_t hc_work;
+    void *hc_work_arg;
+};
 
 /**
  * @brief Thread related data for internal use

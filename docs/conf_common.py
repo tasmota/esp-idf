@@ -115,7 +115,9 @@ BITSCRAMBLER_DOCS = ['api-reference/peripherals/bitscrambler.rst']
 
 CLK_TREE_DOCS = ['api-reference/peripherals/clk_tree.rst']
 
-UART_DOCS = ['api-reference/peripherals/uart.rst', 'api-reference/peripherals/uhci.rst']
+UART_DOCS = ['api-reference/peripherals/uart.rst']
+
+UHCI_DOCS = ['api-reference/peripherals/uhci.rst']
 
 SDMMC_DOCS = ['api-reference/peripherals/sdmmc_host.rst']
 
@@ -267,7 +269,6 @@ ESP32S2_DOCS = (
         'hw-reference/esp32s2/**',
         'api-guides/usb-console.rst',
         'api-reference/peripherals/ds.rst',
-        'api-reference/peripherals/touch_element.rst',
         'api-guides/RF_calibration.rst',
         'api-guides/phy.rst',
     ]
@@ -282,7 +283,6 @@ ESP32S3_DOCS = (
         'api-reference/system/ipc.rst',
         'api-guides/flash_psram_config.rst',
         'api-reference/peripherals/sd_pullup_requirements.rst',
-        'api-reference/peripherals/touch_element.rst',
         'api-guides/RF_calibration.rst',
         'api-guides/phy.rst',
     ]
@@ -340,6 +340,7 @@ conditional_include_dict = {
     'SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE': MM_SYNC_DOCS,
     'SOC_CLK_TREE_SUPPORTED': CLK_TREE_DOCS,
     'SOC_UART_SUPPORTED': UART_DOCS,
+    'SOC_UHCI_SUPPORTED': UHCI_DOCS,
     'SOC_SDMMC_HOST_SUPPORTED': SDMMC_DOCS,
     'SOC_SDIO_SLAVE_SUPPORTED': SDIO_SLAVE_DOCS,
     'SOC_MCPWM_SUPPORTED': MCPWM_DOCS,

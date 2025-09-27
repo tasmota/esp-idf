@@ -526,6 +526,10 @@ function(__idf_build_binary OUTPUT_BIN_FILENAME TARGET_NAME)
     idf_build_get_property(elf EXECUTABLE GENERATOR_EXPRESSION)
     idf_component_get_property(esptool_py_cmd esptool_py ESPTOOLPY_CMD)
 
+    # Collect post-ELF dependencies for the current ELF file
+    idf_build_get_property(elf_name EXECUTABLE_NAME)
+    idf_build_get_post_elf_dependencies("${elf_name}.elf" post_elf_deps)
+
     # Get esptool.py arguments for elf2image target
     idf_component_get_property(esptool_elf2image_args esptool_py ESPTOOL_PY_ELF2IMAGE_ARGS)
 
@@ -535,7 +539,7 @@ function(__idf_build_binary OUTPUT_BIN_FILENAME TARGET_NAME)
             -o "${build_dir}/${OUTPUT_BIN_FILENAME}" "$<TARGET_FILE:$<GENEX_EVAL:${elf}>>"
         COMMAND ${CMAKE_COMMAND} -E echo "Generated ${build_dir}/${OUTPUT_BIN_FILENAME}"
         COMMAND ${CMAKE_COMMAND} -E md5sum "${build_dir}/${OUTPUT_BIN_FILENAME}" > "${build_dir}/.bin_timestamp"
-        DEPENDS "$<TARGET_FILE:$<GENEX_EVAL:${elf}>>"
+        DEPENDS "$<TARGET_FILE:$<GENEX_EVAL:${elf}>>" ${post_elf_deps}
         VERBATIM
         WORKING_DIRECTORY ${build_dir}
         COMMENT "Generating binary image from built executable"
@@ -741,39 +745,6 @@ function(__esptool_py_setup_utility_targets)
         )
 endfunction()
 
-# __esptool_py_setup_main_flash_target
-#
-# @brief Sets up the main `flash` target and its dependencies.
-#
-# This function creates the main `flash` target, which is used to flash multiple
-# images to the target device. It determines the dependencies for a full
-# project flash (bootloader, partition table, the main app) and then calls
-#
-function(__esptool_py_setup_main_flash_target)
-    __ensure_esptool_py_setup()
-
-    idf_build_get_property(non_os_build NON_OS_BUILD)
-
-    if(NOT non_os_build)
-        set(flash_deps "")
-
-        if(CONFIG_APP_BUILD_TYPE_APP_2NDBOOT)
-            list(APPEND flash_deps "partition_table_bin")
-        endif()
-
-        if(CONFIG_APP_BUILD_GENERATE_BINARIES)
-            list(APPEND flash_deps "app")
-        endif()
-
-        if(CONFIG_APP_BUILD_BOOTLOADER)
-            list(APPEND flash_deps "bootloader")
-        endif()
-
-        # Create the flash target. If encryption is enabled, it will also create
-        # an encrypted-flash target.
-        esptool_py_custom_target(flash project "${flash_deps}" FILENAME_PREFIX "flash")
-    endif()
-endfunction()
 
 # Adds espefuse functions for global use
 idf_component_get_property(esptool_py_dir esptool_py COMPONENT_DIR)

@@ -195,7 +195,7 @@
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (118)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (9)
 #elif CONFIG_IDF_TARGET_ESP32H4
-#define DEFAULT_SLEEP_OUT_OVERHEAD_US       (118)
+#define DEFAULT_SLEEP_OUT_OVERHEAD_US       (130)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (9)
 #elif CONFIG_IDF_TARGET_ESP32P4
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US           (324)
@@ -325,7 +325,7 @@ static bool s_light_sleep_wakeup = false;
    is not thread-safe, so we need to disable interrupts before going to deep sleep. */
 static portMUX_TYPE __attribute__((unused)) spinlock_rtc_deep_sleep = portMUX_INITIALIZER_UNLOCKED;
 
-static const char *TAG = "sleep";
+ESP_LOG_ATTR_TAG(TAG, "sleep");
 
 /* APP core of esp32 can't access to RTC FAST MEMORY, do not define it with RTC_IRAM_ATTR */
 RTC_SLOW_ATTR static int32_t s_sleep_sub_mode_ref_cnt[ESP_SLEEP_MODE_MAX] = { 0 };
@@ -1052,7 +1052,7 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
 #elif CONFIG_ULP_COPROC_TYPE_RISCV
     if (s_config.wakeup_triggers & (RTC_COCPU_TRIG_EN | RTC_COCPU_TRAP_TRIG_EN)) {
 #elif CONFIG_ULP_COPROC_TYPE_LP_CORE
-    if (s_config.wakeup_triggers & RTC_LP_CORE_TRIG_EN) {
+    if (s_config.wakeup_triggers & (RTC_LP_CORE_TRIG_EN | RTC_LP_CORE_TRAP_TRIG_EN)) {
 #endif
 #ifdef CONFIG_IDF_TARGET_ESP32
         rtc_hal_ulp_wakeup_enable();
@@ -1172,7 +1172,6 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     {
         rtc_clk_cpu_freq_set_config(&cpu_freq_config);
     }
-
     esp_sleep_execute_event_callbacks(SLEEP_EVENT_SW_CLK_READY, (void *)0);
 
     if (!deep_sleep) {
@@ -1753,7 +1752,11 @@ esp_err_t esp_sleep_enable_ulp_wakeup(void)
     s_config.wakeup_triggers |= (RTC_COCPU_TRIG_EN | RTC_COCPU_TRAP_TRIG_EN);
     return ESP_OK;
 #elif CONFIG_ULP_COPROC_TYPE_LP_CORE
-    s_config.wakeup_triggers |= RTC_LP_CORE_TRIG_EN;
+    #if CONFIG_ULP_TRAP_WAKEUP
+        s_config.wakeup_triggers |= RTC_LP_CORE_TRIG_EN | RTC_LP_CORE_TRAP_TRIG_EN;
+    #else
+        s_config.wakeup_triggers |= RTC_LP_CORE_TRIG_EN;
+    #endif
     return ESP_OK;
 #else
     return ESP_ERR_NOT_SUPPORTED;
@@ -2340,6 +2343,8 @@ esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause(void)
 #if SOC_LP_CORE_SUPPORTED
     } else if (wakeup_cause & RTC_LP_CORE_TRIG_EN) {
         return ESP_SLEEP_WAKEUP_ULP;
+    } else if (wakeup_cause & RTC_LP_CORE_TRAP_TRIG_EN) {
+        return ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG;
 #endif
 #if SOC_LP_VAD_SUPPORTED
     } else if (wakeup_cause & RTC_LP_VAD_TRIG_EN) {
@@ -2427,6 +2432,9 @@ uint32_t esp_sleep_get_wakeup_causes(void)
 #if SOC_LP_CORE_SUPPORTED
     if (wakeup_cause_raw & RTC_LP_CORE_TRIG_EN) {
         wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_ULP);
+    }
+    if (wakeup_cause_raw & RTC_LP_CORE_TRAP_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG);
     }
 #endif
 #if SOC_LP_VAD_SUPPORTED

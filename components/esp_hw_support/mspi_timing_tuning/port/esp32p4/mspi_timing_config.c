@@ -18,14 +18,14 @@
 #include "hal/mspi_ll.h"
 #include "soc/hp_sys_clkrst_struct.h"
 
-const static char *TAG = "MSPI Timing";
+ESP_LOG_ATTR_TAG(TAG, "MSPI Timing");
 
 //-------------------------------------MSPI Clock Setting-------------------------------------//
 void mspi_timing_config_set_psram_clock(uint32_t psram_freq_mhz, mspi_timing_speed_mode_t speed_mode, bool control_both_mspi)
 {
     uint32_t freqdiv = MSPI_TIMING_MPLL_FREQ_MHZ / MSPI_TIMING_CORE_CLOCK_DIV / psram_freq_mhz;
     assert(freqdiv > 0);
-    ESP_EARLY_LOGD(TAG, "psram_freq_mhz: %" PRIu32 " mhz, bus clock div: %" PRIu32, psram_freq_mhz, freqdiv);
+    ESP_DRAM_LOGD(TAG, "psram_freq_mhz: %" PRIu32 " mhz, bus clock div: %" PRIu32, psram_freq_mhz, freqdiv);
     PERIPH_RCC_ATOMIC() {
     	//MSPI2 and MSPI3 share the register for core clock. So we only set MSPI2 here.
         psram_ctrlr_ll_enable_core_clock(PSRAM_CTRLR_LL_MSPI_ID_2, true);

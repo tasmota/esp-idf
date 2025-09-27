@@ -74,12 +74,12 @@ lwip_component:
     - BSD-3-Clause
   license_for_new_files: Apache-2.0
 
-newlib_component:
+esp_libc_component:
   include:
-    - 'components/newlib/platform_include/**'
-    - 'components/newlib/port/**'
-    - 'components/newlib/priv_include/**'
-    - 'components/newlib/src/**'
+    - 'components/esp_libc/platform_include/**'
+    - 'components/esp_libc/port/**'
+    - 'components/esp_libc/priv_include/**'
+    - 'components/esp_libc/src/**'
   allowed_licenses:
     - Apache-2.0
     - BSD-2-Clause-FreeBSD AND Apache-2.0
@@ -175,8 +175,8 @@ app_trace:
     - components/app_trace/app_trace.c
     - components/app_trace/app_trace_membufs_proto.c
     - components/app_trace/app_trace_util.c
-    - components/app_trace/port/riscv/port.c
-    - components/app_trace/port/xtensa/port.c
+    - components/app_trace/port/riscv/port_jtag.c
+    - components/app_trace/port/xtensa/port_jtag.c
   allowed_licenses:
     - Apache-2.0
     - MIT

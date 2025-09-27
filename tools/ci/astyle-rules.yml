@@ -86,7 +86,6 @@ components_not_formatted_temporary:
     - "/components/spi_flash/"
     - "/components/spiffs/"
     - "/components/tcp_transport/"
-    - "/components/touch_element/"
     - "/components/unity/"
     - "/components/vfs/"
     - "/components/wear_levelling/"
@@ -112,7 +111,6 @@ components_not_formatted_temporary:
     - "/tools/esp_app_trace/test/"
     - "/tools/mocks/"
     - "/tools/test_apps/"
-    - "/tools/unit-test-app/"
 
 components_not_formatted_permanent:
   # Files which are not supposed to be formatted.
@@ -136,8 +134,6 @@ components_not_formatted_permanent:
     - "/components/console/argtable3/"
     # Linenoise (upstream source code)
     - "/components/console/linenoise/"
-    # Catch (upstream source code)
-    - "/tools/catch/catch.hpp"
     # FreeRTOS kernel files (upstream source code)
     - "/components/freertos/FreeRTOS-Kernel/"
     - "/components/freertos/FreeRTOS-Kernel-SMP/"

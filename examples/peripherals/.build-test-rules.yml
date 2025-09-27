@@ -121,6 +121,16 @@ examples/peripherals/i2c/i2c_tools:
   depends_filepatterns:
     - examples/system/console/advanced/components/**/*
 
+examples/peripherals/i2c/i2c_u8g2:
+  disable:
+    - if: SOC_I2C_SUPPORTED != 1
+  depends_components:
+    - esp_driver_i2c
+  disable_test:
+    - if: IDF_TARGET not in ["esp32c3"]
+      temporary: true
+      reason: lack of runners
+
 examples/peripherals/i2s/i2s_advance/i2s_usb:
   disable:
     - if: SOC_I2S_SUPPORTED != 1
@@ -486,11 +496,6 @@ examples/peripherals/touch_sensor:
   disable:
     - if: SOC_TOUCH_SENSOR_SUPPORTED != 1
 
-examples/peripherals/touch_sensor/touch_element:
-  enable:
-    - if: IDF_TARGET in ["esp32s2", "esp32s3"]
-      reason: only supports esp32s2 and esp32s3
-
 examples/peripherals/touch_sensor/touch_sens_basic:
   disable:
     - if: SOC_TOUCH_SENSOR_SUPPORTED != 1
@@ -518,9 +523,6 @@ examples/peripherals/twai/twai_error_recovery:
 examples/peripherals/twai/twai_network:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32"
-      reason: esp32c5,esp32 test has been disabled, because C5 twai don't support listen only in network test, see errata issue 5
   depends_components:
     - esp_driver_twai
 

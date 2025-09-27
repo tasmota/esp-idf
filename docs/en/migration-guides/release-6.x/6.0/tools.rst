@@ -53,3 +53,17 @@ The minimal supported CMake version has been upgraded to 3.22.1. In case you enc
 If updating the OS is not possible, you can install a recommended CMake version using the following command: ``./tools/idf_tools.py install cmake``.
 
 This affects ESP-IDF users who use system-provided CMake and custom CMake.
+
+Unit-Test-App
+-------------
+
+The legacy unit-test-app has been moved out of ESP-IDF repository as no ESP-IDF component longer uses it for running tests. It is now available at the `component registry <https://components.espressif.com/components/espressif/unit-test-app>`_ and a test app can be created using the ``idf.py create-project-from-example`` command:
+
+.. code-block:: bash
+
+    idf.py create-project-from-example espressif/unit-test-app:unit-test-app
+
+Catch
+-----
+
+The header-only copy of Catch2 unit testing library previously located in tools/catch directory has been removed. To continue using Catch2 in your project, migrate to Catch2 3.x, available from the `ESP component registry <https://components.espressif.com/components/espressif/catch2>`_. For an example of migrating from Catch2 2.x to Catch2 3.x, see commit 79a2c15477dc327550ff46a64ee0f8b4679cc417.

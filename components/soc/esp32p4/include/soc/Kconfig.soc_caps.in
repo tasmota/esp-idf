@@ -607,6 +607,10 @@ config SOC_GDMA_PAIRS_PER_GROUP_MAX
     int
     default 3
 
+config SOC_AHB_GDMA_SUPPORT_PSRAM
+    bool
+    default y
+
 config SOC_AXI_GDMA_SUPPORT_PSRAM
     bool
     default y
@@ -740,18 +744,6 @@ config SOC_RTCIO_WAKE_SUPPORTED
     default y
 
 config SOC_RTCIO_EDGE_WAKE_SUPPORTED
-    bool
-    default y
-
-config SOC_DEDIC_GPIO_OUT_CHANNELS_NUM
-    int
-    default 8
-
-config SOC_DEDIC_GPIO_IN_CHANNELS_NUM
-    int
-    default 8
-
-config SOC_DEDIC_PERIPH_ALWAYS_ENABLE
     bool
     default y
 
@@ -923,7 +915,15 @@ config SOC_ISP_BF_SUPPORTED
     bool
     default y
 
+config SOC_ISP_BLC_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_CCM_SUPPORTED
+    bool
+    default y
+
+config SOC_ISP_COLOR_SUPPORTED
     bool
     default y
 
@@ -935,15 +935,11 @@ config SOC_ISP_DVP_SUPPORTED
     bool
     default y
 
-config SOC_ISP_SHARPEN_SUPPORTED
-    bool
-    default y
-
-config SOC_ISP_COLOR_SUPPORTED
-    bool
-    default y
-
 config SOC_ISP_LSC_SUPPORTED
+    bool
+    default y
+
+config SOC_ISP_SHARPEN_SUPPORTED
     bool
     default y
 
@@ -1146,22 +1142,6 @@ config SOC_MPU_REGION_RO_SUPPORTED
 config SOC_MPU_REGION_WO_SUPPORTED
     bool
     default n
-
-config SOC_PCNT_GROUPS
-    int
-    default 1
-
-config SOC_PCNT_UNITS_PER_GROUP
-    int
-    default 4
-
-config SOC_PCNT_CHANNELS_PER_UNIT
-    int
-    default 2
-
-config SOC_PCNT_THRES_POINT_PER_UNIT
-    int
-    default 2
 
 config SOC_PCNT_SUPPORT_RUNTIME_THRES_UPDATE
     bool

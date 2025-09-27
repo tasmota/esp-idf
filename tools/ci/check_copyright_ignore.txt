@@ -470,8 +470,6 @@ components/lwip/apps/ping/ping.c
 components/lwip/include/apps/esp_ping.h
 components/lwip/include/apps/ping/ping.h
 components/mbedtls/esp_crt_bundle/test_gen_crt_bundle/test_gen_crt_bundle.py
-components/mbedtls/port/aes/block/esp_aes.c
-components/mbedtls/port/aes/dma/esp_aes.c
 components/mbedtls/port/aes/esp_aes_xts.c
 components/mbedtls/port/include/aes/esp_aes.h
 components/mbedtls/port/include/aes_alt.h
@@ -958,7 +956,6 @@ examples/wifi/wps/main/wps.c
 tools/ble/lib_ble_client.py
 tools/ble/lib_gap.py
 tools/ble/lib_gatt.py
-tools/catch/catch.hpp
 tools/ldgen/samples/template.ld
 tools/ldgen/test/data/linker_script.ld
 tools/test_apps/build_system/embed_test/main/test_main.c

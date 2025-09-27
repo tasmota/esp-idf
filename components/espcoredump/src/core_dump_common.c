@@ -5,13 +5,11 @@
  */
 #include "sdkconfig.h"
 
-#if CONFIG_ESP_COREDUMP_ENABLE
-
 #include <string.h>
 #include <stdbool.h>
 #include "soc/soc_memory_layout.h"
 #include "freertos/FreeRTOS.h"
-#include "esp_private/freertos_debug.h"
+#include "freertos/freertos_debug.h"
 #include "esp_rom_sys.h"
 #include "esp_core_dump_port.h"
 #include "esp_core_dump_common.h"
@@ -345,5 +343,3 @@ void esp_core_dump_write(panic_info_t *info)
     esp_core_dump_write_internal(info);
     esp_core_dump_print_write_end();
 }
-
-#endif // CONFIG_ESP_COREDUMP_ENABLE

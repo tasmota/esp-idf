@@ -143,8 +143,6 @@
 #define SOC_CPU_BREAKPOINTS_NUM             8
 #define SOC_CPU_WATCHPOINTS_NUM             8
 #define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE  0x80000000 // bytes
-// DIG-694: misaligned access across PMP regions must be spaced at least by two instructions
-#define SOC_CPU_MISALIGNED_ACCESS_ON_PMP_MISMATCH_ISSUE 1
 
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
 /** The maximum length of a Digital Signature in bits. */
@@ -194,11 +192,6 @@
 
 // "RTC"_IOs and DIG_IOs can be hold during deep sleep and after waking up
 #define SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP (1)
-
-/*-------------------------- Dedicated GPIO CAPS -----------------------------*/
-#define SOC_DEDIC_GPIO_OUT_CHANNELS_NUM (8) /*!< 8 outward channels on each CPU core */
-#define SOC_DEDIC_GPIO_IN_CHANNELS_NUM  (8) /*!< 8 inward channels on each CPU core */
-#define SOC_DEDIC_PERIPH_ALWAYS_ENABLE  (1) /*!< The dedicated GPIO (a.k.a. fast GPIO) is featured by some customized CPU instructions, which is always enabled */
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-C3 has 1 I2C

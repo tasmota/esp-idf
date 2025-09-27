@@ -130,15 +130,8 @@
 
     MII 和 RMII 的一个明显区别在于其所需的信号数。MII 通常需要多达 18 个信号，RMII 接口则仅需要 9 个信号。
 
-    .. only:: esp32
-
-        .. note::
-            ESP-IDF 只支持 RMII 接口，所以请将 :cpp:member:`eth_esp32_emac_config_t::interface` 设置为 :cpp:enumerator:`eth_data_interface_t::EMAC_DATA_INTERFACE_RMII` 或在 Kconfig 选项 :ref:`CONFIG_ETH_PHY_INTERFACE` 中选择 ``CONFIG_ETH_PHY_INTERFACE_RMII``。
-
-    .. only:: not esp32
-
-        .. note::
-            ESP-IDF 只支持 RMII 接口，所以请将 :cpp:member:`eth_esp32_emac_config_t::interface` 设置为 :cpp:enumerator:`eth_data_interface_t::EMAC_DATA_INTERFACE_RMII`。
+    .. note::
+        ESP-IDF 只支持 RMII 接口，所以请将 :cpp:member:`eth_esp32_emac_config_t::interface` 设置为 :cpp:enumerator:`eth_data_interface_t::EMAC_DATA_INTERFACE_RMII`。
 
     在 RMII 模式下，接收器和发射器信号的参考时钟为 ``REF_CLK``。 **在访问 PHY 和 MAC 时，REF_CLK 必须保持稳定**。一般来说，根据设计中 PHY 设备的特征，可通过以下三种方式生成 ``REF_CLK``：
 
@@ -150,15 +143,13 @@
 
     .. only:: esp32
 
-        .. note::
-            使用 :c:macro:`ETH_ESP32_EMAC_DEFAULT_CONFIG` 宏初始化 :cpp:class:`eth_esp32_emac_config_t` 时，也可以通过项目配置来配置 ``REF_CLK``。在项目配置中，根据上述个人设计，在 :ref:`CONFIG_ETH_RMII_CLK_MODE` 配置下选择适当的选项， ``CONFIG_ETH_RMII_CLK_INPUT`` 或是 ``CONFIG_ETH_RMII_CLK_OUTPUT``。
-
         .. warning::
-            如果配置 RMII 时钟模式为 :cpp:enumerator:`emac_rmii_clock_mode_t::EMAC_CLK_OUT` （或是选择 ``CONFIG_ETH_RMII_CLK_OUTPUT``，那么就可以使用  ``GPIO0`` 输出 ``REF_CLK`` 信号。更多细节，请参见 :cpp:enumerator:`emac_rmii_clock_gpio_t::EMAC_APPL_CLK_OUT_GPIO` 或是 :ref:`CONFIG_ETH_RMII_CLK_OUTPUT_GPIO0`。
+            如果将 RMII 时钟模式配置为 :cpp:enumerator:`emac_rmii_clock_mode_t::EMAC_CLK_OUT`，则会使用内部音频 PLL (APLL) 时钟作为 50 MHz 时钟源。因此，请确保该配置不会与 I2S 总线的配置发生冲突。
 
-            值得一提的是，如果设计中并未使用 PSRAM，则 GPIO16 和 GPIO17 也可以用来输出参考时钟。更多细节，请参见 :cpp:enumerator:`emac_rmii_clock_gpio_t::EMAC_CLK_OUT_GPIO` 和 :cpp:enumerator:`emac_rmii_clock_gpio_t::EMAC_CLK_OUT_180_GPIO`，或是 :ref:`CONFIG_ETH_RMII_CLK_OUT_GPIO`。
+            当选择内部时钟时，可以使用 ``GPIO0`` 输出 ``REF_CLK`` 信号。然而，在这种情况下时钟是直接输出到 GPIO 的，因此与 EMAC 外设并没有直接关联。有时这种配置可能无法很好地兼容所使用的 PHY 芯片。如果设计中未使用 PSRAM，则还可以使用 GPIO16 和 GPIO17 来输出参考时钟信号。其时钟源相同（均来自 APLL），但这些信号是通过 EMAC 外设引出的。
 
-            如果配置 RMII 时钟模式为 :cpp:enumerator:`emac_rmii_clock_mode_t::EMAC_CLK_EXT_IN` （或是选择 ``CONFIG_ETH_RMII_CLK_INPUT``，那么只能选择 ``GPIO0`` 输入 ``REF_CLK`` 信号。请注意， ``GPIO0`` 同时也是 ESP32 上一个重要的 strapping GPIO 管脚。如果上电时 GPIO0 为低电平，则 ESP32 将进入下载模式，需进行手动复位重启系统。解决这个问题的方法是，在硬件中默认禁用 ``REF_CLK``，从而避免 strapping 管脚在启动阶段受到其他信号的干扰。随后，再在以太网驱动安装阶段重新启用 ``REF_CLK``。
+
+            如果配置 RMII 时钟模式为 :cpp:enumerator:`emac_rmii_clock_mode_t::EMAC_CLK_EXT_IN`，那么只能选择 ``GPIO0`` 输入 ``REF_CLK`` 信号。请注意， ``GPIO0`` 同时也是 ESP32 上一个重要的 strapping GPIO 管脚。如果上电时 GPIO0 为低电平，则 ESP32 将进入下载模式，需进行手动复位重启系统。解决这个问题的方法是，在硬件中默认禁用 ``REF_CLK``，从而避免 strapping 管脚在启动阶段受到其他信号的干扰。随后，再在以太网驱动安装阶段重新启用 ``REF_CLK``。
 
             可以通过以下方法禁用 ``REF_CLK`` 信号：
 
@@ -306,13 +297,13 @@ ESP-IDF 在宏 :c:macro:`ETH_MAC_DEFAULT_CONFIG` 和 :c:macro:`ETH_PHY_DEFAULT_C
 
         eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();                      // 应用默认的通用 MAC 配置
         eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG(); // 应用默认的供应商特定 MAC 配置
-        esp32_emac_config.smi_gpio.mdc_num = CONFIG_EXAMPLE_ETH_MDC_GPIO;            // 更改用于 MDC 信号的 GPIO
-        esp32_emac_config.smi_gpio.mdio_num = CONFIG_EXAMPLE_ETH_MDIO_GPIO;          // 更改用于 MDIO 信号的 GPIO
+        esp32_emac_config.smi_gpio.mdc_num = CONFIG_ETHERNET_MDC_GPIO;               // 更改用于 MDC 信号的 GPIO
+        esp32_emac_config.smi_gpio.mdio_num = CONFIG_ETHERNET_MDIO_GPIO;             // 更改用于 MDIO 信号的 GPIO
         esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config); // 创建 MAC 实例
 
         eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();      // 应用默认的 PHY 配置
-        phy_config.phy_addr = CONFIG_EXAMPLE_ETH_PHY_ADDR;           // 根据开发板设计更改 PHY 地址
-        phy_config.reset_gpio_num = CONFIG_EXAMPLE_ETH_PHY_RST_GPIO; // 更改用于 PHY 复位的 GPIO
+        phy_config.phy_addr = CONFIG_ETHERNET_PHY_ADDR;              // 根据开发板设计更改 PHY 地址
+        phy_config.reset_gpio_num = CONFIG_ETHERNET_PHY_RST_GPIO;    // 更改用于 PHY 复位的 GPIO
         esp_eth_phy_t *phy = esp_eth_phy_new_generic(&phy_config);     // 创建通用 PHY 实例
         // ESP-IDF 为数种特定以太网 PHY 芯片驱动提供官方支持
         // esp_eth_phy_t *phy = esp_eth_phy_new_ip101(&phy_config);
@@ -351,30 +342,30 @@ SPI-Ethernet 模块
 
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();      // 应用默认的通用 MAC 配置
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();      // 应用默认的 PHY 配置
-    phy_config.phy_addr = CONFIG_EXAMPLE_ETH_PHY_ADDR;           // 根据开发板设计更改 PHY 地址
-    phy_config.reset_gpio_num = CONFIG_EXAMPLE_ETH_PHY_RST_GPIO; // 更改用于 PHY 复位的 GPIO
+    phy_config.phy_addr = CONFIG_ETHERNET_PHY_ADDR;              // 根据开发板设计更改 PHY 地址
+    phy_config.reset_gpio_num = CONFIG_ETHERNET_PHY_RST_GPIO;    // 更改用于 PHY 复位的 GPIO
     // 安装 GPIO 中断服务（因为 SPI-Ethernet 模块为中断驱动）
     gpio_install_isr_service(0);
     // 配置 SPI 总线
     spi_device_handle_t spi_handle = NULL;
     spi_bus_config_t buscfg = {
-        .miso_io_num = CONFIG_EXAMPLE_ETH_SPI_MISO_GPIO,
-        .mosi_io_num = CONFIG_EXAMPLE_ETH_SPI_MOSI_GPIO,
-        .sclk_io_num = CONFIG_EXAMPLE_ETH_SPI_SCLK_GPIO,
+        .miso_io_num = CONFIG_ETHERNET_SPI_MISO_GPIO,
+        .mosi_io_num = CONFIG_ETHERNET_SPI_MOSI_GPIO,
+        .sclk_io_num = CONFIG_ETHERNET_SPI_SCLK_GPIO,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
     };
-    ESP_ERROR_CHECK(spi_bus_initialize(CONFIG_EXAMPLE_ETH_SPI_HOST, &buscfg, 1));
+    ESP_ERROR_CHECK(spi_bus_initialize(CONFIG_ETHERNET_SPI_HOST, &buscfg, 1));
     // 配置 SPI 从机设备
     spi_device_interface_config_t spi_devcfg = {
         .mode = 0,
-        .clock_speed_hz = CONFIG_EXAMPLE_ETH_SPI_CLOCK_MHZ * 1000 * 1000,
-        .spics_io_num = CONFIG_EXAMPLE_ETH_SPI_CS_GPIO,
+        .clock_speed_hz = CONFIG_ETHERNET_SPI_CLOCK_MHZ * 1000 * 1000,
+        .spics_io_num = CONFIG_ETHERNET_SPI_CS_GPIO,
         .queue_size = 20
     };
     /* dm9051 ethernet driver is based on spi driver */
-    eth_dm9051_config_t dm9051_config = ETH_DM9051_DEFAULT_CONFIG(CONFIG_EXAMPLE_ETH_SPI_HOST, &spi_devcfg);
-    dm9051_config.int_gpio_num = CONFIG_EXAMPLE_ETH_SPI_INT_GPIO;
+    eth_dm9051_config_t dm9051_config = ETH_DM9051_DEFAULT_CONFIG(CONFIG_ETHERNET_SPI_HOST, &spi_devcfg);
+    dm9051_config.int_gpio_num = CONFIG_ETHERNET_SPI_INT_GPIO;
     esp_eth_mac_t *mac = esp_eth_mac_new_dm9051(&dm9051_config, &mac_config);
     esp_eth_phy_t *phy = esp_eth_phy_new_dm9051(&phy_config);
 

@@ -10,6 +10,7 @@ This example demonstrates how to use the ISP (image signal processor) to work wi
 
 - ISP AF (auto-focus) feature
 - ISP BF (bayer denoise) feature
+- ISP BLC (black level correction) feature
 - ISP Sharpen feature
 - ISP Demosaic feature
 - ISP GAMMA feature
@@ -29,7 +30,7 @@ This example requires:
 - EK79007 or ILI9881C LCD screen
 - ESP32P4 devkit
 
-**Note:** OV5647 has its own ISP functions, whereas SC2336 is a camera sensor without ISP functions. You can use the ESP on-chip ISP functions to tune the image together with the sensor ISP functions, if the image quality is not as expected.
+**Note:** OV5647 has its own ISP functions, whereas SC2336 is a camera sensor without ISP functions. You can use the ESP on-chip ISP functions to tune the image together with the sensor ISP functions, if the image quality is not as expected. The [esp-video](https://github.com/espressif/esp-video-components/tree/master/esp_video) component provides support for the ISP control algorithms, and some examples can be found in [esp_video/examples](https://github.com/espressif/esp-video-components/tree/master/esp_video/examples).
 
 **Note:** For EK79007 you will need to connect following pins:
 - 5V - 5V

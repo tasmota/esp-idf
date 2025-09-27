@@ -77,6 +77,9 @@ else()
                                     # should be removable once using component init functions
                                     # link-time registration is used.
                                     bootloader_support esp_pm esp_usb_cdc_rom_console
+                                    # [REFACTOR-TODO] Provide system hook to release dependency reversion.
+                                    # IDF-13980
+                                    esp_hal_i2c
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 
@@ -96,7 +99,15 @@ else()
         PROPERTIES COMPILE_FLAGS
         -fno-stack-protector)
 
-    include(${CMAKE_CURRENT_LIST_DIR}/ld/ld.cmake)
+    target_linker_script(${COMPONENT_LIB} INTERFACE "ld/${target}/memory.ld.in")
+
+    # Generate sections.ld.in and pass it through linker script generator
+    set(sections_name "ld/${target}/sections.ld.in")
+    if(CONFIG_ESP32P4_REV_MIN_300)
+        set(sections_name "ld/${target}/sections.rev3.ld.in")
+    endif()
+    target_linker_script(${COMPONENT_LIB} INTERFACE "${sections_name}"
+                        PROCESS "${CMAKE_CURRENT_BINARY_DIR}/ld/sections.ld")
 endif()
 
 if(CONFIG_IDF_ENV_FPGA OR CONFIG_ESP_BRINGUP_BYPASS_CPU_CLK_SETTING)
@@ -152,7 +163,7 @@ if(NOT BOOTLOADER_BUILD)
 endif()
 
 # For P4, since P4 REV2, the SRAM is contiguous
-if(CONFIG_ESP32P4_SELECTS_REV_LESS_V2)
+if(CONFIG_ESP32P4_SELECTS_REV_LESS_V3)
     target_link_options(${COMPONENT_LIB} INTERFACE "-Wl,--enable-non-contiguous-regions")
 endif()
 

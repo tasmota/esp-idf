@@ -11,6 +11,16 @@ All drivers' ``io_loop_back`` configuration have been removed
 
 Different driver objects can share the same GPIO number, enabling more complex functionalities. For example, you can bind the TX and RX channels of the RMT peripheral to the same GPIO to simulate 1-Wire bus read and write timing. In previous versions, you needed to configure the ``io_loop_back`` setting in the driver to achieve this "loopback" functionality. Now, this configuration has been removed. Simply configuring the same GPIO number in different drivers will achieve the same functionality.
 
+Peripheral Clock Gating
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Peripheral clock gating is managed within the driver layer. Users do not need to manually handle peripheral module clock gating. Its corresponding APIs are included via a private header file ``esp_private/periph_ctrl.h``. There used to be another header file ``driver/periph_ctrl.h`` for the same purpose, which is now removed.
+
+RTC Subsystem Control
+~~~~~~~~~~~~~~~~~~~~~~
+
+Low power modules usually share some common resources like interrupt number. To avoid conflicts, some private APIs are created in the ``esp_private/rtc_ctrl.h`` header file to manage these shared resources with ease. There used to be another header file ``driver/rtc_cntl.h`` for the same purpose, which is now removed.
+
 ADC
 ---
 
@@ -55,6 +65,8 @@ LEDC
 - :func:`ledc_timer_set` has been removed. Use :func:`ledc_timer_config` or :func:`ledc_set_freq` instead.
 
 - ``LEDC_APB_CLK_HZ`` and ``LEDC_REF_CLK_HZ`` have been removed.
+
+- ``LEDC_SLOW_CLK_RTC8M`` macro has been removed. Please use ``LEDC_SLOW_CLK_RC_FAST`` instead.
 
 - Removed esp_driver_gpio as a public required component from esp_driver_ledc.
 
@@ -120,6 +132,13 @@ The legacy timer group driver ``driver/timer.h`` is deprecated since version 5.0
 
     The legacy PCNT driver ``driver/pcnt.h`` is deprecated since version 5.0 (see :ref:`deprecate_pcnt_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_pcnt`, and the header file path is ``driver/pulse_cnt.h``.
 
+.. only:: SOC_RMT_SUPPORTED
+
+    Legacy RMT Driver is Removed
+    -------------------------------
+
+    The legacy RMT driver ``driver/rmt.h`` is deprecated since version 5.0 (see :ref:`deprecate_rmt_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_rmt`, and the header file path is ``driver/rmt_tx.h``, ``driver/rmt_rx.h`` and ``driver/rmt_encoder.h``.
+
 GDMA
 ----
 
@@ -160,21 +179,53 @@ LCD
 - The GPIO number type in the LCD driver has been changed from ``int`` to the more type-safe ``gpio_num_t``. For example, instead of using ``5`` as the GPIO number, you now need to use ``GPIO_NUM_5``.
 - The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_i80_bus_config_t` structure have been replaced by the :cpp:member:`esp_lcd_i80_bus_config_t::dma_burst_size` member, which sets the DMA burst transfer size.
 - The ``psram_trans_align`` and ``sram_trans_align`` members in the :cpp:type:`esp_lcd_rgb_panel_config_t` structure have also been replaced by the :cpp:member:`esp_lcd_rgb_panel_config_t::dma_burst_size` member for configuring the DMA burst transfer size.
-- The ``octal_mode`` and ``quad_mode`` flags in the :cpp:type:`esp_lcd_panel_io_spi_config_t` structure have been removed. The driver now automatically detects the data line mode of the current SPI bus.
 - The ``color_space`` and ``rgb_endian`` configuration options in the :cpp:type:`esp_lcd_panel_dev_config_t` structure have been replaced by the :cpp:member:`esp_lcd_panel_dev_config_t::rgb_ele_order` member, which sets the RGB element order. The corresponding types ``lcd_color_rgb_endian_t`` and ``esp_lcd_color_space_t`` have also been removed; use :cpp:type:`lcd_rgb_element_order_t` instead.
 - The ``esp_lcd_panel_disp_off`` function has been removed. Please use the :func:`esp_lcd_panel_disp_on_off` function to control display on/off.
 - The ``on_bounce_frame_finish`` member in :cpp:type:`esp_lcd_rgb_panel_event_callbacks_t` has been replaced by :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_frame_buf_complete`, which indicates that a complete frame buffer has been sent to the LCD controller.
+- The LCD IO layer driver for the I2C interface previously had two implementations, based on the new and legacy I2C master bus drivers. As the legacy I2C driver is being deprecated, support for it in the LCD IO layer has been removed. Only the APIs provided in ``driver/i2c_master.h`` are now used.
+- :cpp:member:`esp_lcd_dpi_panel_config_t::pixel_format` member is deprecated. It is recommended to only use :cpp:member:`esp_lcd_dpi_panel_config_t::in_color_format` to set the MIPI DSI driver's input pixel data format.
+- The NT35510 LCD device driver has been moved out of ESP-IDF and is now hosted in the `ESP Component Registry <https://components.espressif.com/components/espressif/esp_lcd_nt35510/versions/1.0.0/readme>`_. If your project uses the NT35510 driver, you can add it to your project by running ``idf.py add-dependency "espressif/esp_lcd_nt35510"``.
 
 SPI
 ---
 
-The :ref:`CONFIG_SPI_MASTER_IN_IRAM` option is now invisible by default in menuconfig and depends on :ref:`CONFIG_FREERTOS_IN_IRAM`. This change was made to prevent potential crashes when SPI functions in IRAM call FreeRTOS functions that are placed in flash.
+- The :ref:`CONFIG_SPI_MASTER_IN_IRAM` option is now invisible by default in menuconfig and depends on :ref:`CONFIG_FREERTOS_IN_IRAM`. This change was made to prevent potential crashes when SPI functions in IRAM call FreeRTOS functions that are placed in flash.
+  - To enable SPI master IRAM optimization:
 
-To enable SPI master IRAM optimization:
+    1. Navigate to ``Component config`` → ``FreeRTOS`` → ``Port`` in menuconfig
+    2. Enable ``Place FreeRTOS functions in IRAM`` (:ref:`CONFIG_FREERTOS_IN_IRAM`)
+    3. Navigate to ``Component config`` → ``ESP-Driver:SPI Configurations``
+    4. Enable ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
 
-1. Navigate to ``Component config`` → ``FreeRTOS`` → ``Port`` in menuconfig
-2. Enable ``Place FreeRTOS functions in IRAM`` (:ref:`CONFIG_FREERTOS_IN_IRAM`)
-3. Navigate to ``Component config`` → ``ESP-Driver:SPI Configurations``
-4. Enable ``Place transmitting functions of SPI master into IRAM`` (:ref:`CONFIG_SPI_MASTER_IN_IRAM`)
+  - Note that enabling :ref:`CONFIG_FREERTOS_IN_IRAM` will increase IRAM usage. Consider this trade-off when optimizing for SPI performance.
+
+- Deprecated HSPI and VSPI related IOMUX pin macros on ESP32 and ESP32S2 have been removed.
+
+PSRAM
+-----
+
+Deprecated header file ``esp_spiram.h`` has been removed. Please use ``esp_psram.h`` instead.
+
+
+SPI Flash Driver
+----------------
+
+- Deprecated ``enum`` type ``esp_flash_speed_t`` has been removed. The main flash speed is controlled by :ref:`CONFIG_ESPTOOLPY_FLASHFREQ` option.
+- Deprecated header file ``esp_spi_flash.h`` has been removed. Please use ``spi_flash_mmap.h`` instead.
+- Deprecated API ``spi_flash_dump_counters`` has been removed. Please use :cpp:func:`esp_flash_dump_counters` instead.
+- Deprecated API ``spi_flash_get_counters`` has been removed. Please use :cpp:func:`esp_flash_get_counters` instead.
+- Deprecated API ``spi_flash_reset_counters`` has been removed. Please use :cpp:func:`esp_flash_reset_counters` instead.
 
 Note that enabling :ref:`CONFIG_FREERTOS_IN_IRAM` will increase IRAM usage. Consider this trade-off when optimizing for SPI performance.
+
+Touch Element
+-------------
+
+The ``touch_element`` component is moved to [ESP Component Registry](https://components.espressif.com/components/espressif/touch_element/versions/1.0.0/readme).
+
+You can add this dependency to your project by running ``idf.py add-dependency "espressif/touch_element"``.
+
+Touch Sensor
+------------
+
+The ``touch_sensor_sample_config_t::bypass_shield_output`` member for version 3 touch sensor has been removed because it is not supported in the version 3 hardware.

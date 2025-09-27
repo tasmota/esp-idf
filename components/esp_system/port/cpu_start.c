@@ -96,6 +96,7 @@
 #include "soc/rtc.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
+#include "hal/mmu_hal.h"
 #include "hal/efuse_ll.h"
 #include "hal/uart_ll.h"
 #include "soc/uart_pins.h"
@@ -124,13 +125,13 @@
 #include "esp_private/startup_internal.h"
 #include "esp_private/system_internal.h"
 
-#if CONFIG_ESP32P4_SELECTS_REV_LESS_V2
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 extern int _bss_start_low, _bss_start_high;
 extern int _bss_end_low, _bss_end_high;
 #else
 extern int _bss_start;
 extern int _bss_end;
-#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V2
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 extern int _rtc_bss_start;
 extern int _rtc_bss_end;
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
@@ -156,7 +157,7 @@ extern int _vector_table;
 extern int _mtvt_table;
 #endif
 
-static const char *TAG = "cpu_start";
+ESP_LOG_ATTR_TAG(TAG, "cpu_start");
 
 #ifdef CONFIG_ESP32_IRAM_AS_8BIT_ACCESSIBLE_MEMORY
 extern int _iram_bss_start;
@@ -426,12 +427,12 @@ FORCE_INLINE_ATTR IRAM_ATTR void get_reset_reason(soc_reset_reason_t *rst_reas)
 
 FORCE_INLINE_ATTR IRAM_ATTR void init_bss(const soc_reset_reason_t *rst_reas)
 {
-#if CONFIG_ESP32P4_SELECTS_REV_LESS_V2
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
     memset(&_bss_start_low, 0, (uintptr_t)&_bss_end_low - (uintptr_t)&_bss_start_low);
     memset(&_bss_start_high, 0, (uintptr_t)&_bss_end_high - (uintptr_t)&_bss_start_high);
 #else
     memset(&_bss_start, 0, (uintptr_t)&_bss_end - (uintptr_t)&_bss_start);
-#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V2
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
     // Clear Bluetooth bss
@@ -463,15 +464,35 @@ FORCE_INLINE_ATTR IRAM_ATTR void ram_app_init(void)
 
 #if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 //Keep this static, the compiler will check output parameters are initialized.
-FORCE_INLINE_ATTR IRAM_ATTR void cache_init(void)
+FORCE_INLINE_ATTR IRAM_ATTR void ext_mem_init(void)
 {
 #if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && !CONFIG_IDF_TARGET_ESP32H4 // TODO IDF-12289
     // It helps to fix missed cache settings for other cores. It happens when bootloader is unicore.
     do_multicore_settings();
 #endif
 
+    cache_hal_config_t config = {
+#if CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
+        .core_nums = 1,
+#else
+        .core_nums = SOC_CPU_CORES_NUM,
+#endif
+#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+        .l2_cache_size = CONFIG_CACHE_L2_CACHE_SIZE,
+        .l2_cache_line_size = CONFIG_CACHE_L2_CACHE_LINE_SIZE,
+#endif
+    };
     //cache hal ctx needs to be initialised
-    cache_hal_init();
+    cache_hal_init(&config);
+    //mmu hal ctx needs to be initialised
+    mmu_hal_config_t mmu_config = {
+#if CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
+        .core_nums = 1,
+#else
+        .core_nums = SOC_CPU_CORES_NUM,
+#endif
+    };
+    mmu_hal_ctx_init(&mmu_config);
 
 #if CONFIG_IDF_TARGET_ESP32S2
     /* Configure the mode of instruction cache : cache size, cache associated ways, cache line size. */
@@ -921,9 +942,9 @@ void IRAM_ATTR call_start_cpu0(void)
     ram_app_init();
 #endif  //CONFIG_APP_BUILD_TYPE_RAM
 
-    // Initialize the cache.
+    // Initialize the cache and mmu.
 #if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
-    cache_init();
+    ext_mem_init();
 #endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 
     sys_rtc_init(rst_reas);

@@ -8,10 +8,12 @@
 
     :SOC_BT_CLASSIC_SUPPORTED: bluetooth-classic
     build-system
+    networking
     peripherals
     provisioning
     protocols
     security
     tools
+    storage
     system
     toolchain

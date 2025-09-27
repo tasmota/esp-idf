@@ -17,9 +17,6 @@
 #include "esp_private/cache_utils.h"
 #include "spi_flash_mmap.h"
 #include "esp_flash_internal.h"
-#if CONFIG_NEWLIB_ENABLED
-#include "esp_newlib.h"
-#endif
 #include "esp_newlib.h"
 #include "esp_xt_wdt.h"
 #include "esp_cpu.h"
@@ -51,7 +48,7 @@
 #endif
 
 // Using the same tag as in startup.c to keep the logs unchanged
-static const char* TAG = "cpu_start";
+ESP_LOG_ATTR_TAG(TAG, "cpu_start");
 
 // Hook to force the linker to include this file
 void esp_system_include_startup_funcs(void)
@@ -78,7 +75,7 @@ ESP_SYSTEM_INIT_FN(init_show_cpu_freq, CORE, BIT(0), 10)
 ESP_SYSTEM_INIT_FN(init_brownout, CORE, BIT(0), 104)
 {
     // [refactor-todo] leads to call chain rtc_is_register (driver) -> esp_intr_alloc (esp32/esp32s2) ->
-    // malloc (newlib) -> heap_caps_malloc (heap), so heap must be at least initialized
+    // malloc (esp_libc) -> heap_caps_malloc (heap), so heap must be at least initialized
     esp_err_t ret = ESP_OK;
     // BOD and VBAT share the same interrupt number. To avoid blocking the system in an intermediate state
     // where an interrupt occurs and the interrupt number is enabled, but the ISR is not configured, enable

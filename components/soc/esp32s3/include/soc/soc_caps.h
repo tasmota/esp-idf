@@ -207,11 +207,6 @@
 // RTC_IOs and DIG_IOs can be hold during deep sleep and after waking up
 #define SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP (1)
 
-/*-------------------------- Dedicated GPIO CAPS -----------------------------*/
-#define SOC_DEDIC_GPIO_OUT_CHANNELS_NUM (8) /*!< 8 outward channels on each CPU core */
-#define SOC_DEDIC_GPIO_IN_CHANNELS_NUM  (8) /*!< 8 inward channels on each CPU core */
-#define SOC_DEDIC_GPIO_OUT_AUTO_ENABLE  (1) /*!< Dedicated GPIO output attribution is enabled automatically */
-
 /*-------------------------- I2C CAPS ----------------------------------------*/
 // ESP32-S3 has 2 I2C
 #define SOC_I2C_NUM                 (2U)
@@ -279,12 +274,6 @@
 #define SOC_MPU_REGIONS_MAX_NUM                   8
 #define SOC_MPU_REGION_RO_SUPPORTED               0
 #define SOC_MPU_REGION_WO_SUPPORTED               0
-
-/*-------------------------- PCNT CAPS ---------------------------------------*/
-#define SOC_PCNT_GROUPS               (1U)
-#define SOC_PCNT_UNITS_PER_GROUP      (4)
-#define SOC_PCNT_CHANNELS_PER_UNIT    (2)
-#define SOC_PCNT_THRES_POINT_PER_UNIT (2)
 
 /*-------------------------- RMT CAPS ----------------------------------------*/
 #define SOC_RMT_GROUPS                        1U /*!< One RMT group */

@@ -58,21 +58,8 @@ if(esp_tee_build)
                      "hmac_hal.c"
                      "ds_hal.c"
                      "ecc_hal.c")
-
-    if(CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1)
-        list(APPEND srcs "spi_flash_hal.c")
-    endif()
 elseif(NOT BOOTLOADER_BUILD)
     list(APPEND srcs "color_hal.c")
-
-    if(NOT CONFIG_APP_BUILD_TYPE_PURE_RAM_APP)
-        if(CONFIG_SOC_SPI_FLASH_SUPPORTED)
-            list(APPEND srcs "spi_flash_hal.c" "spi_flash_hal_iram.c")
-        endif()
-        if(CONFIG_SOC_FLASH_ENC_SUPPORTED)
-            list(APPEND srcs "spi_flash_encrypt_hal_iram.c")
-        endif()
-    endif()
 
     if(CONFIG_SOC_CLK_TREE_SUPPORTED)
         list(APPEND srcs "${target}/clk_tree_hal.c")
@@ -92,10 +79,6 @@ elseif(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_RTCIO_PIN_COUNT)
         list(APPEND srcs "rtc_io_hal.c")
-    endif()
-
-    if(CONFIG_SOC_GPTIMER_SUPPORTED)
-        list(APPEND srcs "timer_hal.c")
     endif()
 
     if(CONFIG_SOC_LEDC_SUPPORTED)
@@ -132,9 +115,9 @@ elseif(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_TWAI_SUPPORTED)
         if(CONFIG_SOC_TWAI_SUPPORT_FD)
-            list(APPEND srcs "twai_hal_ctufd.c")
+            list(APPEND srcs "twai_hal_v2.c")
         else()
-            list(APPEND srcs "twai_hal_sja1000.c")
+            list(APPEND srcs "twai_hal_v1.c")
         endif()
     endif()
 
@@ -265,10 +248,6 @@ elseif(NOT BOOTLOADER_BUILD)
         if(CONFIG_SOC_SPI_SUPPORT_SLAVE_HD_VER2)
             list(APPEND srcs "spi_slave_hd_hal.c")
         endif()
-    endif()
-
-    if(CONFIG_SOC_GPSPI_SUPPORTED AND NOT CONFIG_IDF_TARGET_ESP32)
-        list(APPEND srcs "spi_flash_hal_gpspi.c")
     endif()
 
     if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)

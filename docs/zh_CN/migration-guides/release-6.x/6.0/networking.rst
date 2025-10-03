@@ -43,6 +43,32 @@
 **影响**：使用 ``ETH_ESP32_EMAC_DEFAULT_CONFIG()`` 的应用程序可继续正常工作。自定义时钟配置需在 EMAC 配置结构体中显式设置，或使用 `Ethernet Init 组件 <https://components.espressif.com/components/espressif/ethernet_init>`_。
 
 
+以太网 PHY 和以太网 SPI 模块驱动已从 ESP-IDF 移至外部仓库
+-------------------------------------------------------------
+
+以太网 PHY 和以太网 SPI 模块驱动已从 ESP-IDF 中移除，并迁移至 `esp-eth-drivers <https://github.com/espressif/esp-eth-drivers>`_ 仓库。如果你在项目中使用这些驱动，需要将其作为组件集成。相关驱动现已在 `ESP 组件库 <https://components.espressif.com/>`_ 上提供。
+
+**移除的 API**：
+- :cpp:func:`esp_eth_phy_new_ip101`
+- :cpp:func:`esp_eth_phy_new_lan87xx`
+- :cpp:func:`esp_eth_phy_new_rtl8201`
+- :cpp:func:`esp_eth_phy_new_dp83848`
+- :cpp:func:`esp_eth_phy_new_ksz80xx`
+- :cpp:func:`esp_eth_mac_new_dm9051`
+- :cpp:func:`esp_eth_phy_new_dm9051`
+- :cpp:func:`esp_eth_mac_new_ksz8851snl`
+- :cpp:func:`esp_eth_phy_new_ksz8851snl`
+- :cpp:func:`esp_eth_mac_new_w5500`
+- :cpp:func:`esp_eth_phy_new_w5500`
+
+
+**影响**：原本依赖 ESP-IDF 内置以太网 PHY 和以太网 SPI 模块驱动的应用将无法继续工作。
+
+**迁移方式**：
+
+请通过 `idf.py add-dependency` 命令，从 `IDF 组件管理器 <https://components.espressif.com/>`_ 添加驱动组件到你的项目，并包含相应的 `esp_eth_phy_xxxx.h` 和 `esp_eth_mac_xxxx.h` 头文件，或使用 `Ethernet Init 组件 <https://components.espressif.com/components/espressif/ethernet_init>`_。
+
+
 ESP-NETIF
 *********
 
@@ -108,3 +134,31 @@ ESP-NETIF
     if (target) {
         // 使用 "target"
     }
+
+
+DHCP 服务器 DNS 选项行为
+-------------------------
+
+``LWIP_DHCPS_ADD_DNS`` 宏已被移除。
+
+在此之前，在 SoftAP 上运行 DHCP 服务器时，如果没有设置 DNS 选项，则服务器的 IP 地址会被自动公布为 DNS 服务器。
+
+**当前行为：**
+
+从本版本开始，DHCP 服务器只有在显式配置了 :cpp:func:`esp_netif_dhcps_option` 并启用了 ``ESP_NETIF_DOMAIN_NAME_SERVER`` 选项时，才会在 DHCP offer 报文中包含 DNS 信息。此时，SoftAP 接口当前配置的主 DNS 和/或备用 DNS 地址将被发送给客户端。
+
+如果没有启用该选项，DHCP 服务器会将自己的 IP 地址作为 DNS 服务器发送给客户端，从而与之前的默认行为保持一致。
+
+**迁移说明：**
+
+如果应用程序依赖自定义 DNS 设置，开发者应：
+
+1. 使用 :cpp:func:`esp_netif_dhcps_option` 并启用 ``ESP_NETIF_DOMAIN_NAME_SERVER`` 选项，让 DHCP 服务器在 offer 报文中包含 DNS 信息。
+2. 使用 :cpp:func:`esp_netif_set_dns_info` 为 SoftAP 接口配置一个或多个 DNS 服务器地址。
+3. 若需完全禁止发送 DNS 信息，仍需配置 :cpp:func:`esp_netif_dhcps_option`，但应通过 :cpp:func:`esp_netif_set_dns_info` 将 DNS 服务器地址设置为 ``0.0.0.0``。
+
+这样开发者可以：
+
+- 复现旧的行为（通告 SoftAP IP），
+- 提供自定义的 DNS 服务器（例如公共解析器），
+- 通过将 DNS 地址设置为 ``0.0.0.0`` 来完全禁止 DNS 信息通告。

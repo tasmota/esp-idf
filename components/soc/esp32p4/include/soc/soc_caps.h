@@ -93,6 +93,7 @@
 #define SOC_LP_SPI_SUPPORTED            1
 #define SOC_LP_ADC_SUPPORTED            1
 #define SOC_LP_VAD_SUPPORTED            1
+#define SOC_LP_MAILBOX_SUPPORTED        1
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_PSRAM_DMA_CAPABLE           1
 #define SOC_SDMMC_HOST_SUPPORTED        1
@@ -369,6 +370,8 @@
 #define SOC_ISP_AE_BLOCK_Y_NUMS                  5
 #define SOC_ISP_AF_CTLR_NUMS                     1U
 #define SOC_ISP_AF_WINDOW_NUMS                   3
+#define SOC_ISP_AWB_WINDOW_X_NUMS                5
+#define SOC_ISP_AWB_WINDOW_Y_NUMS                5
 #define SOC_ISP_BF_TEMPLATE_X_NUMS               3
 #define SOC_ISP_BF_TEMPLATE_Y_NUMS               3
 #define SOC_ISP_CCM_DIMENSION                    3
@@ -590,6 +593,7 @@
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY           (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+#define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
 
 #define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
 

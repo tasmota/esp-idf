@@ -72,7 +72,7 @@ else()
 
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS include
-                        PRIV_REQUIRES spi_flash esp_timer esp_mm
+                        PRIV_REQUIRES spi_flash esp_timer esp_mm esp_hal_mspi
                                     # [refactor-todo] requirements due to init code,
                                     # should be removable once using component init functions
                                     # link-time registration is used.
@@ -80,6 +80,7 @@ else()
                                     # [REFACTOR-TODO] Provide system hook to release dependency reversion.
                                     # IDF-13980
                                     esp_hal_i2c
+                                    esp_hal_timg # task_wdt_impl_timergroup.c relies on it
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 

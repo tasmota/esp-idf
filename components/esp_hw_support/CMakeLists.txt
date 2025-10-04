@@ -11,7 +11,7 @@ endif()
 
 set(requires soc)
 # only esp_hw_support/adc_share_hw_ctrl.c requires efuse component
-set(priv_requires efuse spi_flash bootloader_support)
+set(priv_requires efuse spi_flash bootloader_support esp_hal_timg)
 
 if(${target} STREQUAL "esp32c6")
     list(APPEND priv_requires hal)
@@ -57,6 +57,9 @@ if(NOT non_os_build)
     if(CONFIG_SOC_MODEM_SUPPORT_ETM)
         list(APPEND srcs "modem/modem_etm.c")
     endif()
+    if(CONFIG_SOC_PMU_SUPPORTED)
+        list(APPEND srcs "pmu_share_hw.c")
+    endif()
     if(CONFIG_SOC_LIGHT_SLEEP_SUPPORTED)
         list(APPEND srcs "sleep_modem.c"
                          "sleep_modes.c"
@@ -75,7 +78,7 @@ if(NOT non_os_build)
                               esp_timer
                               esp_pm)
 
-    list(APPEND priv_requires esp_mm)
+    list(APPEND priv_requires esp_mm esp_hal_mspi)
 
     if(CONFIG_IDF_TARGET_ESP32 OR CONFIG_IDF_TARGET_ESP32S2)
         list(APPEND srcs "rtc_wdt.c")
@@ -190,7 +193,12 @@ endif()
 
 if(CONFIG_ESP32P4_SELECTS_REV_LESS_V3)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-        idf_build_set_property(COMPILE_OPTIONS "-mespv-spec=2p1" APPEND)
+        # 1. Set xespv2p1 explicitly to override the default xespv2p2.
+        # 2. Remove zc* extensions:
+        #    The ESP32-P4 has always supported the zc* extensions,
+        #    but revisions earlier than v3.0 are affected by hardware issue DIG-661
+        #    and lack the mintthresh_csr register needed for the workaround.
+        idf_build_set_property(COMPILE_OPTIONS "-march=rv32imafc_zicsr_zifencei_zaamo_zalrsc_xesploop_xespv2p1" APPEND)
     endif()
 elseif(CONFIG_IDF_TARGET_ESP32P4)
     if(CMAKE_C_COMPILER_ID MATCHES "Clang") # TODO: LLVM-478

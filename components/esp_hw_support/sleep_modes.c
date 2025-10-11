@@ -2245,22 +2245,124 @@ esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause(void)
     }
 }
 
+uint32_t esp_sleep_get_wakeup_causes(void)
+{
+    uint32_t wakeup_cause = 0;
+
+    if (esp_rom_get_reset_reason(0) != RESET_REASON_CORE_DEEP_SLEEP && !s_light_sleep_wakeup) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UNDEFINED);
+        return wakeup_cause;
+    }
+
+#if SOC_PMU_SUPPORTED
+    uint32_t wakeup_cause_raw = pmu_ll_hp_get_wakeup_cause(&PMU);
+#else
+    uint32_t wakeup_cause_raw = rtc_cntl_ll_get_wakeup_cause();
+#endif
+
+    if (wakeup_cause_raw & RTC_TIMER_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_TIMER);
+    }
+    if (wakeup_cause_raw & RTC_GPIO_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_GPIO);
+    }
+    if (wakeup_cause_raw & RTC_UART0_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART);
+    }
+    if (wakeup_cause_raw & RTC_UART1_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART1);
+    }
+#if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
+    if (wakeup_cause_raw & RTC_UART2_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART2);
+    }
+#endif
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+    if (wakeup_cause_raw & RTC_EXT0_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_EXT0);
+    }
+#endif
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+    if (wakeup_cause_raw & RTC_EXT1_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_EXT1);
+    }
+#endif
+#if SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
+    if (wakeup_cause_raw & RTC_TOUCH_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_TOUCHPAD);
+    }
+#endif
+#if SOC_ULP_FSM_SUPPORTED
+    if (wakeup_cause_raw & RTC_ULP_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_ULP);
+    }
+#endif
+#if SOC_PM_SUPPORT_WIFI_WAKEUP
+    if (wakeup_cause_raw & RTC_WIFI_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_WIFI);
+    }
+#endif
+#if SOC_PM_SUPPORT_BT_WAKEUP
+    if (wakeup_cause_raw & RTC_BT_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_BT);
+    }
+#endif
+#if SOC_RISCV_COPROC_SUPPORTED
+    if (wakeup_cause_raw & RTC_COCPU_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_ULP);
+    }
+    if (wakeup_cause_raw & RTC_COCPU_TRAP_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG);
+    }
+#endif
+#if SOC_LP_CORE_SUPPORTED
+    if (wakeup_cause_raw & RTC_LP_CORE_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_ULP);
+    }
+#endif
+#if SOC_LP_VAD_SUPPORTED
+    if (wakeup_cause_raw & RTC_LP_VAD_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_VAD);
+    }
+#endif
+    if (wakeup_cause == 0) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UNDEFINED);
+    }
+    return wakeup_cause;
+}
+
 esp_err_t esp_sleep_pd_config(esp_sleep_pd_domain_t domain, esp_sleep_pd_option_t option)
 {
     if (domain >= ESP_PD_DOMAIN_MAX || option > ESP_PD_OPTION_AUTO) {
         return ESP_ERR_INVALID_ARG;
     }
+    esp_err_t err = ESP_OK;
     portENTER_CRITICAL_SAFE(&s_config.lock);
-
-    int refs = (option == ESP_PD_OPTION_ON)  ? s_config.domain[domain].refs++ \
-             : (option == ESP_PD_OPTION_OFF) ? --s_config.domain[domain].refs \
-             : s_config.domain[domain].refs;
-    if (refs == 0) {
+    int refs = 0;
+    if (s_config.domain[domain].pd_option == ESP_PD_OPTION_AUTO) {
+        s_config.domain[domain].refs = (option == ESP_PD_OPTION_ON) ? 1 : 0;
         s_config.domain[domain].pd_option = option;
+    } else {
+        if (option == ESP_PD_OPTION_AUTO) {
+            s_config.domain[domain].refs = 0;
+            s_config.domain[domain].pd_option = option;
+        } else {
+            refs = (option == ESP_PD_OPTION_ON)  ? s_config.domain[domain].refs++ \
+                 : (option == ESP_PD_OPTION_OFF) ? --s_config.domain[domain].refs \
+                 : s_config.domain[domain].refs;
+            if (refs == 0) {
+                s_config.domain[domain].pd_option = option;
+            } else if (refs < 0) {
+                s_config.domain[domain].refs = 0;
+                err = ESP_ERR_INVALID_STATE;
+            }
+        }
     }
     portEXIT_CRITICAL_SAFE(&s_config.lock);
-    assert(refs >= 0);
-    return ESP_OK;
+    if (err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Domain is already in ESP_PD_OPTION_OFF state, please check whether the domain pd_option is managed symmetrically.");
+    }
+    return err;
 }
 
 static const char* s_submode2str[] = {

@@ -66,9 +66,13 @@
 #include "hal/efuse_ll.h"
 #include "soc/rtc.h"
 
+#if CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2
+#include "ble_log.h"
+#else /* !CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 #if CONFIG_BT_BLE_LOG_SPI_OUT_ENABLED
 #include "ble_log/ble_log_spi_out.h"
 #endif // CONFIG_BT_BLE_LOG_SPI_OUT_ENABLED
+#endif /* CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 
 /* Macro definition
  ************************************************************************
@@ -125,6 +129,15 @@ enum {
     BLE_LOG_INTERFACE_FLAG_END,
 };
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+
+typedef union {
+    struct {
+        uint32_t rtc_freq:20;
+        uint32_t rsv:11;
+        uint32_t bt_wakeup:1;
+    };
+    uint32_t val;
+} bt_wakeup_params_t;
 
 /* External functions or variables
  ************************************************************************
@@ -207,13 +220,18 @@ static int esp_ecc_gen_key_pair(uint8_t *pub, uint8_t *priv);
 static int esp_ecc_gen_dh_key(const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y,
                               const uint8_t *our_priv_key, uint8_t *out_dhkey);
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+#if !CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2
 #if !CONFIG_BT_LE_CONTROLLER_LOG_SPI_OUT_ENABLED
 static void esp_bt_controller_log_interface(uint32_t len, const uint8_t *addr, uint32_t len_append, const uint8_t *addr_append, uint32_t flag);
 #endif // !CONFIG_BT_LE_CONTROLLER_LOG_SPI_OUT_ENABLED
 #if CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
 static void esp_bt_ctrl_log_partition_get_and_erase_first_block(void);
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
+#endif /* !CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+static bool esp_bt_check_wakeup_by_bt(void);
+#endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
 /* Local variable definition
  ***************************************************************************
  */
@@ -224,9 +242,43 @@ void *g_ble_lll_rfmgmt_env_p;
 static DRAM_ATTR esp_bt_controller_status_t ble_controller_status = ESP_BT_CONTROLLER_STATUS_IDLE;
 
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-const static uint32_t log_bufs_size[] = {CONFIG_BT_LE_LOG_CTRL_BUF1_SIZE, CONFIG_BT_LE_LOG_HCI_BUF_SIZE, CONFIG_BT_LE_LOG_CTRL_BUF2_SIZE};
 static bool log_is_inited = false;
 
+#if CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2
+/* TODO: Remove event handler dependency in lib */
+static void void_handler(void) {}
+
+/* TODO: Declare public interfaces in a public header */
+void esp_bt_controller_log_deinit(void)
+{
+    log_is_inited = false;
+    ble_log_deinit_simple();
+    ble_log_deinit();
+}
+
+esp_err_t esp_bt_controller_log_init(void)
+{
+    if (log_is_inited) {
+        return ESP_OK;
+    }
+
+    if (!ble_log_init()) {
+        goto exit;
+    }
+
+    if (ble_log_init_simple(ble_log_write_hex_ll, void_handler) != 0) {
+        goto exit;
+    }
+
+    log_is_inited = true;
+    return ESP_OK;
+
+exit:
+    esp_bt_controller_log_deinit();
+    return ESP_FAIL;
+}
+#else /* !CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
+const static uint32_t log_bufs_size[] = {CONFIG_BT_LE_LOG_CTRL_BUF1_SIZE, CONFIG_BT_LE_LOG_HCI_BUF_SIZE, CONFIG_BT_LE_LOG_CTRL_BUF2_SIZE};
 esp_err_t esp_bt_controller_log_init(void)
 {
     if (log_is_inited) {
@@ -289,6 +341,7 @@ void esp_bt_controller_log_deinit(void)
 
     log_is_inited = false;
 }
+#endif /* CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 
 #if CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
 #include "esp_partition.h"
@@ -413,6 +466,12 @@ void esp_bt_read_ctrl_log_from_flash(bool output)
 }
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_STORAGE_ENABLE
 
+#if CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2
+void esp_ble_controller_log_dump_all(bool output)
+{
+    ble_log_dump_to_console();
+}
+#else /* !CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 #if !CONFIG_BT_LE_CONTROLLER_LOG_SPI_OUT_ENABLED
 static void esp_bt_controller_log_interface(uint32_t len, const uint8_t *addr, uint32_t len_append, const uint8_t *addr_append, uint32_t flag)
 {
@@ -455,6 +514,7 @@ void esp_ble_controller_log_dump_all(bool output)
     portEXIT_CRITICAL_SAFE(&spinlock);
 #endif
 }
+#endif /* CONFIG_BT_LE_CONTROLLER_LOG_MODE_BLE_LOG_V2 */
 
 #if CONFIG_BT_LE_CONTROLLER_LOG_TASK_WDT_USER_HANDLER_ENABLE
 void esp_task_wdt_isr_user_handler(void)
@@ -664,6 +724,7 @@ void controller_sleep_cb(uint32_t enable_tick, void *arg)
 
 void controller_wakeup_cb(void *arg)
 {
+    bt_wakeup_params_t *params;
     if (s_ble_active) {
         return;
     }
@@ -673,14 +734,24 @@ void controller_wakeup_cb(void *arg)
     esp_pm_get_configuration(&pm_config);
     assert(esp_rom_get_cpu_ticks_per_us() == pm_config.max_freq_mhz);
 #endif //CONFIG_PM_ENABLE
+    params = (bt_wakeup_params_t *)arg;
     esp_phy_enable(PHY_MODEM_BT);
     if (s_bt_lpclk_src == MODEM_CLOCK_LPCLK_SRC_RC_SLOW) {
-        uint32_t *clk_freq = (uint32_t *)arg;
-        *clk_freq = esp_clk_tree_lp_slow_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED) / 5;
+        params->rtc_freq = esp_clk_tree_lp_slow_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED) / 5;
     }
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    params->bt_wakeup = esp_bt_check_wakeup_by_bt();
+#endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
     // need to check if need to call pm lock here
     s_ble_active = true;
 }
+
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+static bool esp_bt_check_wakeup_by_bt(void)
+{
+   return (esp_sleep_get_wakeup_causes() & ESP_SLEEP_WAKEUP_BT);
+}
+#endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
 
 esp_err_t controller_sleep_init(modem_clock_lpclk_src_t slow_clk_src)
 {

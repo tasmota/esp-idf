@@ -41,12 +41,15 @@ typedef enum {
     WIFI_IF_MAX                       /**< Maximum number of interfaces */
 } wifi_interface_t;
 
-#define WIFI_OFFCHAN_TX_REQ      1    /**< Request off-channel transmission */
-#define WIFI_OFFCHAN_TX_CANCEL   0    /**< Cancel off-channel transmission */
+typedef enum {
+    WIFI_OFFCHAN_TX_CANCEL,   /**< Cancel off-channel transmission */
+    WIFI_OFFCHAN_TX_REQ,      /**< Request off-channel transmission */
+} wifi_action_tx_t;
 
-#define WIFI_ROC_REQ     1    /**< Request remain on channel */
-#define WIFI_ROC_CANCEL  0    /**< Cancel remain on channel */
-
+typedef enum {
+    WIFI_ROC_CANCEL,    /**< Cancel remain on channel */
+    WIFI_ROC_REQ,       /**< Request remain on channel */
+} wifi_roc_t;
 /**
   * @brief Wi-Fi country policy
   */
@@ -513,13 +516,13 @@ typedef struct {
     uint8_t password[64];                     /**< Password of soft-AP. */
     uint8_t ssid_len;                         /**< Optional length of SSID field. */
     uint8_t channel;                          /**< Channel of soft-AP */
-    wifi_auth_mode_t authmode;                /**< Auth mode of soft-AP. Do not support AUTH_WEP, AUTH_WAPI_PSK and AUTH_OWE in soft-AP mode. When the auth mode is set to WPA2_PSK, WPA2_WPA3_PSK or WPA3_PSK, the pairwise cipher will be overwritten with WIFI_CIPHER_TYPE_CCMP.  */
+    wifi_auth_mode_t authmode;                /**< Auth mode of soft-AP. Do not support AUTH_WEP, AUTH_WAPI_PSK and AUTH_OWE in soft-AP mode. When the auth mode is set to WPA2_PSK, WPA2_WPA3_PSK or WPA3_PSK, the pairwise cipher will be overwritten with WIFI_CIPHER_TYPE_CCMP by default, unless explicitly set.  */
     uint8_t ssid_hidden;                      /**< Broadcast SSID or not, default 0, broadcast the SSID */
     uint8_t max_connection;                   /**< Max number of stations allowed to connect in */
     uint16_t beacon_interval;                 /**< Beacon interval which should be multiples of 100. Unit: TU(time unit, 1 TU = 1024 us). Range: 100 ~ 60000. Default value: 100 */
     uint8_t csa_count;                        /**< Channel Switch Announcement Count. Notify the station that the channel will switch after the csa_count beacon intervals. Default value: 3 */
     uint8_t dtim_period;                      /**< Dtim period of soft-AP. Range: 1 ~ 10. Default value: 1 */
-    wifi_cipher_type_t pairwise_cipher;       /**< Pairwise cipher of SoftAP, group cipher will be derived using this. Cipher values are valid starting from WIFI_CIPHER_TYPE_TKIP, enum values before that will be considered as invalid and default cipher suites(TKIP+CCMP) will be used. Valid cipher suites in softAP mode are WIFI_CIPHER_TYPE_TKIP, WIFI_CIPHER_TYPE_CCMP and WIFI_CIPHER_TYPE_TKIP_CCMP. */
+    wifi_cipher_type_t pairwise_cipher;       /**< Pairwise cipher of SoftAP, group cipher will be derived using this. Cipher values are valid starting from WIFI_CIPHER_TYPE_TKIP, enum values before that will be considered as invalid and default cipher suites(TKIP+CCMP) will be used. Valid cipher suites in softAP mode are WIFI_CIPHER_TYPE_TKIP, WIFI_CIPHER_TYPE_CCMP, WIFI_CIPHER_TYPE_TKIP_CCMP, WIFI_CIPHER_TYPE_GCMP and WIFI_CIPHER_TYPE_GCMP256. */
     bool ftm_responder;                       /**< Enable FTM Responder mode */
     wifi_pmf_config_t pmf_cfg;                /**< Configuration for Protected Management Frame */
     wifi_sae_pwe_method_t sae_pwe_h2e;        /**< Configuration for SAE PWE derivation method */
@@ -563,7 +566,7 @@ typedef struct {
     uint32_t he_trig_mu_bmforming_partial_feedback_disabled: 1;   /**< Whether to disable support the transmission of partial-bandwidth MU feedback in an HE TB sounding sequence. */
     uint32_t he_trig_cqi_feedback_disabled: 1;                    /**< Whether to disable support the transmission of CQI feedback in an HE TB sounding sequence. */
     uint32_t he_reserved: 22;                                     /**< Reserved for future feature set */
-    uint8_t sae_h2e_identifier[SAE_H2E_IDENTIFIER_LEN];           /**< Password identifier for H2E. this needs to be null terminated string */
+    uint8_t sae_h2e_identifier[SAE_H2E_IDENTIFIER_LEN];           /**< Password identifier for H2E. Strings null-terminated (length < SAE_H2E_IDENTIFIER_LEN) or non-null terminated (length = SAE_H2E_IDENTIFIER_LEN) are accepted. Non-null terminated string with 0xFF for full length of SAE_H2E_IDENTIFIER_LEN is not considered a valid identifier */
 } wifi_sta_config_t;
 
 /**
@@ -773,11 +776,48 @@ typedef int (* wifi_action_rx_cb_t)(uint8_t *hdr, uint8_t *payload,
 typedef struct {
     wifi_interface_t ifx;       /**< Wi-Fi interface to send request to */
     uint8_t dest_mac[6];        /**< Destination MAC address */
+    wifi_action_tx_t type;      /**< ACTION TX operation type */
+    uint8_t channel;            /**< Channel on which to perform ACTION TX Operation */
+    uint32_t wait_time_ms;      /**< Duration to wait for on target channel */
     bool no_ack;                /**< Indicates no ack required */
-    wifi_action_rx_cb_t rx_cb;  /**< Rx Callback to receive any response */
+    wifi_action_rx_cb_t rx_cb;  /**< Rx Callback to receive action frames */
+    uint8_t op_id;              /**< Unique Identifier for operation provided by wifi driver */
     uint32_t data_len;          /**< Length of the appended Data */
     uint8_t data[0];            /**< Appended Data payload */
 } wifi_action_tx_req_t;
+
+/** Status codes for WIFI_EVENT_ROC_DONE evt */
+typedef enum {
+    WIFI_ROC_DONE = 0,         /**< ROC operation was completed successfully */
+    WIFI_ROC_FAIL,             /**< ROC operation was cancelled */
+} wifi_roc_done_status_t;
+
+/**
+  * @brief     The callback function executed when ROC operation has ended
+  *
+  * @param     context rxcb registered for the corresponding ROC operation
+  * @param     op_id  ID of the corresponding ROC operation
+  * @param     status status code of the ROC operation denoted
+  *
+  */
+typedef void (* wifi_action_roc_done_cb_t)(uint32_t context, uint8_t op_id,
+                                           wifi_roc_done_status_t status);
+
+/**
+ * @brief Remain on Channel request
+ *
+ *
+ */
+typedef struct {
+    wifi_interface_t ifx;              /**< WiFi interface to send request to */
+    wifi_roc_t type;                   /**< ROC operation type */
+    uint8_t channel;                   /**< Channel on which to perform ROC Operation */
+    wifi_second_chan_t sec_channel;    /**< Secondary channel */
+    uint32_t wait_time_ms;             /**< Duration to wait for on target channel */
+    wifi_action_rx_cb_t rx_cb;         /**< Rx Callback to receive any response */
+    uint8_t op_id;                     /**< ID of this specific ROC operation provided by wifi driver */
+    wifi_action_roc_done_cb_t done_cb; /**< Callback to function that will be called upon ROC done. If assigned, WIFI_EVENT_ROC_DONE event will not be posted */
+} wifi_roc_req_t;
 
 /**
   * @brief FTM Initiator configuration
@@ -1236,21 +1276,32 @@ typedef struct {
 #define WIFI_STATIS_PS        (1<<4)    /**< Power save status */
 #define WIFI_STATIS_ALL       (-1)      /**< All status */
 
-/**
-  * @brief Argument structure for WIFI_EVENT_ACTION_TX_STATUS event
-  */
+/** Status codes for WIFI_EVENT_ACTION_TX_STATUS evt */
+/** There will be back to back events in success case TX_DONE and TX_DURATION_COMPLETED */
+typedef enum {
+    WIFI_ACTION_TX_DONE = 0,           /**< ACTION_TX operation was completed successfully */
+    WIFI_ACTION_TX_FAILED,             /**< ACTION_TX operation failed during tx */
+    WIFI_ACTION_TX_DURATION_COMPLETED, /**< ACTION_TX operation completed it's wait duration */
+    WIFI_ACTION_TX_OP_CANCELLED,       /**< ACTION_TX operation was cancelled by application or higher priority operation */
+} wifi_action_tx_status_type_t;
+
+/** Argument structure for WIFI_EVENT_ACTION_TX_STATUS event */
 typedef struct {
-    wifi_interface_t ifx;     /**< Wi-Fi interface to send request to */
-    uint32_t context;         /**< Context to identify the request */
-    uint8_t da[6];            /**< Destination MAC address */
-    uint8_t status;           /**< Status of the operation */
+    wifi_interface_t ifx;                   /**< WiFi interface to send request to */
+    uint32_t context;                       /**< Context to identify the request */
+    wifi_action_tx_status_type_t status;    /**< Status of the operation */
+    uint8_t op_id;                          /**< ID of the corresponding operation that was provided during action tx request */
+    uint8_t channel;                        /**< Channel provided in tx request */
 } wifi_event_action_tx_status_t;
 
 /**
   * @brief Argument structure for WIFI_EVENT_ROC_DONE event
   */
 typedef struct {
-    uint32_t context;         /**< Context to identify the request */
+    uint32_t context;               /**< Context to identify the initiator of the request */
+    wifi_roc_done_status_t status;  /**< ROC status */
+    uint8_t op_id;                  /**< ID of the corresponding ROC operation */
+    uint8_t channel;                /**< Channel provided in tx request */
 } wifi_event_roc_done_t;
 
 /**

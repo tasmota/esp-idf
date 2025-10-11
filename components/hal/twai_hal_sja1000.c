@@ -127,12 +127,12 @@ twai_error_state_t twai_hal_get_err_state(twai_hal_context_t *hal_ctx)
     return (hw_state & TWAI_LL_STATUS_BS) ? TWAI_ERROR_BUS_OFF : (hw_state & TWAI_LL_STATUS_ES) ? TWAI_ERROR_PASSIVE : TWAI_ERROR_ACTIVE;
 }
 
-uint32_t twai_hal_get_tec(twai_hal_context_t *hal_ctx)
+uint16_t twai_hal_get_tec(twai_hal_context_t *hal_ctx)
 {
     return twai_ll_get_tec((hal_ctx)->dev);
 }
 
-uint32_t twai_hal_get_rec(twai_hal_context_t *hal_ctx)
+uint16_t twai_hal_get_rec(twai_hal_context_t *hal_ctx)
 {
     return twai_ll_get_rec((hal_ctx)->dev);
 }
@@ -202,8 +202,9 @@ static inline uint32_t twai_hal_decode_interrupt(twai_hal_context_t *hal_ctx)
     //Error Warning Interrupt set whenever Error or Bus Status bit changes
     if (interrupts & TWAI_LL_INTR_EI) {
         if (status & TWAI_LL_STATUS_BS) {       //Currently in BUS OFF state
-            if (status & TWAI_LL_STATUS_ES) {    //EWL is exceeded, thus must have entered BUS OFF
-                TWAI_HAL_SET_BITS(events, TWAI_HAL_EVENT_BUS_OFF);
+            if (status & TWAI_LL_STATUS_ES) {   //EWL is exceeded, thus must have entered BUS OFF
+                //The last error which trigger bus_off, hardware no longer fire TWAI_HAL_EVENT_BUS_ERR, but error reason still need to be read/clear and report
+                TWAI_HAL_SET_BITS(events, TWAI_HAL_EVENT_BUS_OFF | TWAI_HAL_EVENT_BUS_ERR);
                 TWAI_HAL_SET_BITS(state_flags, TWAI_HAL_STATE_FLAG_BUS_OFF);
                 //Any TX would have been halted by entering bus off. Reset its flag
                 TWAI_HAL_CLEAR_BITS(state_flags, TWAI_HAL_STATE_FLAG_RUNNING | TWAI_HAL_STATE_FLAG_TX_BUFF_OCCUPIED);
@@ -381,10 +382,10 @@ void twai_hal_format_frame(const twai_hal_trans_desc_t *trans_desc, twai_hal_fra
 
 void twai_hal_parse_frame(const twai_hal_frame_t *frame, twai_frame_header_t *header, uint8_t *buffer, uint8_t buffer_len)
 {
-    twai_message_t msg_flags = {0};
-    twai_ll_parse_frame_buffer((twai_hal_frame_t *)frame, &header->id, (uint8_t *)&header->dlc, buffer, buffer_len, &msg_flags.flags);
-    header->ide = msg_flags.extd;
-    header->rtr = msg_flags.rtr;
+    twai_ll_parse_frame_header((const twai_ll_frame_buffer_t *)frame, header);
+    if (!header->rtr) {
+        twai_ll_parse_frame_data((const twai_ll_frame_buffer_t *)frame, buffer, buffer_len);
+    }
 }
 
 void twai_hal_set_tx_buffer_and_transmit(twai_hal_context_t *hal_ctx, twai_hal_frame_t *tx_frame, uint8_t buffer_idx)

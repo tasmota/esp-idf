@@ -31,6 +31,8 @@ TEST_CASE("twai_listen_only", "[twai_net]")
     twai_onchip_node_config_t node_config = {
         .io_cfg.tx = TEST_TX_GPIO,
         .io_cfg.rx = TEST_RX_GPIO,
+        .io_cfg.quanta_clk_out = GPIO_NUM_NC,
+        .io_cfg.bus_off_indicator = GPIO_NUM_NC,
         .bit_timing.bitrate = 250000,
         .tx_queue_depth = 3,
         .flags.enable_listen_only = true,
@@ -56,6 +58,7 @@ TEST_CASE("twai_listen_only", "[twai_net]")
     while (!rx_msg_cnt) {
         vTaskDelay(1);
     }
+    TEST_ESP_OK(twai_node_transmit_wait_all_done(node_hdl, 0));   // test wait after only receive
     ESP_LOGI("Test", "receive with id 0x%lx", rx_frame.header.id);
     ESP_LOG_BUFFER_HEX("Data", rx_frame.buffer, twaifd_dlc2len(rx_frame.header.dlc));
     TEST_ASSERT_EQUAL_HEX(0x6688, rx_frame.header.id);
@@ -72,6 +75,8 @@ TEST_CASE("twai_remote_request", "[twai_net]")
     twai_onchip_node_config_t node_config = {
         .io_cfg.tx = TEST_TX_GPIO,
         .io_cfg.rx = TEST_RX_GPIO,
+        .io_cfg.quanta_clk_out = GPIO_NUM_NC,
+        .io_cfg.bus_off_indicator = GPIO_NUM_NC,
         .bit_timing.bitrate = 250000,
         .fail_retry_cnt = -1,   // retry forever if send remote frame failed
         .tx_queue_depth = 3,

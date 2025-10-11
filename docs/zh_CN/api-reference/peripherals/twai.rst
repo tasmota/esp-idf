@@ -90,12 +90,6 @@ TWAI 是一种适用于汽车和工业应用的高可靠性的多主机实时串
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_listen_only` 配置为监听模式，节点只接收，不发送任何显性位，包括 ACK 和错误帧。
     - :cpp:member:`twai_onchip_node_config_t::flags::no_receive_rtr` 使用过滤器时是否同时过滤掉符合 ID 规则的远程帧。
 
-.. only:: esp32c5
-
-    .. note::
-
-        注意： ESP32C5 的监听模式在总线上有多个节点相互发送 ACK 信号时无法正常工作。一种替代方案是使用本身支持监听模式的收发器（例如 TJA1145），并结合启用自测模式。
-
 函数 :cpp:func:`twai_node_enable` 将启动 TWAI 控制器，此时 TWAI 控制器就连接到了总线，可以向总线发送报文。如果收到了总线上其他节点发送的报文，或者检测到了总线错误，也将产生相应事件。
 
 与之对应的函数是 :cpp:func:`twai_node_disable`，该函数将立即停止节点工作并与总线断开，正在进行的传输将被中止。当下次重新启动时，如果发送队列中有未完成的任务，驱动将立即发起新的传输。
@@ -120,8 +114,9 @@ TWAI 报文有多种类型，由报头指定。一个典型的数据帧报文主
         .buffer_len = sizeof(send_buff),    // 发送数据的长度
     };
     ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &tx_msg, 0));  // 超时为0，队列满则直接返回超时
+    ESP_ERROR_CHECK(twai_node_transmit_wait_all_done(node_hdl, -1));  // 等待发送完成
 
-其中 :cpp:member:`twai_frame_t::header::id` 指示了该文的 ID 为 0x01。报文的 ID 通常用于表示报文在应用中的类型，并在发送过程中起到总线竞争仲裁的作用，其数值越小，在总线上的优先级越高。:cpp:member:`twai_frame_t::buffer` 则指向要发送数据所在的内存地址，并由 :cpp:member:`twai_frame_t::buffer_len` 给出数据长度。
+其中 :cpp:member:`twai_frame_t::header::id` 指示了该文的 ID 为 0x01。报文的 ID 通常用于表示报文在应用中的类型，并在发送过程中起到总线竞争仲裁的作用，其数值越小，在总线上的优先级越高。:cpp:member:`twai_frame_t::buffer` 则指向要发送数据所在的内存地址，并由 :cpp:member:`twai_frame_t::buffer_len` 给出数据长度。:cpp:func:`twai_node_transmit` 函数是线程安全的，并且也可以在 ISR 中调用。当从 ISR 调用时，``timeout`` 参数将被忽略，函数不会阻塞。
 
 需要注意的是 :cpp:member:`twai_frame_t::header::dlc` 同样可以指定一个数据帧中数据的长度，dlc(data length code) 与具体长度的对应兼容 ISO11898-1 规定。可使用 :cpp:func:`twaifd_dlc2len` / :cpp:func:`twaifd_len2dlc` 进行转换，选择其一即可，如果 dlc 和 buffer_len 都不为 0 ，那他们所代表的长度必须一致。
 
@@ -179,6 +174,32 @@ TWAI 报文有多种类型，由报头指定。一个典型的数据帧报文主
 
 .. image:: ../../../_static/diagrams/twai/full_flow.drawio.svg
     :align: center
+
+在 ISR 中发送
+^^^^^^^^^^^^^
+
+TWAI 驱动支持在中断服务程序 (ISR) 中发送报文。这对于需要低延迟响应或由硬件定时器触发的周期性传输的应用特别有用。例如，你可以在 ``on_tx_done`` 回调中触发一次新的传输，该回调在 ISR 上下文中执行。
+
+.. code:: c
+
+    static bool twai_tx_done_cb(twai_node_handle_t handle, const twai_tx_done_event_data_t *edata, void *user_ctx)
+    {
+        // 一帧已成功发送。排队另一帧。
+        // 帧及其数据缓冲区必须在传输完成之前保持有效。
+        static const uint8_t data_buffer[] = {1, 2, 3, 4};
+        static const twai_frame_t tx_frame = {
+            .header.id = 0x2,
+            .buffer = (uint8_t *)data_buffer,
+            .buffer_len = sizeof(data_buffer),
+        };
+
+        // `twai_node_transmit` 在 ISR 上下文中调用是安全的
+        twai_node_transmit(handle, &tx_frame, 0);
+        return false;
+    }
+
+.. note::
+    在 ISR 中调用 :cpp:func:`twai_node_transmit` 时，``timeout`` 参数将被忽略，函数不会阻塞。如果发送队列已满，函数将立即返回错误。应用程序需要自行处理队列已满的情况。
 
 位时序自定义
 ^^^^^^^^^^^^^
@@ -317,7 +338,9 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 关于性能
 ^^^^^^^^
 
-为了提升中断处理的实时响应能力， 驱动提供了 :ref:`CONFIG_TWAI_ISR_IN_IRAM` 选项。启用该选项后，中断处理程序将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令带来的延迟。
+为了提升中断处理的实时响应能力， 驱动提供了 :ref:`CONFIG_TWAI_ISR_IN_IRAM` 选项。启用该选项后，中断处理程序和接收操作将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令带来的延迟。
+
+对于需要高性能发送操作的应用，驱动还提供了 :ref:`CONFIG_TWAI_IO_FUNC_IN_IRAM` 选项，用于将发送函数放置在 IRAM 中。这对于在用户任务中频繁调用 :cpp:func:`twai_node_transmit` 的时间关键应用特别有效。
 
 .. note::
 
@@ -371,7 +394,8 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 
 .. list::
 
-    - 暂无
+    - :example:`peripherals/twai/twai_error_recovery` 演示了总线错误上报，节点状态变化等事件信息，以及如何从离线状态恢复节点并重新进行通信。
+    - :example:`peripherals/twai/twai_network` 通过发送、监听， 2 个不同角色的节点，演示了如何使用驱动程序进行单次的和大量的数据发送，以及配置过滤器以接收这些数据。
 
 API 参考
 --------

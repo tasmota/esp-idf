@@ -98,7 +98,16 @@ static inline void twaifd_ll_reset_register(uint8_t twai_id)
  */
 static inline void twaifd_ll_set_clock_source(uint8_t twai_id, twai_clock_source_t clk_src)
 {
-    PCR.twai[twai_id].twai_func_clk_conf.twai_func_clk_sel = (clk_src == TWAI_CLK_SRC_XTAL) ? 0 : 1;
+    switch (clk_src) {
+    case TWAI_CLK_SRC_PLL_F80M:
+        PCR.twai[twai_id].twai_func_clk_conf.twai_func_clk_sel = 1;
+        break;
+    case TWAI_CLK_SRC_XTAL:
+        PCR.twai[twai_id].twai_func_clk_conf.twai_func_clk_sel = 0;
+        break;
+    default:
+        HAL_ASSERT(false);
+    }
 }
 
 /**
@@ -165,7 +174,11 @@ static inline void twaifd_ll_set_mode(twaifd_dev_t *hw, bool listen_only, bool s
 
     twaifd_mode_settings_reg_t opmode = {.val = hw->mode_settings.val};
     opmode.stm = self_test;
+    // esp32c5 using `rom` and `acf` together with `bmm` to warkaround the errata 0v2 issue 5
+    // see issue https://github.com/espressif/esp-idf/issues/17461
     opmode.bmm = listen_only;
+    opmode.rom = listen_only;
+    opmode.acf = listen_only;
     opmode.ilbp = loopback;
 
     hw->mode_settings.val = opmode.val;

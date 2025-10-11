@@ -330,10 +330,8 @@
 #define SOC_LP_I2C_FIFO_LEN         (16) /*!< LP_I2C hardware FIFO depth */
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
-#define SOC_I2S_NUM                 (3U)
 #define SOC_I2S_HW_VERSION_2        (1)
 #define SOC_I2S_SUPPORTS_ETM        (1)
-#define SOC_I2S_SUPPORTS_XTAL       (1)
 #define SOC_I2S_SUPPORTS_APLL       (1)
 #define SOC_I2S_SUPPORTS_PCM        (1)
 #define SOC_I2S_SUPPORTS_PDM        (1)
@@ -346,8 +344,6 @@
 #define SOC_I2S_SUPPORTS_TDM        (1)
 #define SOC_I2S_PDM_MAX_TX_LINES    (2)     // On I2S0
 #define SOC_I2S_PDM_MAX_RX_LINES    (4)     // On I2S0
-#define SOC_I2S_TDM_FULL_DATA_WIDTH (1)  /*!< No limitation to data bit width when using multiple slots */
-#define SOC_I2S_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up I2S registers before sleep */
 
 /*-------------------------- LP_I2S CAPS -------------------------------------*/
 #define SOC_LP_I2S_NUM              (1U)
@@ -627,7 +623,6 @@
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/
 #define SOC_TOUCH_SENSOR_VERSION                    (3)     /*!< Hardware version of touch sensor */
-#define SOC_TOUCH_SENSOR_NUM                        (14)    /*!< Touch available channel number. Actually there are 15 Touch channels, but channel 14 is not pinned out, limit to 14 channels */
 #define SOC_TOUCH_MIN_CHAN_ID                       (1U)    /*!< Touch minimum channel number */
 #define SOC_TOUCH_MAX_CHAN_ID                       (14)    /*!< Touch maximum channel number */
 
@@ -637,8 +632,6 @@
 #define SOC_TOUCH_SUPPORT_WATERPROOF                (1)     /*!< Touch sensor supports waterproof */
 #define SOC_TOUCH_SUPPORT_PROX_SENSING              (1)     /*!< Touch sensor supports proximity sensing */
 #define SOC_TOUCH_PROXIMITY_CHANNEL_NUM             (3)     /*!< Support touch proximity channel number. */
-#define SOC_TOUCH_PROXIMITY_MEAS_DONE_SUPPORTED     (1)     /*!< Support touch proximity channel measure done interrupt type. */
-#define SOC_TOUCH_SUPPORT_FREQ_HOP                  (1)     /*!< Touch sensor supports frequency hopping */
 #define SOC_TOUCH_SAMPLE_CFG_NUM                    (3)     /*!< The sample configurations number in total, each sampler can be used to sample on one frequency */
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/

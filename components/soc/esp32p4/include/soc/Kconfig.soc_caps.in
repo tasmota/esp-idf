@@ -839,19 +839,11 @@ config SOC_LP_I2C_FIFO_LEN
     int
     default 16
 
-config SOC_I2S_NUM
-    int
-    default 3
-
 config SOC_I2S_HW_VERSION_2
     bool
     default y
 
 config SOC_I2S_SUPPORTS_ETM
-    bool
-    default y
-
-config SOC_I2S_SUPPORTS_XTAL
     bool
     default y
 
@@ -902,14 +894,6 @@ config SOC_I2S_PDM_MAX_TX_LINES
 config SOC_I2S_PDM_MAX_RX_LINES
     int
     default 4
-
-config SOC_I2S_TDM_FULL_DATA_WIDTH
-    bool
-    default y
-
-config SOC_I2S_SUPPORT_SLEEP_RETENTION
-    bool
-    default y
 
 config SOC_LP_I2S_NUM
     int
@@ -1679,10 +1663,6 @@ config SOC_TOUCH_SENSOR_VERSION
     int
     default 3
 
-config SOC_TOUCH_SENSOR_NUM
-    int
-    default 14
-
 config SOC_TOUCH_MIN_CHAN_ID
     int
     default 1
@@ -1710,14 +1690,6 @@ config SOC_TOUCH_SUPPORT_PROX_SENSING
 config SOC_TOUCH_PROXIMITY_CHANNEL_NUM
     int
     default 3
-
-config SOC_TOUCH_PROXIMITY_MEAS_DONE_SUPPORTED
-    bool
-    default y
-
-config SOC_TOUCH_SUPPORT_FREQ_HOP
-    bool
-    default y
 
 config SOC_TOUCH_SAMPLE_CFG_NUM
     int

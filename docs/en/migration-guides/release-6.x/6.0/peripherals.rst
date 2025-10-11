@@ -263,3 +263,15 @@ Touch Sensor
 ------------
 
 The ``touch_sensor_sample_config_t::bypass_shield_output`` member for version 3 touch sensor has been removed because it is not supported in the version 3 hardware.
+
+I2S
+---
+
+- ``i2s_port_t`` type has been removed. Please use ``int`` type instead. Its enum items ``I2S_NUM_0``, ``I2S_NUM_1``, ``I2S_NUM_2`` and ``I2S_NUM_AUTO`` have been replaced by macro definitions to ensure compatibility.
+
+USB
+---
+
+The ``usb`` component is moved to ESP Component Registry
+
+You can add this dependency to your project by running ``idf.py add-dependency "espressif/usb"``.

@@ -40,3 +40,10 @@
 
 /*--------------------------- MIPI DSI -------------------------------------------*/
 #define _SOC_CAPS_MIPI_DSI_INST_NUM               1  // Number of MIPI DSI instances
+
+/*------------------------------- I2S ---------------------------------------*/
+// helper macros to access module attributes
+#define _SOC_CAPS_I2S_INST_NUM                    3  // Number of I2S instances
+
+/*------------------------------- Touch Sensor ------------------------------------*/
+#define _SOC_CAPS_TOUCH_CHAN_NUM                  14  // Number of touch sensor channels

@@ -162,6 +162,7 @@ esp_err_t esp_dpp_send_action_frame(uint8_t *dest_mac, const uint8_t *buf, uint3
     req->data_len = len;
     req->rx_cb = s_action_rx_cb;
     req->channel = channel;
+    req->sec_channel = WIFI_SECOND_CHAN_NONE;
     req->wait_time_ms = wait_time_ms;
     req->type = WIFI_OFFCHAN_TX_REQ;
     os_memcpy(req->data, buf, req->data_len);
@@ -651,6 +652,7 @@ static void dpp_listen_next_channel(void *data, void *user_ctx)
         wpa_printf(MSG_ERROR, "Failed ROC. error : 0x%x", ret);
         return;
     }
+    atomic_store(&roc_in_progress, true);
     os_event_group_clear_bits(s_dpp_event_group, DPP_ROC_EVENT_HANDLED);
 }
 
@@ -823,7 +825,6 @@ static void tx_status_handler(void *arg, esp_event_base_t event_base,
             eloop_register_timeout(ESP_GAS_TIMEOUT_SECS, 0, gas_query_timeout, NULL, auth);
         }
     }
-    atomic_store(&roc_in_progress, true);
 }
 
 static void roc_status_handler(void *arg, esp_event_base_t event_base,

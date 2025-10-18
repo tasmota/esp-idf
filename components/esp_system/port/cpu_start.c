@@ -121,13 +121,13 @@
 #include "esp_private/startup_internal.h"
 #include "esp_private/system_internal.h"
 
-#if SOC_MEM_NON_CONTIGUOUS_SRAM
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 extern int _bss_start_low, _bss_start_high;
 extern int _bss_end_low, _bss_end_high;
 #else
 extern int _bss_start;
 extern int _bss_end;
-#endif // SOC_MEM_NON_CONTIGUOUS_SRAM
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 extern int _rtc_bss_start;
 extern int _rtc_bss_end;
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
@@ -169,8 +169,13 @@ static volatile bool s_resume_cores;
 
 static void core_intr_matrix_clear(void)
 {
-    uint32_t core_id = esp_cpu_get_core_id();
+    __attribute__((unused)) uint32_t core_id = esp_cpu_get_core_id();
 
+    /* NOTE: With ESP-TEE enabled, each iteration in this loop results in a service call.
+    * To accelerate the boot-up process, the interrupt configuration is pre-cleared in the TEE,
+    * allowing this step to be safely skipped here.
+    */
+#if !CONFIG_SECURE_ENABLE_TEE
     for (int i = 0; i < ETS_MAX_INTR_SOURCE; i++) {
 #if SOC_INT_CLIC_SUPPORTED
         interrupt_clic_ll_route(core_id, i, ETS_INVALID_INUM);
@@ -178,6 +183,7 @@ static void core_intr_matrix_clear(void)
         esp_rom_route_intr_matrix(core_id, i, ETS_INVALID_INUM);
 #endif  // SOC_INT_CLIC_SUPPORTED
     }
+#endif  // !CONFIG_SECURE_ENABLE_TEE
 
 #if SOC_INT_CLIC_SUPPORTED
     for (int i = 0; i < 32; i++) {
@@ -378,6 +384,15 @@ FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
     );
 #endif
 
+    /* NOTE: When ESP-TEE is enabled, this sets up the callback function
+     * which redirects all the interrupt management for the REE (user app)
+     * to the TEE by raising the appropriate service calls.
+     */
+#if CONFIG_SECURE_ENABLE_TEE
+    extern uint32_t esp_tee_service_call(int argc, ...);
+    esprv_int_setup_mgmt_cb((void *)esp_tee_service_call);
+#endif
+
 #if SOC_BRANCH_PREDICTOR_SUPPORTED
     esp_cpu_branch_prediction_enable();
 #endif
@@ -387,19 +402,12 @@ FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
     /* When hardware vectored interrupts are enabled in CLIC,
      * the CPU jumps to this base address + 4 * interrupt_id.
      */
-    esp_cpu_intr_set_mtvt_addr(&_mtvt_table);
+    /* NOTE: When ESP-TEE is enabled, this sets up the U-mode
+     * interrupt vector table (UTVT) */
+    esp_cpu_intr_set_xtvt_addr(&_mtvt_table);
 #endif
 #if SOC_CPU_SUPPORT_WFE
-    rv_utils_disable_wfe_mode();
-#endif
-
-    /* NOTE: When ESP-TEE is enabled, this sets up the callback function
-     * which redirects all the interrupt management for the REE (user app)
-     * to the TEE by raising the appropriate service calls.
-     */
-#if CONFIG_SECURE_ENABLE_TEE
-    extern uint32_t esp_tee_service_call(int argc, ...);
-    esprv_int_setup_mgmt_cb((void *)esp_tee_service_call);
+    esp_cpu_disable_wfe_mode();
 #endif
 }
 
@@ -414,12 +422,12 @@ FORCE_INLINE_ATTR IRAM_ATTR void get_reset_reason(soc_reset_reason_t *rst_reas)
 
 FORCE_INLINE_ATTR IRAM_ATTR void init_bss(const soc_reset_reason_t *rst_reas)
 {
-#if SOC_MEM_NON_CONTIGUOUS_SRAM
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
     memset(&_bss_start_low, 0, (&_bss_end_low - &_bss_start_low) * sizeof(_bss_start_low));
     memset(&_bss_start_high, 0, (&_bss_end_high - &_bss_start_high) * sizeof(_bss_start_high));
 #else
     memset(&_bss_start, 0, (&_bss_end - &_bss_start) * sizeof(_bss_start));
-#endif // SOC_MEM_NON_CONTIGUOUS_SRAM
+#endif // CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 
 #if CONFIG_BT_LE_RELEASE_IRAM_SUPPORTED
     // Clear Bluetooth bss
@@ -486,12 +494,6 @@ FORCE_INLINE_ATTR IRAM_ATTR void cache_init(void)
     rom_config_data_cache_mode(CONFIG_ESP32S3_DATA_CACHE_SIZE, CONFIG_ESP32S3_DCACHE_ASSOCIATED_WAYS, CONFIG_ESP32S3_DATA_CACHE_LINE_SIZE);
     Cache_Resume_DCache(0);
 #endif // CONFIG_IDF_TARGET_ESP32S3
-
-#if CONFIG_IDF_TARGET_ESP32P4
-    //TODO: IDF-5670, add cache init API
-    extern void esp_config_l2_cache_mode(void);
-    esp_config_l2_cache_mode();
-#endif
 
     // For RAM loadable ELF case, we don't need to reserve IROM/DROM as instructions and data
     // are all in internal RAM. If the RAM loadable ELF has any requirement to memory map the

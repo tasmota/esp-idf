@@ -177,8 +177,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATE
     list(APPEND c_compile_options "-fzero-init-padding-bits=all" "-fno-malloc-dce")
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0 AND CONFIG_IDF_TARGET_ARCH_RISCV)
-    list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set
+if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0 AND CONFIG_IDF_TARGET_ESP32P4)
+    list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set for P4
 endif()
 
 __generate_prefix_map(prefix_map_compile_options)

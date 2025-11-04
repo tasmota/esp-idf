@@ -138,29 +138,47 @@ UART
 I2C
 ---
 
-I2C slave has been redesigned in v5.4. In the current version, the old I2C slave driver has been removed. For details, please refer to the I2C slave section in the programming guide.
+Legacy I2C Driver End-of-Life
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The major breaking changes in concept and usage are listed as follows:
+.. warning::
+
+    The legacy I2C driver (``driver/i2c.h``) has been marked as **End-of-Life (EOL)** in ESP-IDF v6.0 and is scheduled for **removal in v7.0**.
+
+    - ESP-IDF will not provide updates, bug fixes, or security patches for the legacy driver timely.
+    - Users are strongly recommended to migrate to the new I2C drivers: ``driver/i2c_master.h`` and ``driver/i2c_slave.h``.
+    - To temporarily suppress the compile-time warning, enable ``Component config`` > ``Legacy Driver Configurations`` > ``Legacy I2C Driver Configurations`` > ``Suppress legacy driver deprecated warning`` in menuconfig.
+
+The new I2C drivers provide improved slave and master functionality. For details, please refer to the :ref:`I2C Migration Guide <migration_guide_i2c_driver_5_2>` and the :doc:`I2C Driver Programming Guide <../../../api-reference/peripherals/i2c>`.
+
+I2C Slave Driver Updates
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The I2C slave driver has been redesigned in v5.4. In the current version, the old I2C slave driver has been removed.
 
 Major Changes in Concepts
-~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Previously, the I2C slave driver performed active read and write operations. In the new version, these operations are handled passively via callbacks triggered by master events, aligning with standard I2C slave behavior.
 
 Major Changes in Usage
-~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^
 
 - ``i2c_slave_receive`` has been removed. In the new driver, data reception is handled via callbacks.
 - ``i2c_slave_transmit`` has been replaced by ``i2c_slave_write``.
 - ``i2c_slave_write_ram`` has been removed.
 - ``i2c_slave_read_ram`` has been removed.
 
-Meanwhile, I2C master also has some change in its APIs' definitions.
+I2C Master Driver Updates
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The I2C master driver also has some changes in its API definitions.
 
 Major Changes in Usage
-~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^
 
 Following functions now will return ``ESP_ERR_INVALID_RESPONSE`` instead of ``ESP_ERR_INVALID_STATE`` when NACK from the bus is detected:
+
 - ``i2c_master_transmit``
 - ``i2c_master_multi_buffer_transmit``
 - ``i2c_master_transmit_receive``
@@ -270,6 +288,7 @@ SPI Flash Driver
 - Deprecated API ``spi_flash_dump_counters`` has been removed. Please use :cpp:func:`esp_flash_dump_counters` instead.
 - Deprecated API ``spi_flash_get_counters`` has been removed. Please use :cpp:func:`esp_flash_get_counters` instead.
 - Deprecated API ``spi_flash_reset_counters`` has been removed. Please use :cpp:func:`esp_flash_reset_counters` instead.
+- Kconfig option ``CONFIG_SPI_FLASH_ROM_DRIVER_PATCH`` has been removed. Considering that this option is unlikely to be widely used by users and may cause serious issues if misused, it has been decided to remove it.
 
 .. note::
 
@@ -287,6 +306,8 @@ Touch Sensor
 
 The ``touch_sensor_sample_config_t::bypass_shield_output`` member for version 3 touch sensor has been removed because it is not supported in the version 3 hardware.
 
+The dependencies of legacy touch sensor driver are removed from ULP touch driver, now you need to use ``int`` instead of ``touch_pad_t`` to indicate the touch channel ID.
+
 I2S
 ---
 
@@ -295,6 +316,6 @@ I2S
 USB
 ---
 
-The ``usb`` component is moved to ESP Component Registry
+The ``usb`` component has been moved to `ESP Component Registry <https://components.espressif.com/components/espressif/usb>`__.
 
 You can add this dependency to your project by running ``idf.py add-dependency "espressif/usb"``.

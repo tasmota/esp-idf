@@ -81,6 +81,7 @@ else()
                                     esp_hal_i2c
                                     esp_hal_wdt
                                     esp_hal_lcd
+                                    esp_hal_mcpwm
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 
@@ -129,8 +130,8 @@ target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_system_include_startup_
 
 # [refactor-todo] requirements due to init code, should be removable
 # once link-time registration of component init functions is used.
-if(CONFIG_APPTRACE_ENABLE)
-    idf_component_optional_requires(PRIVATE app_trace)
+if(CONFIG_ESP_TRACE_ENABLE)
+    idf_component_optional_requires(PRIVATE esp_trace)
 endif()
 
 if(CONFIG_ESP_COREDUMP_ENABLE)

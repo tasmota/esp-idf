@@ -483,6 +483,10 @@ config SOC_CPU_HAS_LOCKUP_RESET
     bool
     default y
 
+config SOC_CPU_ZCMP_WORKAROUND
+    bool
+    default y
+
 config SOC_DS_SIGNATURE_MAX_BIT_LEN
     int
     default 3072
@@ -783,6 +787,10 @@ config SOC_LEDC_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
+config SOC_LEDC_SUPPORT_ETM
+    bool
+    default y
+
 config SOC_MMU_PERIPH_NUM
     int
     default 1
@@ -862,50 +870,6 @@ config SOC_RMT_SUPPORT_XTAL
 config SOC_RMT_SUPPORT_SLEEP_RETENTION
     bool
     default y
-
-config SOC_MCPWM_GROUPS
-    int
-    default 1
-
-config SOC_MCPWM_TIMERS_PER_GROUP
-    int
-    default 3
-
-config SOC_MCPWM_OPERATORS_PER_GROUP
-    int
-    default 3
-
-config SOC_MCPWM_COMPARATORS_PER_OPERATOR
-    int
-    default 2
-
-config SOC_MCPWM_GENERATORS_PER_OPERATOR
-    int
-    default 2
-
-config SOC_MCPWM_EVENT_COMPARATORS_PER_OPERATOR
-    int
-    default 2
-
-config SOC_MCPWM_TRIGGERS_PER_OPERATOR
-    int
-    default 2
-
-config SOC_MCPWM_GPIO_FAULTS_PER_GROUP
-    int
-    default 3
-
-config SOC_MCPWM_CAPTURE_TIMERS_PER_GROUP
-    bool
-    default y
-
-config SOC_MCPWM_CAPTURE_CHANNELS_PER_TIMER
-    int
-    default 3
-
-config SOC_MCPWM_GPIO_SYNCHROS_PER_GROUP
-    int
-    default 3
 
 config SOC_MCPWM_SWSYNC_CAN_PROPAGATE
     bool
@@ -1040,6 +1004,10 @@ config SOC_SHA_SUPPORT_SHA512_T
     default y
 
 config SOC_ECC_CONSTANT_TIME_POINT_MUL
+    bool
+    default y
+
+config SOC_ECC_SUPPORT_CURVE_P384
     bool
     default y
 

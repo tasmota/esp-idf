@@ -581,7 +581,7 @@ menu "BLE 5.x Features"
 
         config BT_NIMBLE_EXT_SCAN
             bool "Enable extended scanning"
-            depends on BT_NIMBLE_50_FEATURE_SUPPORT && BT_NIMBLE_ROLE_OBSERVER
+            depends on BT_NIMBLE_50_FEATURE_SUPPORT
             default y
             help
                 Enable this option to do extended scanning.
@@ -721,11 +721,15 @@ menu "BLE 6.x Features"
     if BT_NIMBLE_60_FEATURE_SUPPORT
         config BT_NIMBLE_CHANNEL_SOUNDING
             bool "ble channel souding feature"
-            depends on BT_NIMBLE_ENABLED
             default n
             help
                 Used to enable/disable the channel sounding feature
 
+        config BT_NIMBLE_MONITOR_ADV
+            bool "Enable Monitor Advertising"
+            default n
+            help
+                Enable support for Monitor Advertisers
     endif
 endmenu #BLE6.x
 

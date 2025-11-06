@@ -248,6 +248,7 @@ typedef enum {
     ESP_GAP_BLE_READ_CHANNEL_MAP_COMPLETE_EVT,                   /*!< When BLE channel map result is received, the event comes */
     ESP_GAP_BLE_SET_COMMON_FACTOR_CMPL_EVT,                      /*!< When set the common factor complete, the event comes */
     ESP_GAP_BLE_SET_SCH_LEN_CMPL_EVT,                            /*!< When set the scheduling length complete, the event comes */
+    ESP_GAP_BLE_SET_SCAN_CHAN_MAP_CMPL_EVT,                      /*!< When set the channel map for scanning complete, the event comes */
     ESP_GAP_BLE_EVT_MAX,                                         /*!< when maximum advertising event complete, the event comes */
 } esp_gap_ble_cb_event_t;
 
@@ -1625,7 +1626,7 @@ typedef union {
      * @brief ESP_GAP_BLE_PERIODIC_ADV_SYNC_ESTAB_EVT
      */
     struct ble_periodic_adv_sync_estab_param {
-        uint8_t status;                      /*!< periodic advertising sync status */
+        esp_bt_status_t status;              /*!< periodic advertising sync status */
         uint16_t sync_handle;                /*!< periodic advertising sync handle */
         uint8_t sid;                         /*!< periodic advertising sid */
         esp_ble_addr_type_t adv_addr_type;   /*!< periodic advertising address type */
@@ -1762,6 +1763,12 @@ typedef union {
     struct ble_set_sch_len_cmpl_evt_param {
         esp_bt_status_t status;                     /*!< Indicate scheduling length set operation success status */
     } set_sch_len_cmpl;                             /*!< Event parameter of ESP_GAP_BLE_SET_SCH_LEN_CMPL_EVT */
+    /**
+     * @brief ESP_GAP_BLE_SET_SCAN_CHAN_MAP_CMPL_EVT
+     */
+    struct ble_set_scan_chan_map_cmpl_evt_param {
+        esp_bt_status_t status;                     /*!< Indicate channel map for scanning set operation success status */
+    } set_scan_chan_map_cmpl;                       /*!< Event parameter of ESP_GAP_BLE_SET_SCAN_CHAN_MAP_CMPL_EVT */
 #endif // #if (BLE_VENDOR_HCI_EN == TRUE)
 #if (BLE_FEAT_POWER_CONTROL_EN == TRUE)
     /**
@@ -2081,6 +2088,7 @@ esp_err_t esp_ble_gap_set_resolvable_private_address_timeout(uint16_t rpa_timeou
  *
  */
 esp_err_t esp_ble_gap_add_device_to_resolving_list(esp_bd_addr_t peer_addr, uint8_t addr_type, uint8_t *peer_irk);
+
 /**
  * @brief           This function clears the random address for the application
  *
@@ -2486,6 +2494,28 @@ esp_err_t esp_ble_sc_oob_req_reply(esp_bd_addr_t bd_addr, uint8_t p_c[16], uint8
 *
 */
 esp_err_t esp_ble_create_sc_oob_data(void);
+
+/**
+ * @brief           Get the local Identity Resolving Key (IRK).
+ *
+ * @note            This API retrieves the local IRK stored in the device's security database.
+ *                  The IRK is used by the controller to generate and resolve Resolvable Private Addresses (RPA).
+ *                  The IRK length is always 16 bytes (ESP_BT_OCTET16_LEN).
+ *
+ * @note            Usage Restrictions: Do NOT call this API during a disconnection event or while
+ *                  a BLE disconnection is in progress. Calling this API during disconnection may lead
+ *                  to undefined behavior or accessing invalid information.
+ *
+ * @param[out]      local_irk: Buffer to hold the 16-byte IRK. The array notation [16] explicitly
+ *                             indicates the required buffer size (ESP_BT_OCTET16_LEN).
+ *
+ * @return
+ *                  - ESP_OK : success
+ *                  - ESP_ERR_INVALID_ARG : local_irk is NULL
+ *                  - ESP_ERR_INVALID_STATE : BLE stack not initialized or IRK not available
+ */
+esp_err_t esp_ble_gap_get_local_irk(uint8_t local_irk[16]);
+
 #endif /* #if (SMP_INCLUDED == TRUE) */
 
 /**
@@ -3143,6 +3173,28 @@ esp_err_t esp_ble_gap_set_common_factor(uint32_t common_factor);
  *                  - other  : failed
  */
 esp_err_t esp_ble_gap_set_sch_len(uint8_t role, uint32_t len);
+
+/**
+ * @brief           This function is used to Set the channel map for LE scanning or initiating state.
+ *
+ * @note            - This function must be called before starting scanning or initiating.
+ *                  - At least one channel should be marked as used.
+ *
+ * @param[in]       state: The LE state for which the channel map is applied.
+ *                         - 0 : Scanning state
+ *                         - 1 : Initiating state
+ * @param[in]       chan_map: A 5-byte array representing the channel usage bit mask.
+ *                            Each bit corresponds to one channel from channel 0 to channel 39.
+ *                            The least significant bit of chan_map[0] corresponds to channel 0.
+ *                            The most significant bit of chan_map[4] corresponds to channel 39.
+ *                            - Bit = 1 : channel is used
+ *                            - Bit = 0 : channel is not used
+ *
+ * @return
+ *                  - ESP_OK : success
+ *                  - other  : failed
+ */
+esp_err_t esp_ble_gap_set_scan_chan_map(uint8_t state, uint8_t chan_map[5]);
 
 /**
  * @brief           This function is used to read the current and maximum transmit power levels of the local Controller.

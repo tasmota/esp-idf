@@ -272,8 +272,8 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     ESP_RETURN_ON_FALSE(config->flags.allow_pd == 0, ESP_ERR_NOT_SUPPORTED, TAG, "not able to power down in light sleep");
 #endif // SOC_RMT_SUPPORT_SLEEP_RETENTION
 
-    // malloc channel memory
-    uint32_t mem_caps = RMT_MEM_ALLOC_CAPS;
+    // allocate channel memory from internal memory because it contains atomic variable
+    uint32_t mem_caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
     tx_channel = heap_caps_calloc(1, sizeof(rmt_tx_channel_t) + sizeof(rmt_tx_trans_desc_t) * config->trans_queue_depth, mem_caps);
     ESP_GOTO_ON_FALSE(tx_channel, ESP_ERR_NO_MEM, err, TAG, "no mem for tx channel");
     // GPIO configuration is not done yet
@@ -281,7 +281,7 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     // create DMA descriptors
     if (config->flags.with_dma) {
         // DMA descriptors must be placed in internal SRAM
-        mem_caps |= MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA;
+        mem_caps |= MALLOC_CAP_DMA;
         rmt_dma_descriptor_t *dma_nodes = heap_caps_aligned_calloc(RMT_DMA_DESC_ALIGN, RMT_DMA_NODES_PING_PONG, sizeof(rmt_dma_descriptor_t), mem_caps);
         ESP_GOTO_ON_FALSE(dma_nodes, ESP_ERR_NO_MEM, err, TAG, "no mem for tx DMA nodes");
         tx_channel->dma_nodes = dma_nodes;
@@ -542,7 +542,7 @@ esp_err_t rmt_transmit(rmt_channel_handle_t channel, rmt_encoder_t *encoder, con
     ESP_RETURN_ON_FALSE(channel && encoder && payload && payload_bytes && config, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(channel->direction == RMT_CHANNEL_DIRECTION_TX, ESP_ERR_INVALID_ARG, TAG, "invalid channel direction");
 #if !SOC_RMT_SUPPORT_TX_LOOP_COUNT
-    ESP_RETURN_ON_FALSE(config->loop_count <= 0, ESP_ERR_NOT_SUPPORTED, TAG, "loop count is not supported");
+    ESP_RETURN_ON_FALSE(config->loop_count <= 1, ESP_ERR_NOT_SUPPORTED, TAG, "loop count is not supported");
 #endif // !SOC_RMT_SUPPORT_TX_LOOP_COUNT
 #if CONFIG_RMT_ISR_IRAM_SAFE
     // payload is retrieved by the encoder, we should make sure it's still accessible even when the cache is disabled
@@ -567,7 +567,8 @@ esp_err_t rmt_transmit(rmt_channel_handle_t channel, rmt_encoder_t *encoder, con
     t->encoder = encoder;
     t->payload = payload;
     t->payload_bytes = payload_bytes;
-    t->loop_count = config->loop_count;
+    // treat loop_count == 1 as no loop
+    t->loop_count = config->loop_count == 1 ? 0 : config->loop_count;
     t->remain_loop_count = t->loop_count;
     t->flags.eot_level = config->flags.eot_level;
 
@@ -661,19 +662,21 @@ static size_t IRAM_ATTR rmt_encode_check_result(rmt_tx_channel_t *tx_chan, rmt_t
     rmt_encode_state_t encode_state = RMT_ENCODING_RESET;
     rmt_encoder_handle_t encoder = t->encoder;
     size_t encoded_symbols = encoder->encode(encoder, &tx_chan->base, t->payload, t->payload_bytes, &encode_state);
+    bool is_mem_full = encode_state & RMT_ENCODING_MEM_FULL;
 
     if (encode_state & RMT_ENCODING_COMPLETE) {
         t->flags.encoding_done = true;
         // inserting EOF symbol if there's extra space
-        if (!(encode_state & RMT_ENCODING_MEM_FULL)) {
+        if (!is_mem_full) {
             rmt_tx_mark_eof(tx_chan);
             encoded_symbols += 1;
         }
     }
 
-    // for loop transaction, the memory block should accommodate all encoded RMT symbols
+    // for loop transaction, the memory block should accommodate all encoded RMT symbols and an extra EOF symbol
     if (t->loop_count != 0) {
-        if (unlikely(encoded_symbols > tx_chan->base.mem_block_num * SOC_RMT_MEM_WORDS_PER_CHANNEL)) {
+        size_t limit_symbols = tx_chan->base.mem_block_num * SOC_RMT_MEM_WORDS_PER_CHANNEL;
+        if (unlikely(encoded_symbols > limit_symbols || (encoded_symbols == limit_symbols && is_mem_full))) {
             ESP_DRAM_LOGE(TAG, "encoding artifacts can't exceed hw memory block for loop transmission");
         }
     }
@@ -838,7 +841,7 @@ static esp_err_t rmt_tx_disable(rmt_channel_handle_t channel)
 #if !SOC_RMT_SUPPORT_ASYNC_STOP
         // we do a trick to stop the undergoing transmission
         // stop interrupt, insert EOF marker to the RMT memory, polling the trans_done event
-        channel->hw_mem_base[0].val = 0;
+        memset(channel->hw_mem_base, 0, channel->mem_block_num * SOC_RMT_MEM_WORDS_PER_CHANNEL * sizeof(rmt_symbol_word_t));
         while (!(rmt_ll_tx_get_interrupt_status_raw(hal->regs, channel_id) & RMT_LL_EVENT_TX_DONE(channel_id))) {}
 #endif
         rmt_ll_clear_interrupt_status(hal->regs, RMT_LL_EVENT_TX_MASK(channel_id));

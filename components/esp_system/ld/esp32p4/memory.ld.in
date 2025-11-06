@@ -15,6 +15,11 @@
 #include "sdkconfig.h"
 #include "ld.common"
 
+#if !CONFIG_ESP32P4_SELECTS_REV_LESS_V3
+#define SRAM_START       0x4FF00000 + CONFIG_CACHE_L2_CACHE_SIZE
+#define SRAM_END         0x4FFAEFC0  /* 2nd stage bootloader iram_loader_seg start address */
+#define SRAM_SIZE        SRAM_END - SRAM_START
+#else
 #define SRAM_LOW_START     0x4FF00000
 #define SRAM_LOW_END       0x4FF2CBD0  /* 2nd stage bootloader iram_loader_seg start address */
 #define SRAM_LOW_SIZE      SRAM_LOW_END - SRAM_LOW_START
@@ -25,6 +30,13 @@
 #define SRAM_HIGH_START    0x4FF40000
 #define SRAM_HIGH_SIZE     0x80000 - CONFIG_CACHE_L2_CACHE_SIZE
 #define SRAM_HIGH_END      SRAM_HIGH_START + SRAM_HIGH_SIZE
+#endif
+
+#if CONFIG_P4_REV3_MSPI_CRASH_AFTER_POWER_UP_WORKAROUND
+#define MSPI_WORKAROUND_SIZE   CONFIG_P4_REV3_MSPI_WORKAROUND_SIZE
+#else
+#define MSPI_WORKAROUND_SIZE   0x0
+#endif
 
 #define IDROM_SEG_SIZE   (CONFIG_MMU_PAGE_SIZE << 10)
 
@@ -65,9 +77,12 @@ MEMORY
    * Shared data RAM, excluding memory reserved for ROM bss/data/stack.
    * Enabling Bluetooth & Trace Memory features in menuconfig will decrease the amount of RAM available.
    */
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
   sram_low (RWX) :                 org = SRAM_LOW_START, len = SRAM_LOW_SIZE
-
   sram_high (RW) :                org = SRAM_HIGH_START, len = SRAM_HIGH_SIZE
+#else
+  sram_seg (RWX) :                 org = SRAM_START, len = SRAM_SIZE
+#endif
 
 #if CONFIG_APP_BUILD_USE_FLASH_SECTIONS
 #if CONFIG_SPIRAM_RODATA
@@ -81,14 +96,17 @@ MEMORY
   /* (See irom_seg for meaning of 0x20 offset in the above.) */
 #endif // CONFIG_APP_BUILD_USE_FLASH_SECTIONS
 
+  /* Used to store the deep sleep workaround code of P4 rev3.0. The reset vector will be set here before the chip enters sleep. */
+  rev3_mspi_workaround_seg(RWX) :        org = 0x50108000, len = MSPI_WORKAROUND_SIZE
+
   /**
    * lp ram memory (RWX). Persists over deep sleep. // TODO: IDF-5667
    */
 #if CONFIG_ULP_COPROC_ENABLED
-  lp_ram_seg(RW)  :                 org = 0x50108000 + RESERVE_RTC_MEM + CONFIG_ULP_COPROC_RESERVE_MEM,
+  lp_ram_seg(RW)  :                 org = 0x50108000 + MSPI_WORKAROUND_SIZE + RESERVE_RTC_MEM + CONFIG_ULP_COPROC_RESERVE_MEM,
                                     len = 0x8000 - CONFIG_ULP_COPROC_RESERVE_MEM - RESERVE_RTC_MEM - LP_ROM_DRAM_SIZE
 #else
-  lp_ram_seg(RW)  :                 org = 0x50108000 + RESERVE_RTC_MEM, len = 0x8000 - RESERVE_RTC_MEM
+  lp_ram_seg(RW)  :                 org = 0x50108000 + MSPI_WORKAROUND_SIZE + RESERVE_RTC_MEM, len = 0x8000 - RESERVE_RTC_MEM - MSPI_WORKAROUND_SIZE
 #endif // CONFIG_ULP_COPROC_ENABLED
 
   /* We reduced the size of lp_ram_seg by RESERVE_RTC_MEM value.
@@ -99,7 +117,7 @@ MEMORY
      The aim of this is to keep data that will not be moved around and have a fixed address.
      This segment is placed at the beginning of LP RAM, as the end of LP RAM is occupied by LP ROM stack/data
   */
-  lp_reserved_seg(RW) :        org = 0x50108000, len = RESERVE_RTC_MEM
+  lp_reserved_seg(RW) :        org = 0x50108000 + MSPI_WORKAROUND_SIZE, len = RESERVE_RTC_MEM
 
   /* PSRAM seg */
   extern_ram_seg(RWX) :        org = 0x48000000, len = IDROM_SEG_SIZE

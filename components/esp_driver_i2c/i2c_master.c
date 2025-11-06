@@ -814,7 +814,7 @@ static esp_err_t i2c_master_bus_destroy(i2c_master_bus_handle_t bus_handle)
     i2c_master_bus_handle_t i2c_master = bus_handle;
     esp_err_t err = ESP_OK;
     if (i2c_master->base) {
-        i2c_common_deinit_pins(i2c_master->base);
+        ESP_RETURN_ON_ERROR(i2c_common_deinit_pins(i2c_master->base), TAG, "failed to deinit i2c pins");
         err = i2c_release_bus_handle(i2c_master->base);
     }
     if (err == ESP_OK) {
@@ -1218,7 +1218,7 @@ esp_err_t i2c_master_transmit(i2c_master_dev_handle_t i2c_dev, const uint8_t *wr
     ESP_RETURN_ON_FALSE((write_buffer != NULL) && (write_size > 0), ESP_ERR_INVALID_ARG, TAG, "i2c transmit buffer or size invalid");
 
     i2c_master_transmit_multi_buffer_info_t buffer_info[1] = {
-        {.write_buffer = (uint8_t*)write_buffer, .buffer_size = write_size},
+        {.write_buffer = write_buffer, .buffer_size = write_size},
     };
     return i2c_master_multi_buffer_transmit(i2c_dev, buffer_info, 1, xfer_timeout_ms);
 }

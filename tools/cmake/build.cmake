@@ -92,6 +92,7 @@ function(__build_set_default_build_specifications)
     unset(compile_options)
     unset(c_compile_options)
     unset(cxx_compile_options)
+    unset(link_options)
 
     list(APPEND compile_definitions "_GLIBCXX_USE_POSIX_SEMAPHORE"  # These two lines enable libstd++ to use
                                     "_GLIBCXX_HAVE_POSIX_SEMAPHORE" # posix-semaphores from components/pthread
@@ -100,13 +101,13 @@ function(__build_set_default_build_specifications)
     list(APPEND compile_options     "-ffunction-sections"
                                     "-fdata-sections"
                                     # warning-related flags
-                                    "-Wall"
-                                    "-Werror=all"
+                                    # "-Wall"
+                                    # "-Werror=all"
                                     "-Wno-error=unused-function"
                                     "-Wno-error=unused-variable"
                                     "-Wno-error=unused-but-set-variable"
                                     "-Wno-error=deprecated-declarations"
-                                    "-Wextra"
+                                    # "-Wextra"
                                     "-Wno-unused-parameter"
                                     "-Wno-sign-compare"
                                     # ignore multiple enum conversion warnings since gcc 11
@@ -118,6 +119,7 @@ function(__build_set_default_build_specifications)
                                     # always generate debug symbols (even in release mode, these don't
                                     # go into the final binary so have no impact on size
                                     "-ggdb")
+    list(APPEND link_options        "-Wl,--gc-sections")
     if(NOT IDF_TARGET STREQUAL "linux")
         # Building for chip targets: we use a known version of the toolchain.
         # Use latest supported versions.

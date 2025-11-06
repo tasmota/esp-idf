@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
+project(esp-idf C CXX ASM)
 
 if(CMAKE_CURRENT_LIST_DIR STREQUAL CMAKE_SOURCE_DIR)
     message(FATAL_ERROR "Current directory '${CMAKE_CURRENT_LIST_DIR}' is not buildable. "
@@ -197,6 +198,14 @@ if(NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS 8.0.0)
     endif()
 endif()
 
+if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0)
+    list(APPEND c_compile_options "-fzero-init-padding-bits=all" "-fno-malloc-dce")
+endif()
+
+# if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0 AND CONFIG_IDF_TARGET_ARCH_RISCV)
+#     list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set
+# endif()
+
 if(CONFIG_COMPILER_DISABLE_GCC12_WARNINGS)
     list(APPEND compile_options "-Wno-address"
                                 "-Wno-use-after-free")
@@ -207,6 +216,25 @@ if(CONFIG_COMPILER_DISABLE_GCC13_WARNINGS)
     list(APPEND c_compile_options "-Wno-enum-int-mismatch")
     list(APPEND cxx_compile_options "-Wno-self-move"
                                     "-Wno-dangling-reference")
+endif()
+
+if(CONFIG_COMPILER_DISABLE_GCC14_WARNINGS)
+    list(APPEND compile_options "-Wno-calloc-transposed-args")
+endif()
+
+if(CONFIG_COMPILER_DISABLE_GCC15_WARNINGS)
+    list(APPEND c_compile_options "-Wno-unterminated-string-initialization")
+    list(APPEND c_compile_options "-Wno-header-guard")
+    list(APPEND cxx_compile_options "-Wno-self-move")
+    list(APPEND cxx_compile_options "-Wno-template-body")
+    list(APPEND cxx_compile_options "-Wno-dangling-reference")
+    list(APPEND cxx_compile_options "-Wno-defaulted-function-deleted")
+endif()
+
+if(CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        idf_build_replace_option_from_property(COMPILE_OPTIONS "-Werror" "-Werror=all")
+    endif()
 endif()
 
 # GCC-specific options

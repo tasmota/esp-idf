@@ -607,6 +607,10 @@ config SOC_GDMA_PAIRS_PER_GROUP_MAX
     int
     default 3
 
+config SOC_AHB_GDMA_SUPPORT_PSRAM
+    bool
+    default y
+
 config SOC_AXI_GDMA_SUPPORT_PSRAM
     bool
     default y
@@ -629,11 +633,11 @@ config SOC_DMA2D_GROUPS
 
 config SOC_DMA2D_TX_CHANNELS_PER_GROUP
     int
-    default 3
+    default 4
 
 config SOC_DMA2D_RX_CHANNELS_PER_GROUP
     int
-    default 2
+    default 3
 
 config SOC_ETM_GROUPS
     int
@@ -927,7 +931,15 @@ config SOC_ISP_BF_SUPPORTED
     bool
     default y
 
+config SOC_ISP_BLC_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_CCM_SUPPORTED
+    bool
+    default y
+
+config SOC_ISP_COLOR_SUPPORTED
     bool
     default y
 
@@ -939,15 +951,11 @@ config SOC_ISP_DVP_SUPPORTED
     bool
     default y
 
-config SOC_ISP_SHARPEN_SUPPORTED
-    bool
-    default y
-
-config SOC_ISP_COLOR_SUPPORTED
-    bool
-    default y
-
 config SOC_ISP_LSC_SUPPORTED
+    bool
+    default y
+
+config SOC_ISP_SHARPEN_SUPPORTED
     bool
     default y
 
@@ -1487,6 +1495,14 @@ config SOC_SHA_SUPPORT_SHA512_T
     bool
     default y
 
+config SOC_ECC_CONSTANT_TIME_POINT_MUL
+    bool
+    default y
+
+config SOC_ECC_SUPPORT_CURVE_P384
+    bool
+    default y
+
 config SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
     bool
     default y
@@ -1624,6 +1640,10 @@ config SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY
     default y
 
 config SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR
     bool
     default y
 
@@ -2007,6 +2027,10 @@ config SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
     bool
     default y
 
+config SOC_PM_SUPPORT_CPU_PD
+    bool
+    default y
+
 config SOC_PM_SUPPORT_XTAL32K_PD
     bool
     default y
@@ -2056,10 +2080,6 @@ config SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR
     default y
 
 config SOC_PAU_IN_TOP_DOMAIN
-    bool
-    default y
-
-config SOC_CPU_IN_TOP_DOMAIN
     bool
     default y
 

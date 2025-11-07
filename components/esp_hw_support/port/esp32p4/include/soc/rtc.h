@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "sdkconfig.h"
 #include "soc/soc.h"
 #include "soc/clk_tree_defs.h"
 #include "hal/hal_utils.h"
@@ -95,6 +96,36 @@ set sleep_init default param
 #define RTC_CNTL_PD_CUR_SLEEP_DEFAULT  1
 #define RTC_CNTL_DG_VDD_DRV_B_SLP_DEFAULT 254
 
+#if CONFIG_ESP_ENABLE_PVT
+
+#define PVT_CHANNEL0_SEL    49
+#define PVT_CHANNEL1_SEL    53
+#define PVT_CHANNEL0_CFG    0x13e80
+#define PVT_CHANNEL1_CFG    0x13e80
+#define PVT_CHANNEL2_CFG    0x10000
+#define PVT_CMD0            0x24
+#define PVT_CMD1            0x5
+#define PVT_CMD2            0x427
+#define PVT_TARGET          0x7d00
+#define PVT_CLK_DIV         1
+#define PVT_EDG_MODE        1
+#define PVT_DELAY_NUM_HIGH  164
+#define PVT_DELAY_NUM_LOW   157
+
+/**
+ * @brief Initialize PVT related parameters
+ */
+void pvt_auto_dbias_init(void);
+
+/**
+ * @brief Enable or disable PVT functions
+ *
+ * @param enable  true to enable, false to disable
+ */
+void pvt_func_enable(bool enable);
+
+#endif //#if CONFIG_ESP_ENABLE_PVT
+
 /*
 The follow value is used to get a reasonable rtc voltage dbias value according to digital dbias & some other value
 storing in efuse (based on ATE 5k ECO3 chips)
@@ -159,6 +190,7 @@ typedef struct {
 /**
  * Default initializer for rtc_clk_config_t
  */
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 #define RTC_CLK_CONFIG_DEFAULT() { \
     .xtal_freq = CONFIG_XTAL_FREQ, \
     .cpu_freq_mhz = 90, \
@@ -170,6 +202,19 @@ typedef struct {
     .clk_8m_dfreq = RTC_CNTL_CK8M_DFREQ_DEFAULT, \
     .rc32k_dfreq = RTC_CNTL_RC32K_DFREQ_DEFAULT, \
 }
+#else
+#define RTC_CLK_CONFIG_DEFAULT() { \
+    .xtal_freq = CONFIG_XTAL_FREQ, \
+    .cpu_freq_mhz = 100, \
+    .fast_clk_src = SOC_RTC_FAST_CLK_SRC_RC_FAST, \
+    .slow_clk_src = SOC_RTC_SLOW_CLK_SRC_RC_SLOW, \
+    .clk_rtc_clk_div = 0, \
+    .clk_8m_clk_div = 0, \
+    .slow_clk_dcap = RTC_CNTL_SCK_DCAP_DEFAULT, \
+    .clk_8m_dfreq = RTC_CNTL_CK8M_DFREQ_DEFAULT, \
+    .rc32k_dfreq = RTC_CNTL_RC32K_DFREQ_DEFAULT, \
+}
+#endif
 
 /**
  * Initialize clocks and set CPU frequency

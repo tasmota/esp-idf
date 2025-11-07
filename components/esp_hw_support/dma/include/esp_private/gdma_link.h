@@ -24,7 +24,6 @@ typedef struct gdma_link_list_t *gdma_link_list_handle_t;
 typedef struct {
     uint32_t num_items;              //!< Number of nodes in the link list
     size_t item_alignment;           //!< Alignment of each list item required by the DMA. By default, it's 4 bytes alignment.
-    size_t buffer_alignment;         //!< Alignment of each buffer required by the DMA. By default, it's 1 byte alignment.
     struct gdma_link_list_flags {
         uint32_t items_in_ext_mem: 1; //!< Whether the link list items are allocated from external memory
         uint32_t check_owner: 1;      //!< Whether the link list is responsible for checking the ownership when mount data buffers
@@ -62,6 +61,7 @@ esp_err_t gdma_del_link_list(gdma_link_list_handle_t list);
  */
 typedef struct {
     void *buffer;   //!< Buffer to be mounted to the DMA link list
+    size_t buffer_alignment; //!< Alignment of the buffer. By default, it's 1 byte alignment.
     size_t length;  //!< Number of bytes that are expected to be transferred
     struct gdma_buffer_mount_flags {
         uint32_t mark_eof: 1;   /*!< Whether to mark the list item as the "EOF" item.
@@ -175,6 +175,24 @@ esp_err_t gdma_link_get_owner(gdma_link_list_handle_t list, int item_index, gdma
  *         If the link list is empty or invalid, return 0.
  */
 size_t gdma_link_count_buffer_size_till_eof(gdma_link_list_handle_t list, int start_item_index);
+
+/**
+ * @brief Get the buffer of a DMA link list item
+ *
+ * @param[in] list Link list handle, allocated by `gdma_new_link_list`
+ * @param[in] item_index Index of the link list item
+ * @return Buffer of the link list item
+ */
+void* gdma_link_get_buffer(gdma_link_list_handle_t list, int item_index);
+
+/**
+ * @brief Get the length of the buffer of a DMA link list item
+ *
+ * @param[in] list Link list handle, allocated by `gdma_new_link_list`
+ * @param[in] item_index Index of the link list item
+ * @return Length of the buffer of the link list item
+ */
+size_t gdma_link_get_length(gdma_link_list_handle_t list, int item_index);
 
 #ifdef __cplusplus
 }

@@ -667,6 +667,13 @@ static const esp_err_msg_t esp_err_msg_table[] = {
     ERR_TBL_IT(ESP_ERR_HTTP_RANGE_NOT_SATISFIABLE),             /* 28682 0x700a HTTP 416 Range Not Satisfiable,
                                                                                 requested range in header is incorrect */
 #   endif
+#   ifdef      ESP_ERR_HTTP_READ_TIMEOUT
+    ERR_TBL_IT(ESP_ERR_HTTP_READ_TIMEOUT),                      /* 28683 0x700b HTTP data read timeout */
+#   endif
+#   ifdef      ESP_ERR_HTTP_INCOMPLETE_DATA
+    ERR_TBL_IT(ESP_ERR_HTTP_INCOMPLETE_DATA),                   /* 28684 0x700c Incomplete data received, less than
+                                                                                Content-Length or last chunk */
+#   endif
     // components/esp-tls/esp_tls_errors.h
 #   ifdef      ESP_ERR_ESP_TLS_BASE
     ERR_TBL_IT(ESP_ERR_ESP_TLS_BASE),                           /* 32768 0x8000 Starting number of ESP-TLS error codes */
@@ -738,6 +745,9 @@ static const esp_err_msg_t esp_err_msg_table[] = {
 #   endif
 #   ifdef      ESP_ERR_MBEDTLS_SSL_TICKET_SETUP_FAILED
     ERR_TBL_IT(ESP_ERR_MBEDTLS_SSL_TICKET_SETUP_FAILED),        /* 32796 0x801c mbedtls api returned failed */
+#   endif
+#   ifdef      ESP_ERR_MBEDTLS_SSL_READ_FAILED
+    ERR_TBL_IT(ESP_ERR_MBEDTLS_SSL_READ_FAILED),                /* 32797 0x801d mbedtls api returned failed */
 #   endif
 #   ifdef      ESP_ERR_WOLFSSL_SSL_SET_HOSTNAME_FAILED
     ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_SET_HOSTNAME_FAILED),        /* 32817 0x8031 wolfSSL api returned error */

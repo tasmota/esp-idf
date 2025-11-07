@@ -415,7 +415,7 @@ static void roaming_app_rssi_low_handler(void* arg, esp_event_base_t event_base,
 static void trigger_network_assisted_roam(void)
 {
 #if PERIODIC_RRM_MONITORING
-    if (g_roaming_app.config.rrm_monitor) {
+    if (g_roaming_app.current_bss.rrm_support) {
         ROAM_NEIGHBOR_LIST_LOCK();
     }
 #endif /*PERIODIC_RRM_MONITORING*/
@@ -423,7 +423,7 @@ static void trigger_network_assisted_roam(void)
         ESP_LOGD(ROAMING_TAG, "failed to send btm query");
     }
 #if PERIODIC_RRM_MONITORING
-    if (g_roaming_app.config.rrm_monitor) {
+    if (g_roaming_app.current_bss.rrm_support) {
         ROAM_NEIGHBOR_LIST_UNLOCK();
     }
 #endif /*PERIODIC_RRM_MONITORING*/
@@ -638,11 +638,13 @@ static void scan_done_event_handler(void *arg, ETS_STATUS status)
         esp_wifi_scan_get_ap_records(&g_roaming_app.scanned_aps.current_count, g_roaming_app.scanned_aps.ap_records);
         print_ap_records(&g_roaming_app.scanned_aps);
         parse_scan_results_and_roam();
-        g_roaming_app.scan_ongoing = false;
         ROAM_SCAN_RESULTS_UNLOCK();
-        } else {
-            ESP_LOGD(ROAMING_TAG, "Scan Done with error %d ", status);
+    } else {
+        ESP_LOGD(ROAMING_TAG, "Scan Done with error %d ", status);
     }
+    ROAM_SCAN_RESULTS_LOCK();
+    g_roaming_app.scan_ongoing = false;
+    ROAM_SCAN_RESULTS_UNLOCK();
 }
 static void conduct_scan(void)
 {

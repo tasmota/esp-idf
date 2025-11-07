@@ -10,25 +10,11 @@
 examples/peripherals/adc/continuous_read:
   disable:
     - if: SOC_ADC_DMA_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: lack of runners, TODO IDF-9573
-    - if: IDF_TARGET == "esp32c61"
-      temporary: true
-      reason: lack of runner
   <<: *adc_dependencies
 
 examples/peripherals/adc/oneshot_read:
   disable:
     - if: SOC_ADC_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: lack of runner, TODO IDF-9573
-    - if: IDF_TARGET == "esp32c61"
-      temporary: true
-      reason: lack of runner
   <<: *adc_dependencies
 
 examples/peripherals/analog_comparator:
@@ -44,9 +30,27 @@ examples/peripherals/bitscrambler:
   depends_components:
     - esp_driver_bitscrambler
 
+examples/peripherals/camera/dvp_dsi:
+  disable:
+    - if: SOC_LCDCAM_CAM_SUPPORTED != 1 or SOC_MIPI_DSI_SUPPORTED != 1
+  depends_components:
+    - esp_lcd
+    - esp_driver_cam
+
 examples/peripherals/camera/dvp_isp_dsi:
   disable:
     - if: SOC_ISP_DVP_SUPPORTED != 1 or SOC_MIPI_DSI_SUPPORTED != 1
+  depends_components:
+    - esp_lcd
+    - esp_driver_cam
+
+examples/peripherals/camera/dvp_spi_lcd:
+  disable:
+    - if: SOC_LCDCAM_CAM_SUPPORTED != 1
+  disable_test:
+    - if: IDF_TARGET == "esp32s3"
+      temporary: true
+      reason: lack of runners
   depends_components:
     - esp_lcd
     - esp_driver_cam
@@ -486,32 +490,17 @@ examples/peripherals/touch_sensor/touch_sens_sleep:
   depends_components:
     - esp_driver_touch_sens
 
-examples/peripherals/twai/twai_alert_and_recovery:
+examples/peripherals/twai/twai_error_recovery:
   disable:
-    - if: SOC_TWAI_SUPPORTED != 1 or SOC_TWAI_SUPPORT_FD == 1
-      reason: This example not support FD
-  disable_test:
-    - if: IDF_TARGET not in ["esp32"]
-      temporary: true
-      reason: lack of runners
+    - if: SOC_TWAI_SUPPORTED != 1
+  depends_components:
+    - esp_driver_twai
 
 examples/peripherals/twai/twai_network:
   disable:
-    - if: SOC_TWAI_SUPPORTED != 1 or SOC_TWAI_SUPPORT_FD == 1
-      reason: This example not support FD
-  disable_test:
-    - if: 1 == 1
-      temporary: true
-      reason: Test is flakey, TODO IDF-2939
-
-examples/peripherals/twai/twai_self_test:
-  disable:
-    - if: SOC_TWAI_SUPPORTED != 1 or SOC_TWAI_SUPPORT_FD == 1
-      reason: This example not support FD
-  disable_test:
-    - if: IDF_TARGET not in ["esp32"]
-      temporary: true
-      reason: lack of runners
+    - if: SOC_TWAI_SUPPORTED != 1
+  depends_components:
+    - esp_driver_twai
 
 examples/peripherals/uart/uart_dma_ota:
   disable:

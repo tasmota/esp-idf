@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Common (non-language-specific) configuration for Sphinx
 #
@@ -26,6 +25,7 @@ BT_DOCS = [
     'api-reference/bluetooth/bt_vhci.rst',
     'api-reference/bluetooth/controller_vhci.rst',
     'api-reference/bluetooth/index.rst',
+    'migration-guides/release-5.x/5.4/bt_common.rst',
 ]
 
 BLE_DOCS = [
@@ -75,6 +75,9 @@ CLASSIC_BT_DOCS = [
     'api-reference/bluetooth/esp_spp.rst',
     'api-reference/bluetooth/esp_gap_bt.rst',
     'migration-guides/release-5.x/5.0/bluetooth-classic.rst',
+    'migration-guides/release-5.x/5.2/bluetooth-classic.rst',
+    'migration-guides/release-5.x/5.3/bluetooth-classic.rst',
+    'migration-guides/release-5.x/5.4/bluetooth-classic.rst',
 ]
 
 BLUFI_DOCS = ['api-guides/ble/blufi.rst', 'api-reference/bluetooth/esp_blufi.rst']
@@ -91,6 +94,8 @@ WIFI_DOCS = [
     'api-reference/provisioning/provisioning.rst',
     'api-reference/provisioning/wifi_provisioning.rst',
     'migration-guides/release-5.x/5.2/wifi.rst',
+    'migration-guides/release-5.x/5.4/wifi.rst',
+    'migration-guides/release-5.x/5.5/wifi.rst',
 ]
 
 IEEE802154_DOCS = ['migration-guides/release-5.x/5.1/ieee802154.rst', 'migration-guides/release-5.x/5.2/ieee802154.rst']
@@ -109,7 +114,9 @@ BITSCRAMBLER_DOCS = ['api-reference/peripherals/bitscrambler.rst']
 
 CLK_TREE_DOCS = ['api-reference/peripherals/clk_tree.rst']
 
-UART_DOCS = ['api-reference/peripherals/uart.rst', 'api-reference/peripherals/uhci.rst']
+UART_DOCS = ['api-reference/peripherals/uart.rst']
+
+UHCI_DOCS = ['api-reference/peripherals/uhci.rst']
 
 SDMMC_DOCS = ['api-reference/peripherals/sdmmc_host.rst']
 
@@ -285,9 +292,17 @@ ESP32C3_DOCS = ['hw-reference/esp32c3/**', 'api-guides/RF_calibration.rst', 'api
 
 ESP32C2_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst']
 
-ESP32C5_DOCS = ['api-guides/phy.rst', 'api-reference/peripherals/sd_pullup_requirements.rst']
+ESP32C5_DOCS = [
+    'api-guides/phy.rst',
+    'api-reference/peripherals/sd_pullup_requirements.rst',
+    'api-guides/RF_calibration.rst',
+]
 
-ESP32C61_DOCS = ['api-guides/phy.rst']
+ESP32C61_DOCS = [
+    'api-guides/phy.rst',
+    'api-reference/peripherals/sd_pullup_requirements.rst',
+    'api-guides/RF_calibration.rst',
+]
 
 ESP32C6_DOCS = [
     'api-guides/RF_calibration.rst',
@@ -317,6 +332,7 @@ conditional_include_dict = {
     'SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE': MM_SYNC_DOCS,
     'SOC_CLK_TREE_SUPPORTED': CLK_TREE_DOCS,
     'SOC_UART_SUPPORTED': UART_DOCS,
+    'SOC_UHCI_SUPPORTED': UHCI_DOCS,
     'SOC_SDMMC_HOST_SUPPORTED': SDMMC_DOCS,
     'SOC_SDIO_SLAVE_SUPPORTED': SDIO_SLAVE_DOCS,
     'SOC_MCPWM_SUPPORTED': MCPWM_DOCS,
@@ -448,7 +464,7 @@ with open('../page_redirects.txt') as f:
     ]
     for line in lines:  # check for well-formed entries
         if len(line.split(' ')) != 2:
-            raise RuntimeError('Invalid line in page_redirects.txt: %s' % line)
+            raise RuntimeError(f'Invalid line in page_redirects.txt: {line}')
 html_redirect_pages = [tuple(line.split(' ')) for line in lines]
 
 html_static_path = ['../_static']
@@ -470,7 +486,7 @@ def conf_setup(app, config):
         f'This document is not updated for {config.idf_target.upper()} yet, so some of the content may not be correct.'
     )
 
-    add_warnings_file = '{}/../docs_not_updated/{}.txt'.format(app.confdir, config.idf_target)
+    add_warnings_file = f'{app.confdir}/../docs_not_updated/{config.idf_target}.txt'
 
     if config.idf_target in QEMU_TARGETS:
         app.tags.add('TARGET_SUPPORT_QEMU')

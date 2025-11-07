@@ -15,7 +15,7 @@ Feature Supported by ESP-IDF but Not in Chip-ROM
 .. list::
 
     - Octal flash chip support. See :ref:`oct-flash-doc` for details.
-    - 32-bit-address support for GD25Q256. Note that this feature is an optional feature, please do read :ref:`32-bit-flash-doc` for details.
+    - 32-bit-address support on flash chips. Note that this feature is an optional feature, please do read :ref:`32-bit-flash-doc` for details.
     - TH flash chip support.
     - Kconfig option :ref:`CONFIG_SPI_FLASH_CHECK_ERASE_TIMEOUT_DISABLED`.
     - :ref:`CONFIG_SPI_FLASH_VERIFY_WRITE`, enabling this option helps you detect bad writing.
@@ -40,3 +40,4 @@ Bugfixes Introduced in ESP-IDF but Not in Chip-ROM
     :esp32s3: - Fixed issue that only 16 MB virtual address ranges can be mapped to read-only data on flash.
     :esp32c3: - Fixed issue that only 128 KB virtual address ranges can be mapped to instructions on flash.
     :esp32c2: - Fixed issue that only at most 128 KB virtual address ranges can be mapped to instructions on flash.
+    - Fixed issue that address range may escape from checking for erasing and writing function when their sum overflows 32-bit boundary.

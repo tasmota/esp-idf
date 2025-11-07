@@ -53,6 +53,7 @@ typedef enum {
 ---------------------------------------------------------------*/
 typedef struct isp_processor_t {
     int                         proc_id;
+    isp_clk_src_t               clk_src;
     isp_hal_context_t           hal;
 #if SOC_ISP_SHARE_CSI_BRG
     int                         csi_brg_id;
@@ -76,6 +77,7 @@ typedef struct isp_processor_t {
     isp_fsm_t                   sharpen_fsm;
     isp_fsm_t                   color_fsm;
     isp_fsm_t                   lsc_fsm;
+    isp_fsm_t                   blc_fsm;
     esp_isp_evt_cbs_t           cbs;
     void                        *user_data;
 

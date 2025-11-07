@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -61,6 +61,15 @@ void esp_transport_ssl_crt_bundle_attach(esp_transport_handle_t t, esp_err_t ((*
  */
 void esp_transport_ssl_enable_global_ca_store(esp_transport_handle_t t);
 
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+/**
+ * @brief      Set ESP-TLS dynamic buffer strategy for ESP-TLS connection
+ *
+ * @param      t    ssl transport
+ * @param[in]  strategy      ESP-TLS dynamic buffer strategy
+ */
+void esp_transport_ssl_set_esp_tls_dyn_buf_strategy(esp_transport_handle_t t, esp_tls_dyn_buf_strategy_t strategy);
+#endif
 /**
  * @brief      Set TLS protocol version for ESP-TLS connection
  *
@@ -85,9 +94,29 @@ void esp_transport_ssl_set_client_cert_data(esp_transport_handle_t t, const char
  * @brief      Set SSL client key data for mutual authentication when using ECDSA peripheral.
  *
  * @param      t            ssl transport
- * @param[in]  efuse_blk    Efuse block where ECDSA private key is stored
+ * @param[in]  ecdsa_efuse_blk. The efuse block where ECDSA key is stored.
  */
 void esp_transport_ssl_set_client_key_ecdsa_peripheral(esp_transport_handle_t t, uint8_t ecdsa_efuse_blk);
+
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+/**
+ * @brief      Set SSL client key data for mutual authentication when using ECDSA peripheral with extended key storage.
+ *             This function is used when the ECDSA key requires multiple efuse blocks for storage (e.g., P-384 curve).
+ *
+ * @param      t                    ssl transport
+ * @param[in]  ecdsa_efuse_blk      The efuse block where the lower part of ECDSA key is stored
+ * @param[in]  ecdsa_efuse_blk_high The efuse block where the upper part of ECDSA key is stored (required for P-384 and larger curves)
+ */
+void esp_transport_ssl_set_client_key_ecdsa_peripheral_extended(esp_transport_handle_t t, uint8_t ecdsa_efuse_blk, uint8_t ecdsa_efuse_blk_high);
+#endif
+
+/**
+ * @brief      Set ECDSA curve for SSL client when using ECDSA peripheral.
+ *
+ * @param      t            ssl transport
+ * @param[in]  curve        ECDSA curve to use
+ */
+void esp_transport_ssl_set_ecdsa_curve(esp_transport_handle_t t, esp_tls_ecdsa_curve_t curve);
 #endif
 
 /**

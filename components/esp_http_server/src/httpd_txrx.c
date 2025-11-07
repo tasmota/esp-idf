@@ -12,6 +12,7 @@
 #include <esp_http_server.h>
 #include "esp_httpd_priv.h"
 #include <netinet/tcp.h>
+#include "ctrl_sock.h"
 
 static const char *TAG = "httpd_txrx";
 
@@ -95,7 +96,7 @@ static size_t httpd_recv_pending(httpd_req_t *r, char *buf, size_t buf_len)
     return buf_len;
 }
 
-int httpd_recv_with_opt(httpd_req_t *r, char *buf, size_t buf_len, bool halt_after_pending)
+int httpd_recv_with_opt(httpd_req_t *r, char *buf, size_t buf_len, httpd_recv_opt_t opt)
 {
     ESP_LOGD(TAG, LOG_FMT("requested length = %"NEWLIB_NANO_COMPAT_FORMAT), NEWLIB_NANO_COMPAT_CAST(buf_len));
 
@@ -112,34 +113,41 @@ int httpd_recv_with_opt(httpd_req_t *r, char *buf, size_t buf_len, bool halt_aft
         /* If buffer filled then no need to recv.
          * If asked to halt after receiving pending data then
          * return with received length */
-        if (!buf_len || halt_after_pending) {
+        if (!buf_len || opt == HTTPD_RECV_OPT_HALT_AFTER_PENDING) {
             return pending_len;
         }
     }
 
     /* Receive data of remaining length */
-    int ret = ra->sd->recv_fn(ra->sd->handle, ra->sd->fd, buf, buf_len, 0);
-    if (ret < 0) {
-        ESP_LOGD(TAG, LOG_FMT("error in recv_fn"));
-        if ((ret == HTTPD_SOCK_ERR_TIMEOUT) && (pending_len != 0)) {
-            /* If recv() timeout occurred, but pending data is
-             * present, return length of pending data.
-             * This behavior is similar to that of socket recv()
-             * function, which, in case has only partially read the
-             * requested length, due to timeout, returns with read
-             * length, rather than error */
-            return pending_len;
+    size_t recv_len = pending_len;
+    do {
+        int ret = ra->sd->recv_fn(ra->sd->handle, ra->sd->fd, buf, buf_len, 0);
+        if (ret < 0) {
+            ESP_LOGD(TAG, LOG_FMT("error in recv_fn"));
+            if ((ret == HTTPD_SOCK_ERR_TIMEOUT) && (pending_len != 0)) {
+                /* If recv() timeout occurred, but pending data is
+                * present, return length of pending data.
+                * This behavior is similar to that of socket recv()
+                * function, which, in case has only partially read the
+                * requested length, due to timeout, returns with read
+                * length, rather than error */
+                return pending_len;
+            }
+            return ret;
         }
-        return ret;
-    }
 
-    ESP_LOGD(TAG, LOG_FMT("received length = %"NEWLIB_NANO_COMPAT_FORMAT), NEWLIB_NANO_COMPAT_CAST((ret + pending_len)));
-    return ret + pending_len;
+        recv_len += ret;
+        buf      += ret;
+        buf_len  -= ret;
+    } while (buf_len > 0 && opt == HTTPD_RECV_OPT_BLOCKING);
+
+    ESP_LOGD(TAG, LOG_FMT("received length = %"NEWLIB_NANO_COMPAT_FORMAT), NEWLIB_NANO_COMPAT_CAST(recv_len));
+    return recv_len;
 }
 
 int httpd_recv(httpd_req_t *r, char *buf, size_t buf_len)
 {
-    return httpd_recv_with_opt(r, buf, buf_len, false);
+    return httpd_recv_with_opt(r, buf, buf_len, HTTPD_RECV_OPT_NONE);
 }
 
 size_t httpd_unrecv(struct httpd_req *r, const char *buf, size_t buf_len)
@@ -684,6 +692,11 @@ esp_err_t httpd_req_async_handler_complete(httpd_req_t *r)
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Get server handle and control socket info before freeing the request
+    struct httpd_data *hd = (struct httpd_data *) r->handle;
+    int msg_fd = hd->msg_fd;
+    int port = hd->config.ctrl_port;
+
     struct httpd_req_aux *ra = r->aux;
     ra->sd->for_async_req = false;
     free(ra->scratch);
@@ -694,6 +707,18 @@ esp_err_t httpd_req_async_handler_complete(httpd_req_t *r)
     free(r->aux);
     free(r);
 
+    // Send a dummy control message(httpd_ctrl_data) to unblock the main HTTP server task from the select() call.
+    // Since the current connection FD was marked as inactive for async requests, the main task
+    // will now re-add this FD to its select() descriptor list. This ensures that subsequent requests
+    // on the same FD are processed correctly
+    struct httpd_ctrl_data msg = {.hc_msg = HTTPD_CTRL_MAX};
+    int ret = cs_send_to_ctrl_sock(msg_fd, port, &msg, sizeof(msg));
+    if (ret < 0) {
+        ESP_LOGW(TAG, LOG_FMT("failed to send socket notification"));
+        return ESP_FAIL;
+    }
+
+    ESP_LOGD(TAG, LOG_FMT("socket notification sent"));
     return ESP_OK;
 }
 

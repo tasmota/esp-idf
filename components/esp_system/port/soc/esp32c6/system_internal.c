@@ -30,7 +30,7 @@
 #include "esp32c6/rom/rtc.h"
 #include "soc/pcr_reg.h"
 
-void IRAM_ATTR esp_system_reset_modules_on_exit(void)
+void esp_system_reset_modules_on_exit(void)
 {
     // Flush any data left in UART FIFOs before reset the UART peripheral
     for (int i = 0; i < SOC_UART_HP_NUM; ++i) {
@@ -51,6 +51,8 @@ void IRAM_ATTR esp_system_reset_modules_on_exit(void)
     SET_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
     SET_PERI_REG_MASK(PCR_MODEM_APB_CONF_REG, PCR_MODEM_RST_EN);
     SET_PERI_REG_MASK(PCR_PWM_CONF_REG, PCR_PWM_RST_EN);
+    //ETM may directly control the GPIO or other peripherals even after CPU reset. Reset to stop these control.
+    SET_PERI_REG_MASK(PCR_ETM_CONF_REG, PCR_ETM_RST_EN);
 
     // Clear Peripheral clk rst
     CLEAR_PERI_REG_MASK(PCR_MSPI_CONF_REG, PCR_MSPI_RST_EN);
@@ -61,6 +63,7 @@ void IRAM_ATTR esp_system_reset_modules_on_exit(void)
     CLEAR_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_MODEM_APB_CONF_REG, PCR_MODEM_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_PWM_CONF_REG, PCR_PWM_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_ETM_CONF_REG, PCR_ETM_RST_EN);
 
     // Reset crypto peripherals. This ensures a clean state for the crypto peripherals after a CPU restart
     // and hence avoiding any possibility with crypto failure in ROM security workflows.
@@ -86,7 +89,7 @@ void IRAM_ATTR esp_system_reset_modules_on_exit(void)
  * core are already stopped. Stalls other core, resets hardware,
  * triggers restart.
 */
-void IRAM_ATTR esp_restart_noos(void)
+void esp_restart_noos(void)
 {
     // Disable interrupts
     rv_utils_intr_global_disable();

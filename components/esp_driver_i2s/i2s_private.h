@@ -64,6 +64,7 @@ extern "C" {
 #define I2S_USE_RETENTION_LINK  (SOC_I2S_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
 
 #define I2S_NULL_POINTER_CHECK(tag, p)          ESP_RETURN_ON_FALSE((p), ESP_ERR_INVALID_ARG, tag, "input parameter '"#p"' is NULL")
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 /**
  * @brief i2s channel state for checking if the operation in under right driver state
@@ -163,6 +164,7 @@ struct i2s_channel_obj_t {
         bool                is_etm_stop: 1;    /*!< Whether stop by etm tasks */
         bool                is_raw_pdm: 1;     /*!< Flag of whether send/receive PDM in raw data, i.e., no PCM2PDM/PDM2PCM filter enabled */
         bool                is_external: 1;    /*!< Whether use external clock */
+        bool                full_duplex_slave: 1; /*!< whether the channel is forced to switch to slave role for full duplex */
 #if SOC_I2S_SUPPORTS_APLL
         bool                apll_en: 1;        /*!< Flag of whether APLL enabled */
 #endif

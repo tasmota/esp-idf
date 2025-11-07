@@ -429,7 +429,7 @@ esp_err_t esp_ble_gap_get_local_used_addr(esp_bd_addr_t local_used_addr, uint8_t
     }
     return ESP_OK;
 }
-
+#if ((BLE_42_SCAN_EN == TRUE) || (BLE_50_EXTEND_SCAN_EN == TRUE))
 uint8_t *esp_ble_resolve_adv_data_by_type( uint8_t *adv_data, uint16_t adv_data_len, esp_ble_adv_data_type type, uint8_t *length)
 {
     if (length == NULL) {
@@ -460,7 +460,7 @@ uint8_t *esp_ble_resolve_adv_data( uint8_t *adv_data, uint8_t type, uint8_t *len
 {
     return esp_ble_resolve_adv_data_by_type( adv_data, ESP_BLE_ADV_DATA_LEN_MAX + ESP_BLE_SCAN_RSP_DATA_LEN_MAX, (esp_ble_adv_data_type) type, length);
 }
-
+#endif // #if ((BLE_42_SCAN_EN == TRUE) || (BLE_50_EXTEND_SCAN_EN == TRUE))
 #if (BLE_42_FEATURE_SUPPORT == TRUE)
 #if (BLE_42_ADV_EN == TRUE)
 esp_err_t esp_ble_gap_config_adv_data_raw(uint8_t *raw_data, uint32_t raw_data_len)
@@ -804,6 +804,28 @@ esp_err_t esp_ble_create_sc_oob_data(void)
     msg.act = BTC_GAP_BLE_SC_CR_OOB_DATA_EVT;
 
     return (btc_transfer_context(&msg, NULL, 0, NULL, NULL) == BT_STATUS_SUCCESS ? ESP_OK : ESP_FAIL);
+}
+
+esp_err_t esp_ble_gap_get_local_irk(uint8_t local_irk[16])
+{
+    if (local_irk == NULL) {
+        ESP_LOGE(__func__, "local_irk is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
+        ESP_LOGE(__func__, "Bluedroid is not enabled");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* Use BTM API to safely retrieve local IRK */
+    if (BTM_GetLocalIRK(local_irk)) {
+        ESP_LOGD(__func__, "Local IRK retrieved successfully");
+        return ESP_OK;
+    } else {
+        ESP_LOGW(__func__, "Local IRK not available");
+        return ESP_ERR_INVALID_STATE;
+    }
 }
 #endif /* #if (SMP_INCLUDED == TRUE) */
 
@@ -1758,6 +1780,60 @@ esp_err_t esp_ble_gap_set_csa_support(uint8_t csa_select)
 
     return (btc_transfer_context(&msg, &arg, sizeof(btc_ble_gap_args_t), NULL, NULL)
             == BT_STATUS_SUCCESS ? ESP_OK : ESP_FAIL);
+}
+
+#if CONFIG_SOC_BLE_MULTI_CONN_OPTIMIZATION
+esp_err_t esp_ble_gap_set_common_factor(uint32_t common_factor)
+{
+    esp_ble_vendor_cmd_params_t vs_cmd;
+    uint8_t cmd_param[5];
+
+    cmd_param[0] = common_factor & 0xFF;
+    cmd_param[1] = (common_factor >> 8) & 0xFF;
+    cmd_param[2] = (common_factor >> 16) & 0xFF;
+    cmd_param[3] = (common_factor >> 24) & 0xFF;
+    cmd_param[4] = 0x01;
+    vs_cmd.opcode = 0xFD0F;
+    vs_cmd.param_len = 5;
+    vs_cmd.p_param_buf = cmd_param;
+
+    return esp_ble_gap_vendor_command_send(&vs_cmd);
+}
+
+esp_err_t esp_ble_gap_set_sch_len(uint8_t role, uint32_t len)
+{
+    esp_ble_vendor_cmd_params_t vs_cmd;
+    uint8_t cmd_param[5];
+
+    cmd_param[0] = role;
+    cmd_param[1] = len & 0xFF;
+    cmd_param[2] = (len >> 8) & 0xFF;
+    cmd_param[3] = (len >> 16) & 0xFF;
+    cmd_param[4] = (len >> 24) & 0xFF;
+    vs_cmd.opcode = 0xFD10;
+    vs_cmd.param_len = 5;
+    vs_cmd.p_param_buf = cmd_param;
+
+    return esp_ble_gap_vendor_command_send(&vs_cmd);
+}
+#endif // CONFIG_SOC_BLE_MULTI_CONN_OPTIMIZATION
+
+esp_err_t esp_ble_gap_set_scan_chan_map(uint8_t state, uint8_t chan_map[5])
+{
+    esp_ble_vendor_cmd_params_t vs_cmd;
+    uint8_t cmd_param[6];
+
+    if (chan_map == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cmd_param[0] = state;
+    memcpy(&cmd_param[1], chan_map, 5);
+    vs_cmd.opcode = 0xFD19;
+    vs_cmd.param_len = 6;
+    vs_cmd.p_param_buf = cmd_param;
+
+    return esp_ble_gap_vendor_command_send(&vs_cmd);
 }
 #endif // (BLE_VENDOR_HCI_EN == TRUE)
 

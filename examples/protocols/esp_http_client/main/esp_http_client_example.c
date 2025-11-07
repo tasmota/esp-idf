@@ -45,9 +45,6 @@ static const char *TAG = "HTTP_CLIENT";
 extern const char howsmyssl_com_root_cert_pem_start[] asm("_binary_howsmyssl_com_root_cert_pem_start");
 extern const char howsmyssl_com_root_cert_pem_end[]   asm("_binary_howsmyssl_com_root_cert_pem_end");
 
-extern const char postman_root_cert_pem_start[] asm("_binary_postman_root_cert_pem_start");
-extern const char postman_root_cert_pem_end[]   asm("_binary_postman_root_cert_pem_end");
-
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     static char *output_buffer;  // Buffer to store response of http request from event handler
@@ -636,12 +633,13 @@ static void http_perform_as_stream_reader(void)
     free(buffer);
 }
 
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 static void https_async(void)
 {
     esp_http_client_config_t config = {
         .url = "https://postman-echo.com/post",
         .event_handler = _http_event_handler,
-        .cert_pem = postman_root_cert_pem_start,
+        .crt_bundle_attach = esp_crt_bundle_attach,
         .is_async = true,
         .timeout_ms = 5000,
     };
@@ -694,6 +692,7 @@ static void https_async(void)
     }
     esp_http_client_cleanup(client);
 }
+#endif
 
 static void https_with_invalid_url(void)
 {
@@ -858,7 +857,9 @@ static void http_test_task(void *pvParameters)
     http_redirect_to_https();
     http_download_chunk();
     http_perform_as_stream_reader();
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
     https_async();
+#endif
     https_with_invalid_url();
     http_native_request();
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE

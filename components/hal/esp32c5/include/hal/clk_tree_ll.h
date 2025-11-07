@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -568,6 +568,15 @@ static inline __attribute__((always_inline)) void clk_ll_rc_slow_set_divider(uin
     HAL_ASSERT(divider == 1);
 }
 
+/**
+ * @brief Enable the RTC clock calibration reference XTAL source on timer group0.
+ * @param  enable enable or disable the XTAL source.
+ */
+static inline __attribute__((always_inline)) void clk_ll_enable_timergroup_rtc_calibration_clock(bool enable)
+{
+    PCR.timergroup_xtal_conf.tg0_xtal_clk_en = enable;
+}
+
 /************************** LP STORAGE REGISTER STORE/LOAD **************************/
 /**
  * @brief Store RTC_SLOW_CLK calibration value in RTC storage register
@@ -592,6 +601,39 @@ static inline __attribute__((always_inline)) void clk_ll_rtc_slow_store_cal(uint
 static inline __attribute__((always_inline)) uint32_t clk_ll_rtc_slow_load_cal(void)
 {
     return REG_READ(RTC_SLOW_CLK_CAL_REG);
+}
+
+/*
+ * Enable/Disable the clock gate for clock output signal source
+*/
+static inline void clk_ll_enable_clkout_source(soc_clkout_sig_id_t clk_src, bool en)
+{
+    switch (clk_src)
+    {
+        case CLKOUT_SIG_PLL_F22M:
+            PCR.ctrl_clk_out_en.clk22_oen = en;
+            break;
+        case CLKOUT_SIG_PLL_F44M:
+            PCR.ctrl_clk_out_en.clk44_oen = en;
+            break;
+        case CLKOUT_SIG_PLL_F40M:
+            PCR.ctrl_clk_out_en.clk_bb_oen = en;
+            break;
+        case CLKOUT_SIG_PLL_F80M:
+            PCR.ctrl_clk_out_en.clk80_oen = en;
+            break;
+        case CLKOUT_SIG_PLL_F160M:
+            PCR.ctrl_clk_out_en.clk160_oen = en;
+            break;
+        case CLKOUT_SIG_PLL_F480M:
+            PCR.ctrl_clk_out_en.clk_480m_oen = en;
+            break;
+        case CLKOUT_SIG_XTAL:
+            PCR.ctrl_clk_out_en.clk_xtal_oen = en;
+            break;
+        default:
+            break;
+    }
 }
 
 #ifdef __cplusplus

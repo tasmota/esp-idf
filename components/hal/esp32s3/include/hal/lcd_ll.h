@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,6 +24,9 @@ extern "C" {
 // Interrupt event, bit mask
 #define LCD_LL_EVENT_VSYNC_END  (1 << 0)
 #define LCD_LL_EVENT_TRANS_DONE (1 << 1)
+
+#define LCD_LL_EVENT_I80        LCD_LL_EVENT_TRANS_DONE
+#define LCD_LL_EVENT_RGB        LCD_LL_EVENT_VSYNC_END
 
 #define LCD_LL_CLK_FRAC_DIV_N_MAX  256 // LCD_CLK = LCD_CLK_S / (N + b/a), the N register is 8 bit-width
 #define LCD_LL_CLK_FRAC_DIV_AB_MAX 64  // LCD_CLK = LCD_CLK_S / (N + b/a), the a/b register is 6 bit-width
@@ -717,6 +720,12 @@ static inline void lcd_ll_enable_interrupt(lcd_cam_dev_t *dev, uint32_t mask, bo
         dev->lc_dma_int_ena.val &= ~(mask & 0x03);
     }
 }
+/// use a macro to wrap the function, force the caller to use it in a critical section
+/// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
+#define lcd_ll_enable_interrupt(...) do { \
+        (void)__DECLARE_RCC_ATOMIC_ENV; \
+        lcd_ll_enable_interrupt(__VA_ARGS__); \
+    } while(0)
 
 /**
  * @brief Get interrupt status value

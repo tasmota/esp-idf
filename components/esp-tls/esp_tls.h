@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -91,6 +91,22 @@ typedef enum {
    ESP_TLS_VER_TLS_MAX,         /* to indicate max */
 } esp_tls_proto_ver_t;
 
+typedef enum {
+    ESP_TLS_DYN_BUF_RX_STATIC = 1,    /*!< Strategy to disable dynamic RX buffer allocations and convert to static allocation post-handshake, reducing memory fragmentation */
+    ESP_TLS_DYN_BUF_STRATEGY_MAX,     /*!< to indicate max */
+} esp_tls_dyn_buf_strategy_t;
+
+/**
+ * @brief ECDSA curve options for TLS connections
+ */
+typedef enum {
+    ESP_TLS_ECDSA_CURVE_SECP256R1 = 0,   /*!< Use SECP256R1 curve */
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    ESP_TLS_ECDSA_CURVE_SECP384R1,       /*!< Use SECP384R1 curve */
+#endif
+    ESP_TLS_ECDSA_CURVE_MAX,            /*!< to indicate max */
+} esp_tls_ecdsa_curve_t;
+
 /**
  * @brief      ESP-TLS configuration parameters
  *
@@ -163,7 +179,11 @@ typedef struct esp_tls_cfg {
 
     bool use_ecdsa_peripheral;              /*!< Use the ECDSA peripheral for the private key operations */
 
-    uint8_t ecdsa_key_efuse_blk;            /*!< The efuse block where the ECDSA key is stored */
+    uint8_t ecdsa_key_efuse_blk;            /*!< The efuse block where ECDSA key is stored. For SECP384R1 curve, if two blocks are used, set this to the low block and use ecdsa_key_efuse_blk_high for the high block. */
+
+    uint8_t ecdsa_key_efuse_blk_high;       /*!< The high efuse block for ECDSA key (used only for SECP384R1 curve). If not set (0), only ecdsa_key_efuse_blk is used. */
+
+    esp_tls_ecdsa_curve_t ecdsa_curve;      /*!< ECDSA curve to use (SECP256R1 or SECP384R1) */
 
     bool non_block;                         /*!< Configure non-blocking mode. If set to true the
                                                  underneath socket will be configured in non
@@ -213,6 +233,11 @@ typedef struct esp_tls_cfg {
     const int *ciphersuites_list;           /*!< Pointer to a zero-terminated array of IANA identifiers of TLS ciphersuites.
                                                 Please check the list validity by esp_tls_get_ciphersuites_list() API */
     esp_tls_proto_ver_t tls_version;        /*!< TLS protocol version of the connection, e.g., TLS 1.2, TLS 1.3 (default - no preference) */
+
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+    esp_tls_dyn_buf_strategy_t esp_tls_dyn_buf_strategy; /*!< ESP-TLS dynamic buffer strategy */
+#endif
+
 } esp_tls_cfg_t;
 
 #if defined(CONFIG_ESP_TLS_SERVER_SESSION_TICKETS)
@@ -302,7 +327,11 @@ typedef struct esp_tls_cfg_server {
 
     bool use_ecdsa_peripheral;                  /*!< Use ECDSA peripheral to use private key */
 
-    uint8_t ecdsa_key_efuse_blk;                /*!< The efuse block where ECDSA key is stored */
+    uint8_t ecdsa_key_efuse_blk;                /*!< The efuse block where ECDSA key is stored. For SECP384R1 curve, if two blocks are used, set this to the low block and use ecdsa_key_efuse_blk_high for the high block. */
+
+    uint8_t ecdsa_key_efuse_blk_high;           /*!< The high efuse block for ECDSA key (used only for SECP384R1 curve). If not set (0), only ecdsa_key_efuse_blk is used. */
+
+    esp_tls_ecdsa_curve_t ecdsa_curve;          /*!< ECDSA curve to use (SECP256R1 or SECP384R1) */
 
     bool use_secure_element;                    /*!< Enable this option to use secure element or
                                                  atecc608a chip */
@@ -397,10 +426,12 @@ esp_tls_t *esp_tls_conn_http_new(const char *url, const esp_tls_cfg_t *cfg) __at
  * @param[in]  hostname  Hostname of the host.
  * @param[in]  hostlen   Length of hostname.
  * @param[in]  port      Port number of the host.
- * @param[in]  cfg       TLS configuration as esp_tls_cfg_t. If you wish to open
- *                       non-TLS connection, keep this NULL. For TLS connection,
- *                       a pass pointer to esp_tls_cfg_t. At a minimum, this
- *                       structure should be zero-initialized.
+ * @param[in]  cfg       TLS configuration as esp_tls_cfg_t. For a TLS
+ *                       connection, pass a pointer to a esp_tls_cfg_t. For a
+ *                       plain TCP connection, pass a pointer to a
+ *                       esp_tls_cfg_t with is_plain_tcp set to true. At a
+ *                       minimum, this pointer should be not NULL and the
+ *                       structure should be zero-initialized
  * @param[in]  tls       Pointer to esp-tls as esp-tls handle.
  *
  * @return

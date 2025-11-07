@@ -40,7 +40,7 @@ ieee80211_ampdu_start_age_timer = 0x40000b5c;
 ieee80211_is_tx_allowed = 0x40000b64;
 ieee80211_output_pending_eb = 0x40000b68;
 ieee80211_output_process = 0x40000b6c;
-ieee80211_set_tx_desc = 0x40000b70;
+/*ieee80211_set_tx_desc = 0x40000b70;*/
 ieee80211_classify = 0x40000b74;
 ieee80211_copy_eb_header = 0x40000b78;
 ieee80211_recycle_cache_eb = 0x40000b7c;
@@ -67,7 +67,7 @@ wifi_rf_phy_enable = 0x40000bcc;
 wifi_is_started = 0x40000bd0;
 /*sta_input = 0x40000bd4;*/
 sta_rx_eapol = 0x40000bd8;
-sta_reset_beacon_timeout = 0x40000bdc;
+//sta_reset_beacon_timeout = 0x40000bdc;
 sta_get_beacon_timeout = 0x40000be0;
 ampdu_process_multicast_address_qos_frame = 0x40000be4;
 /* Data (.data, .bss, .rodata) */

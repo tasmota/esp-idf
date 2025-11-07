@@ -150,7 +150,9 @@ TEST_CASE("SPI Master clk_source and divider accuracy", "[spi]")
             spi_device_interface_config_t devcfg = SPI_DEVICE_TEST_DEFAULT_CONFIG();
             devcfg.clock_source = spi_clk_sour[sour_idx];
             devcfg.clock_speed_hz = MIN(IDF_TARGET_MAX_SPI_CLK_FREQ, clock_source_hz) >> test_time;
+#if CONFIG_IDF_TARGET_ESP32
             devcfg.flags |= SPI_DEVICE_HALFDUPLEX;  //esp32 half duplex to work on high freq
+#endif
 #if SOC_SPI_SUPPORT_CLK_RC_FAST
             if (devcfg.clock_source == SPI_CLK_SRC_RC_FAST) {
                 devcfg.clock_speed_hz /= 2; //rc_fast have bad accuracy, test at low speed
@@ -159,6 +161,13 @@ TEST_CASE("SPI Master clk_source and divider accuracy", "[spi]")
             TEST_ESP_OK(spi_bus_add_device(TEST_SPI_HOST, &devcfg, &handle));
             // one trans first to trigger lazy load
             TEST_ESP_OK(spi_device_polling_transmit(handle, &trans));
+
+            // test single tx/rx under full duplex mode, refer to `TEST_CASE_MULTIPLE_DEVICES("SPI Master: FD, DMA, Master Single Direction Test"...`
+            if (!(devcfg.flags && SPI_DEVICE_HALFDUPLEX)) {
+                trans.tx_buffer = NULL;
+                trans.rxlength = trans.length;
+                trans.rx_buffer = sendbuf;
+            }
 
             // calculate theoretical transaction time by actual freq and trans length
             int real_freq_khz;
@@ -175,7 +184,7 @@ TEST_CASE("SPI Master clk_source and divider accuracy", "[spi]")
 #if !SOC_CLK_TREE_SUPPORTED
             time_tolerance *= 2;    //cpu is executing too slow before clock supported
 #endif
-            printf("real_freq %dk predict_cost %d real_cost_us %d diff %d tolerance %d us\n", real_freq_khz, trans_cost_us_predict, trans_cost, (trans_cost - trans_cost_us_predict), time_tolerance);
+            printf("exp_freq %dk real_freq %dk predict_cost %d real_cost_us %d diff %d tolerance %d us\n", devcfg.clock_speed_hz / 1000, real_freq_khz, trans_cost_us_predict, trans_cost, (trans_cost - trans_cost_us_predict), time_tolerance);
 
             TEST_ASSERT_LESS_THAN_UINT32(time_tolerance, abs(trans_cost - trans_cost_us_predict));
             TEST_ESP_OK(spi_bus_remove_device(handle));
@@ -1845,6 +1854,7 @@ TEST_CASE("test_spi_master_sleep_retention", "[spi]")
     spi_device_interface_config_t devcfg = SPI_DEVICE_TEST_DEFAULT_CONFIG();
     buscfg.flags |= SPICOMMON_BUSFLAG_GPIO_PINS;
     buscfg.flags |= SPICOMMON_BUSFLAG_SLP_ALLOW_PD;
+    buscfg.miso_io_num = buscfg.mosi_io_num;    // set spi "self-loop"
     uint8_t send[16] = "hello spi x\n";
     uint8_t recv[16];
     spi_transaction_t trans_cfg = {
@@ -1861,8 +1871,6 @@ TEST_CASE("test_spi_master_sleep_retention", "[spi]")
 #endif
             printf("Retention on GPSPI%d with dma: %d\n", periph + 1, use_dma);
             TEST_ESP_OK(spi_bus_initialize(periph, &buscfg, use_dma));
-            // set spi "self-loop" after bus initialized
-            spitest_gpio_output_sel(buscfg.miso_io_num, FUNC_GPIO, spi_periph_signal[periph].spid_out);
             TEST_ESP_OK(spi_bus_add_device(periph, &devcfg, &dev_handle));
 
             for (uint8_t cnt = 0; cnt < 3; cnt ++) {
@@ -1917,9 +1925,8 @@ TEST_CASE("test_spi_master_auto_sleep_retention", "[spi]")
         spi_bus_config_t buscfg = SPI_BUS_TEST_DEFAULT_CONFIG();
         buscfg.flags = (allow_pd) ? SPICOMMON_BUSFLAG_SLP_ALLOW_PD : 0;
         buscfg.flags |= SPICOMMON_BUSFLAG_GPIO_PINS;
+        buscfg.miso_io_num = buscfg.mosi_io_num;    // set spi "self-loop"
         TEST_ESP_OK(spi_bus_initialize(TEST_SPI_HOST, &buscfg, SPI_DMA_DISABLED));
-        // set spi "self-loop" after bus initialized
-        spitest_gpio_output_sel(buscfg.miso_io_num, FUNC_GPIO, spi_periph_signal[TEST_SPI_HOST].spid_out);
 
         spi_device_handle_t dev_handle;
         spi_device_interface_config_t devcfg = SPI_DEVICE_TEST_DEFAULT_CONFIG();

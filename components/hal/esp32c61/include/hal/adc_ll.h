@@ -39,6 +39,7 @@ extern "C" {
 #define ADC_LL_GET_HIGH_THRES_MASK(monitor_id)    ((monitor_id == 0) ? SARADC_THRES0_HIGH_INT_ST_M : SARADC_THRES1_HIGH_INT_ST_M)
 #define ADC_LL_GET_LOW_THRES_MASK(monitor_id)     ((monitor_id == 0) ? SARADC_THRES0_LOW_INT_ST_M : SARADC_THRES1_LOW_INT_ST_M)
 
+#define ADC_LL_ADC_FE_ON_MODEM_DOMAIN               (1)
 /*---------------------------------------------------------------
                     Oneshot
 ---------------------------------------------------------------*/
@@ -58,7 +59,7 @@ extern "C" {
 #define ADC_LL_CLKM_DIV_B_DEFAULT         1
 #define ADC_LL_CLKM_DIV_A_DEFAULT         0
 #define ADC_LL_DEFAULT_CONV_LIMIT_EN      0
-#define ADC_LL_DEFAULT_CONV_LIMIT_NUM     10
+#define ADC_LL_DEFAULT_CONV_LIMIT_NUM     255
 
 #define ADC_LL_POWER_MANAGE_SUPPORTED     1 //ESP32C61 supported to manage power mode
 /*---------------------------------------------------------------
@@ -628,6 +629,47 @@ static inline void adc_ll_set_controller(adc_unit_t adc_n, adc_ll_controller_t c
 /*---------------------------------------------------------------
                     Calibration
 ---------------------------------------------------------------*/
+
+/* ADC calibration code. */
+/**
+ * @brief Set common calibration configuration. Should be shared with other parts (PWDET).
+ */
+__attribute__((always_inline))
+static inline void adc_ll_calibration_init(adc_unit_t adc_n)
+{
+    (void)adc_n;
+    REGI2C_WRITE_MASK(I2C_SAR_ADC, ADC_SAR1_DREF_ADDR, 1);
+}
+
+/**
+ * Configure the registers for ADC calibration. You need to call the ``adc_ll_calibration_finish`` interface to resume after calibration.
+ *
+ * @note  Different ADC units and different attenuation options use different calibration data (initial data).
+ *
+ * @param adc_n ADC index number.
+ * @param internal_gnd true:  Disconnect from the IO port and use the internal GND as the calibration voltage.
+ *                     false: Use IO external voltage as calibration voltage.
+ */
+static inline void adc_ll_calibration_prepare(adc_unit_t adc_n, bool internal_gnd)
+{
+    /* Enable/disable internal connect GND (for calibration). */
+    if (internal_gnd) {
+        REGI2C_WRITE_MASK(I2C_SAR_ADC, ADC_SAR1_ENCAL_GND_ADDR, 1);
+    } else {
+        REGI2C_WRITE_MASK(I2C_SAR_ADC, ADC_SAR1_ENCAL_GND_ADDR, 0);
+    }
+}
+
+/**
+ * Resume register status after calibration.
+ *
+ * @param adc_n ADC index number.
+ */
+static inline void adc_ll_calibration_finish(adc_unit_t adc_n)
+{
+    REGI2C_WRITE_MASK(I2C_SAR_ADC, ADC_SAR1_ENCAL_GND_ADDR, 0);
+}
+
 /**
  * Set the calibration result to ADC.
  *

@@ -49,6 +49,10 @@
 #include "esp_private/sleep_modem.h"
 #endif
 #include "hal/efuse_hal.h"
+#if SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT
+#include "esp_private/esp_modem_clock.h"
+#include "soc/periph_defs.h"
+#endif
 
 #if CONFIG_IDF_TARGET_ESP32
 extern wifi_mac_time_update_cb_t s_wifi_mac_time_update_cb;
@@ -268,6 +272,22 @@ IRAM_ATTR void esp_phy_common_clock_disable(void)
     wifi_bt_common_module_disable();
 }
 
+#if SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT
+IRAM_ATTR void esp_phy_calibration_clock_enable(esp_phy_modem_t modem)
+{
+    if (modem == PHY_MODEM_BT || modem == PHY_MODEM_IEEE802154) {
+        modem_clock_module_enable(PERIPH_PHY_CALIBRATION_MODULE);
+    }
+}
+
+IRAM_ATTR void esp_phy_calibration_clock_disable(esp_phy_modem_t modem)
+{
+    if (modem == PHY_MODEM_BT || modem == PHY_MODEM_IEEE802154) {
+        modem_clock_module_disable(PERIPH_PHY_CALIBRATION_MODULE);
+    }
+}
+#endif
+
 #if SOC_PM_MODEM_RETENTION_BY_BACKUPDMA
 static inline void phy_digital_regs_store(void)
 {
@@ -296,6 +316,9 @@ void esp_phy_enable(esp_phy_modem_t modem)
         phy_update_wifi_mac_time(false, s_phy_rf_en_ts);
 #endif
         esp_phy_common_clock_enable();
+#if SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT
+        esp_phy_calibration_clock_enable(modem);
+#endif
         if (s_is_phy_calibrated == false) {
             esp_phy_load_cal_and_init();
             s_is_phy_calibrated = true;
@@ -329,7 +352,7 @@ void esp_phy_enable(esp_phy_modem_t modem)
 #endif
 
 // ESP32 will track pll in the wifi/BT modem interrupt handler.
-#if !CONFIG_IDF_TARGET_ESP32
+#if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_ESP_PHY_DISABLE_PLL_TRACK
         phy_track_pll_init();
 #endif
 
@@ -337,10 +360,12 @@ void esp_phy_enable(esp_phy_modem_t modem)
             phy_ant_update();
             phy_ant_clr_update_flag();
         }
-
+#if SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT
+        esp_phy_calibration_clock_disable(modem);
+#endif
     }
     phy_set_modem_flag(modem);
-#if !CONFIG_IDF_TARGET_ESP32
+#if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_ESP_PHY_DISABLE_PLL_TRACK
     // Immediately track pll when phy enabled.
     phy_track_pll();
 #endif
@@ -357,10 +382,11 @@ void esp_phy_disable(esp_phy_modem_t modem)
 #if CONFIG_ESP_PHY_RECORD_USED_TIME
     phy_record_time(false, modem);
 #endif
+    esp_phy_modem_t saved_modem = phy_get_modem_flag();
     phy_clr_modem_flag(modem);
-    if (phy_get_modem_flag() == 0) {
+    if (saved_modem == modem) {
 // ESP32 will track pll in the wifi/BT modem interrupt handler.
-#if !CONFIG_IDF_TARGET_ESP32
+#if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_ESP_PHY_DISABLE_PLL_TRACK
         phy_track_pll_deinit();
 #endif
 #if SOC_PM_MODEM_RETENTION_BY_BACKUPDMA

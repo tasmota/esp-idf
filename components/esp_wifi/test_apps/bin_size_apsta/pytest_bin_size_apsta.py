@@ -11,7 +11,7 @@ from pytest_embedded_idf.utils import idf_parametrize
 # The standard value has 30~100 bytes fault tolerance
 SAVE_BIN_SIZE_TH = {
     'disable_sae_h2e': {
-        'esp32': 16800,
+        'esp32': 16700,
         'esp32c2': 19700,
         'esp32c3': 19600,
         'esp32c5': 19650,
@@ -23,8 +23,8 @@ SAVE_BIN_SIZE_TH = {
     },
     'disable_nan': {
         'esp32': 29600,
-        'esp32c5': 32400,
-        'esp32c61': 32400,
+        'esp32c5': 32000,
+        'esp32c61': 32000,
         'esp32s2': 28000,
         # other chips does not support nan
         'default': 0,

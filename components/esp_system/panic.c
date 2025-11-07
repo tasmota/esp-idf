@@ -262,6 +262,14 @@ static inline void disable_all_wdts(void)
     wdt_hal_write_protect_enable(&rtc_wdt_ctx);
 }
 
+/* IRAM-only halt stub: reset modules, then loop */
+void IRAM_ATTR esp_panic_handler_reset_modules_on_exit_and_halt(void)
+{
+    // Do not print or call non-IRAM functions beyond this point
+    esp_system_reset_modules_on_exit();
+    ESP_INFINITE_LOOP();
+}
+
 /********************** Panic handler functions **********************/
 
 /* This function is called from the panic handler entry point to increment the panic entry count */
@@ -455,15 +463,15 @@ void esp_panic_handler(panic_info_t *info)
     panic_print_str("Rebooting...\r\n");
     panic_restart();
 #else /* CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT || CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT */
+    esp_panic_handler_feed_wdts();
     panic_print_str("CPU halted.\r\n");
-    esp_system_reset_modules_on_exit();
     disable_all_wdts();
-    ESP_INFINITE_LOOP();
+    esp_panic_handler_reset_modules_on_exit_and_halt();
 #endif /* CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT || CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT */
 #endif /* CONFIG_ESP_SYSTEM_PANIC_GDBSTUB */
 }
 
-void IRAM_ATTR __attribute__((noreturn, no_sanitize_undefined)) panic_abort(const char *details)
+void __attribute__((noreturn, no_sanitize_undefined)) panic_abort(const char *details)
 {
     g_panic_abort = true;
     g_panic_abort_details = (char *) details;
@@ -490,11 +498,11 @@ void IRAM_ATTR __attribute__((noreturn, no_sanitize_undefined)) panic_abort(cons
  * If these weren't provided, reset reason code would be linked into the app
  * even if the app never called esp_reset_reason().
  */
-void IRAM_ATTR __attribute__((weak)) esp_reset_reason_set_hint(esp_reset_reason_t hint)
+void __attribute__((weak)) esp_reset_reason_set_hint(esp_reset_reason_t hint)
 {
 }
 
-esp_reset_reason_t IRAM_ATTR  __attribute__((weak)) esp_reset_reason_get_hint(void)
+esp_reset_reason_t __attribute__((weak)) esp_reset_reason_get_hint(void)
 {
     return ESP_RST_UNKNOWN;
 }

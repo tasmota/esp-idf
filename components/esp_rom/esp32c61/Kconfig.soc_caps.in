@@ -43,6 +43,10 @@ config ESP_ROM_HAS_HAL_SYSTIMER
     bool
     default y
 
+config ESP_ROM_SYSTIMER_INIT_PATCH
+    bool
+    default y
+
 config ESP_ROM_HAS_HEAP_TLSF
     bool
     default y
@@ -107,10 +111,10 @@ config ESP_ROM_HAS_OUTPUT_PUTC_FUNC
     bool
     default y
 
-config ESP_ROM_CACHE_WB_INVLD_LOW_RANGE
+config ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY
     bool
     default y
 
-config ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY
+config ESP_ROM_DELAY_US_PATCH
     bool
     default y

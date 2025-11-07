@@ -20,8 +20,10 @@
 #include <errno.h>
 #include "esp_log.h"
 #include "esp_check.h"
-
+#include "soc/soc_caps.h"
+#include "mbedtls/esp_mbedtls_dynamic.h"
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
+#include "mbedtls/ecp.h"
 #include "ecdsa/ecdsa_alt.h"
 #endif
 
@@ -40,6 +42,7 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki);
 #endif /* CONFIG_ESP_TLS_USE_SECURE_ELEMENT */
 
 #if defined(CONFIG_ESP_TLS_USE_DS_PERIPHERAL)
+#include <pk_wrap.h>
 #include "rsa_sign_alt.h"
 static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki);
 #endif /* CONFIG_ESP_TLS_USE_DS_PERIPHERAL */
@@ -55,6 +58,31 @@ static mbedtls_x509_crt *global_cacert = NULL;
 #define NEWLIB_NANO_SSIZE_T_COMPAT_FORMAT           "zX"
 #define NEWLIB_NANO_SIZE_T_COMPAT_FORMAT            "zu"
 #define NEWLIB_NANO_SIZE_T_COMPAT_CAST(size_t_var)  size_t_var
+#endif
+
+#ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
+/**
+ * @brief Convert ESP-TLS ECDSA curve enum to mbedTLS group ID
+ * @param curve ESP-TLS ECDSA curve enum value
+ * @param grp_id Pointer to store the converted mbedTLS group ID
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG on invalid curve
+ */
+static esp_err_t esp_tls_ecdsa_curve_to_mbedtls_group_id(esp_tls_ecdsa_curve_t curve, mbedtls_ecp_group_id *grp_id)
+{
+    switch (curve) {
+        case ESP_TLS_ECDSA_CURVE_SECP256R1:
+            *grp_id = MBEDTLS_ECP_DP_SECP256R1;
+            break;
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+        case ESP_TLS_ECDSA_CURVE_SECP384R1:
+            *grp_id = MBEDTLS_ECP_DP_SECP384R1;
+            break;
+#endif
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+    return ESP_OK;
+}
 #endif
 
 /* This function shall return the error message when appropriate log level has been set, otherwise this function shall do nothing */
@@ -114,6 +142,10 @@ esp_err_t esp_create_mbedtls_handle(const char *hostname, size_t hostlen, const 
     }
 
     mbedtls_ssl_conf_rng(&tls->conf, mbedtls_ctr_drbg_random, &tls->ctr_drbg);
+
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+    tls->esp_tls_dyn_buf_strategy = ((esp_tls_cfg_t *)cfg)->esp_tls_dyn_buf_strategy;
+#endif
 
     if (tls->role == ESP_TLS_CLIENT) {
         esp_ret = set_client_config(hostname, hostlen, (esp_tls_cfg_t *)cfg, tls);
@@ -256,6 +288,15 @@ int esp_mbedtls_handshake(esp_tls_t *tls, const esp_tls_cfg_t *cfg)
 #endif
     ret = mbedtls_ssl_handshake(&tls->ssl);
     if (ret == 0) {
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+        if (tls->esp_tls_dyn_buf_strategy != 0) {
+            ret = esp_mbedtls_dynamic_set_rx_buf_static(&tls->ssl);
+            if (ret != 0) {
+                ESP_LOGE(TAG, "esp_mbedtls_dynamic_set_rx_buf_static returned -0x%04X", -ret);
+                return -1;
+            }
+        }
+#endif
         tls->conn_state = ESP_TLS_DONE;
 
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
@@ -269,8 +310,12 @@ int esp_mbedtls_handshake(esp_tls_t *tls, const esp_tls_cfg_t *cfg)
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED);
             if (cfg->crt_bundle_attach != NULL || cfg->cacert_buf != NULL || cfg->use_global_ca_store == true) {
-                /* This is to check whether handshake failed due to invalid certificate*/
-                esp_mbedtls_verify_certificate(tls);
+                if (mbedtls_ssl_get_peer_cert(&tls->ssl) != NULL) {
+                    /* This is to check whether handshake failed due to invalid certificate*/
+                    esp_mbedtls_verify_certificate(tls);
+                } else {
+                    ESP_LOGD(TAG, "Skipping certificate verification - no peer certificate received");
+                }
             }
             tls->conn_state = ESP_TLS_FAIL;
             return -1;
@@ -366,6 +411,7 @@ ssize_t esp_mbedtls_read(esp_tls_t *tls, char *data, size_t datalen)
         }
         if (ret != ESP_TLS_ERR_SSL_WANT_READ  && ret != ESP_TLS_ERR_SSL_WANT_WRITE) {
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_MBEDTLS_SSL_READ_FAILED);
             ESP_LOGE(TAG, "read error :-0x%04"NEWLIB_NANO_SSIZE_T_COMPAT_FORMAT, -ret);
             mbedtls_print_error_msg(ret);
         }
@@ -458,6 +504,28 @@ void esp_mbedtls_cleanup(esp_tls_t *tls)
     tls->cacert_ptr = NULL;
     mbedtls_x509_crt_free(&tls->cacert);
     mbedtls_x509_crt_free(&tls->clientcert);
+
+#ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
+    if (mbedtls_pk_get_type(&tls->clientkey) == MBEDTLS_PK_RSA_ALT) {
+        mbedtls_rsa_alt_context *rsa_alt = tls->clientkey.MBEDTLS_PRIVATE(pk_ctx);
+        if (rsa_alt && rsa_alt->key != NULL) {
+            mbedtls_rsa_free(rsa_alt->key);
+            mbedtls_free(rsa_alt->key);
+            rsa_alt->key = NULL;
+        }
+    }
+
+    // Similar cleanup for server key
+    if (mbedtls_pk_get_type(&tls->serverkey) == MBEDTLS_PK_RSA_ALT) {
+        mbedtls_rsa_alt_context *rsa_alt = tls->serverkey.MBEDTLS_PRIVATE(pk_ctx);
+        if (rsa_alt && rsa_alt->key != NULL) {
+            mbedtls_rsa_free(rsa_alt->key);
+            mbedtls_free(rsa_alt->key);
+            rsa_alt->key = NULL;
+        }
+    }
+#endif
+
     mbedtls_pk_free(&tls->clientkey);
     mbedtls_entropy_free(&tls->entropy);
     mbedtls_ssl_config_free(&tls->conf);
@@ -525,10 +593,18 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
 #endif
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
         if (tls->use_ecdsa_peripheral) {
+            // Determine the curve group ID based on user preference
+            mbedtls_ecp_group_id grp_id;
+            esp_err_t esp_ret = esp_tls_ecdsa_curve_to_mbedtls_group_id(tls->ecdsa_curve, &grp_id);
+            if (esp_ret != ESP_OK) {
+                return esp_ret;
+            }
+
             esp_ecdsa_pk_conf_t conf = {
-                .grp_id = MBEDTLS_ECP_DP_SECP256R1,
+                .grp_id = grp_id,
                 .efuse_block = tls->ecdsa_efuse_blk,
             };
+
             ret = esp_ecdsa_set_pk_context(pki->pk_key, &conf);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to initialize pk context for ecdsa peripheral with the key stored in efuse block %d", tls->ecdsa_efuse_blk);
@@ -713,7 +789,12 @@ static esp_err_t set_server_config(esp_tls_cfg_server_t *cfg, esp_tls_t *tls)
     }  else if (cfg->use_ecdsa_peripheral) {
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
         tls->use_ecdsa_peripheral = cfg->use_ecdsa_peripheral;
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+        tls->ecdsa_efuse_blk = HAL_ECDSA_COMBINE_KEY_BLOCKS(cfg->ecdsa_key_efuse_blk_high, cfg->ecdsa_key_efuse_blk);
+#else
         tls->ecdsa_efuse_blk = cfg->ecdsa_key_efuse_blk;
+#endif
+        tls->ecdsa_curve = cfg->ecdsa_curve;
         esp_tls_pki_t pki = {
             .public_cert = &tls->servercert,
             .pk_key = &tls->serverkey,
@@ -960,7 +1041,12 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
     } else if (cfg->use_ecdsa_peripheral) {
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
         tls->use_ecdsa_peripheral = cfg->use_ecdsa_peripheral;
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+        tls->ecdsa_efuse_blk = HAL_ECDSA_COMBINE_KEY_BLOCKS(cfg->ecdsa_key_efuse_blk_high, cfg->ecdsa_key_efuse_blk);
+#else
         tls->ecdsa_efuse_blk = cfg->ecdsa_key_efuse_blk;
+#endif
+        tls->ecdsa_curve = cfg->ecdsa_curve;
         esp_tls_pki_t pki = {
             .public_cert = &tls->clientcert,
             .pk_key = &tls->clientkey,
@@ -976,13 +1062,30 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
             ESP_LOGE(TAG, "Failed to set client pki context");
             return esp_ret;
         }
-        static const int ecdsa_peripheral_supported_ciphersuites[] = {
-            MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+
+        mbedtls_ecp_group_id grp_id;
+        esp_ret = esp_tls_ecdsa_curve_to_mbedtls_group_id(tls->ecdsa_curve, &grp_id);
+        if (esp_ret != ESP_OK) {
+            return esp_ret;
+        }
+
+        // Create dynamic ciphersuite array based on curve
+        static int ecdsa_peripheral_supported_ciphersuites[4] = {0}; // Max 4 elements
+        int ciphersuite_count = 0;
+
+        if (grp_id == MBEDTLS_ECP_DP_SECP384R1) {
+            ecdsa_peripheral_supported_ciphersuites[ciphersuite_count++] = MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+        } else {
+            ecdsa_peripheral_supported_ciphersuites[ciphersuite_count++] = MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+        }
+
 #if CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-            MBEDTLS_TLS1_3_AES_128_GCM_SHA256,
+        if (grp_id == MBEDTLS_ECP_DP_SECP384R1) {
+            ecdsa_peripheral_supported_ciphersuites[ciphersuite_count++] = MBEDTLS_TLS1_3_AES_256_GCM_SHA384;
+        } else {
+            ecdsa_peripheral_supported_ciphersuites[ciphersuite_count++] = MBEDTLS_TLS1_3_AES_128_GCM_SHA256;
+        }
 #endif
-            0
-        };
 
         ESP_LOGD(TAG, "Set the ciphersuites list");
         mbedtls_ssl_conf_ciphersuites(&tls->conf, ecdsa_peripheral_supported_ciphersuites);
@@ -1260,12 +1363,18 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
 {
     int ret = -1;
     /* initialize the mbedtls pk context with rsa context */
-    mbedtls_rsa_context rsakey;
-    mbedtls_rsa_init(&rsakey);
-    if ((ret = mbedtls_pk_setup_rsa_alt(((const esp_tls_pki_t*)pki)->pk_key, &rsakey, NULL, esp_ds_rsa_sign,
+    mbedtls_rsa_context *rsakey = calloc(1, sizeof(mbedtls_rsa_context));
+    if (rsakey == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for mbedtls_rsa_context");
+        return ESP_ERR_NO_MEM;
+    }
+    mbedtls_rsa_init(rsakey);
+    if ((ret = mbedtls_pk_setup_rsa_alt(((const esp_tls_pki_t*)pki)->pk_key, rsakey, NULL, esp_ds_rsa_sign,
                                         esp_ds_get_keylen )) != 0) {
         ESP_LOGE(TAG, "Error in mbedtls_pk_setup_rsa_alt, returned -0x%04X", -ret);
         mbedtls_print_error_msg(ret);
+        mbedtls_rsa_free(rsakey);
+        free(rsakey);
         ret = ESP_FAIL;
         goto exit;
     }
@@ -1276,7 +1385,6 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
     }
     ESP_LOGD(TAG, "DS peripheral params initialized.");
 exit:
-    mbedtls_rsa_free(&rsakey);
     return ret;
 }
 #endif /* CONFIG_ESP_TLS_USE_DS_PERIPHERAL */

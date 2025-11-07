@@ -13,13 +13,16 @@
 #include "rom/digital_signature.h"
 #include "hal/mmu_types.h"
 #include "hal/wdt_hal.h"
+#include "hal/spi_flash_hal.h"
 #include "hal/spi_flash_types.h"
+#include "esp_private/mspi_timing_tuning.h"
 #include "esp_hmac.h"
 #include "esp_ds.h"
 #include "esp_crypto_lock.h"
 #include "esp_flash.h"
 
 #include "soc/soc_caps.h"
+#include "sdkconfig.h"
 
 #include "esp_tee.h"
 #include "secure_service_num.h"
@@ -30,6 +33,13 @@ void IRAM_ATTR __wrap_esp_rom_route_intr_matrix(int cpu_no, uint32_t model_num, 
 {
     esp_tee_service_call(4, SS_ESP_ROM_ROUTE_INTR_MATRIX, cpu_no, model_num, intr_num);
 }
+
+#if SOC_INT_CLIC_SUPPORTED
+void IRAM_ATTR __wrap_esprv_int_set_vectored(int rv_int_num, bool vectored)
+{
+    esp_tee_service_call(3, SS_ESPRV_INT_SET_VECTORED, rv_int_num, vectored);
+}
+#endif
 
 /* ---------------------------------------------- RTC_WDT ------------------------------------------------- */
 
@@ -222,6 +232,13 @@ void __wrap_esp_crypto_sha_enable_periph_clk(bool enable)
     esp_tee_service_call(2, SS_ESP_CRYPTO_SHA_ENABLE_PERIPH_CLK, enable);
 }
 
+#if SOC_SHA_SUPPORT_SHA512_T
+int __wrap_esp_sha_512_t_init_hash(uint16_t t)
+{
+    return esp_tee_service_call(2, SS_ESP_SHA_512_T_INIT_HASH, t);
+}
+#endif
+
 /* ---------------------------------------------- HMAC ------------------------------------------------- */
 
 esp_err_t __wrap_esp_hmac_calculate(hmac_key_id_t key_id, const void *message, size_t message_len, uint8_t *hmac)
@@ -365,6 +382,25 @@ bool IRAM_ATTR __wrap_mmu_hal_paddr_to_vaddr(uint32_t mmu_id, uint32_t paddr, mm
     return esp_tee_service_call(6, SS_MMU_HAL_PADDR_TO_VADDR, mmu_id, paddr, target, type, out_vaddr);
 }
 
+/**
+ * NOTE: This ROM-provided API is intended to configure the Cache MMU size for
+ * instruction (irom) and rodata (drom) sections in flash.
+ *
+ * On ESP32-C5, it also sets the start pages for flash irom and drom sections,
+ * which involves accessing MMU registers directly.
+ *
+ * However, these MMU registers are protected by the APM and direct access
+ * from the REE results in a fault.
+ *
+ * To prevent this, we wrap this function to be routed as a TEE service call.
+ */
+#if CONFIG_IDF_TARGET_ESP32C5
+void IRAM_ATTR __wrap_Cache_Set_IDROM_MMU_Size(uint32_t irom_size, uint32_t drom_size)
+{
+    esp_tee_service_call(3, SS_CACHE_SET_IDROM_MMU_SIZE, irom_size, drom_size);
+}
+#endif
+
 #if CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1
 /* ---------------------------------------------- SPI Flash HAL ------------------------------------------------- */
 
@@ -386,11 +422,6 @@ esp_err_t IRAM_ATTR __wrap_spi_flash_hal_device_config(spi_flash_host_inst_t *ho
 void IRAM_ATTR __wrap_spi_flash_hal_erase_block(spi_flash_host_inst_t *host, uint32_t start_address)
 {
     esp_tee_service_call(3, SS_SPI_FLASH_HAL_ERASE_BLOCK, host, start_address);
-}
-
-void IRAM_ATTR __wrap_spi_flash_hal_erase_chip(spi_flash_host_inst_t *host)
-{
-    esp_tee_service_call(2, SS_SPI_FLASH_HAL_ERASE_CHIP, host);
 }
 
 void IRAM_ATTR __wrap_spi_flash_hal_erase_sector(spi_flash_host_inst_t *host, uint32_t start_address)
@@ -461,4 +492,36 @@ esp_err_t IRAM_ATTR __wrap_spi_flash_chip_generic_config_host_io_mode(esp_flash_
 {
     return esp_tee_service_call(3, SS_SPI_FLASH_CHIP_GENERIC_CONFIG_HOST_IO_MODE, chip, flags);
 }
+
+#if CONFIG_IDF_TARGET_ESP32C5
+void IRAM_ATTR __wrap_mspi_timing_flash_tuning(void)
+{
+    esp_tee_service_call(1, SS_MSPI_TIMING_FLASH_TUNING);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_psram_tuning(void)
+{
+    esp_tee_service_call(1, SS_MSPI_TIMING_PSRAM_TUNING);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_enter_low_speed_mode(bool control_spi1)
+{
+    esp_tee_service_call(2, SS_MSPI_TIMING_ENTER_LOW_SPEED_MODE, control_spi1);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_enter_high_speed_mode(bool control_spi1)
+{
+    esp_tee_service_call(2, SS_MSPI_TIMING_ENTER_HIGH_SPEED_MODE, control_spi1);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_change_speed_mode_cache_safe(bool switch_down)
+{
+    esp_tee_service_call(2, SS_MSPI_TIMING_CHANGE_SPEED_MODE_CACHE_SAFE, switch_down);
+}
+
+void IRAM_ATTR __wrap_spi_timing_get_flash_timing_param(spi_flash_hal_timing_config_t *out_timing_config)
+{
+    esp_tee_service_call(2, SS_SPI_TIMING_GET_FLASH_TIMING_PARAM, out_timing_config);
+}
+#endif
 #endif

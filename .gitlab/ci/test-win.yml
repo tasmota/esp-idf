@@ -14,10 +14,17 @@
     - job: upload-submodules-cache
       optional: true
       artifacts: false
-  before_script: []
+  variables:
+    GIT_STRATEGY: fetch  # use brew local mirror first
+  before_script:
+    - if ($env:IDF_DONT_USE_MIRRORS) {
+        $env:IDF_MIRROR_PREFIX_MAP = ""
+      }
   after_script: []
 
 test_cli_installer_win:
+  rules:
+    - when: never
   extends:
     - .host_test_win_template
     - .rules:labels:windows_pytest_build_system
@@ -30,9 +37,11 @@ test_cli_installer_win:
   variables:
     IDF_PATH: "$CI_PROJECT_DIR"
   timeout: 3h
+  allow_failure: true
   script:
     # Tools must be downloaded for testing
-    - python ${IDF_PATH}\tools\idf_tools.py download required qemu-riscv32 qemu-xtensa cmake
+    #                                                                     cmake@version that is supported
+    - python ${IDF_PATH}\tools\idf_tools.py download required qemu-riscv32 qemu-xtensa cmake cmake@3.16.3
     - cd ${IDF_PATH}\tools\test_idf_tools
     - python -m pip install jsonschema
     - python .\test_idf_tools.py

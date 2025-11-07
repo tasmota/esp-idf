@@ -16,11 +16,14 @@
 #endif
 
 #ifdef SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
-#include "hal/key_mgr_ll.h"
+#include "hal/key_mgr_hal.h"
 #endif
 
 #define ECDSA_HAL_P192_COMPONENT_LEN        24
 #define ECDSA_HAL_P256_COMPONENT_LEN        32
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+#define ECDSA_HAL_P384_COMPONENT_LEN        48
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
 
 static void configure_ecdsa_periph(ecdsa_hal_config_t *conf)
 {
@@ -30,12 +33,20 @@ static void configure_ecdsa_periph(ecdsa_hal_config_t *conf)
 
 #if SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
         // Force Key Manager to use eFuse key for XTS-AES operation
-        key_mgr_ll_set_key_usage(ESP_KEY_MGR_ECDSA_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+        if (conf->curve == ECDSA_CURVE_SECP192R1) {
+            key_mgr_hal_set_key_usage(ESP_KEY_MGR_ECDSA_192_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+        } else {
+            key_mgr_hal_set_key_usage(ESP_KEY_MGR_ECDSA_256_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+        }
 #endif
     }
 #if SOC_KEY_MANAGER_SUPPORTED
     else {
-        key_mgr_ll_set_key_usage(ESP_KEY_MGR_ECDSA_KEY, ESP_KEY_MGR_USE_OWN_KEY);
+        if (conf->curve == ECDSA_CURVE_SECP192R1) {
+            key_mgr_hal_set_key_usage(ESP_KEY_MGR_ECDSA_192_KEY, ESP_KEY_MGR_USE_OWN_KEY);
+        } else {
+            key_mgr_hal_set_key_usage(ESP_KEY_MGR_ECDSA_256_KEY, ESP_KEY_MGR_USE_OWN_KEY);
+        }
     }
 #endif
 
@@ -125,7 +136,11 @@ __attribute__((optimize("O0"))) static void ecdsa_hal_gen_signature_with_counter
 void ecdsa_hal_gen_signature(ecdsa_hal_config_t *conf, const uint8_t *hash,
                         uint8_t *r_out, uint8_t *s_out, uint16_t len)
 {
-    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN) {
+    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    && len != ECDSA_HAL_P384_COMPONENT_LEN
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
+    ) {
         HAL_ASSERT(false && "Incorrect length");
     }
 
@@ -158,7 +173,11 @@ void ecdsa_hal_gen_signature(ecdsa_hal_config_t *conf, const uint8_t *hash,
 int ecdsa_hal_verify_signature(ecdsa_hal_config_t *conf, const uint8_t *hash, const uint8_t *r, const uint8_t *s,
                                const uint8_t *pub_x, const uint8_t *pub_y, uint16_t len)
 {
-    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN) {
+    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    && len != ECDSA_HAL_P384_COMPONENT_LEN
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
+    ) {
         HAL_ASSERT(false && "Incorrect length");
     }
 
@@ -194,7 +213,11 @@ int ecdsa_hal_verify_signature(ecdsa_hal_config_t *conf, const uint8_t *hash, co
 #ifdef SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
 void ecdsa_hal_export_pubkey(ecdsa_hal_config_t *conf, uint8_t *pub_x, uint8_t *pub_y, uint16_t len)
 {
-    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN) {
+    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    && len != ECDSA_HAL_P384_COMPONENT_LEN
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
+    ) {
         HAL_ASSERT(false && "Incorrect length");
     }
 

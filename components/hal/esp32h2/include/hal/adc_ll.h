@@ -38,6 +38,7 @@ extern "C" {
 #define ADC_LL_GET_HIGH_THRES_MASK(monitor_id)    ((monitor_id == 0) ? APB_SARADC_APB_SARADC_THRES0_HIGH_INT_ST_M : APB_SARADC_APB_SARADC_THRES1_HIGH_INT_ST_M)
 #define ADC_LL_GET_LOW_THRES_MASK(monitor_id)     ((monitor_id == 0) ? APB_SARADC_APB_SARADC_THRES0_LOW_INT_ST_M : APB_SARADC_APB_SARADC_THRES1_LOW_INT_ST_M)
 
+#define ADC_LL_ADC_FE_ON_MODEM_DOMAIN               (1)
 /*---------------------------------------------------------------
                     Oneshot
 ---------------------------------------------------------------*/
@@ -58,7 +59,7 @@ extern "C" {
 #define ADC_LL_CLKM_DIV_B_DEFAULT         1
 #define ADC_LL_CLKM_DIV_A_DEFAULT         0
 #define ADC_LL_DEFAULT_CONV_LIMIT_EN      0
-#define ADC_LL_DEFAULT_CONV_LIMIT_NUM     10
+#define ADC_LL_DEFAULT_CONV_LIMIT_NUM     255
 
 #define ADC_LL_POWER_MANAGE_SUPPORTED     1 //ESP32H2 supported to manage power mode
 /*---------------------------------------------------------------

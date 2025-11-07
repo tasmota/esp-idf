@@ -28,7 +28,7 @@
 #include "esp32/rom/cache.h"
 #include "esp32/rom/rtc.h"
 
-void IRAM_ATTR esp_system_reset_modules_on_exit(void)
+void esp_system_reset_modules_on_exit(void)
 {
     // Flush any data left in UART FIFOs before reset the UART peripheral
     for (int i = 0; i < SOC_UART_HP_NUM; ++i) {
@@ -48,8 +48,13 @@ void IRAM_ATTR esp_system_reset_modules_on_exit(void)
     DPORT_SET_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG,
                             //UART TX FIFO cannot be reset correctly on ESP32, so reset the UART memory by DPORT here.
                             DPORT_TIMERS_RST | DPORT_SPI01_RST | DPORT_SPI2_RST | DPORT_SPI3_RST |
-                            DPORT_SPI_DMA_RST | DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST |
-                            DPORT_UART_MEM_RST | DPORT_PWM0_RST | DPORT_PWM1_RST);
+                            // The DMA inside SPI needs to be reset to avoid memory corruption after restart.
+                            DPORT_SPI_DMA_RST |
+                            DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST | DPORT_UART_MEM_RST |
+                            DPORT_PWM0_RST | DPORT_PWM1_RST |
+                            // The DMA inside I2S needs to be reset to avoid memory corruption after restart.
+                            DPORT_I2S0_RST | DPORT_I2S1_RST |
+                            DPORT_UHCI0_RST | DPORT_UHCI1_RST);
     DPORT_REG_WRITE(DPORT_PERIP_RST_EN_REG, 0);
 
     // Reset crypto peripherals. This ensures a clean state for the crypto peripherals after a CPU restart and hence
@@ -63,7 +68,7 @@ void IRAM_ATTR esp_system_reset_modules_on_exit(void)
  * core are already stopped. Stalls other core, resets hardware,
  * triggers restart.
 */
-void IRAM_ATTR esp_restart_noos(void)
+void esp_restart_noos(void)
 {
     // Disable interrupts
     esp_cpu_intr_disable(0xFFFFFFFF);

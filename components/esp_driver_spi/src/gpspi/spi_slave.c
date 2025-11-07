@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -103,20 +103,26 @@ static inline bool SPI_SLAVE_ISR_ATTR bus_is_iomux(spi_slave_t *host)
     return host->flags & SPICOMMON_BUSFLAG_IOMUX_PINS;
 }
 
-static void SPI_SLAVE_ISR_ATTR freeze_cs(spi_slave_t *host)
+static inline void SPI_SLAVE_ISR_ATTR freeze_cs(spi_slave_t *host)
 {
+#if SPI_LL_SLAVE_NEEDS_CS_WORKAROUND
+    // This workaround only for ESP32 due to old hardware design, see MR !3207
     esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT, host->cs_in_signal, false);
+#endif
 }
 
 // Use this function instead of cs_initial to avoid overwrite the output config
 // This is used in test by internal gpio matrix connections
 static inline void SPI_SLAVE_ISR_ATTR restore_cs(spi_slave_t *host)
 {
+#if SPI_LL_SLAVE_NEEDS_CS_WORKAROUND
+    // This workaround only for ESP32 due to old hardware design, see MR !3207
     if (host->cs_iomux) {
         gpio_ll_set_input_signal_from(GPIO_HAL_GET_HW(GPIO_PORT_0), host->cs_in_signal, false);
     } else {
         esp_rom_gpio_connect_in_signal(host->cfg.spics_io_num, host->cs_in_signal, false);
     }
+#endif
 }
 
 #if (SOC_CPU_CORES_NUM > 1) && (!CONFIG_FREERTOS_UNICORE)
@@ -774,7 +780,7 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         spi_slave_hal_hw_reset(hal);
         s_spi_slave_prepare_data(host);
 
-        //The slave rx dma get disturbed by unexpected transaction. Only connect the CS when slave is ready.
+        //The slave rx dma get disturbed by unexpected transaction. Only connect the CS and start DMA when slave is ready.
         if (use_dma) {
             restore_cs(host);
         }

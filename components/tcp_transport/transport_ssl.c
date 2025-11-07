@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -362,6 +362,14 @@ void esp_transport_ssl_enable_global_ca_store(esp_transport_handle_t t)
     ssl->cfg.use_global_ca_store = true;
 }
 
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+void esp_transport_ssl_set_esp_tls_dyn_buf_strategy(esp_transport_handle_t t, esp_tls_dyn_buf_strategy_t strategy)
+{
+    GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
+    ssl->cfg.esp_tls_dyn_buf_strategy = strategy;
+}
+#endif
+
 void esp_transport_ssl_set_tls_version(esp_transport_handle_t t, esp_tls_proto_ver_t tls_version)
 {
     GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
@@ -409,6 +417,22 @@ void esp_transport_ssl_set_client_key_ecdsa_peripheral(esp_transport_handle_t t,
     GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
     ssl->cfg.use_ecdsa_peripheral = true;
     ssl->cfg.ecdsa_key_efuse_blk = ecdsa_efuse_blk;
+}
+
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+void esp_transport_ssl_set_client_key_ecdsa_peripheral_extended(esp_transport_handle_t t, uint8_t ecdsa_efuse_blk, uint8_t ecdsa_efuse_blk_high)
+{
+    GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
+    ssl->cfg.use_ecdsa_peripheral = true;
+    ssl->cfg.ecdsa_key_efuse_blk = ecdsa_efuse_blk;
+    ssl->cfg.ecdsa_key_efuse_blk_high = ecdsa_efuse_blk_high;
+}
+#endif
+
+void esp_transport_ssl_set_ecdsa_curve(esp_transport_handle_t t, esp_tls_ecdsa_curve_t curve)
+{
+    GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
+    ssl->cfg.ecdsa_curve = curve;
 }
 #endif
 

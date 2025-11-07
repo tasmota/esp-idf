@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include "soc/soc.h"
 #include "soc/gpio_periph.h"
+#include "soc/gpio_ext_reg.h"
 #include "soc/gpio_struct.h"
 #include "soc/lp_aon_struct.h"
 #include "soc/pmu_struct.h"
@@ -38,7 +39,7 @@ extern "C" {
 #define GPIO_LL_PRO_CPU_INTR_ENA      (BIT(0))
 #define GPIO_LL_PRO_CPU_NMI_INTR_ENA  (BIT(1))
 
-#define GPIO_LL_INTR_SOURCE0   ETS_GPIO_INTR_SOURCE
+#define GPIO_LL_INTR_SOURCE0   ETS_GPIO_INTERRUPT_PRO_SOURCE
 
 /**
  * @brief Get the configuration for an IO
@@ -689,6 +690,18 @@ static inline void gpio_ll_sleep_output_enable(gpio_dev_t *hw, uint32_t gpio_num
     IO_MUX.gpion[gpio_num].gpion_mcu_oe = 1;
 }
 
+/**
+ * @brief  Control the pin in the IOMUX
+ *
+ * @param  bmap   write mask of control value
+ * @param  val    Control value
+ * @param  shift  write mask shift of control value
+ */
+__attribute__((always_inline))
+static inline void gpio_ll_set_pin_ctrl(uint32_t val, uint32_t bmap, uint32_t shift)
+{
+    SET_PERI_REG_BITS(GPIO_EXT_PIN_CTRL_REG, bmap, val, shift);
+}
 #ifdef __cplusplus
 }
 #endif

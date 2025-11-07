@@ -699,7 +699,7 @@ static esp_err_t ledc_set_timer_div(ledc_mode_t speed_mode, ledc_timer_t timer_n
         if (p_ledc_obj[speed_mode]->glb_clk != glb_clk) {
             // TODO: release old glb_clk (if not UNINIT), and acquire new glb_clk [clk_tree]
             p_ledc_obj[speed_mode]->glb_clk = glb_clk;
-            esp_clk_tree_enable_src((soc_module_clk_t)glb_clk, true);
+            ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)glb_clk, true), LEDC_TAG, "clock source enable failed");
             LEDC_FUNC_CLOCK_ATOMIC() {
                 ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), glb_clk);
             }
@@ -864,7 +864,7 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     else if (new_speed_mode_ctx_created) {
         portENTER_CRITICAL(&ledc_spinlock);
         if (p_ledc_obj[speed_mode]->glb_clk == LEDC_SLOW_CLK_UNINIT) {
-            esp_clk_tree_enable_src((soc_module_clk_t)LEDC_LL_GLOBAL_CLK_DEFAULT, true);
+            ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)LEDC_LL_GLOBAL_CLK_DEFAULT, true));
             ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), LEDC_LL_GLOBAL_CLK_DEFAULT);
         }
         portEXIT_CRITICAL(&ledc_spinlock);
@@ -874,7 +874,7 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     /*set channel parameters*/
     /*   channel parameters decide how the waveform looks like in one period */
     /*   set channel duty and hpoint value, duty range is [0, (2**duty_res)], hpoint range is [0, (2**duty_res)-1] */
-    /*   Note: On ESP32, ESP32S2, ESP32S3, ESP32C3, ESP32C2, ESP32C6, ESP32H2 (rev < 1.2), ESP32P4, due to a hardware bug,
+    /*   Note: On ESP32, ESP32S2, ESP32S3, ESP32C3, ESP32C2, ESP32C6, ESP32H2 (rev < 1.2), ESP32P4 (rev < 3.0), due to a hardware bug,
      *         100% duty cycle (i.e. 2**duty_res) is not reachable when the binded timer selects the maximum duty
      *         resolution. For example, the max duty resolution on ESP32C3 is 14-bit width, then set duty to (2**14)
      *         will mess up the duty calculation in hardware.
@@ -978,7 +978,7 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
 static void _ledc_update_duty(ledc_mode_t speed_mode, ledc_channel_t channel)
 {
     ledc_hal_set_sig_out_en(&(p_ledc_obj[speed_mode]->ledc_hal), channel, true);
-    ledc_hal_set_duty_start(&(p_ledc_obj[speed_mode]->ledc_hal), channel, true);
+    ledc_hal_set_duty_start(&(p_ledc_obj[speed_mode]->ledc_hal), channel);
     ledc_ls_channel_update(speed_mode, channel);
 }
 
@@ -1001,7 +1001,6 @@ esp_err_t ledc_stop(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t idl
     portENTER_CRITICAL_SAFE(&ledc_spinlock);
     ledc_hal_set_idle_level(&(p_ledc_obj[speed_mode]->ledc_hal), channel, idle_level);
     ledc_hal_set_sig_out_en(&(p_ledc_obj[speed_mode]->ledc_hal), channel, false);
-    ledc_hal_set_duty_start(&(p_ledc_obj[speed_mode]->ledc_hal), channel, false);
     ledc_ls_channel_update(speed_mode, channel);
     portEXIT_CRITICAL_SAFE(&ledc_spinlock);
     return ESP_OK;
@@ -1264,7 +1263,7 @@ static void IRAM_ATTR ledc_fade_isr(void *arg)
                                  cycle,
                                  scale);
                 s_ledc_fade_rec[speed_mode][channel]->fsm = LEDC_FSM_HW_FADE;
-                ledc_hal_set_duty_start(&(p_ledc_obj[speed_mode]->ledc_hal), channel, true);
+                ledc_hal_set_duty_start(&(p_ledc_obj[speed_mode]->ledc_hal), channel);
                 ledc_ls_channel_update(speed_mode, channel);
             }
             portEXIT_CRITICAL_ISR(&ledc_spinlock);

@@ -60,7 +60,8 @@ static inline void rtcio_ll_iomux_func_sel(int rtcio_num, int func)
 static inline void _rtcio_ll_enable_io_clock(bool enable)
 {
     LPPERI.clk_en.lp_io_ck_en = enable;
-    while (LPPERI.clk_en.lp_io_ck_en != enable) {
+    LP_GPIO.clock_gate.clk_en = enable;
+    while ((LPPERI.clk_en.lp_io_ck_en != enable) || (LP_GPIO.clock_gate.clk_en != enable)) {
         ;
     }
 }
@@ -101,7 +102,7 @@ static inline void rtcio_ll_function_select(int rtcio_num, rtcio_ll_func_t func)
  */
 static inline void rtcio_ll_output_enable(int rtcio_num)
 {
-    LP_GPIO.enable_w1ts.enable_w1ts = BIT(rtcio_num);
+    LP_GPIO.enable_w1ts.val = BIT(rtcio_num);
 }
 
 /**
@@ -111,7 +112,7 @@ static inline void rtcio_ll_output_enable(int rtcio_num)
  */
 static inline void rtcio_ll_output_disable(int rtcio_num)
 {
-    LP_GPIO.enable_w1tc.enable_w1tc = BIT(rtcio_num);
+    LP_GPIO.enable_w1tc.val = BIT(rtcio_num);
 }
 
 /**
@@ -123,9 +124,9 @@ static inline void rtcio_ll_output_disable(int rtcio_num)
 static inline void rtcio_ll_set_level(int rtcio_num, uint32_t level)
 {
     if (level) {
-        LP_GPIO.out_w1ts.out_w1ts = BIT(rtcio_num);
+        LP_GPIO.out_w1ts.val = BIT(rtcio_num);
     } else {
-        LP_GPIO.out_w1tc.out_w1tc = BIT(rtcio_num);
+        LP_GPIO.out_w1tc.val = BIT(rtcio_num);
     }
 }
 
@@ -436,7 +437,7 @@ static inline  uint32_t rtcio_ll_get_interrupt_status(void)
  */
 static inline  void rtcio_ll_clear_interrupt_status(void)
 {
-    LP_GPIO.status_w1tc.status_w1tc = 0x7F;
+    LP_GPIO.status_w1tc.val = 0x7F;
 }
 
 #ifdef __cplusplus

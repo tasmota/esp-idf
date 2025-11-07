@@ -282,6 +282,22 @@ esp_err_t esp_efuse_write_block(esp_efuse_block_t blk, const void* src_key, size
  */
 uint32_t esp_efuse_get_pkg_ver(void);
 
+#if SOC_RECOVERY_BOOTLOADER_SUPPORTED || __DOXYGEN__
+/**
+ * @brief Sets the recovery bootloader flash offset in eFuse.
+ *
+ * This function is used to set the flash offset in eFuse for the recovery bootloader.
+ * If an offset is already set in eFuse, it will be validated against the provided offset.
+ *
+ * @param offset Flash offset where the recovery bootloader is located.
+ * @return
+ *    - ESP_OK: Successfully set or given offset is already set.
+ *    - ESP_ERR_NOT_ALLOWED: Recovery bootloader feature is disabled in eFuse.
+ *    - ESP_FAIL: Failed to update the recovery bootloader flash offset.
+ *    - Error code from eFuse read/write operations if an error occurs.
+ */
+esp_err_t esp_efuse_set_recovery_bootloader_offset(const uint32_t offset);
+#endif // SOC_RECOVERY_BOOTLOADER_SUPPORTED
 
 /**
  *  @brief Reset efuse write registers
@@ -351,11 +367,12 @@ esp_err_t esp_efuse_set_rom_log_scheme(esp_efuse_rom_log_scheme_t log_scheme);
  *
  * @note If Secure Download mode is already enabled, this function does nothing and returns success.
  *
- * @note Disabling the ROM Download Mode also disables Secure Download Mode.
+ * @note If UART DL mode is completely disabled then Secure Download mode can not be enabled
+ * and this API simply returns success.
  *
  * @return
- * - ESP_OK If the eFuse was successfully burned, or had already been burned.
- * - ESP_ERR_INVALID_STATE ROM Download Mode has been disabled via eFuse, so Secure Download mode is unavailable.
+ * - ESP_OK If the eFuse was successfully burned, or had already been burned, or UART DL mode is already disabled.
+ * - Other errors If an error occurred while burning ESP_EFUSE_ENABLE_SECURITY_DOWNLOAD.
  */
 esp_err_t esp_efuse_enable_rom_secure_download_mode(void);
 #endif

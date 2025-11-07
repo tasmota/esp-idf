@@ -2063,7 +2063,6 @@ UINT8 *BTM_CheckAdvData( UINT8 *p_adv, UINT16 adv_data_len, UINT8 type, UINT8 *p
     UINT8 *p = p_adv;
     UINT8 length;
     UINT8 adv_type;
-    BTM_TRACE_API("BTM_CheckAdvData type=0x%02X", type);
 
     STREAM_TO_UINT8(length, p);
 
@@ -2071,6 +2070,13 @@ UINT8 *BTM_CheckAdvData( UINT8 *p_adv, UINT16 adv_data_len, UINT8 type, UINT8 *p
         STREAM_TO_UINT8(adv_type, p);
 
         if ( adv_type == type ) {
+
+            if((p + length - 1) > (p_adv + adv_data_len)) {
+                /* avoid memory overflow*/
+                *p_length = 0;
+                return NULL;
+            }
+
             /* length doesn't include itself */
             *p_length = length - 1; /* minus the length of type */
             return p;
@@ -4863,4 +4869,16 @@ bool btm_ble_adv_pkt_post(pkt_linked_item_t *pkt)
 }
 #endif // #if (BLE_42_SCAN_EN == TRUE)
 
+#if (SMP_INCLUDED == TRUE)
+/* Retrieve local IRK safely */
+bool BTM_GetLocalIRK(uint8_t *irk)
+{
+    if (!irk) {
+        return false;
+    }
+
+    memcpy(irk, btm_cb.devcb.id_keys.irk, sizeof(btm_cb.devcb.id_keys.irk));
+    return true;
+}
+#endif // (SMP_INCLUDED == TRUE)
 #endif  /* BLE_INCLUDED */

@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "esp_attr.h"
+#include "esp_private/esp_system_attr.h"
 #include "esp_err.h"
 #include "esp_compiler.h"
 #include "esp_macros.h"
@@ -153,7 +153,7 @@ static void  esp_startup_start_app_other_cores_default(void)
 /* This function has to be in IRAM, as while it is running on CPU1, CPU0 may do some flash operations
  * (e.g. initialize the core dump), which means that cache will be disabled.
  */
-static void IRAM_ATTR start_cpu_other_cores_default(void)
+static void ESP_SYSTEM_IRAM_ATTR start_cpu_other_cores_default(void)
 {
     do_system_init_fn(ESP_SYSTEM_INIT_STAGE_SECONDARY);
 
@@ -200,10 +200,16 @@ static void do_secondary_init(void)
 static void start_cpu0_default(void)
 {
     // Initialize core components and services.
+    // Operations that needs the cache to be disabled have to be done here.
     do_core_init();
 
     // Execute constructors.
     do_global_ctors();
+
+    /* ----------------------------------Separator-----------------------------
+     * After this stage, other CPU start running with the cache, however the scheduler (and ipc service) is not available.
+     * Don't touch the cache/MMU until the OS is up.
+     */
 
     // Execute init functions of other components; blocks
     // until all cores finish (when !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE).

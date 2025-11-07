@@ -96,6 +96,17 @@ typedef enum {
 typedef esp_err_t (*http_event_handle_cb)(esp_http_client_event_t *evt);
 
 /**
+ * @brief ECDSA curve options for TLS connections
+ */
+typedef enum {
+    ESP_HTTP_CLIENT_ECDSA_CURVE_SECP256R1 = 0,   /*!< Use SECP256R1 curve */
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    ESP_HTTP_CLIENT_ECDSA_CURVE_SECP384R1,       /*!< Use SECP384R1 curve */
+#endif
+    ESP_HTTP_CLIENT_ECDSA_CURVE_MAX,            /*!< to indicate max */
+} esp_http_client_ecdsa_curve_t;
+
+/**
  * @brief HTTP method
  */
 typedef enum {
@@ -176,7 +187,9 @@ typedef struct {
     esp_http_client_proto_ver_t tls_version;         /*!< TLS protocol version of the connection, e.g., TLS 1.2, TLS 1.3 (default - no preference) */
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
     bool                        use_ecdsa_peripheral;       /*!< Use ECDSA peripheral to use private key. */
-    uint8_t                     ecdsa_key_efuse_blk;        /*!< The efuse block where ECDSA key is stored. */
+    uint8_t                     ecdsa_key_efuse_blk;        /*!< The efuse block where ECDSA key is stored. For SECP384R1 curve, if two blocks are used, set this to the low block and use ecdsa_key_efuse_blk_high for the high block. */
+    uint8_t                     ecdsa_key_efuse_blk_high;   /*!< The high efuse block for ECDSA key (used only for SECP384R1 curve). If not set (0), only ecdsa_key_efuse_blk is used. */
+    esp_http_client_ecdsa_curve_t       ecdsa_curve;        /*!< ECDSA curve to use (SECP256R1 or SECP384R1) */
 #endif
     const char                  *user_agent;         /*!< The User Agent string to send with HTTP requests */
     esp_http_client_method_t    method;                   /*!< HTTP Method */
@@ -310,6 +323,33 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
  *  - ESP_ERR_HTTP_CONNECTION_CLOSED if server closes the connection
  */
 esp_err_t esp_http_client_perform(esp_http_client_handle_t client);
+
+/**
+ * @brief      Prepare HTTP client for a new request
+ *             This function initializes the client state and prepares authentication if needed.
+ *             It should be called before sending a request.
+ *
+ * @param[in]  client  The esp_http_client handle
+ *
+ * @return
+ *  - ESP_OK on successful
+ *  - ESP_FAIL on error
+ */
+esp_err_t esp_http_client_prepare(esp_http_client_handle_t client);
+
+/**
+ * @brief      Send HTTP request headers and data
+ *             This function sends the HTTP request line, headers, and any post data to the server.
+ *
+ * @param[in]  client     The esp_http_client handle
+ * @param[in]  write_len  Length of data to write (for POST/PUT requests)
+ *
+ * @return
+ *  - ESP_OK on successful
+ *  - ESP_FAIL on error
+ *  - ESP_ERR_HTTP_WRITE_DATA if write operation fails
+ */
+esp_err_t esp_http_client_request_send(esp_http_client_handle_t client, int write_len);
 
 /**
  * @brief       Cancel an ongoing HTTP request. This API closes the current socket and opens a new socket with the same esp_http_client context.
@@ -807,6 +847,15 @@ esp_err_t esp_http_client_get_url(esp_http_client_handle_t client, char *url, co
  *     - ESP_ERR_INVALID_ARG    If the client or len are NULL
  */
 esp_err_t esp_http_client_get_chunk_length(esp_http_client_handle_t client, int *len);
+
+/**
+ * @brief      Check if persistent connection is supported by the server
+ *
+ * @param[in]  client  The HTTP client handle
+ *
+ * @return     true if persistent connection is supported, false otherwise
+ */
+bool esp_http_client_is_persistent_connection(esp_http_client_handle_t client);
 
 #ifdef __cplusplus
 }

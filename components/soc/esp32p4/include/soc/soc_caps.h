@@ -218,6 +218,7 @@
 #define SOC_GDMA_SUPPORT_CRC                1
 #define SOC_GDMA_NUM_GROUPS_MAX             2
 #define SOC_GDMA_PAIRS_PER_GROUP_MAX        3
+#define SOC_AHB_GDMA_SUPPORT_PSRAM          1
 #define SOC_AXI_GDMA_SUPPORT_PSRAM          1
 #define SOC_GDMA_SUPPORT_ETM                1
 #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
@@ -225,8 +226,8 @@
 
 /*-------------------------- 2D-DMA CAPS -------------------------------------*/
 #define SOC_DMA2D_GROUPS                            (1U) // Number of 2D-DMA groups
-#define SOC_DMA2D_TX_CHANNELS_PER_GROUP             (3)  // Number of 2D-DMA TX (OUT) channels in each group
-#define SOC_DMA2D_RX_CHANNELS_PER_GROUP             (2)  // Number of 2D-DMA RX (IN) channels in each group
+#define SOC_DMA2D_TX_CHANNELS_PER_GROUP             (4)  // Number of 2D-DMA TX (OUT) channels in each group (4th channel only exists on P4 ver. >= 3.0)
+#define SOC_DMA2D_RX_CHANNELS_PER_GROUP             (3)  // Number of 2D-DMA RX (IN) channels in each group (3rd channel only exists on P4 ver. >= 3.0)
 // #define SOC_DMA2D_SUPPORT_ETM              (1)  // Support ETM submodule
 
 /*-------------------------- ETM CAPS --------------------------------------*/
@@ -351,12 +352,13 @@
 
 /*-------------------------- ISP CAPS ----------------------------------------*/
 #define SOC_ISP_BF_SUPPORTED                     1
+#define SOC_ISP_BLC_SUPPORTED                    1
 #define SOC_ISP_CCM_SUPPORTED                    1
+#define SOC_ISP_COLOR_SUPPORTED                  1
 #define SOC_ISP_DEMOSAIC_SUPPORTED               1
 #define SOC_ISP_DVP_SUPPORTED                    1
-#define SOC_ISP_SHARPEN_SUPPORTED                1
-#define SOC_ISP_COLOR_SUPPORTED                  1
 #define SOC_ISP_LSC_SUPPORTED                    1
+#define SOC_ISP_SHARPEN_SUPPORTED                1
 #define SOC_ISP_SHARE_CSI_BRG                    1
 
 #define SOC_ISP_NUMS                             1U
@@ -545,6 +547,10 @@
 #define SOC_SHA_SUPPORT_SHA512_256      (1)
 #define SOC_SHA_SUPPORT_SHA512_T        (1)
 
+/*--------------------------- ECC CAPS ---------------------------------------*/
+#define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
+#define SOC_ECC_SUPPORT_CURVE_P384      (1)
+
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
@@ -598,6 +604,7 @@
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY           (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+#define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
 
 #define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
 
@@ -741,6 +748,7 @@
 #define SOC_PM_EXT1_WAKEUP_BY_PMU       (1)
 #define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
 #define SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP    (1)     /*!<Supports waking up from touch pad trigger */
+#define SOC_PM_SUPPORT_CPU_PD           (1)
 #define SOC_PM_SUPPORT_XTAL32K_PD       (1)
 #define SOC_PM_SUPPORT_RC32K_PD         (1)
 #define SOC_PM_SUPPORT_RC_FAST_PD       (1)
@@ -757,7 +765,6 @@
 #define SOC_PM_PAU_LINK_NUM             (4)
 #define SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR   (1)
 #define SOC_PAU_IN_TOP_DOMAIN           (1)
-#define SOC_CPU_IN_TOP_DOMAIN           (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_SLEEP_SYSTIMER_STALL_WORKAROUND 1    //TODO IDF-11381: replace with all xtal field clk gate control

@@ -321,7 +321,7 @@ static void start_other_core(void)
     }
 }
 
-#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && !CONFIG_IDF_TARGET_ESP32H4 // TODO IDF-12289
+#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 #if CONFIG_IDF_TARGET_ESP32
 static void restore_app_mmu_from_pro_mmu(void)
 {
@@ -466,7 +466,7 @@ FORCE_INLINE_ATTR IRAM_ATTR void ram_app_init(void)
 //Keep this static, the compiler will check output parameters are initialized.
 FORCE_INLINE_ATTR IRAM_ATTR void ext_mem_init(void)
 {
-#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && !CONFIG_IDF_TARGET_ESP32H4 // TODO IDF-12289
+#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
     // It helps to fix missed cache settings for other cores. It happens when bootloader is unicore.
     do_multicore_settings();
 #endif
@@ -681,6 +681,10 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     REG_CLR_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_RESETING);
 #endif
 #elif CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_ESP32P4_REV_MIN_FULL >= 300
+    // In single core mode, the CPU system should ignore the WFI state of core1 when entering WFI autoclock gating mode.
+    REG_CLR_BIT(HP_SYS_CLKRST_CPU_WAITI_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_WAITI_ICG_EN);
+#endif
     REG_CLR_BIT(HP_SYS_CLKRST_SOC_CLK_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_CPU_CLK_EN);
     REG_SET_BIT(HP_SYS_CLKRST_HP_RST_EN0_REG, HP_SYS_CLKRST_REG_RST_EN_CORE1_GLOBAL);
 #elif CONFIG_IDF_TARGET_ESP32H4

@@ -47,12 +47,27 @@ endif()
 
 if(esp_tee_build)
     list(APPEND srcs "apm_hal.c"
-                     "brownout_hal.c"
-                     "aes_hal.c"
-                     "sha_hal.c"
-                     "hmac_hal.c"
-                     "ds_hal.c"
-                     "ecc_hal.c")
+                     "brownout_hal.c")
+
+    if(CONFIG_SOC_AES_SUPPORTED)
+        list(APPEND srcs "aes_hal.c")
+    endif()
+
+    if(CONFIG_SOC_SHA_SUPPORTED)
+        list(APPEND srcs "sha_hal.c")
+    endif()
+
+    if(CONFIG_SOC_HMAC_SUPPORTED)
+        list(APPEND srcs "hmac_hal.c")
+    endif()
+
+    if(CONFIG_SOC_DIG_SIGN_SUPPORTED)
+        list(APPEND srcs "ds_hal.c")
+    endif()
+
+    if(CONFIG_SOC_ECC_SUPPORTED)
+        list(APPEND srcs "ecc_hal.c")
+    endif()
 elseif(NOT BOOTLOADER_BUILD)
     list(APPEND srcs "color_hal.c")
 
@@ -96,10 +111,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "rmt_hal.c")
     endif()
 
-    if(CONFIG_SOC_PCNT_SUPPORTED)
-        list(APPEND srcs "pcnt_hal.c")
-    endif()
-
     if(CONFIG_SOC_UHCI_SUPPORTED)
         list(APPEND srcs "uhci_hal.c")
     endif()
@@ -124,12 +135,8 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "sdmmc_hal.c")
     endif()
 
-    if(CONFIG_ETH_USE_ESP32_EMAC)
-        list(APPEND srcs "emac_hal.c")
-    endif()
-
     if(CONFIG_SOC_ETM_SUPPORTED)
-        list(APPEND srcs "etm_hal.c")
+        list(APPEND srcs "etm_hal.c" "${target}/etm_periph.c")
     endif()
 
     if(CONFIG_SOC_PARLIO_SUPPORTED)
@@ -229,16 +236,6 @@ elseif(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED)
         list(APPEND srcs "usb_serial_jtag_hal.c")
-    endif()
-
-    if(CONFIG_SOC_USB_UTMI_PHY_NUM GREATER 0)
-        list(APPEND srcs "usb_utmi_hal.c")
-    endif()
-
-    if(CONFIG_SOC_USB_OTG_SUPPORTED)
-        list(APPEND srcs
-                    "usb_dwc_hal.c"
-                    "usb_wrap_hal.c")
     endif()
 
     if(CONFIG_SOC_TOUCH_SENSOR_SUPPORTED)

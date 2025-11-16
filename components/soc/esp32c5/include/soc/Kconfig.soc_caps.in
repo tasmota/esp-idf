@@ -519,6 +519,10 @@ config SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION
     bool
     default y
 
+config SOC_GDMA_EXT_MEM_ENC_ALIGNMENT
+    int
+    default 16
+
 config SOC_GPIO_PORT
     int
     default 1
@@ -576,10 +580,6 @@ config SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK
     default 0x0000000001FFFF80
 
 config SOC_GPIO_SUPPORT_FORCE_HOLD
-    bool
-    default y
-
-config SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP
     bool
     default y
 
@@ -1283,6 +1283,10 @@ config SOC_EFUSE_ECDSA_KEY_P384
     bool
     default y
 
+config SOC_EFUSE_XTS_AES_KEY_128
+    bool
+    default y
+
 config SOC_HUK_MEM_NEEDS_RECHARGE
     bool
     default y
@@ -1343,7 +1347,15 @@ config SOC_FLASH_ENCRYPTION_XTS_AES
     bool
     default y
 
+config SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS
+    bool
+    default y
+
 config SOC_FLASH_ENCRYPTION_XTS_AES_128
+    bool
+    default y
+
+config SOC_FLASH_ENCRYPTION_XTS_AES_256
     bool
     default y
 

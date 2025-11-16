@@ -8,13 +8,13 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "soc/interrupts.h"
 #if !CONFIG_FREERTOS_UNICORE
 #include "esp_ipc.h"
 #endif
-
 #include "soc/soc_caps.h"
 #include "soc/gpio_periph.h"
 #include "esp_log.h"
@@ -579,14 +579,14 @@ esp_err_t gpio_isr_handler_remove(gpio_num_t gpio_num)
     return ESP_OK;
 }
 
-void gpio_uninstall_isr_service(void)
+esp_err_t gpio_uninstall_isr_service(void)
 {
     gpio_isr_func_t *gpio_isr_func_free = NULL;
     gpio_isr_handle_t gpio_isr_handle_free = NULL;
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     if (gpio_context.gpio_isr_func == NULL) {
         portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
-        return;
+        return ESP_OK;
     }
     gpio_isr_func_free = gpio_context.gpio_isr_func;
     gpio_context.gpio_isr_func = NULL;
@@ -596,7 +596,7 @@ void gpio_uninstall_isr_service(void)
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
     esp_intr_free(gpio_isr_handle_free);
     free(gpio_isr_func_free);
-    return;
+    return ESP_OK;
 }
 
 static void gpio_isr_register_on_core_static(void *param)
@@ -775,7 +775,7 @@ esp_err_t gpio_hold_dis(gpio_num_t gpio_num)
     return ret;
 }
 
-#if SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 void gpio_deep_sleep_hold_en(void)
 {
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
@@ -789,7 +789,7 @@ void gpio_deep_sleep_hold_dis(void)
     gpio_hal_deep_sleep_hold_dis(gpio_context.gpio_hal);
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
 }
-#endif //SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+#endif //!SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 
 #if SOC_GPIO_SUPPORT_FORCE_HOLD
 esp_err_t IRAM_ATTR gpio_force_hold_all()

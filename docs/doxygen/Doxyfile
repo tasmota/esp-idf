@@ -22,7 +22,6 @@ PROJECT_NAME = "IDF Programming Guide"
 
 INPUT = \
     $(PROJECT_PATH)/components/app_trace/include/esp_app_trace.h \
-    $(PROJECT_PATH)/components/app_trace/include/esp_sysview_trace.h \
     $(PROJECT_PATH)/components/app_update/include/esp_ota_ops.h \
     $(PROJECT_PATH)/components/bootloader_support/include/bootloader_random.h \
     $(PROJECT_PATH)/components/bootloader_support/include/esp_app_format.h \
@@ -262,7 +261,7 @@ INPUT = \
     $(PROJECT_PATH)/components/hal/include/hal/ledc_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/mcpwm_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/parlio_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/pcnt_types.h \
+    $(PROJECT_PATH)/components/esp_hal_pcnt/include/hal/pcnt_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/rmt_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/rtc_io_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
@@ -292,8 +291,6 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
     $(PROJECT_PATH)/components/mbedtls/port/include/ecdsa/ecdsa_alt.h \
-    $(PROJECT_PATH)/components/mqtt/esp-mqtt/include/mqtt_client.h \
-    $(PROJECT_PATH)/components/mqtt/esp-mqtt/include/mqtt5_client.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \

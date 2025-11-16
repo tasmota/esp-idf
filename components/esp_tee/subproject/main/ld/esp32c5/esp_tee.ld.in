@@ -32,12 +32,7 @@
  * should be stored via esp_app_tee_config structure
  */
 
-#if CONFIG_ESP_DEBUG_INCLUDE_OCD_STUB_BINS
-PROVIDE ( esp_tee_app_config        = SRAM_REE_SEG_START + 0x22b0 );
-#else
 PROVIDE ( esp_tee_app_config        = SRAM_REE_SEG_START + 0x2b0 );
-#endif
-
 PROVIDE ( GDMA                      = 0x60080000 );
 
 /* SPI Flash functions required from the ROM (refer esp32c5.rom.spiflash.ld) */
@@ -101,9 +96,9 @@ SECTIONS
     /* HAL */
     *libhal.a:mmu_hal.c*(.literal .text .literal.* .text.*)
     *libhal.a:cache_hal.c*(.literal .text .literal.* .text.*)
-    *libhal.a:wdt_hal_iram.c*(.literal .text .literal.* .text.*)
     *libhal.a:apm_hal.c*(.literal .text .literal.* .text.*)
     *libesp_hal_mspi.a:*(.literal .text .literal.* .text.*)
+    *libesp_hal_wdt.a:*(.literal .text .literal.* .text.*)
     /* IDF components */
     *libbootloader_support.a:*(.literal .text .literal.* .text.*)
     *libesp_hw_support.a:*(.literal .text .literal.* .text.*)

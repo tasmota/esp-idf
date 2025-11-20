@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "soc/soc.h"
 #include "hal/mcpwm_periph.h"
 #include "soc/mcpwm_reg.h"
 #include "soc/gpio_sig_map.h"

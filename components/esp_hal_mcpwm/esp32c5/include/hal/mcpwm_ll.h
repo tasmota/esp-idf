@@ -28,7 +28,7 @@ extern "C" {
 #define MCPWM_LL_GET_HW(ID)                  (((ID) == 0) ? &MCPWM0 : NULL)
 
 // MCPWM capabilities
-#define MCPWM_LL_GROUP_NUM                         (1U) ///< 1 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
+#define MCPWM_LL_GROUP_NUM                         (1) ///< 1 MCPWM group on the chip (i.e., the number of independent MCPWM peripherals)
 #define MCPWM_LL_TIMERS_PER_GROUP                  (3)  ///< The number of timers that each group has
 #define MCPWM_LL_OPERATORS_PER_GROUP               (3)  ///< The number of operators that each group has
 #define MCPWM_LL_COMPARATORS_PER_OPERATOR          (2)  ///< The number of comparators that each operator has

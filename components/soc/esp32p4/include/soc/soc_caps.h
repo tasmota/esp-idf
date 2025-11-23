@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -223,8 +223,8 @@
 
 /*-------------------------- 2D-DMA CAPS -------------------------------------*/
 #define SOC_DMA2D_GROUPS                            (1U) // Number of 2D-DMA groups
-#define SOC_DMA2D_TX_CHANNELS_PER_GROUP             (3)  // Number of 2D-DMA TX (OUT) channels in each group
-#define SOC_DMA2D_RX_CHANNELS_PER_GROUP             (2)  // Number of 2D-DMA RX (IN) channels in each group
+#define SOC_DMA2D_TX_CHANNELS_PER_GROUP             (4)  // Number of 2D-DMA TX (OUT) channels in each group (4th channel only exists on P4 ver. >= 3.0)
+#define SOC_DMA2D_RX_CHANNELS_PER_GROUP             (3)  // Number of 2D-DMA RX (IN) channels in each group (3rd channel only exists on P4 ver. >= 3.0)
 // #define SOC_DMA2D_SUPPORT_ETM              (1)  // Support ETM submodule
 
 /*-------------------------- ETM CAPS --------------------------------------*/
@@ -265,6 +265,11 @@
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_16~GPIO_NUM_54)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x007FFFFFFFFF0000ULL
 
+// Support to force hold all IOs
+#define SOC_GPIO_SUPPORT_FORCE_HOLD              (1)
+// Support to hold a single digital I/O when the digital domain is powered off
+#define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  (1)    // Supported only on ESP32P4 rev >= 3.0 (see DIG-399)
+
 // The Clock Out signal is route to the pin by GPIO matrix
 #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX         (1)
 #define SOC_GPIO_CLOCKOUT_CHANNEL_NUM            (2)
@@ -272,9 +277,6 @@
 
 #define SOC_DEBUG_PROBE_NUM_UNIT                 (1U)  // Number of debug probe units
 #define SOC_DEBUG_PROBE_MAX_OUTPUT_WIDTH         (16) // Maximum width of the debug probe output in each unit
-
-// Support to force hold all IOs
-#define SOC_GPIO_SUPPORT_FORCE_HOLD              (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT                 16
@@ -347,12 +349,14 @@
 
 /*-------------------------- ISP CAPS ----------------------------------------*/
 #define SOC_ISP_BF_SUPPORTED                     1
+#define SOC_ISP_BLC_SUPPORTED                    1
 #define SOC_ISP_CCM_SUPPORTED                    1
+#define SOC_ISP_COLOR_SUPPORTED                  1
 #define SOC_ISP_DEMOSAIC_SUPPORTED               1
 #define SOC_ISP_DVP_SUPPORTED                    1
-#define SOC_ISP_SHARPEN_SUPPORTED                1
-#define SOC_ISP_COLOR_SUPPORTED                  1
 #define SOC_ISP_LSC_SUPPORTED                    1
+#define SOC_ISP_SHARPEN_SUPPORTED                1
+#define SOC_ISP_WBG_SUPPORTED                    1
 #define SOC_ISP_SHARE_CSI_BRG                    1
 
 #define SOC_ISP_NUMS                             1U
@@ -362,6 +366,8 @@
 #define SOC_ISP_AE_BLOCK_Y_NUMS                  5
 #define SOC_ISP_AF_CTLR_NUMS                     1U
 #define SOC_ISP_AF_WINDOW_NUMS                   3
+#define SOC_ISP_AWB_WINDOW_X_NUMS                5
+#define SOC_ISP_AWB_WINDOW_Y_NUMS                5
 #define SOC_ISP_BF_TEMPLATE_X_NUMS               3
 #define SOC_ISP_BF_TEMPLATE_Y_NUMS               3
 #define SOC_ISP_CCM_DIMENSION                    3

@@ -621,11 +621,11 @@ config SOC_DMA2D_GROUPS
 
 config SOC_DMA2D_TX_CHANNELS_PER_GROUP
     int
-    default 3
+    default 4
 
 config SOC_DMA2D_RX_CHANNELS_PER_GROUP
     int
-    default 2
+    default 3
 
 config SOC_ETM_GROUPS
     int
@@ -703,6 +703,14 @@ config SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK
     hex
     default 0x007FFFFFFFFF0000
 
+config SOC_GPIO_SUPPORT_FORCE_HOLD
+    bool
+    default y
+
+config SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+    bool
+    default y
+
 config SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX
     bool
     default y
@@ -722,10 +730,6 @@ config SOC_DEBUG_PROBE_NUM_UNIT
 config SOC_DEBUG_PROBE_MAX_OUTPUT_WIDTH
     int
     default 16
-
-config SOC_GPIO_SUPPORT_FORCE_HOLD
-    bool
-    default y
 
 config SOC_RTCIO_PIN_COUNT
     int
@@ -911,7 +915,15 @@ config SOC_ISP_BF_SUPPORTED
     bool
     default y
 
+config SOC_ISP_BLC_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_CCM_SUPPORTED
+    bool
+    default y
+
+config SOC_ISP_COLOR_SUPPORTED
     bool
     default y
 
@@ -923,15 +935,15 @@ config SOC_ISP_DVP_SUPPORTED
     bool
     default y
 
+config SOC_ISP_LSC_SUPPORTED
+    bool
+    default y
+
 config SOC_ISP_SHARPEN_SUPPORTED
     bool
     default y
 
-config SOC_ISP_COLOR_SUPPORTED
-    bool
-    default y
-
-config SOC_ISP_LSC_SUPPORTED
+config SOC_ISP_WBG_SUPPORTED
     bool
     default y
 
@@ -966,6 +978,14 @@ config SOC_ISP_AF_CTLR_NUMS
 config SOC_ISP_AF_WINDOW_NUMS
     int
     default 3
+
+config SOC_ISP_AWB_WINDOW_X_NUMS
+    int
+    default 5
+
+config SOC_ISP_AWB_WINDOW_Y_NUMS
+    int
+    default 5
 
 config SOC_ISP_BF_TEMPLATE_X_NUMS
     int

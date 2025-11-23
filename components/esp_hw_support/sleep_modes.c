@@ -861,7 +861,7 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
     }
 #endif
     if (deep_sleep) {
-#if SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
         esp_sleep_isolate_digital_gpio();
 #endif
 
@@ -2746,6 +2746,13 @@ static SLEEP_FN_ATTR uint32_t get_power_down_flags(void)
         if (pd_flags & RTC_SLEEP_PD_VDDSDIO) {
             ESP_LOGE(TAG, "ESP32P4 chips lower than v1.0 are not allowed to power down the Flash");
         }
+    }
+#endif
+
+#if CONFIG_IDF_TARGET_ESP32C6
+    if (!(pd_flags & PMU_SLEEP_PD_TOP)) {
+        // TOP power domain depends on the RTC_PERIPH power domain on ESP32C6, RTC_PERIPH should only be disabled when the TOP domain is down.
+        pd_flags &= ~RTC_SLEEP_PD_RTC_PERIPH;
     }
 #endif
     return pd_flags;

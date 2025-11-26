@@ -26,6 +26,7 @@ from pytest_ignore_test_results.ignore_results import ChildCase
 from pytest_ignore_test_results.ignore_results import ChildCasesStashKey
 
 from .constants import DEFAULT_SDKCONFIG
+from .constants import ECO_MARKERS
 from .constants import PREVIEW_TARGETS
 from .constants import SUPPORTED_TARGETS
 from .constants import CollectMode
@@ -317,6 +318,12 @@ class IdfPytestEmbedded:
             # only add this marker for esp32c2 cases
             if 'esp32c2' in self.target and 'esp32c2' in case.targets and 'xtal_26mhz' not in case.all_markers:
                 item.add_marker('xtal_40mhz')
+
+            for eco_marker in ECO_MARKERS:
+                if eco_marker in case.all_markers:
+                    break
+            else:
+                item.add_marker('rev_default')
 
     def pytest_report_collectionfinish(self, items: t.List[Function]) -> None:
         self.cases = [item.stash[ITEM_PYTEST_CASE_KEY] for item in items]

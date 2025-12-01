@@ -1704,6 +1704,9 @@ tBTM_STATUS btm_ble_start_encrypt(BD_ADDR bda, BOOLEAN use_stk, BT_OCTET16 stk)
 #if (SMP_INCLUDED == TRUE)
 void btm_ble_link_encrypted(BD_ADDR bd_addr, UINT8 encr_enable)
 {
+#if BLE_INCLUDED == TRUE
+    l2cble_notify_le_connection(bd_addr);
+#endif // BLE_INCLUDED == TRUE
     tBTM_SEC_DEV_REC    *p_dev_rec = btm_find_dev (bd_addr);
     BOOLEAN             enc_cback;
 
@@ -2956,6 +2959,15 @@ uint8_t btm_ble_sec_dev_record_count(void)
     for (p_node = list_begin(btm_cb.p_sec_dev_rec_list); p_node; p_node = list_next(p_node)) {
         p_dev_rec = list_node(p_node);
         if (p_dev_rec && (p_dev_rec->sec_flags & BTM_SEC_IN_USE) && (p_dev_rec->ble.key_type != BTM_LE_KEY_NONE)) {
+            BTM_TRACE_DEBUG("%s BLE security device #%d: bd_addr=%02X:%02X:%02X:%02X:%02X:%02X",
+                            __func__,
+                            count,
+                            p_dev_rec->bd_addr[0],
+                            p_dev_rec->bd_addr[1],
+                            p_dev_rec->bd_addr[2],
+                            p_dev_rec->bd_addr[3],
+                            p_dev_rec->bd_addr[4],
+                            p_dev_rec->bd_addr[5]);
             count++;
         }
     }

@@ -24,10 +24,14 @@ if(CONFIG_IDF_ENV_FPGA OR CONFIG_ESP_BRINGUP_BYPASS_RANDOM_SETTING)
 endif()
 
 if(BOOTLOADER_BUILD OR esp_tee_build)
-        # "_esp_error_check_failed()" requires spi_flash module
-        # Bootloader relies on some Kconfig options defined in esp_system.
-        idf_component_register(SRCS "${srcs}" REQUIRES spi_flash
-                               INCLUDE_DIRS include)
+    set(include_dirs "include")
+    if(esp_tee_build)
+        list(APPEND include_dirs "port/include/private")
+    endif()
+    # "_esp_error_check_failed()" requires spi_flash module
+    # Bootloader relies on some Kconfig options defined in esp_system.
+    idf_component_register(SRCS "${srcs}" INCLUDE_DIRS "${include_dirs}"
+                           REQUIRES spi_flash)
 else()
     list(APPEND srcs "crosscore_int.c"
             "esp_ipc.c"
@@ -86,7 +90,9 @@ else()
                                     esp_hal_jpeg
                                     esp_hal_emac
                                     esp_hal_pcnt
+                                    esp_hal_rmt
                                     esp_hal_parlio
+                                    esp_hal_cam
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 

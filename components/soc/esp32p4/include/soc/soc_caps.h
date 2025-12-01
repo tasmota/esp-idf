@@ -429,25 +429,14 @@
 #define SOC_PCNT_SUPPORT_CLEAR_SIGNAL         1  /*!< Support clear signal input */
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
-#define SOC_RMT_GROUPS                        1U /*!< One RMT group */
-#define SOC_RMT_TX_CANDIDATES_PER_GROUP       4  /*!< Number of channels that capable of Transmit in each group */
-#define SOC_RMT_RX_CANDIDATES_PER_GROUP       4  /*!< Number of channels that capable of Receive in each group */
-#define SOC_RMT_CHANNELS_PER_GROUP            8  /*!< Total 8 channels */
 #define SOC_RMT_MEM_WORDS_PER_CHANNEL         48 /*!< Each channel owns 48 words memory (1 word = 4 Bytes) */
 #define SOC_RMT_SUPPORT_RX_PINGPONG           1  /*!< Support Ping-Pong mode on RX path */
-#define SOC_RMT_SUPPORT_RX_DEMODULATION       1  /*!< Support signal demodulation on RX path (i.e. remove carrier) */
-#define SOC_RMT_SUPPORT_ASYNC_STOP            1  /*!< Support stop transmission asynchronously */
 #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
 #define SOC_RMT_SUPPORT_TX_LOOP_AUTO_STOP     1  /*!< Hardware support of auto-stop in loop mode */
-#define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
-#define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
-#define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
-#define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST clock as the RMT clock source */
 #define SOC_RMT_SUPPORT_DMA                   1  /*!< RMT peripheral can connect to DMA channel */
 #define SOC_RMT_SUPPORT_SLEEP_RETENTION       1  /*!< The sleep retention feature can help back up RMT registers before sleep */
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
-
 #define SOC_MCPWM_SWSYNC_CAN_PROPAGATE       (1)    ///< Software sync event can be routed to its output
 #define SOC_MCPWM_SUPPORT_ETM                (1)    ///< Support ETM (Event Task Matrix)
 #define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR   (1)    ///< Support event comparator (based on ETM)
@@ -661,6 +650,7 @@
 #define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS 1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1  /* SOC_EFUSE_XTS_AES_KEY_128 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128 (1) */
 #define SOC_FLASH_ENCRYPTION_XTS_AES_256    1  /* SOC_EFUSE_XTS_AES_KEY_256 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256 (1) */
+
 /*-------------------------- MEMPROT CAPS ------------------------------------*/
 
 /*-------------------------- UART CAPS ---------------------------------------*/
@@ -772,8 +762,6 @@
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
-#define SOC_LCDCAM_CAM_PERIPH_NUM                   (1U)
-#define SOC_LCDCAM_CAM_DATA_WIDTH_MAX               (16U)
 
 /*--------------------------- I3C ---------------------------------*/
 #define SOC_I3C_MASTER_PERIPH_NUM                   (1)

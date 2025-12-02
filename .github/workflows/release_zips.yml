@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create a recursive clone source and stripped archive
-        uses: Jason2866/github-actions/release_zips@tar_xz
+        uses: Jason2866/github-actions/release_zips@xz_refac_clone
         env:
             RELEASE_PROJECT_NAME: ESP-IDF
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

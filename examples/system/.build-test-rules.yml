@@ -1,6 +1,10 @@
 # Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
 
 examples/system/app_trace_basic:
+  disable:
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: p4 rev3 migration # TODO: IDF-14364
   disable_test:
     - if: IDF_TARGET == "esp32h21"
       temporary: true
@@ -98,6 +102,9 @@ examples/system/gcov:
     - if: IDF_TARGET == "esp32h4"
       temporary: true
       reason: not supported yet #TODO: OCD-1138
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: p4 rev3 migration # TODO: IDF-14440
 
 examples/system/heap_task_tracking:
   disable:
@@ -199,6 +206,7 @@ examples/system/ota/partitions_ota:
     - esp_wifi
     - esp_phy
     - mbedtls
+    - protocol_examples_common
 
 examples/system/ota/simple_ota_example:
   disable:
@@ -219,6 +227,7 @@ examples/system/ota/simple_ota_example:
     - esp_wifi
     - esp_phy
     - mbedtls
+    - protocol_examples_common
 
 examples/system/perfmon:
   enable:
@@ -253,6 +262,12 @@ examples/system/select:
 examples/system/sysview_tracing:
   disable:
     - if: SOC_GPTIMER_SUPPORTED != 1
+    - if: IDF_TARGET in ["esp32", "esp32s2", "esp32s3", "esp32c2", "esp32c3", "esp32c5", "esp32c61", "esp32c6", "esp32h2", "esp32h21", "esp32h4", "esp32p4"]
+      temporary: true
+      reason: temporarily disabled until the sysview component is published in the component registry
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: p4 rev3 migration # TODO: IDF-14364
   disable_test:
     - if: IDF_TARGET == "esp32h21"
       temporary: true
@@ -264,6 +279,12 @@ examples/system/sysview_tracing:
 examples/system/sysview_tracing_heap_log:
   disable:
     - if: SOC_GPTIMER_SUPPORTED != 1
+    - if: IDF_TARGET in ["esp32", "esp32s2", "esp32s3", "esp32c2", "esp32c3", "esp32c5", "esp32c61", "esp32c6", "esp32h2", "esp32h21", "esp32h4", "esp32p4"]
+      temporary: true
+      reason: temporarily disabled until the sysview component is published in the component registry
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: p4 rev3 migration # TODO: IDF-14364
   disable_test:
     - if: IDF_TARGET == "esp32h21"
       temporary: true

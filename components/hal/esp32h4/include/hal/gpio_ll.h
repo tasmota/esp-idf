@@ -327,7 +327,7 @@ __attribute__((always_inline))
 static inline void gpio_ll_set_level(gpio_dev_t *hw, uint32_t gpio_num, uint32_t level)
 {
 #if HAL_CONFIG(GPIO_USE_ROM_API)
-    gpio_set_output_level(gpio_num, level);
+    rom_gpio_set_output_level(gpio_num, level);
 #else
     if (level) {
         if (gpio_num < 32) {
@@ -361,7 +361,7 @@ __attribute__((always_inline))
 static inline int gpio_ll_get_level(gpio_dev_t *hw, uint32_t gpio_num)
 {
 #if HAL_CONFIG(GPIO_USE_ROM_API)
-    return gpio_get_input_level(gpio_num);
+    return rom_gpio_get_input_level(gpio_num);
 #else
     if (gpio_num < 32) {
         return (hw->in.in_data_next >> gpio_num) & 0x1;
@@ -518,7 +518,7 @@ static inline int gpio_ll_get_in_signal_connected_io(gpio_dev_t *hw, uint32_t in
 }
 
 /**
-  * @brief Set peripheral output to an GPIO pad through the IOMUX.
+  * @brief Configure the source of output enable signal for the pad (only takes effect if func sel is selected to be GPIO).
   *
   * @param hw Peripheral GPIO hardware instance address.
   * @param gpio_num GPIO number of the pad.

@@ -605,6 +605,7 @@ Spark Plug 组件
 
 通用组件包括：cxx、esp_libc、freertos、esp_hw_support、heap、log、soc、hal、esp_rom、esp_common、esp_system。
 
+.. _including-components-in-the-build:
 
 在构建中导入组件
 -----------------
@@ -1053,10 +1054,6 @@ ESP-IDF 还支持自动生成链接脚本，它允许组件通过链接片段文
 - 第二组命令添加了一个目标库，指向外部构建系统生成的库文件。为了添加 include 目录，并告知 CMake 该文件的位置，需要再设置一些属性。
 - 最后，生成的库被添加到 `ADDITIONAL_MAKE_CLEAN_FILES`_ 中。即执行 ``make clean`` 后会删除该库。请注意，构建系统中的其他目标文件不会被删除。
 
-.. only:: esp32
-
-    .. note:: 当外部构建系统使用 PSRAM 时，请记得将 ``-mfix-esp32-psram-cache-issue`` 添加到 C 编译器的参数中。关于该标志的更多详细信息，请参考 :ref:`CONFIG_SPIRAM_CACHE_WORKAROUND`。
-
 
 .. _ADDITIONAL_MAKE_CLEAN_FILES_note:
 
@@ -1155,7 +1152,7 @@ ESP-IDF 构建系统用“组件”的概念“封装”了 CMake，并提供了
 
   target_include_directories(json PUBLIC cJSON)
 
-- 这实际上与 IDF 中的 :idf_file:`json 组件 </components/json/CMakeLists.txt>` 是等效的。
+- 这实际上与 `espressif/cjson <https://github.com/espressif/idf-extra-components/tree/master/cjson>`_ 托管组件是等效的。
 - 因为组件中的源文件不多，所以这个 CMakeLists 文件非常简单。对于具有大量源文件的组件而言，ESP-IDF 支持的组件通配符，可以简化组件 CMakeLists 的样式。
 - 每当组件中新增一个与组件同名的库目标时，ESP-IDF 构建系统会自动将其添加到构建中，并公开公共的 include 目录。如果组件想要添加一个与组件不同名的库目标，就需要使用 CMake 命令手动添加依赖关系。
 

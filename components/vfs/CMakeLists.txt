@@ -9,13 +9,23 @@ endif()
 
 set(sources "")
 
+# These are here to pull the misc stdio drivers into the build when using VFS
+# This maintains the old behavior of just having to add vfs as a REQUIRES to enable
+# the desired output driver. For the new cmake v2 build system this is no longer
+# necessary as we can conditionally pull in dependencies.
+
+list(APPEND pr esp_driver_uart esp_driver_usb_serial_jtag esp_usb_cdc_rom_console)
+
+if(IDF_BUILD_V2)
+    # Clear driver dependencies in v2, these will be pulled in conditionally by stdio
+    set(pr "")
+endif()
+
 list(APPEND sources "vfs.c"
                     "vfs_eventfd.c"
                     "vfs_semihost.c"
                     "nullfs.c"
                     )
-
-list(APPEND pr esp_vfs_console)
 
 idf_component_register(SRCS ${sources}
                        LDFRAGMENTS "linker.lf"

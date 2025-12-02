@@ -267,6 +267,112 @@ uf2 二进制文件也可以通过 :ref:`idf.py uf2 <generate-uf2-binary>` 生�
 
 此命令将打印 ``otadata`` 分区的内容，该分区存储当前所选 OTA 应用程序分区的信息。有关 ``otadata`` 分区的更多信息，请参阅 :doc:`/api-reference/system/ota`。
 
+启动 MCP 服务器：``mcp-server``
+---------------------------------
+
+.. code-block:: bash
+
+  idf.py mcp-server
+
+此命令将启动 MCP（模型上下文协议）服务器，实现 AI 与 ESP-IDF 项目的集成。该服务器通过标准化协议提供工具和资源，使 AI 助手能够与 ESP-IDF 项目进行交互。
+
+MCP 服务器提供以下工具：
+
+- ``build_project``：使用指定目标芯片构建 ESP-IDF 项目
+- ``set_target``：设置 ESP-IDF 目标芯片（esp32、esp32s3、esp32c6 等）
+- ``flash_project``：将构建好的项目烧录至已连接设备
+- ``monitor_serial``：启动串行监视器（在后台运行）
+- ``clean_project``：清理构建产物
+- ``menuconfig``：打开 menuconfig 界面（基于终端）
+
+同时提供以下资源：
+
+- ``project://config``：获取当前项目配置
+- ``project://status``：获取当前项目构建状态
+- ``project://devices``：获取已连接的 ESP 设备列表
+
+.. note::
+
+    运行 MCP 服务器需提前安装 ``mcp`` Python 包。可通过以下命令安装：``./install.sh --enable-mcp``。
+
+将 ESP-IDF MCP 服务器添加到 IDE
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Claude Desktop：**
+
+使用 Claude CLI 添加 ESP-IDF MCP 服务器：
+
+.. code-block:: bash
+
+  claude mcp add esp-idf python /path/to/esp-idf/tools/idf.py mcp-server --env IDF_PATH=/path/to/esp-idf
+
+配置预设：``--preset``
+========================
+
+ESP-IDF 支持 `CMake presets`_ 以简化多个构建配置的管理。此功能允许定义可重用的配置配置文件，这些文件指定构建目录、缓存变量和其他 CMake 设置。
+
+.. code-block:: bash
+
+  idf.py --preset <preset-name> build
+
+此命令使用指定的配置预设来构建项目。该预设定义了诸如构建目录位置、CMake 缓存变量（包括 ``SDKCONFIG`` 路径）和生成器首选项等设置。
+
+预设定义文件
+--------------
+
+在项目根目录下创建一个 ``CMakePresets.json`` 或 ``CMakeUserPresets.json`` 文件来定义 **配置预设**。例如：
+
+.. code-block:: json
+
+  {
+      "version": 3,
+      "configurePresets": [
+          {
+              "name": "default",
+              "binaryDir": "build/default",
+              "displayName": "Default Configuration",
+              "cacheVariables": {
+                  "SDKCONFIG": "./build/default/sdkconfig"
+              }
+          },
+          {
+              "name": "production",
+              "binaryDir": "build/production",
+              "displayName": "Production Build",
+              "cacheVariables": {
+                  "SDKCONFIG_DEFAULTS": "sdkconfig.defaults.prod_common;sdkconfig.defaults.production",
+                  "SDKCONFIG": "./build/production/sdkconfig"
+              }
+          }
+      ]
+  }
+
+.. note::
+
+    字段 ``version`` 代表 CMake Presets 的 JSON 模式版本。在本例中，其值设为 ``3``，以匹配 ESP-IDF 支持的最低 CMake 版本所支持的模式。如果你使用的是更高版本的 CMake，可以相应地增加 ``version`` 字段的值。请参阅 `CMake Presets`_。
+
+**当前限制**
+
+- ESP-IDF 目前不支持用于预设继承的 ``inherits`` 字段。包含继承的预设将显示警告。
+
+自动预设选择
+----------------
+
+如果未指定预设但存在 ``CMakePresets.json`` 文件，``idf.py`` 将自动选择一个预设：
+
+1.  如果存在名为 ``default`` 的预设，则将使用它。
+2.  否则，将选择文件中的第一个预设。
+
+.. note::
+
+    环境变量 ``IDF_PRESET`` 可用于设置默认预设名称，例如 ``export IDF_PRESET=production``。命令行参数会覆盖环境变量。
+
+**SDKCONFIG 文件位置**
+
+默认情况下，``sdkconfig`` 文件在项目根目录中创建。但是，在使用 CMake 预设时，可以使用 ``SDKCONFIG`` 缓存变量指定 ``sdkconfig`` 文件的自定义位置。
+
+完整示例请参阅 :example_file:`Multiple Build Configurations Example <build_system/cmake/multi_config/README.md>`。
+
 全局选项
 ==============
 
@@ -410,3 +516,4 @@ uf2 二进制文件也可以通过 :ref:`idf.py uf2 <generate-uf2-binary>` 生�
 .. _esptool: https://github.com/espressif/esptool/#readme
 .. _CCache: https://ccache.dev/
 .. _click context: https://click.palletsprojects.com/en/stable/api/#context
+.. _CMake presets: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html

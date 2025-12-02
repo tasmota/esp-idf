@@ -321,7 +321,7 @@ static void start_other_core(void)
     }
 }
 
-#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && !CONFIG_IDF_TARGET_ESP32H4 // TODO IDF-12289
+#if !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 #if CONFIG_IDF_TARGET_ESP32
 static void restore_app_mmu_from_pro_mmu(void)
 {
@@ -466,7 +466,7 @@ FORCE_INLINE_ATTR IRAM_ATTR void ram_app_init(void)
 //Keep this static, the compiler will check output parameters are initialized.
 FORCE_INLINE_ATTR IRAM_ATTR void ext_mem_init(void)
 {
-#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && !CONFIG_IDF_TARGET_ESP32H4 // TODO IDF-12289
+#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
     // It helps to fix missed cache settings for other cores. It happens when bootloader is unicore.
     do_multicore_settings();
 #endif
@@ -681,6 +681,10 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     REG_CLR_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_RESETING);
 #endif
 #elif CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_ESP32P4_REV_MIN_FULL >= 300
+    // In single core mode, the CPU system should ignore the WFI state of core1 when entering WFI autoclock gating mode.
+    REG_CLR_BIT(HP_SYS_CLKRST_CPU_WAITI_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_WAITI_ICG_EN);
+#endif
     REG_CLR_BIT(HP_SYS_CLKRST_SOC_CLK_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_CPU_CLK_EN);
     REG_SET_BIT(HP_SYS_CLKRST_HP_RST_EN0_REG, HP_SYS_CLKRST_REG_RST_EN_CORE1_GLOBAL);
 #elif CONFIG_IDF_TARGET_ESP32H4
@@ -793,7 +797,6 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
 
     _uart_ll_set_baudrate(UART_LL_GET_HW(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM), CONFIG_ESP_CONSOLE_UART_BAUDRATE, clock_hz);
-#endif
     int console_uart_tx_pin = U0TXD_GPIO_NUM;
     int console_uart_rx_pin = U0RXD_GPIO_NUM;
 #if CONFIG_ESP_CONSOLE_UART_CUSTOM
@@ -801,7 +804,8 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     console_uart_rx_pin = (CONFIG_ESP_CONSOLE_UART_RX_GPIO >= 0) ? CONFIG_ESP_CONSOLE_UART_RX_GPIO : U0RXD_GPIO_NUM;
 #endif
     ESP_EARLY_LOGI(TAG, "GPIO %d and %d are used as console UART I/O pins", console_uart_rx_pin, console_uart_tx_pin);
-#endif
+#endif // CONFIG_ESP_CONSOLE_UART
+#endif // !CONFIG_IDF_ENV_FPGA
 
 #if SOC_DEEP_SLEEP_SUPPORTED
     // Need to unhold the IOs that were hold right before entering deep sleep, which are used as wakeup pins

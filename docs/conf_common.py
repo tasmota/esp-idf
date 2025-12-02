@@ -8,9 +8,12 @@
 # pylint: disable=undefined-variable
 import os.path
 import re
+import sys
 from pathlib import Path
 
 from esp_docs.conf_docs import *  # noqa: F403,F401
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tools', 'cmakev2')))
 
 if os.environ.get('IDF_PATH') is None:
     raise RuntimeError('IDF_PATH should be set, run export.sh before building docs')
@@ -39,6 +42,7 @@ BLE_DOCS = [
     'api-guides/ble/get-started/ble-connection.rst',
     'api-guides/ble/get-started/ble-data-exchange.rst',
     'api-guides/ble/smp.rst',
+    'api-guides/low-power-mode/low-power-mode-ble.rst',
     'api-reference/bluetooth/bt_le.rst',
     'api-reference/bluetooth/esp_gap_ble.rst',
     'api-reference/bluetooth/esp_gatt_defs.rst',
@@ -299,13 +303,13 @@ ESP32C5_DOCS = [
     'api-guides/phy.rst',
     'api-reference/peripherals/sd_pullup_requirements.rst',
     'api-guides/RF_calibration.rst',
-]
+] + ESP_TEE_DOCS
 
 ESP32C61_DOCS = [
     'api-guides/phy.rst',
     'api-reference/peripherals/sd_pullup_requirements.rst',
     'api-guides/RF_calibration.rst',
-]
+] + ESP_TEE_DOCS
 
 ESP32C6_DOCS = [
     'api-guides/RF_calibration.rst',
@@ -317,6 +321,8 @@ ESP32H2_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst']
 
 ESP32H4_DOCS = [
     'api-reference/system/ipc.rst',
+    'api-guides/RF_calibration.rst',
+    'api-guides/phy.rst',
 ]
 
 ESP32P4_DOCS = [
@@ -348,7 +354,7 @@ conditional_include_dict = {
     'SOC_DEDICATED_GPIO_SUPPORTED': DEDIC_GPIO_DOCS,
     'SOC_LCD_I80_SUPPORTED': I80_LCD_DOCS,
     'SOC_LCD_RGB_SUPPORTED': RGB_LCD_DOCS,
-    'SOC_PARLIO_SUPPORT_SPI_LCD': PARLIO_LCD_DOCS,
+    'SOC_PARLIO_LCD_SUPPORTED': PARLIO_LCD_DOCS,
     'SOC_MIPI_DSI_SUPPORTED': DSI_LCD_DOCS,
     'SOC_SPIRAM_SUPPORTED': SPIRAM_DOCS,
     'SOC_PARLIO_SUPPORTED': PARLIO_DOCS,
@@ -415,6 +421,7 @@ extensions += [  # noqa: F405
     'esp_docs.esp_extensions.run_doxygen',
     'esp_docs.esp_extensions.add_html_zip',
     'linuxdoc.rstFlatTable',  # https://return42.github.io/linuxdoc/linuxdoc-howto/table-markup.html#flat-table
+    'esp_docs_cmakev2_extension',
 ]
 
 # Use wavedrompy as backend, instead of wavedrom-cli

@@ -605,6 +605,7 @@ To avoid duplication, every component automatically requires some "common" IDF c
 
 The list of common components is: cxx, esp_libc, freertos, esp_hw_support, heap, log, soc, hal, esp_rom, esp_common, esp_system, xtensa/riscv.
 
+.. _including-components-in-the-build:
 
 Including Components in the Build
 ---------------------------------
@@ -1053,10 +1054,6 @@ Obviously, there are cases where all these recipes are insufficient for a certai
 - The second set of commands adds a library target, which points to the "imported" library file built by the external system. Some properties need to be set in order to add include directories and tell CMake where this file is.
 - Finally, the generated library is added to `ADDITIONAL_CLEAN_FILES`_. This means ``make clean`` will delete this library. (Note that the other object files from the build won't be deleted.)
 
-.. only:: esp32
-
-   .. note:: When using an external build process with PSRAM, remember to add ``-mfix-esp32-psram-cache-issue`` to the C compiler arguments. See :ref:`CONFIG_SPIRAM_CACHE_WORKAROUND` for details of this flag.
-
 
 .. _ADDITIONAL_CLEAN_FILES_note:
 
@@ -1155,7 +1152,7 @@ Here is an example minimal "pure CMake" component CMakeLists file for a componen
 
   target_include_directories(json PUBLIC cJSON)
 
-- This is actually an equivalent declaration to the IDF ``json`` component :idf_file:`/components/json/CMakeLists.txt`.
+- This is actually an equivalent declaration to the `espressif/cjson <https://github.com/espressif/idf-extra-components/tree/master/cjson>`_ managed component.
 - This file is quite simple as there are not a lot of source files. For components with a large number of files, the globbing behavior of ESP-IDF's component logic can make the component CMakeLists style simpler.)
 - Any time a component adds a library target with the component name, the ESP-IDF build system will automatically add this to the build, expose public include directories, etc. If a component wants to add a library target with a different name, dependencies will need to be added manually via CMake commands.
 

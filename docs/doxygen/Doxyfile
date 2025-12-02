@@ -22,7 +22,6 @@ PROJECT_NAME = "IDF Programming Guide"
 
 INPUT = \
     $(PROJECT_PATH)/components/app_trace/include/esp_app_trace.h \
-    $(PROJECT_PATH)/components/app_trace/include/esp_sysview_trace.h \
     $(PROJECT_PATH)/components/app_update/include/esp_ota_ops.h \
     $(PROJECT_PATH)/components/bootloader_support/include/bootloader_random.h \
     $(PROJECT_PATH)/components/bootloader_support/include/esp_app_format.h \
@@ -46,6 +45,8 @@ INPUT = \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/v1.1/api/core/include/esp_ble_mesh_rpr_model_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/v1.1/api/core/include/esp_ble_mesh_sar_model_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/v1.1/api/core/include/esp_ble_mesh_srpl_model_api.h \
+    $(PROJECT_PATH)/components/bt/esp_ble_mesh/v1.1/api/models/include/esp_ble_mesh_dfu_model_api.h \
+    $(PROJECT_PATH)/components/bt/esp_ble_mesh/v1.1/api/models/include/esp_ble_mesh_dfu_slot_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/api/esp_ble_mesh_defs.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/api/models/include/esp_ble_mesh_config_model_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/api/models/include/esp_ble_mesh_generic_model_api.h \
@@ -105,6 +106,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_driver_gptimer/include/driver/gptimer_etm.h \
     $(PROJECT_PATH)/components/esp_driver_gptimer/include/driver/gptimer_types.h \
     $(PROJECT_PATH)/components/esp_driver_ledc/include/driver/ledc.h \
+    $(PROJECT_PATH)/components/esp_driver_ledc/include/driver/ledc_etm.h \
     $(PROJECT_PATH)/components/esp_driver_mcpwm/include/driver/mcpwm_cap.h \
     $(PROJECT_PATH)/components/esp_driver_mcpwm/include/driver/mcpwm_cmpr.h \
     $(PROJECT_PATH)/components/esp_driver_mcpwm/include/driver/mcpwm_etm.h \
@@ -163,8 +165,14 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_event/include/esp_event.h \
     $(PROJECT_PATH)/components/esp_hal_timg/include/hal/timer_types.h \
     $(PROJECT_PATH)/components/esp_hal_i2c/include/hal/i2c_types.h \
+    $(PROJECT_PATH)/components/esp_hal_i2s/include/hal/i2s_types.h \
+    $(PROJECT_PATH)/components/esp_hal_jpeg/include/hal/jpeg_types.h \
+    $(PROJECT_PATH)/components/esp_hal_lcd/include/hal/lcd_types.h \
+    $(PROJECT_PATH)/components/esp_hal_parlio/include/hal/parlio_types.h \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/esp_flash_err.h \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/spi_flash_types.h \
+    $(PROJECT_PATH)/components/esp_hal_pcnt/include/hal/pcnt_types.h \
+    $(PROJECT_PATH)/components/esp_hal_rmt/include/hal/rmt_types.h \
     $(PROJECT_PATH)/components/esp_http_client/include/esp_http_client.h \
     $(PROJECT_PATH)/components/esp_http_server/include/esp_http_server.h \
     $(PROJECT_PATH)/components/esp_https_ota/include/esp_https_ota.h \
@@ -253,13 +261,8 @@ INPUT = \
     $(PROJECT_PATH)/components/hal/include/hal/color_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/dac_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/gpio_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/i2s_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/lcd_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/ledc_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/mcpwm_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/parlio_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/pcnt_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/rmt_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/rtc_io_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/sdm_types.h \
@@ -288,8 +291,6 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
     $(PROJECT_PATH)/components/mbedtls/port/include/ecdsa/ecdsa_alt.h \
-    $(PROJECT_PATH)/components/mqtt/esp-mqtt/include/mqtt_client.h \
-    $(PROJECT_PATH)/components/mqtt/esp-mqtt/include/mqtt5_client.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \

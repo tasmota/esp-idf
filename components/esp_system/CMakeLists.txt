@@ -24,15 +24,18 @@ if(CONFIG_IDF_ENV_FPGA OR CONFIG_ESP_BRINGUP_BYPASS_RANDOM_SETTING)
 endif()
 
 if(BOOTLOADER_BUILD OR esp_tee_build)
-        # "_esp_error_check_failed()" requires spi_flash module
-        # Bootloader relies on some Kconfig options defined in esp_system.
-        idf_component_register(SRCS "${srcs}" REQUIRES spi_flash
-                               INCLUDE_DIRS include)
+    set(include_dirs "include")
+    if(esp_tee_build)
+        list(APPEND include_dirs "port/include/private")
+    endif()
+    # "_esp_error_check_failed()" requires spi_flash module
+    # Bootloader relies on some Kconfig options defined in esp_system.
+    idf_component_register(SRCS "${srcs}" INCLUDE_DIRS "${include_dirs}"
+                           REQUIRES spi_flash)
 else()
     list(APPEND srcs "crosscore_int.c"
             "esp_ipc.c"
             "esp_err.c"
-            "esp_system_console.c"
             "freertos_hooks.c"
             "int_wdt.c"
             "panic.c"
@@ -80,7 +83,16 @@ else()
                                     # [REFACTOR-TODO] Provide system hook to release dependency reversion.
                                     # IDF-13980
                                     esp_hal_i2c
-                                    esp_hal_timg # task_wdt_impl_timergroup.c relies on it
+                                    esp_hal_i2s
+                                    esp_hal_wdt
+                                    esp_hal_lcd
+                                    esp_hal_mcpwm
+                                    esp_hal_jpeg
+                                    esp_hal_emac
+                                    esp_hal_pcnt
+                                    esp_hal_rmt
+                                    esp_hal_parlio
+                                    esp_hal_cam
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 
@@ -129,8 +141,8 @@ target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_system_include_startup_
 
 # [refactor-todo] requirements due to init code, should be removable
 # once link-time registration of component init functions is used.
-if(CONFIG_APPTRACE_ENABLE)
-    idf_component_optional_requires(PRIVATE app_trace)
+if(CONFIG_ESP_TRACE_ENABLE)
+    idf_component_optional_requires(PRIVATE esp_trace)
 endif()
 
 if(CONFIG_ESP_COREDUMP_ENABLE)

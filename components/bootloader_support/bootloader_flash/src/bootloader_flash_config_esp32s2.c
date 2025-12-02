@@ -114,10 +114,10 @@ void IRAM_ATTR bootloader_configure_spi_pins(int drv)
     esp_rom_gpio_pad_set_drv(q_gpio_num,   drv);
     esp_rom_gpio_pad_set_drv(d_gpio_num,   drv);
     esp_rom_gpio_pad_set_drv(cs0_gpio_num, drv);
-    if (hd_gpio_num <= MAX_PAD_GPIO_NUM) {
+    if (hd_gpio_num < SOC_GPIO_PIN_COUNT) {
         esp_rom_gpio_pad_set_drv(hd_gpio_num, drv);
     }
-    if (wp_gpio_num <= MAX_PAD_GPIO_NUM) {
+    if (wp_gpio_num < SOC_GPIO_PIN_COUNT) {
         esp_rom_gpio_pad_set_drv(wp_gpio_num, drv);
     }
 }
@@ -254,13 +254,6 @@ static void IRAM_ATTR bootloader_init_flash_configure(void)
 esp_err_t bootloader_init_spi_flash(void)
 {
     bootloader_init_flash_configure();
-#ifndef CONFIG_SPI_FLASH_ROM_DRIVER_PATCH
-    const uint32_t spiconfig = esp_rom_efuse_get_flash_gpio_info();
-    if (spiconfig != ESP_ROM_EFUSE_FLASH_DEFAULT_SPI && spiconfig != ESP_ROM_EFUSE_FLASH_DEFAULT_HSPI) {
-        ESP_EARLY_LOGE(TAG, "SPI flash pins are overridden. Enable CONFIG_SPI_FLASH_ROM_DRIVER_PATCH in menuconfig");
-        return ESP_FAIL;
-    }
-#endif
 
     if ((void*)bootloader_flash_unlock != (void*)bootloader_flash_unlock_default) {
         ESP_EARLY_LOGD(TAG, "Using overridden bootloader_flash_unlock");

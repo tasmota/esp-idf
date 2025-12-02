@@ -267,6 +267,112 @@ Read Otadata Partition: ``read-otadata``
 
 This command prints the contents of the ``otadata`` partition which stores the information about the currently selected OTA app slot. Refer to :doc:`/api-reference/system/ota` for more about the ``otadata`` partition.
 
+Start MCP Server: ``mcp-server``
+---------------------------------
+
+.. code-block:: bash
+
+  idf.py mcp-server
+
+This command starts an MCP (Model Context Protocol) server that enables AI integration with ESP-IDF projects. The MCP server provides tools and resources that allow AI assistants to interact with your ESP-IDF project through a standardized protocol.
+
+The MCP server provides the following tools:
+
+- ``build_project``: Build the ESP-IDF project with specified target
+- ``set_target``: Set the ESP-IDF target (esp32, esp32s3, esp32c6, etc.)
+- ``flash_project``: Flash the built project to a connected device
+- ``monitor_serial``: Start serial monitor (runs in background)
+- ``clean_project``: Clean build artifacts
+- ``menuconfig``: Open menuconfig interface (terminal-based)
+
+The MCP server also provides these resources:
+
+- ``project://config``: Get current project configuration
+- ``project://status``: Get current project build status
+- ``project://devices``: Get list of connected ESP devices
+
+.. note::
+
+    The MCP server requires the ``mcp`` Python package to be installed. Install it with: ``./install.sh --enable-mcp``.
+
+Adding ESP-IDF MCP Server to IDEs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Claude Desktop:**
+
+Use the Claude CLI to add the ESP-IDF MCP server:
+
+.. code-block:: bash
+
+  claude mcp add esp-idf python /path/to/esp-idf/tools/idf.py mcp-server --env IDF_PATH=/path/to/esp-idf
+
+Configuration Presets: ``--preset``
+====================================
+
+ESP-IDF supports `CMake presets`_ to simplify managing multiple build configurations. This feature allows you to define reusable configuration profiles that specify build directories, cache variables, and other CMake settings.
+
+.. code-block:: bash
+
+  idf.py --preset <preset-name> build
+
+This command builds the project using the specified configuration preset. The preset defines settings such as the build directory location, CMake cache variables (including ``SDKCONFIG`` paths), and generator preferences.
+
+Preset Definition Files
+-----------------------
+
+Create a ``CMakePresets.json`` or ``CMakeUserPresets.json`` file in your project root directory to define **configuration presets**. For example:
+
+.. code-block:: json
+
+  {
+      "version": 3,
+      "configurePresets": [
+          {
+              "name": "default",
+              "binaryDir": "build/default",
+              "displayName": "Default Configuration",
+              "cacheVariables": {
+                  "SDKCONFIG": "./build/default/sdkconfig"
+              }
+          },
+          {
+              "name": "production",
+              "binaryDir": "build/production",
+              "displayName": "Production Build",
+              "cacheVariables": {
+                  "SDKCONFIG_DEFAULTS": "sdkconfig.defaults.prod_common;sdkconfig.defaults.production",
+                  "SDKCONFIG": "./build/production/sdkconfig"
+              }
+          }
+      ]
+  }
+
+.. note::
+
+    The ``version`` field represents the JSON schema version for CMake Presets. In this example it is set to ``3`` to match the schema supported by ESP-IDF's minimal supported CMake version. If you are using a newer CMake version, you can increase the ``version`` field accordingly—see `CMake Presets`_.
+
+**Current Limitations**
+
+- The ``inherits`` field for preset inheritance is not currently supported by ESP-IDF. Presets with inheritance will show a warning.
+
+Automatic Preset Selection
+---------------------------
+
+If no preset is specified but a ``CMakePresets.json`` file exists, ``idf.py`` will automatically select a preset:
+
+1. If a preset named ``default`` exists, it will be used.
+2. Otherwise, the first preset in the file will be selected.
+
+.. note::
+
+    The environment variable ``IDF_PRESET`` can be used to set the default preset name, e.g., ``export IDF_PRESET=production``. Command-line arguments override environment variables.
+
+**SDKCONFIG File Placement**
+
+By default, the ``sdkconfig`` file is created in the project root directory. However, when using CMake presets, you can specify a custom location for the ``sdkconfig`` file using the ``SDKCONFIG`` cache variable.
+
+For a complete example, see the :example_file:`Multiple Build Configurations Example <build_system/cmake/multi_config/README.md>`.
+
 Global Options
 ==============
 
@@ -410,3 +516,4 @@ Basic Usage Examples
 .. _esptool: https://github.com/espressif/esptool/#readme
 .. _CCache: https://ccache.dev/
 .. _click context: https://click.palletsprojects.com/en/stable/api/#context
+.. _CMake presets: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html

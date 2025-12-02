@@ -111,6 +111,8 @@ typedef enum {
     IP_EVENT_TX_RX,                    /*!< transmitting/receiving data packet */
     IP_EVENT_NETIF_UP,                 /*!< unified netif status: interface became up */
     IP_EVENT_NETIF_DOWN,               /*!< unified netif status: interface went down */
+    IP_EVENT_CUSTOM_GOT_IP,            /*!< custom netif got IP (for user-defined interfaces) */
+    IP_EVENT_CUSTOM_LOST_IP,           /*!< custom netif lost IP (for user-defined interfaces) */
 } ip_event_t;
 
 /** @brief IP event base declaration */
@@ -174,10 +176,11 @@ typedef struct {
     esp_ip4_addr_t ip; /*!< IP address which was assigned to the station */
     uint8_t mac[6];    /*!< MAC address of the connected client */
     /* Client hostname as provided via DHCP option 12 (if available). */
-#ifndef CONFIG_LWIP_DHCPS_MAX_HOSTNAME_LEN
-#define CONFIG_LWIP_DHCPS_MAX_HOSTNAME_LEN 64
-#endif
+#ifdef CONFIG_LWIP_DHCPS_REPORT_CLIENT_HOSTNAME
 #define ESP_NETIF_HOSTNAME_MAX_LEN CONFIG_LWIP_DHCPS_MAX_HOSTNAME_LEN
+#else
+#define ESP_NETIF_HOSTNAME_MAX_LEN 1 /* Minimal footprint when hostname reporting is disabled - just null terminator for API compatibility */
+#endif
     char hostname[ESP_NETIF_HOSTNAME_MAX_LEN]; /*!< Optional DHCP client hostname (may be empty string) */
 } ip_event_assigned_ip_to_client_t;
 
@@ -254,6 +257,7 @@ typedef struct esp_netif_inherent_config {
                                           A higher value of route_prio indicates
                                           a higher priority */
     bridgeif_config_t *bridge_info;  /*!< LwIP bridge configuration */
+    uint16_t mtu;                    /*!< Optional initial MTU (bytes). 0 = use stack default */
 } esp_netif_inherent_config_t;
 
 typedef struct esp_netif_config esp_netif_config_t;

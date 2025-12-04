@@ -84,8 +84,9 @@ _Pragma("pop_macro(\"I64\")")
  * @brief Mode of opening the non-volatile storage
  */
 typedef enum {
-	NVS_READONLY,  /*!< Read only */
-	NVS_READWRITE  /*!< Read and write */
+	NVS_READONLY,       /*!< Read only */
+	NVS_READWRITE,      /*!< Read and write */
+	NVS_READWRITE_PURGE /*!< Read and write */
 } nvs_open_mode_t;
 
 /*
@@ -136,9 +137,12 @@ typedef struct nvs_opaque_iterator_t *nvs_iterator_t;
  * table.
  *
  * @param[in]  namespace_name   Namespace name. Maximum length is (NVS_KEY_NAME_MAX_SIZE-1) characters. Shouldn't be empty.
- * @param[in]  open_mode        NVS_READWRITE or NVS_READONLY. If NVS_READONLY, will
- *                              open a handle for reading only. All write requests will
- *                              be rejected for this handle.
+ * @param[in]  open_mode        NVS_READONLY opens a read only handle
+ *                              NVS_READWRITE opens a read/write handle. erase and set operations are allowed.
+ *                                            previous data is marked as deleted only and new data is written to a new location.
+ *                              NVS_READWRITE_PURGE opens a read/write handle. Update and erase operations are allowed.
+ *                                            previous data is purged from flash memory to ensure that it cannot be recovered.
+ *                                            New data is written to a new location.
  * @param[out] out_handle       If successful (return code is zero), handle will be
  *                              returned in this argument.
  *
@@ -557,6 +561,24 @@ esp_err_t nvs_erase_key(nvs_handle_t handle, const char* key);
  *              - other error codes from the underlying storage driver
  */
 esp_err_t nvs_erase_all(nvs_handle_t handle);
+
+/**
+ * @brief      Purge data of all erased key-value pairs in a namespace
+ *
+ * Note that actual storage may not be updated until nvs_commit function is called.
+ *
+ * @param[in]  handle  Storage handle obtained with nvs_open.
+ *                     Handles that were opened read only cannot be used.
+ *
+ * @return
+ *              - ESP_OK if erase operation was successful
+ *              - ESP_FAIL if there is an internal error; most likely due to corrupted
+ *                NVS partition (only if NVS assertion checks are disabled)
+ *              - ESP_ERR_NVS_INVALID_HANDLE if handle has been closed or is NULL
+ *              - ESP_ERR_NVS_READ_ONLY if handle was opened as read only
+ *              - other error codes from the underlying storage driver
+ */
+esp_err_t nvs_purge_all(nvs_handle_t handle);
 
 /**
  * @brief      Write any pending changes to non-volatile storage

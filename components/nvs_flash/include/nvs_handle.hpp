@@ -211,6 +211,11 @@ public:
     virtual esp_err_t erase_all() = 0;
 
     /**
+     * Purges all erased entries in the scope of this handle. The scope may vary, depending on the implementation.
+     */
+    virtual esp_err_t purge_all() = 0;
+
+    /**
      * Commits all changes done through this handle so far.
      * Currently, NVS writes to storage right after the set and get functions,
      * but this is not guaranteed.

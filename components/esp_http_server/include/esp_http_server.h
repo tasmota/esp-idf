@@ -1780,8 +1780,8 @@ esp_err_t httpd_ws_recv_frame(httpd_req_t *req, httpd_ws_frame_t *pkt, size_t ma
  * @brief Receive and parse a WebSocket frame part
  *
  * @note    Calling httpd_ws_recv_frame_part() with max_len as 0 will give actual frame size in pkt->len.
+ *          The user can dynamically allocate space for pkt->payload or user defined chunk size and call httpd_ws_recv_frame_part() again to get the actual data.
  *          In contrast to httpd_ws_recv_frame, this method is able to read frame payload partially. The amount of data that is yet to be received is stored in pkt->left_len
- *          Keep in mind however, that you have to read the entire packet before completing the request successfully.
  *
  * @param[in]   req         Current request
  * @param[out]  pkt         WebSocket packet

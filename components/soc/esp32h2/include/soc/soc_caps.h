@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 /*
@@ -220,9 +220,6 @@
 #define SOC_GPIO_SUPPORT_ETM          1
 
 // Target has no full LP IO subsystem, GPIO7~14 remain LP function (powered by VDD3V3_LP, and can be used as ext1 wakeup pins)
-// Digital IOs have their own registers to control pullup/down/capability
-// However, there is no way to control pullup/down/capability for IOs under LP function since there is no LP_IOMUX registers
-#define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    (1)
 
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
@@ -441,10 +438,6 @@
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM             1U
 #define SOC_TWAI_MASK_FILTER_NUM            1U
-#define SOC_TWAI_CLK_SUPPORT_XTAL           1
-#define SOC_TWAI_BRP_MIN                    2
-#define SOC_TWAI_BRP_MAX                    32768
-#define SOC_TWAI_SUPPORTS_RX_STATUS         1
 #define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- eFuse CAPS----------------------------*/

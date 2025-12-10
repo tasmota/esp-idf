@@ -61,8 +61,7 @@ typedef struct {
 typedef struct {
     int id;
     _Atomic spi_bus_fsm_t fsm;
-    uint64_t gpio_reserve;
-    spi_bus_config_t bus_config;
+    spi_bus_attr_t* bus_attr;
     spi_dma_ctx_t   *dma_ctx;
     spi_slave_interface_config_t cfg;
     intr_handle_t intr;
@@ -181,8 +180,8 @@ esp_err_t spi_slave_initialize(spi_host_device_t host, const spi_bus_config_t *b
         goto cleanup;
     }
     memcpy(&spihost[host]->cfg, slave_config, sizeof(spi_slave_interface_config_t));
-    memcpy(&spihost[host]->bus_config, bus_config, sizeof(spi_bus_config_t));
     spihost[host]->id = host;
+    spihost[host]->bus_attr = (spi_bus_attr_t *)spi_bus_get_attr(host);
     atomic_store(&spihost[host]->fsm, SPI_BUS_FSM_ENABLED);
     spi_slave_hal_context_t *hal = &spihost[host]->hal;
 
@@ -213,17 +212,18 @@ esp_err_t spi_slave_initialize(spi_host_device_t host, const spi_bus_config_t *b
         spihost[host]->max_transfer_sz = SOC_SPI_MAXIMUM_BUFFER_SIZE;
     }
 
-    err = spicommon_bus_initialize_io(host, bus_config, SPICOMMON_BUSFLAG_SLAVE | bus_config->flags, &spihost[host]->flags, &spihost[host]->gpio_reserve);
+    err = spicommon_bus_initialize_io(host, bus_config, SPICOMMON_BUSFLAG_SLAVE | bus_config->flags, NULL, NULL);
     if (err != ESP_OK) {
         ret = err;
         goto cleanup;
     }
     if (slave_config->spics_io_num >= 0) {
-        spicommon_cs_initialize(host, slave_config->spics_io_num, 0, !bus_is_iomux(spihost[host]), &spihost[host]->gpio_reserve);
+        spicommon_cs_initialize(host, slave_config->spics_io_num, 0, !bus_is_iomux(spihost[host]), NULL);
         // check and save where cs line really route through
         spihost[host]->cs_iomux = (slave_config->spics_io_num == spi_periph_signal[host].spics0_iomux_pin) && bus_is_iomux(spihost[host]);
         spihost[host]->cs_in_signal = spi_periph_signal[host].spics_in;
     }
+    spihost[host]->flags = spihost[host]->bus_attr->flags; // This flag MUST be set after spicommon_bus_initialize_io is called
 
     // The slave DMA suffers from unexpected transactions. Forbid reading if DMA is enabled by disabling the CS line.
     if (spihost[host]->dma_enabled) {
@@ -337,9 +337,9 @@ esp_err_t spi_slave_free(spi_host_device_t host)
         free(spihost[host]->dma_ctx->dmadesc_rx);
         spicommon_dma_chan_free(spihost[host]->dma_ctx);
     }
-    spicommon_bus_free_io_cfg(&spihost[host]->bus_config, &spihost[host]->gpio_reserve);
+    spicommon_bus_free_io_cfg(&spihost[host]->bus_attr->bus_cfg, &spihost[host]->bus_attr->gpio_reserve);
     if (spihost[host]->cfg.spics_io_num >= 0) {
-        spicommon_cs_free_io(spihost[host]->cfg.spics_io_num, &spihost[host]->gpio_reserve);
+        spicommon_cs_free_io(spihost[host]->cfg.spics_io_num, &spihost[host]->bus_attr->gpio_reserve);
     }
     esp_intr_free(spihost[host]->intr);
 
@@ -473,7 +473,7 @@ static esp_err_t SPI_SLAVE_ISR_ATTR spi_slave_setup_priv_trans(spi_host_device_t
     return ESP_OK;
 }
 
-esp_err_t SPI_SLAVE_ATTR spi_slave_queue_trans(spi_host_device_t host, const spi_slave_transaction_t *trans_desc, TickType_t ticks_to_wait)
+esp_err_t SPI_SLAVE_ATTR spi_slave_queue_trans(spi_host_device_t host, const spi_slave_transaction_t *trans_desc, uint32_t ticks_to_wait)
 {
     BaseType_t r;
     SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
@@ -601,7 +601,7 @@ esp_err_t SPI_SLAVE_ISR_ATTR spi_slave_queue_reset_isr(spi_host_device_t host)
     return ESP_OK;
 }
 
-esp_err_t SPI_SLAVE_ATTR spi_slave_get_trans_result(spi_host_device_t host, spi_slave_transaction_t **trans_desc, TickType_t ticks_to_wait)
+esp_err_t SPI_SLAVE_ATTR spi_slave_get_trans_result(spi_host_device_t host, spi_slave_transaction_t **trans_desc, uint32_t ticks_to_wait)
 {
     BaseType_t r;
     SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
@@ -620,7 +620,7 @@ esp_err_t SPI_SLAVE_ATTR spi_slave_get_trans_result(spi_host_device_t host, spi_
     return ESP_OK;
 }
 
-esp_err_t SPI_SLAVE_ATTR spi_slave_transmit(spi_host_device_t host, spi_slave_transaction_t *trans_desc, TickType_t ticks_to_wait)
+esp_err_t SPI_SLAVE_ATTR spi_slave_transmit(spi_host_device_t host, spi_slave_transaction_t *trans_desc, uint32_t ticks_to_wait)
 {
     esp_err_t ret;
     spi_slave_transaction_t *ret_trans;

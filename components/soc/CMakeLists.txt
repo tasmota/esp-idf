@@ -64,18 +64,6 @@ if(target STREQUAL "esp32")
     list(APPEND srcs "${target_folder}/dport_access.c")
 endif()
 
-if(CONFIG_SOC_ADC_SUPPORTED)
-    list(APPEND srcs "${target_folder}/adc_periph.c")
-endif()
-
-if(CONFIG_SOC_ANA_CMPR_SUPPORTED)
-    list(APPEND srcs "${target_folder}/ana_cmpr_periph.c")
-endif()
-
-if(CONFIG_SOC_DEDICATED_GPIO_SUPPORTED)
-    list(APPEND srcs "${target_folder}/dedic_gpio_periph.c")
-endif()
-
 if(CONFIG_SOC_DEBUG_PROBE_SUPPORTED)
     list(APPEND srcs "${target_folder}/debug_probe_periph.c")
 endif()
@@ -87,10 +75,6 @@ endif()
 
 if(CONFIG_SOC_LEDC_SUPPORTED)
     list(APPEND srcs "${target_folder}/ledc_periph.c")
-endif()
-
-if(CONFIG_SOC_SDM_SUPPORTED)
-    list(APPEND srcs "${target_folder}/sdm_periph.c")
 endif()
 
 if(CONFIG_SOC_ISP_SUPPORTED)
@@ -113,24 +97,8 @@ if(CONFIG_SOC_SDMMC_HOST_SUPPORTED)
     list(APPEND srcs "${target_folder}/sdmmc_periph.c")
 endif()
 
-if(CONFIG_SOC_TOUCH_SENSOR_SUPPORTED)
-    list(APPEND srcs "${target_folder}/touch_sensor_periph.c")
-endif()
-
-if(CONFIG_SOC_TWAI_SUPPORTED)
-    list(APPEND srcs "${target_folder}/twai_periph.c")
-endif()
-
 if(CONFIG_SOC_IEEE802154_SUPPORTED)
     list(APPEND srcs "${target_folder}/ieee802154_periph.c")
-endif()
-
-if(CONFIG_SOC_DAC_SUPPORTED)
-    list(APPEND srcs "${target_folder}/dac_periph.c")
-endif()
-
-if(CONFIG_SOC_RTCIO_PIN_COUNT GREATER 0)
-    list(APPEND srcs "${target_folder}/rtc_io_periph.c")
 endif()
 
 if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)

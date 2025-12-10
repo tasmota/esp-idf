@@ -1,7 +1,7 @@
 /**
  * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  *
- *  SPDX-License-Identifier: Apache-2.0
+ *  SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 #pragma once
 
@@ -1178,7 +1178,7 @@ typedef union {
          *  Configures the clock source of Paraller IO RX
          *  0 (default): XTAL_CLK
          *  1: RC_FAST_CLK
-         *  2: PLL_F240M_CLK
+         *  2: PLL_F96M_CLK
          *  3: Use the clock from chip pin
          */
         uint32_t parl_clk_tx_sel:2;

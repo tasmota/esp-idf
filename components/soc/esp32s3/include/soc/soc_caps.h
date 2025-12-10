@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 // The long term plan is to have a single soc_caps.h for all peripherals.
@@ -179,10 +179,7 @@
 #define SOC_GPIO_PORT                      1U
 #define SOC_GPIO_PIN_COUNT                 49
 #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1
-#define SOC_GPIO_FILTER_CLK_SUPPORT_APB 1
 
-// On ESP32-S3, Digital IOs have their own registers to control pullup/down/capability, independent with RTC registers.
-#define SOC_GPIO_SUPPORT_RTC_INDEPENDENT (1)
 // Force hold is a new function of ESP32-S3
 #define SOC_GPIO_SUPPORT_FORCE_HOLD      (1)
 
@@ -352,10 +349,6 @@
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM         1U
 #define SOC_TWAI_MASK_FILTER_NUM        1U
-#define SOC_TWAI_CLK_SUPPORT_APB        1
-#define SOC_TWAI_BRP_MIN                2
-#define SOC_TWAI_BRP_MAX                16384
-#define SOC_TWAI_SUPPORTS_RX_STATUS     1
 
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-S3 has 3 UARTs

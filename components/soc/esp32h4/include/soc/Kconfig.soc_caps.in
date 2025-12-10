@@ -35,7 +35,19 @@ config SOC_TWAI_SUPPORTED
     bool
     default y
 
+config SOC_TWAI_FD_SUPPORTED
+    bool
+    default y
+
 config SOC_ETM_SUPPORTED
+    bool
+    default y
+
+config SOC_PARLIO_SUPPORTED
+    bool
+    default y
+
+config SOC_PARLIO_LCD_SUPPORTED
     bool
     default y
 
@@ -351,10 +363,6 @@ config SOC_GPIO_ETM_TASKS_PER_GROUP
     int
     default 8
 
-config SOC_GPIO_SUPPORT_RTC_INDEPENDENT
-    bool
-    default y
-
 config SOC_LP_IO_CLOCK_IS_INDEPENDENT
     bool
     default y
@@ -392,10 +400,6 @@ config SOC_RTCIO_HOLD_SUPPORTED
     default y
 
 config SOC_RTCIO_WAKE_SUPPORTED
-    bool
-    default y
-
-config SOC_RTCIO_EDGE_WAKE_SUPPORTED
     bool
     default y
 
@@ -623,6 +627,34 @@ config SOC_MCPWM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
+config SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH
+    int
+    default 8
+
+config SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH
+    int
+    default 8
+
+config SOC_PARLIO_TX_CLK_SUPPORT_GATING
+    bool
+    default y
+
+config SOC_PARLIO_RX_CLK_SUPPORT_GATING
+    bool
+    default y
+
+config SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION
+    bool
+    default y
+
+config SOC_PARLIO_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_PARLIO_SUPPORT_I80_LCD
+    bool
+    default y
+
 config SOC_ECC_CONSTANT_TIME_POINT_MUL
     bool
     default y
@@ -770,30 +802,6 @@ config SOC_TWAI_MASK_FILTER_NUM
 config SOC_TWAI_RANGE_FILTER_NUM
     int
     default 1
-
-config SOC_TWAI_BRP_MIN
-    int
-    default 1
-
-config SOC_TWAI_BRP_MAX
-    int
-    default 255
-
-config SOC_TWAI_CLK_SUPPORT_XTAL
-    bool
-    default y
-
-config SOC_TWAI_SUPPORTS_RX_STATUS
-    bool
-    default y
-
-config SOC_TWAI_SUPPORT_FD
-    bool
-    default y
-
-config SOC_TWAI_SUPPORT_TIMESTAMP
-    bool
-    default y
 
 config SOC_EFUSE_DIS_DOWNLOAD_ICACHE
     bool

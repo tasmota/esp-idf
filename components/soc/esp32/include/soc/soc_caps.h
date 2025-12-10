@@ -2,7 +2,7 @@
 /*
  * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 /*
@@ -180,10 +180,6 @@
 #define SOC_GPIO_PORT                   (1U)
 #define SOC_GPIO_PIN_COUNT              40
 
-// SOC_GPIO_SUPPORT_RTC_INDEPENDENT not defined. On ESP32 those PADs which have RTC functions must
-// set pullup/down/capability via RTC register. On ESP32-S2, Digital IOs have their own registers to
-// control pullup/down/capability, independent with RTC registers.
-
 // 0~39 valid except 24, 28~31
 #define SOC_GPIO_VALID_GPIO_MASK        (0xFFFFFFFFFFULL & ~(0ULL | BIT24 | BIT28 | BIT29 | BIT30 | BIT31))
 // GPIO >= 34 are input only
@@ -293,14 +289,6 @@
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM         1U
 #define SOC_TWAI_MASK_FILTER_NUM        1U
-#define SOC_TWAI_BRP_MIN                2
-#if SOC_CAPS_ECO_VER >= 200
-#  define SOC_TWAI_BRP_MAX              256
-#else
-#  define SOC_TWAI_BRP_MAX              128
-#endif
-#define SOC_TWAI_CLK_SUPPORT_APB        1
-#define SOC_TWAI_SUPPORT_MULTI_ADDRESS_LAYOUT   1
 
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32 have 3 UART.

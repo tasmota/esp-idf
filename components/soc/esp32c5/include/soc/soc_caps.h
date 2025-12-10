@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 /*
@@ -34,6 +34,7 @@
 #define SOC_PCNT_SUPPORTED              1
 #define SOC_MCPWM_SUPPORTED             1
 #define SOC_TWAI_SUPPORTED              1
+#define SOC_TWAI_FD_SUPPORTED           1
 #define SOC_ETM_SUPPORTED               1
 #define SOC_PARLIO_SUPPORTED            1
 #define SOC_PARLIO_LCD_SUPPORTED        1
@@ -219,8 +220,6 @@
 #define SOC_GPIO_SUPPORT_ETM          1
 
 // Target has the full LP IO subsystem
-// On ESP32-C5, Digital IOs have their own registers to control pullup/down capability, independent of LP registers.
-#define SOC_GPIO_SUPPORT_RTC_INDEPENDENT    (1)
 // GPIO0~7 on ESP32C5 can support chip deep sleep wakeup
 #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
 // LP IO peripherals have independent clock gating to manage
@@ -256,7 +255,6 @@
                                                 */
 #define SOC_RTCIO_HOLD_SUPPORTED            1
 #define SOC_RTCIO_WAKE_SUPPORTED            1
-#define SOC_RTCIO_EDGE_WAKE_SUPPORTED       1
 
 /*-------------------------- Sigma Delta Modulator CAPS -----------------*/
 #define SOC_SDM_SUPPORT_SLEEP_RETENTION 1
@@ -480,12 +478,6 @@
 #define SOC_TWAI_CONTROLLER_NUM         2
 #define SOC_TWAI_MASK_FILTER_NUM        3
 #define SOC_TWAI_RANGE_FILTER_NUM       1U
-#define SOC_TWAI_BRP_MIN                1U
-#define SOC_TWAI_BRP_MAX                255
-#define SOC_TWAI_CLK_SUPPORT_XTAL       1
-#define SOC_TWAI_SUPPORTS_RX_STATUS     1
-#define SOC_TWAI_SUPPORT_FD             1
-#define SOC_TWAI_SUPPORT_TIMESTAMP      1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_PAD_JTAG 1

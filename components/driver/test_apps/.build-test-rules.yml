@@ -10,7 +10,7 @@ components/driver/test_apps/legacy_i2c_driver:
 
 components/driver/test_apps/legacy_twai:
   disable:
-    - if: SOC_TWAI_SUPPORTED != 1 or SOC_TWAI_SUPPORT_FD == 1
+    - if: SOC_TWAI_SUPPORTED != 1 or SOC_TWAI_FD_SUPPORTED == 1
       reason: legacy driver doesn't support FD
     - if: IDF_TARGET == "esp32p4"
       temporary: true
@@ -25,13 +25,14 @@ components/driver/test_apps/touch_element:
     - if: IDF_TARGET not in ["esp32s2", "esp32s3"]
       reason: only supports esp32s2 and esp32s3
   depends_filepatterns:
-    - components/soc/**/touch_sensor_periph.h
     - components/soc/esp32s2/**/rtc_cntl_*
     - components/soc/esp32s3/**/rtc_cntl_*
     - components/soc/esp32s2/**/rtc_io_struct.h
     - components/soc/esp32s3/**/rtc_io_struct.h
     - components/soc/esp32s2/**/sens_struct.h
     - components/soc/esp32s3/**/sens_struct.h
+  depends_components:
+    - esp_hal_touch_sens
 
 components/driver/test_apps/touch_sensor_v1:
   disable:

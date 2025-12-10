@@ -23,7 +23,6 @@
 #include "driver/rtc_io.h"
 #include "soc/rtc.h"
 #include "esp_private/gptimer.h"
-#include "soc/rtc_periph.h"
 #include "esp_rom_sys.h"
 #include "esp_private/esp_clk.h"
 
@@ -32,6 +31,10 @@
 #if CONFIG_ULP_COPROC_TYPE_FSM
 #if CONFIG_IDF_TARGET_ESP32
 #include "esp32/ulp.h"
+#include "soc/rtc_io_reg.h"
+#include "hal/rtc_io_periph.h"
+#include "soc/rtc_io_channel.h"
+#include "soc/rtc_cntl_reg.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
 #include "esp32s2/ulp.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
@@ -217,7 +220,11 @@ static const int test_freqs[] = {32, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, 64, 48, 32
 static const int test_freqs[] = {CONFIG_XTAL_FREQ, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, 80, CONFIG_XTAL_FREQ, 80,
                                  CONFIG_XTAL_FREQ / 2, CONFIG_XTAL_FREQ}; // C2 xtal has 40/26MHz option
 #elif CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 static const int test_freqs[] = {40, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, 90, 40, 90, 10, 90, 20, 40, 360, 90, 180, 90, 40};
+#else
+static const int test_freqs[] = {40, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, 100, 40, 100, 10, 100, 20, 40, 400, 100, 200, 100, 40};
+#endif
 #else
 static const int test_freqs[] = {240, 40, 160, 240, 80, 40, 240, 40, 80, 10, 80, 20, 40};
 #endif

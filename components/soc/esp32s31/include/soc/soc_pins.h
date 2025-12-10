@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 /*
@@ -14,4 +14,3 @@
 
 #include "soc/gpio_pins.h"
 #include "soc/spi_pins.h"
-#include "soc/sdmmc_pins.h"

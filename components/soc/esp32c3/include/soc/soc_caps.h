@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
  */
 
 /*
@@ -163,7 +163,6 @@
 #define SOC_GPIO_PORT                      1U
 #define SOC_GPIO_PIN_COUNT                 22
 #define SOC_GPIO_SUPPORT_PIN_GLITCH_FILTER 1
-#define SOC_GPIO_FILTER_CLK_SUPPORT_APB 1
 
 // Target has no full RTC IO subsystem, GPIO0~5 remain RTC function (powered by VDD3V3_RTC, and can be used as deep-sleep wakeup pins)
 
@@ -350,10 +349,6 @@
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM         1U
 #define SOC_TWAI_MASK_FILTER_NUM        1U
-#define SOC_TWAI_CLK_SUPPORT_APB        1
-#define SOC_TWAI_BRP_MIN                2
-#define SOC_TWAI_BRP_MAX                16384
-#define SOC_TWAI_SUPPORTS_RX_STATUS     1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 1

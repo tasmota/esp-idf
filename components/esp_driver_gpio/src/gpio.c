@@ -8,13 +8,13 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "soc/interrupts.h"
 #if !CONFIG_FREERTOS_UNICORE
 #include "esp_ipc.h"
 #endif
-
 #include "soc/soc_caps.h"
 #include "soc/gpio_periph.h"
 #include "esp_log.h"
@@ -207,7 +207,8 @@ esp_err_t gpio_output_disable(gpio_num_t gpio_num)
 {
     GPIO_CHECK(GPIO_IS_VALID_GPIO(gpio_num), "GPIO number error", ESP_ERR_INVALID_ARG);
     gpio_hal_output_disable(gpio_context.gpio_hal, gpio_num);
-    gpio_hal_set_output_enable_ctrl(gpio_context.gpio_hal, gpio_num, false, false); // so that output disable could take effect
+    gpio_hal_set_output_enable_ctrl(gpio_context.gpio_hal, gpio_num, false, false); // so that output disable could always take effect when func sel is GPIO
+    gpio_hal_func_sel(gpio_context.gpio_hal, gpio_num, PIN_FUNC_GPIO); // otherwise the oe can only be controlled by peripheral
     return ESP_OK;
 }
 
@@ -216,6 +217,7 @@ esp_err_t gpio_output_enable(gpio_num_t gpio_num)
     GPIO_CHECK(GPIO_IS_VALID_OUTPUT_GPIO(gpio_num), "GPIO output gpio_num error", ESP_ERR_INVALID_ARG);
     gpio_hal_matrix_out_default(gpio_context.gpio_hal, gpio_num); // No peripheral output signal routed to the pin, just as a simple GPIO output
     gpio_hal_output_enable(gpio_context.gpio_hal, gpio_num);
+    gpio_hal_func_sel(gpio_context.gpio_hal, gpio_num, PIN_FUNC_GPIO); // otherwise the oe can only be controlled by peripheral
     return ESP_OK;
 }
 
@@ -755,7 +757,7 @@ esp_err_t gpio_hold_dis(gpio_num_t gpio_num)
     return ret;
 }
 
-#if SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 void gpio_deep_sleep_hold_en(void)
 {
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
@@ -769,7 +771,7 @@ void gpio_deep_sleep_hold_dis(void)
     gpio_hal_deep_sleep_hold_dis(gpio_context.gpio_hal);
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
 }
-#endif //SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+#endif //!SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 
 #if SOC_GPIO_SUPPORT_FORCE_HOLD
 esp_err_t IRAM_ATTR gpio_force_hold_all()
@@ -1052,9 +1054,10 @@ esp_err_t gpio_dump_io_configuration(FILE *out_stream, uint64_t io_bit_mask)
 #endif
 
         // When the IO is used as a simple GPIO output, oe signal can only be controlled by the oe register
-        // When the IO is not used as a simple GPIO output, oe signal could be controlled by the peripheral
+        // When the IO connects to a peripheral signal through GPIO Matrix, oe signal can be controlled by the peripheral or the oe register (switch by oe_ctrl_by_periph)
+        // When the IO connects to a peripheral signal through IOMUX, oe signal can only be controlled by the peripheral
         const char *oe_str = oe ? "1" : "0";
-        if (sig_out != SIG_GPIO_OUT_IDX && oe_ctrl_by_periph) {
+        if (fun_sel != PIN_FUNC_GPIO || oe_ctrl_by_periph) {
             oe_str = "[periph_sig_ctrl]";
         }
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,7 @@
 #include "hal/hal_utils.h"
 #include "hal/isp_types.h"
 #include "hal/color_types.h"
+#include "hal/config.h"
 #include "soc/isp_struct.h"
 #include "soc/hp_sys_clkrst_struct.h"
 #include "soc/clk_tree_defs.h"
@@ -65,11 +66,14 @@ extern "C" {
 #define ISP_LL_EVENT_YUV2RGB_FRAME            (1<<26)
 #define ISP_LL_EVENT_TAIL_IDI_FRAME           (1<<27)
 #define ISP_LL_EVENT_HEADER_IDI_FRAME         (1<<28)
+#define ISP_LL_EVENT_CROP_FRAME               (1<<29)
+#define ISP_LL_EVENT_WBG_FRAME                (1<<30)
+#define ISP_LL_EVENT_CROP_ERR                 (1<<31)
 
 #define ISP_LL_EVENT_ALL_MASK                 (0x1FFFFFFF)
 #define ISP_LL_EVENT_AF_MASK                  (ISP_LL_EVENT_AF_FDONE | ISP_LL_EVENT_AF_ENV)
 #define ISP_LL_EVENT_AE_MASK                  (ISP_LL_EVENT_AE_FDONE | ISP_LL_EVENT_AE_ENV)
-#define ISP_LL_EVENT_AWB_MASK                 (ISP_LL_EVENT_AWB_FDONE)
+#define ISP_LL_EVENT_AWB_MASK                 (ISP_LL_EVENT_AWB_FDONE | ISP_LL_EVENT_WBG_FRAME)
 #define ISP_LL_EVENT_SHARP_MASK               (ISP_LL_EVENT_SHARP_FRAME)
 #define ISP_LL_EVENT_HIST_MASK                (ISP_LL_EVENT_HIST_FDONE)
 #define ISP_LL_EVENT_COLOR_MASK               (ISP_LL_EVENT_COLOR_FRAME)
@@ -165,8 +169,35 @@ typedef union {
 typedef enum {
     ISP_LL_LUT_LSC,    ///< LUT for LSC
     ISP_LL_LUT_DPC,    ///< LUT for DPC
+    ISP_LL_LUT_AWB,    ///< LUT for AWB
 } isp_ll_lut_t;
 
+/**
+ * @brief ISP LUT AWB type
+ */
+typedef enum {
+    ISP_LL_LUT_AWB_WHITE_PATCH_CNT,    ///< White patch count
+    ISP_LL_LUT_AWB_ACCUMULATED_R,      ///< Accumulated R
+    ISP_LL_LUT_AWB_ACCUMULATED_G,      ///< Accumulated G
+    ISP_LL_LUT_AWB_ACCUMULATED_B,      ///< Accumulated B
+} isp_ll_lut_awb_t;
+
+/**
+ * @brief ISP pipeline clock control mode
+ */
+typedef enum {
+    ISP_LL_PIPELINE_CLK_CTRL_AUTO,         ///< HW control, off when in frame interval
+    ISP_LL_PIPELINE_CLK_CTRL_ALWAYS_ON,    ///< Always on
+} isp_ll_pipeline_clk_ctrl_t;
+
+/**
+ * @brief Shadow mode
+ */
+typedef enum {
+    ISP_SHADOW_MODE_DISABLE,
+    ISP_SHADOW_MODE_UPDATE_EVERY_VSYNC,
+    ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC,
+} isp_ll_shadow_mode_t;
 
 /*---------------------------------------------------------------
                       Clock
@@ -495,14 +526,14 @@ static inline void isp_ll_set_bayer_mode(isp_dev_t *hw, color_raw_element_order_
                       AF
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable AF clock
+ * @brief Set AF clock control mode
  *
  * @param[in] hw
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_af_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_af_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_af_force_on = enable;
+    hw->clk_en.clk_af_force_on = mode;
 }
 
 /**
@@ -730,14 +761,14 @@ static inline void isp_ll_af_env_detector_set_ratio(isp_dev_t *hw, uint32_t rati
                       BF
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable BF clock
+ * @brief Set BF clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_bf_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_bf_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_bf_force_on = enable;
+    hw->clk_en.clk_bf_force_on = mode;
 }
 
 /**
@@ -829,17 +860,121 @@ static inline void isp_ll_bf_set_template(isp_dev_t *hw, uint8_t template_arr[SO
 }
 
 /*---------------------------------------------------------------
-                      CCM
+                      BLC
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable CCM clock
+ * @brief Set BLC clock control mode
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
+ */
+static inline void isp_ll_blc_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
+{
+    hw->clk_en.clk_blc_force_on = mode;
+}
+
+/**
+ * @brief Enable / Disable BLC
  *
  * @param[in] hw      Hardware instance address
  * @param[in] enable  Enable / Disable
  */
-static inline void isp_ll_ccm_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_blc_enable(isp_dev_t *hw, bool enable)
 {
-    hw->clk_en.clk_ccm_force_on = enable;
+    hw->cntl.blc_en = enable;
+}
+
+/**
+ * @brief Set BLC correction offset
+ *
+ * @param[in] hw                       Hardware instance address
+ * @param[in] top_left_chan_offset     Correction offset for top left channel of the raw Bayer image
+ * @param[in] top_right_chan_offset    Correction offset for top right channel of the raw Bayer image
+ * @param[in] bottom_left_chan_offset  Correction offset for bottom left channel of the raw Bayer image
+ * @param[in] bottom_right_chan_offset Correction offset for bottom right channel of the raw Bayer image
+ */
+static inline void isp_ll_blc_set_correction_offset(isp_dev_t *hw, uint32_t top_left_chan_offset, uint32_t top_right_chan_offset, uint32_t bottom_left_chan_offset, uint32_t bottom_right_chan_offset)
+{
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_value, blc_r0_value, top_left_chan_offset);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_value, blc_r1_value, top_right_chan_offset);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_value, blc_r2_value, bottom_left_chan_offset);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_value, blc_r3_value, bottom_right_chan_offset);
+}
+
+/**
+ * @brief Enable / Disable BLC stretch
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] top_left_chan_stretch_en  Enable / Disable stretch for top left channel of the raw Bayer image
+ * @param[in] top_right_chan_stretch_en Enable / Disable stretch for top right channel of the raw Bayer image
+ * @param[in] bottom_left_chan_stretch_en Enable / Disable stretch for bottom left channel of the raw Bayer image
+ * @param[in] bottom_right_chan_stretch_en Enable / Disable stretch for bottom right channel of the raw Bayer image
+ */
+static inline void isp_ll_blc_enable_stretch(isp_dev_t *hw, bool top_left_chan_stretch_en, bool top_right_chan_stretch_en, bool bottom_left_chan_stretch_en, bool bottom_right_chan_stretch_en)
+{
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl0, blc_r0_stretch, top_left_chan_stretch_en);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl0, blc_r1_stretch, top_right_chan_stretch_en);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl0, blc_r2_stretch, bottom_left_chan_stretch_en);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl0, blc_r3_stretch, bottom_right_chan_stretch_en);
+}
+
+/**
+ * @brief Set BLC window
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] x_start X start position
+ * @param[in] y_start Y start position
+ * @param[in] x_size  X size
+ * @param[in] y_size  Y size
+ */
+static inline void isp_ll_blc_set_window(isp_dev_t *hw, uint32_t x_start, uint32_t y_start, uint32_t x_size, uint32_t y_size)
+{
+    hw->blc_ctrl1.blc_window_top = y_start;
+    hw->blc_ctrl1.blc_window_left = x_start;
+    hw->blc_ctrl1.blc_window_vnum = y_size;
+    hw->blc_ctrl1.blc_window_hnum = x_size;
+}
+
+/**
+ * @brief Set BLC filter threshold
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] top_left_chan_thresh  Filter threshold for top left channel of the raw Bayer image
+ * @param[in] top_right_chan_thresh Filter threshold for top right channel of the raw Bayer image
+ * @param[in] bottom_left_chan_thresh Filter threshold for bottom left channel of the raw Bayer image
+ * @param[in] bottom_right_chan_thresh Filter threshold for bottom right channel of the raw Bayer image
+ */
+static inline void isp_ll_blc_set_filter_threshold(isp_dev_t *hw, uint32_t top_left_chan_thresh, uint32_t top_right_chan_thresh, uint32_t bottom_left_chan_thresh, uint32_t bottom_right_chan_thresh)
+{
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl2, blc_r0_th, top_left_chan_thresh);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl2, blc_r1_th, top_right_chan_thresh);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl2, blc_r2_th, bottom_left_chan_thresh);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->blc_ctrl2, blc_r3_th, bottom_right_chan_thresh);
+}
+
+/**
+ * @brief Enable / Disable BLC filter
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] enable  Enable / Disable
+ */
+static inline void isp_ll_blc_enable_filter(isp_dev_t *hw, bool enable)
+{
+    hw->blc_ctrl1.blc_filter_en = enable;
+}
+
+/*---------------------------------------------------------------
+                      CCM
+---------------------------------------------------------------*/
+/**
+ * @brief Set CCM clock control mode
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
+ */
+static inline void isp_ll_ccm_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
+{
+    hw->clk_en.clk_ccm_force_on = mode;
 }
 
 /**
@@ -876,14 +1011,14 @@ static inline void isp_ll_ccm_set_matrix(isp_dev_t *hw, isp_ll_ccm_gain_t fixed_
                       Color
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable Color clock
+ * @brief Set Color clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_color_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_color_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_color_force_on = enable;
+    hw->clk_en.clk_color_force_on = mode;
 }
 
 /**
@@ -1071,14 +1206,14 @@ static inline void isp_ll_cam_enable(isp_dev_t *hw, bool enable)
 ---------------------------------------------------------------*/
 
 /**
- * @brief Enable / Disable AE clock
+ * @brief Set AE clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_ae_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_ae_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_ae_force_on = enable;
+    hw->clk_en.clk_ae_force_on = mode;
 }
 
 /**
@@ -1185,14 +1320,14 @@ static inline void isp_ll_ae_env_detector_set_period(isp_dev_t *hw, uint32_t per
                       LSC
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable LSC clock
+ * @brief Set LSC clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_lsc_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_lsc_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_lsc_force_on = enable;
+    hw->clk_en.clk_lsc_force_on = mode;
 }
 
 /**
@@ -1221,7 +1356,7 @@ static inline void isp_ll_lsc_set_xtablesize(isp_dev_t *hw, uint8_t xtablesize)
                       LUT
 ---------------------------------------------------------------*/
 /**
- * @brief Select ISP LUT
+ * @brief Select ISP LUT for LSC usage
  *
  * @param[in] hw        Hardware instance address
  * @param[in] is_write  Is write or not
@@ -1229,7 +1364,7 @@ static inline void isp_ll_lsc_set_xtablesize(isp_dev_t *hw, uint8_t xtablesize)
  * @param[in] addr      LUT addr
  * @param[in] lut       ISP LUT
  */
-static inline void isp_ll_lut_set_cmd(isp_dev_t *hw, bool is_write, bool is_gb_b, uint32_t addr, isp_ll_lut_t lut)
+static inline void isp_ll_lut_lsc_set_cmd(isp_dev_t *hw, bool is_write, bool is_gb_b, uint32_t addr, isp_ll_lut_t lut)
 {
     uint32_t val = 0;
     val |= is_write ? (1 << 16) : 0;
@@ -1246,7 +1381,7 @@ static inline void isp_ll_lut_set_cmd(isp_dev_t *hw, bool is_write, bool is_gb_b
  * @param[in] gb_gain   gb gain
  * @param[in] b_gain    b gain
  */
-static inline void isp_ll_lut_set_wdata_gb_b(isp_dev_t *hw, isp_lsc_gain_t gb_gain, isp_lsc_gain_t b_gain)
+static inline void isp_ll_lut_lsc_set_wdata_gb_b(isp_dev_t *hw, isp_lsc_gain_t gb_gain, isp_lsc_gain_t b_gain)
 {
     hw->lut_wdata.lut_wdata = (gb_gain.val & 0x3ff) << 10 | (b_gain.val & 0x3ff);
 }
@@ -1258,9 +1393,73 @@ static inline void isp_ll_lut_set_wdata_gb_b(isp_dev_t *hw, isp_lsc_gain_t gb_ga
  * @param[in] r_gain   r gain
  * @param[in] gr_gain    gr gain
  */
-static inline void isp_ll_lut_set_wdata_r_gr(isp_dev_t *hw, isp_lsc_gain_t r_gain, isp_lsc_gain_t gr_gain)
+static inline void isp_ll_lut_lsc_set_wdata_r_gr(isp_dev_t *hw, isp_lsc_gain_t r_gain, isp_lsc_gain_t gr_gain)
 {
     hw->lut_wdata.lut_wdata = (r_gain.val & 0x3ff) << 10 | (gr_gain.val & 0x3ff);
+}
+
+/**
+ * @brief Set AWB LUT command
+ *
+ * @param[in] hw        Hardware instance address
+ * @param[in] type      ISP LUT AWB type
+ * @param[in] addr      AWB sub window ID
+ */
+static inline void isp_ll_lut_awb_set_cmd(isp_dev_t *hw, isp_ll_lut_awb_t type, uint32_t sub_window_id, isp_ll_lut_t lut)
+{
+    HAL_ASSERT(sub_window_id <= 25);
+    uint32_t val = 0;
+    val |= 0x2000 + 4 * sub_window_id + type;
+    val |= lut << 12;
+    hw->lut_cmd.val = val;
+}
+
+/**
+ * @brief Get AWB statistics of subwindow white patch count
+ *
+ * @param[in] hw        Hardware instance address
+ *
+ * @return White patch number
+ */
+static inline uint32_t isp_ll_lut_awb_get_subwindow_white_patch_cnt(isp_dev_t *hw)
+{
+    return hw->lut_rdata.lut_rdata;
+}
+
+/**
+ * @brief Get AWB statistics of subwindow accumulated R
+ *
+ * @param[in] hw        Hardware instance address
+ *
+ * @return Accumulated R
+ */
+static inline uint32_t isp_ll_lut_awb_get_subwindow_accumulated_r(isp_dev_t *hw)
+{
+    return hw->lut_rdata.lut_rdata;
+}
+
+/**
+ * @brief Get AWB statistics of subwindow accumulated G
+ *
+ * @param[in] hw        Hardware instance address
+ *
+ * @return Accumulated G
+ */
+static inline uint32_t isp_ll_lut_awb_get_subwindow_accumulated_g(isp_dev_t *hw)
+{
+    return hw->lut_rdata.lut_rdata;
+}
+
+/**
+ * @brief Get AWB statistics of subwindow accumulated B
+ *
+ * @param[in] hw        Hardware instance address
+ *
+ * @return Accumulated B
+ */
+static inline uint32_t isp_ll_lut_awb_get_subwindow_accumulated_b(isp_dev_t *hw)
+{
+    return hw->lut_rdata.lut_rdata;
 }
 
 /*---------------------------------------------------------------
@@ -1337,14 +1536,14 @@ static inline void isp_ll_clear_intr(isp_dev_t *hw, uint32_t mask)
                       AWB
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable AWB clock
+ * @brief Set AWB clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_awb_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_awb_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_awb_force_on = enable;
+    hw->clk_en.clk_awb_force_on = mode;
 }
 
 /**
@@ -1491,18 +1690,70 @@ static inline uint32_t isp_ll_awb_get_accumulated_b_value(isp_dev_t *hw)
     return hw->awb0_acc_b.awb0_acc_b;
 }
 
-/*---------------------------------------------------------------
-                      Demosaic
----------------------------------------------------------------*/
+#if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
 /**
- * @brief Enable / Disable demosaic clock
+ * @brief Enable AWB white balance gain
  *
  * @param[in] hw      Hardware instance address
  * @param[in] enable  Enable / Disable
  */
-static inline void isp_ll_demosaic_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_awb_enable_wb_gain(isp_dev_t *hw, bool enable)
 {
-    hw->clk_en.clk_demosaic_force_on = enable;
+    hw->cntl.wbg_en = enable;
+}
+
+/**
+ * @brief Set AWB white balance gain clock control mode
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
+ */
+static inline void isp_ll_awb_set_wb_gain_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
+{
+    hw->clk_en.clk_wbg_force_on = mode;
+}
+
+/**
+ * @brief Set AWB white balance gain
+ *
+ * @param[in] hw              Hardware instance address
+ * @param[in] gain            WBG white balance gain
+ */
+static inline void isp_ll_awb_set_wb_gain(isp_dev_t *hw, isp_wbg_gain_t gain)
+{
+    hw->wbg_coef_r.wbg_r = gain.gain_r;
+    hw->wbg_coef_g.wbg_g = gain.gain_g;
+    hw->wbg_coef_b.wbg_b = gain.gain_b;
+}
+#else
+static inline void isp_ll_awb_enable_wb_gain(isp_dev_t *hw, bool enable)
+{
+    //for compatibility
+}
+
+static inline void isp_ll_awb_set_wb_gain_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
+{
+    //for compatibility
+}
+
+static inline void isp_ll_awb_set_wb_gain(isp_dev_t *hw, isp_wbg_gain_t gain)
+{
+    //for compatibility
+}
+#endif  //#if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
+
+/*---------------------------------------------------------------
+                      Demosaic
+---------------------------------------------------------------*/
+/**
+ * @brief Set demosaic clock control mode
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
+ */
+static inline void isp_ll_demosaic_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
+{
+    hw->clk_en.clk_demosaic_force_on = mode;
 }
 
 /**
@@ -1576,18 +1827,236 @@ static inline void isp_ll_demosaic_set_padding_line_tail_valid_end_pixel(isp_dev
     hw->demosaic_matrix_ctrl.demosaic_tail_pixen_pulse_th = end_pixel;
 }
 
+#if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
+/*---------------------------------------------------------------
+                      Shadow
+---------------------------------------------------------------*/
+/**
+ * @brief Shadow mode
+ *
+ * @param[in] hw      Hardware instance address
+ * @param[in] mode    'isp_ll_shadow_mode_t`
+ */
+static inline void isp_ll_shadow_set_mode(isp_dev_t *hw, isp_ll_shadow_mode_t mode)
+{
+    hw->shadow_reg_ctrl.shadow_update_sel = mode;
+}
+
+/**
+ * @brief Update BLC shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.blc_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.blc_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update DPC shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.dpc_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.dpc_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update BF shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.bf_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.bf_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update WBG shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.wbg_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.wbg_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update CCM shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.ccm_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.ccm_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update Sharpen shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.sharp_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.sharp_update = 1;
+
+    return true;
+}
+
+/**
+ * @brief Update Color shadow register
+ *
+ * @param[in] hw      Hardware instance address
+ * @return
+ *      - True if update is successful, False otherwise
+ */
+static inline bool isp_ll_shadow_update_color(isp_dev_t *hw)
+{
+    //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
+
+    if (hw->shadow_reg_ctrl.color_update == 1) {
+        return false;
+    }
+
+    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+    hw->shadow_reg_ctrl.color_update = 1;
+
+    return true;
+}
+
+#else
+static inline void isp_ll_shadow_set_mode(isp_dev_t *hw, isp_ll_shadow_mode_t mode)
+{
+    //for compatibility
+}
+
+static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+
+static inline bool isp_ll_shadow_update_color(isp_dev_t *hw)
+{
+    //for compatibility
+    return true;
+}
+#endif
+
 /*---------------------------------------------------------------
                       Sharpen
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable sharpen clock
+ * @brief Set sharpen clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  Enable / Disable
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_sharp_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_sharp_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_sharp_force_on = enable;
+    hw->clk_en.clk_sharp_force_on = mode;
 }
 
 /**
@@ -1740,25 +2209,25 @@ static inline uint8_t isp_ll_sharp_get_high_freq_pixel_max(isp_dev_t *hw)
                       RGB/YUV
 ---------------------------------------------------------------*/
 /**
- * @brief Enable / Disable rgb2yuv clock
+ * @brief Set rgb2yuv clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  0: hw control; 1: always on
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_rgb2yuv_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_rgb2yuv_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_rgb2yuv_force_on = enable;
+    hw->clk_en.clk_rgb2yuv_force_on = mode;
 }
 
 /**
- * @brief Enable / Disable yuv2rgb clock
+ * @brief Set yuv2rgb clock control mode
  *
  * @param[in] hw      Hardware instance address
- * @param[in] enable  0: hw control; 1: always on
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
  */
-static inline void isp_ll_yuv2rgb_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_yuv2rgb_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_yuv2rgb_force_on = enable;
+    hw->clk_en.clk_yuv2rgb_force_on = mode;
 }
 
 /**
@@ -1868,14 +2337,14 @@ static inline void isp_ll_gamma_set_correction_curve(isp_dev_t *hw, color_compon
                       HIST
 ---------------------------------------------------------------*/
 /**
- * @brief enable histogram clock
+ * @brief Set histogram clock control mode
  *
  * @param[in] hw Hardware instance address
- * @param[in] enable true: enable the clock. false: disable the clock
+ * @param[in] mode    'isp_ll_pipeline_clk_ctrl_t`
 */
-static inline void isp_ll_hist_clk_enable(isp_dev_t *hw, bool enable)
+static inline void isp_ll_hist_set_clk_ctrl_mode(isp_dev_t *hw, isp_ll_pipeline_clk_ctrl_t mode)
 {
-    hw->clk_en.clk_hist_force_on = enable;
+    hw->clk_en.clk_hist_force_on = mode;
 }
 
 /**
@@ -1943,7 +2412,7 @@ __attribute__((always_inline))
 static inline void isp_ll_hist_get_histogram_value(isp_dev_t *hw, uint32_t *histogram_value)
 {
     for (int i = 0; i < SOC_ISP_HIST_SEGMENT_NUMS; i++) {
-        histogram_value[i] = hw->hist_binn[i].hist_bin_n;
+        histogram_value[i] = hw->hist_bin[i].hist_bin_n;
     }
 }
 

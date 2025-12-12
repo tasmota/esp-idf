@@ -83,14 +83,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "uart_hal.c" "uart_hal_iram.c")
     endif()
 
-    if(CONFIG_SOC_GPIO_PORT)
-        list(APPEND srcs "gpio_hal.c")
-    endif()
-
-    if(CONFIG_SOC_RTCIO_PIN_COUNT)
-        list(APPEND srcs "rtc_io_hal.c")
-    endif()
-
     if(CONFIG_SOC_LEDC_SUPPORTED)
         list(APPEND srcs "ledc_hal.c" "ledc_hal_iram.c")
     endif()
@@ -127,10 +119,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "i2s_hal.c")
     endif()
 
-    if(CONFIG_SOC_SDM_SUPPORTED)
-        list(APPEND srcs "sdm_hal.c")
-    endif()
-
     if(CONFIG_SOC_SDMMC_HOST_SUPPORTED)
         list(APPEND srcs "sdmmc_hal.c")
     endif()
@@ -153,10 +141,6 @@ elseif(NOT BOOTLOADER_BUILD)
         if(CONFIG_SOC_ADC_DMA_SUPPORTED)
             list(APPEND srcs "adc_hal.c")
         endif()
-    endif()
-
-    if(CONFIG_SOC_MIPI_CSI_SUPPORTED)
-        list(APPEND srcs "mipi_csi_hal.c")
     endif()
 
     if(CONFIG_SOC_ECC_SUPPORTED)
@@ -204,6 +188,7 @@ elseif(NOT BOOTLOADER_BUILD)
     endif()
 
     if(CONFIG_SOC_GPSPI_SUPPORTED)
+        # Remember to add esp_hal_gpio to esp_hal_spi PRIV_REQUIRES!!!
         list(APPEND srcs
             "spi_hal.c"
             "spi_hal_iram.c"
@@ -238,14 +223,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "ds_hal.c")
     endif()
 
-    if(CONFIG_SOC_LCDCAM_CAM_SUPPORTED)
-        list(APPEND srcs "cam_hal.c")
-    endif()
-
-    if(CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED)
-        list(APPEND srcs "usb_serial_jtag_hal.c")
-    endif()
-
     if(CONFIG_SOC_TOUCH_SENSOR_SUPPORTED)
         # Source files for the legacy touch hal driver
         if(CONFIG_SOC_TOUCH_SENSOR_VERSION LESS 3)
@@ -270,6 +247,7 @@ idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${includes}
                        PRIV_INCLUDE_DIRS ${priv_include}
                        REQUIRES soc esp_rom
+                       PRIV_REQUIRES esp_hal_gpio
                        LDFRAGMENTS linker.lf)
 
 if(CONFIG_HAL_DEFAULT_ASSERTION_LEVEL EQUAL 1)

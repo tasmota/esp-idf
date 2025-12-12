@@ -131,14 +131,6 @@ endif()
 
 # Common API which is linked both for bootloader and app builds
 
-if(CONFIG_HAL_WDT_USE_ROM_IMPL)
-    if(CONFIG_IDF_TARGET_ESP32H4 AND NOT CONFIG_ESP32H4_SELECTS_REV_MP) # TODO: ESP32H4 IDF-13835
-        rom_linker_script("beta5.wdt")
-    else()
-        rom_linker_script("wdt")
-    endif()
-endif()
-
 if(CONFIG_HAL_SYSTIMER_USE_ROM_IMPL)
     if(CONFIG_IDF_TARGET_ESP32H4 AND NOT CONFIG_ESP32H4_SELECTS_REV_MP) # TODO: ESP32H4 IDF-13835
         rom_linker_script("beta5.systimer")
@@ -153,7 +145,7 @@ endif()
 
 if(ESP_TEE_BUILD)
     rom_linker_script("heap")
-    if(CONFIG_ESP_ROM_HAS_NEWLIB_NANO_FORMAT)
+    if(CONFIG_LIBC_NEWLIB AND CONFIG_ESP_ROM_HAS_NEWLIB_NANO_FORMAT)
         rom_linker_script("newlib-nano")
     endif()
     rom_linker_script("libc")

@@ -78,7 +78,6 @@ The driver of FIFOs works as below:
 #include <string.h>
 
 #include "soc/soc_memory_layout.h"
-#include "soc/gpio_periph.h"
 #include "soc/soc_caps.h"
 #include "soc/sdio_slave_periph.h"
 #include "esp_cpu.h"
@@ -356,15 +355,20 @@ esp_err_t sdio_slave_initialize(sdio_slave_config_t *config)
     esp_err_t r;
     intr_handle_t intr_handle = NULL;
     const int flags = 0;
-    r = esp_intr_alloc(ETS_SLC0_INTR_SOURCE, flags, sdio_intr, NULL, &intr_handle);
-    if (r != ESP_OK) {
-        return r;
-    }
 
     r = init_context(config);
-    if (r != ESP_OK) {
-        return r;
-    }
+    SDIO_SLAVE_CHECK(r == ESP_OK, "context initialization failed", r);
+
+    r = esp_intr_alloc_intrstatus(
+            ETS_SLC0_INTR_SOURCE,
+            flags,
+            (uint32_t)sdio_slave_hal_get_intr_status_reg(context.hal),
+            sdio_slave_ll_intr_status_mask,
+            sdio_intr,
+            NULL,
+            &intr_handle
+        );
+    SDIO_SLAVE_CHECK(r == ESP_OK, "interrupt allocation failed", r);
     context.intr_handle = intr_handle;
 
 #if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP

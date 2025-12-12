@@ -465,7 +465,7 @@ static esp_err_t do_dma_transaction_handler(i3c_master_bus_handle_t bus_handle, 
                 .length = dma_aligned_size,
                 .flags = {
                     .mark_eof = true,
-                    .mark_final = true,
+                    .mark_final = GDMA_FINAL_LINK_TO_NULL,
                 }
             };
 
@@ -491,7 +491,7 @@ static esp_err_t do_dma_transaction_handler(i3c_master_bus_handle_t bus_handle, 
                 .length = dma_aligned_size,
                 .flags = {
                     .mark_eof = true,
-                    .mark_final = true,
+                    .mark_final = GDMA_FINAL_LINK_TO_NULL,
                 }
             };
 
@@ -768,7 +768,7 @@ static esp_err_t i3c_master_prepare_transaction(i3c_master_i2c_device_handle_t d
 
     // Check if async transaction requires DMA
     if (dev_handle->bus_handle->async_transaction && !dev_handle->bus_handle->dma_initialized) {
-        ESP_LOGE(TAG, "Async transaction requires DMA, please call i3c_master_bus_decorate_dma() first");
+        ESP_LOGE(TAG, "Async transaction requires DMA, please call `i3c_master_bus_decorate_dma()` first");
         return ESP_ERR_INVALID_STATE;
     }
 

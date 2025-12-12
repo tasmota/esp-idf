@@ -20,6 +20,7 @@ from pytest_embedded.utils import find_by_suffix
 from pytest_ignore_test_results.ignore_results import ChildCase
 from pytest_ignore_test_results.ignore_results import ChildCasesStashKey
 
+from .constants import ECO_MARKERS
 from .utils import format_case_id
 from .utils import merge_junit_files
 from .utils import normalize_testcase_file_path
@@ -48,8 +49,8 @@ def requires_elf_or_map(case: PytestCase) -> bool:
     return False
 
 
-def skipped_targets(item: Function) -> t.Set[str]:
-    def _get_temp_markers_disabled_targets(marker_name: str) -> t.Set[str]:
+def skipped_targets(item: Function) -> set[str]:
+    def _get_temp_markers_disabled_targets(marker_name: str) -> set[str]:
         temp_marker = item.get_closest_marker(marker_name)
 
         if not temp_marker:
@@ -102,7 +103,7 @@ class IdfLocalPlugin:
         with open(KNOWN_GENERATE_TEST_CHILD_PIPELINE_WARNINGS_FILEPATH) as fr:
             known_warnings_dict = yaml.safe_load(fr) or dict()
 
-        self.exclude_no_env_markers_test_cases: t.Set[str] = set(known_warnings_dict['no_env_marker_test_cases'])
+        self.exclude_no_env_markers_test_cases: set[str] = set(known_warnings_dict['no_env_marker_test_cases'])
 
     @staticmethod
     def get_param(item: Function, key: str, default: t.Any = None) -> t.Any:
@@ -114,7 +115,7 @@ class IdfLocalPlugin:
         return item.callspec.params.get(key, default) or default
 
     @pytest.hookimpl(wrapper=True)
-    def pytest_collection_modifyitems(self, config: Config, items: t.List[Function]) -> t.Generator[None, None, None]:
+    def pytest_collection_modifyitems(self, config: Config, items: list[Function]) -> t.Generator[None, None, None]:
         yield  # throw it back to idf-ci
 
         deselected_items = []
@@ -164,6 +165,12 @@ class IdfLocalPlugin:
             if 'esp32c2' in case.targets and 'xtal_26mhz' not in case.all_markers:
                 item.add_marker('xtal_40mhz')
 
+            for eco_marker in ECO_MARKERS:
+                if eco_marker in case.all_markers:
+                    break
+            else:
+                item.add_marker('eco_default')
+
             if 'host_test' in case.all_markers:
                 item.add_marker('skip_app_downloader')  # host_test jobs will build the apps itself
 
@@ -176,14 +183,14 @@ class IdfLocalPlugin:
             config = item.funcargs['config']
             is_qemu = item.get_closest_marker('qemu') is not None
 
-            dut: t.Union[Dut, t.Tuple[Dut]] = item.funcargs['dut']  # type: ignore
-            if isinstance(dut, (list, tuple)):
+            dut: Dut | tuple[Dut] = item.funcargs['dut']  # type: ignore
+            if isinstance(dut, (list | tuple)):
                 res = []
                 for i, _dut in enumerate(dut):
                     res.extend(
                         [
                             ChildCase(
-                                format_case_id(target, config, case.name + f' {i}', is_qemu=is_qemu),
+                                format_case_id(target, config, case.name, is_qemu=is_qemu),
                                 self.UNITY_RESULT_MAPPINGS[case.result],
                             )
                             for case in _dut.testsuite.testcases
@@ -206,7 +213,7 @@ class IdfLocalPlugin:
         """
         Modify the junit reports. Format the unity c test case names.
         """
-        tempdir: t.Optional[str] = item.funcargs.get('test_case_tempdir')  # type: ignore
+        tempdir: str | None = item.funcargs.get('test_case_tempdir')  # type: ignore
         if not tempdir:
             return
 

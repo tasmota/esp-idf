@@ -9,7 +9,7 @@ if(${target} STREQUAL "linux")
     return()
 endif()
 
-set(requires esp_hal_dma esp_hal_usb)
+set(requires esp_hal_dma esp_hal_gpio esp_hal_usb)
 # only esp_hw_support/adc_share_hw_ctrl.c requires efuse component
 set(priv_requires efuse spi_flash bootloader_support esp_hal_wdt)
 
@@ -233,4 +233,9 @@ if(NOT non_os_build)
     if(CONFIG_SPIRAM)
         idf_component_optional_requires(PRIVATE esp_psram)
     endif()
+endif()
+
+if(${target} STREQUAL "esp32p4")
+    # for mipi_csi_share_hw_ctrl.c
+    idf_component_optional_requires(PRIVATE esp_hal_cam)
 endif()

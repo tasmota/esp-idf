@@ -819,18 +819,6 @@ config SOC_MCPWM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
-config SOC_PARLIO_GROUPS
-    int
-    default 1
-
-config SOC_PARLIO_TX_UNITS_PER_GROUP
-    int
-    default 1
-
-config SOC_PARLIO_RX_UNITS_PER_GROUP
-    int
-    default 1
-
 config SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH
     int
     default 16
@@ -1066,22 +1054,6 @@ config SOC_TWAI_CONTROLLER_NUM
 config SOC_TWAI_MASK_FILTER_NUM
     int
     default 1
-
-config SOC_TWAI_CLK_SUPPORT_XTAL
-    bool
-    default y
-
-config SOC_TWAI_BRP_MIN
-    int
-    default 2
-
-config SOC_TWAI_BRP_MAX
-    int
-    default 32768
-
-config SOC_TWAI_SUPPORTS_RX_STATUS
-    bool
-    default y
 
 config SOC_TWAI_SUPPORT_SLEEP_RETENTION
     bool

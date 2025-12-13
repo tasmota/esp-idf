@@ -24,6 +24,7 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_lcd_common.h"
+#include "freertos/FreeRTOS.h"
 
 static const char *TAG = "lcd_panel.io.spi";
 
@@ -97,7 +98,6 @@ esp_err_t esp_lcd_new_panel_io_spi(esp_lcd_spi_bus_handle_t bus, const esp_lcd_p
     // if the DC line is not encoded into any spi transaction phase or it's not controlled by SPI peripheral
     if (io_config->dc_gpio_num >= 0) {
         gpio_set_level(io_config->dc_gpio_num, 0);
-        gpio_func_sel(io_config->dc_gpio_num, PIN_FUNC_GPIO);
         gpio_output_enable(io_config->dc_gpio_num);
     }
 

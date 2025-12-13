@@ -333,9 +333,6 @@
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
 
 /*-------------------------- PARLIO CAPS --------------------------------------*/
-#define SOC_PARLIO_GROUPS                    1U  /*!< Number of parallel IO peripherals */
-#define SOC_PARLIO_TX_UNITS_PER_GROUP        1U  /*!< number of TX units in each group */
-#define SOC_PARLIO_RX_UNITS_PER_GROUP        1U  /*!< number of RX units in each group */
 #define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the TX unit */
 #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    16  /*!< Number of data lines of the RX unit */
 #define SOC_PARLIO_TX_RX_SHARE_INTERRUPT     1   /*!< TX and RX unit share the same interrupt source number */
@@ -438,10 +435,6 @@
 /*-------------------------- TWAI CAPS ---------------------------------------*/
 #define SOC_TWAI_CONTROLLER_NUM             2
 #define SOC_TWAI_MASK_FILTER_NUM            1U
-#define SOC_TWAI_CLK_SUPPORT_XTAL           1
-#define SOC_TWAI_BRP_MIN                    2
-#define SOC_TWAI_BRP_MAX                    32768
-#define SOC_TWAI_SUPPORTS_RX_STATUS         1
 #define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- eFuse CAPS----------------------------*/

@@ -34,6 +34,7 @@
 #define SOC_PCNT_SUPPORTED              1
 #define SOC_MCPWM_SUPPORTED             1
 #define SOC_TWAI_SUPPORTED              1
+#define SOC_TWAI_FD_SUPPORTED           1
 #define SOC_ETM_SUPPORTED               1
 #define SOC_PARLIO_SUPPORTED            1
 #define SOC_PARLIO_LCD_SUPPORTED        1
@@ -362,17 +363,11 @@
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
 
 /*-------------------------- PARLIO CAPS --------------------------------------*/
-#define SOC_PARLIO_GROUPS                    1U  /*!< Number of parallel IO peripherals */
-#define SOC_PARLIO_TX_UNITS_PER_GROUP        1U  /*!< number of TX units in each group */
-#define SOC_PARLIO_RX_UNITS_PER_GROUP        1U  /*!< number of RX units in each group */
 #define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    8  /*!< Number of data lines of the TX unit */
 #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    8  /*!< Number of data lines of the RX unit */
 #define SOC_PARLIO_TX_CLK_SUPPORT_GATING     1  /*!< Support gating TX clock */
 #define SOC_PARLIO_RX_CLK_SUPPORT_GATING     1  /*!< Support gating RX clock */
-#define SOC_PARLIO_RX_CLK_SUPPORT_OUTPUT     1  /*!< Support output RX clock to a GPIO */
-#define SOC_PARLIO_TRANS_BIT_ALIGN           1  /*!< Support bit alignment in transaction */
 #define SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION 1  /*!< Support loop transmission */
-#define SOC_PARLIO_TX_SUPPORT_EOF_FROM_DMA   1   /*!< Support to treat DMA EOF as TX unit EOF */
 #define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
 #define SOC_PARLIO_SUPPORT_I80_LCD           1   /*!< Support to drive I80 interfaced LCD */
 
@@ -493,12 +488,6 @@
 #define SOC_TWAI_CONTROLLER_NUM         2
 #define SOC_TWAI_MASK_FILTER_NUM        3
 #define SOC_TWAI_RANGE_FILTER_NUM       1U
-#define SOC_TWAI_BRP_MIN                1U
-#define SOC_TWAI_BRP_MAX                255
-#define SOC_TWAI_CLK_SUPPORT_XTAL       1
-#define SOC_TWAI_SUPPORTS_RX_STATUS     1
-#define SOC_TWAI_SUPPORT_FD             1
-#define SOC_TWAI_SUPPORT_TIMESTAMP      1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_PAD_JTAG 1

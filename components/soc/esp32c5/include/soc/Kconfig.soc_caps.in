@@ -291,6 +291,10 @@ config SOC_BITSCRAMBLER_SUPPORTED
     bool
     default y
 
+config SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED
+    bool
+    default y
+
 config SOC_XTAL_SUPPORT_40M
     bool
     default y
@@ -1522,6 +1526,10 @@ config SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE
 config SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC
     int
     default 4
+
+config SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
+    bool
+    default y
 
 config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
     bool

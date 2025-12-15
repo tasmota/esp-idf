@@ -1,7 +1,7 @@
 # Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
 
 components/esp_mm/test_apps/mm:
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
+  disable:
+    - if: IDF_TARGET in ["esp32s31"]
       temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14470
+      reason: not support yet # TODO: [ESP32S31] IDF-14669

@@ -92,10 +92,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "i3c_master_hal.c")
     endif()
 
-    if(CONFIG_SOC_ISP_SUPPORTED)
-        list(APPEND srcs "isp_hal.c")
-    endif()
-
     if(CONFIG_SOC_UHCI_SUPPORTED)
         list(APPEND srcs "uhci_hal.c")
     endif()
@@ -146,20 +142,6 @@ elseif(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_PPA_SUPPORTED)
         list(APPEND srcs "ppa_hal.c")
-    endif()
-
-    if(CONFIG_SOC_GPSPI_SUPPORTED)
-        # Remember to add esp_hal_gpio to esp_hal_spi PRIV_REQUIRES!!!
-        list(APPEND srcs
-            "spi_hal.c"
-            "spi_hal_iram.c"
-            "spi_slave_hal.c"
-            "spi_slave_hal_iram.c"
-        )
-
-        if(CONFIG_SOC_SPI_SUPPORT_SLAVE_HD_VER2)
-            list(APPEND srcs "spi_slave_hd_hal.c")
-        endif()
     endif()
 
     if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)

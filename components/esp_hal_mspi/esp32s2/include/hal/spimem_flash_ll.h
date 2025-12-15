@@ -18,8 +18,7 @@
 #include <sys/param.h> // For MIN/MAX
 #include <stdbool.h>
 #include <string.h>
-
-#include "soc/spi_periph.h"
+#include "soc/spi_mem_reg.h"
 #include "soc/spi_mem_struct.h"
 #include "hal/assert.h"
 #include "hal/spi_types.h"
@@ -256,6 +255,26 @@ static inline void spimem_flash_ll_set_write_protect(spi_mem_dev_t *dev, bool wp
     } else {
         dev->cmd.flash_wren = 1;
     }
+}
+
+/**
+ * Drive Flash into power down mode
+ *
+ * @param dev Beginning address of the peripheral registers.
+ */
+static inline void spimem_flash_ll_enter_dpd(spi_mem_dev_t *dev)
+{
+    dev->cmd.flash_dp = 1;
+}
+
+/**
+ * Releases Flash from the power-down state
+ *
+ * @param dev Beginning address of the peripheral registers.
+ */
+static inline void spimem_flash_ll_exit_dpd(spi_mem_dev_t *dev)
+{
+    dev->cmd.flash_res = 1;
 }
 
 /**

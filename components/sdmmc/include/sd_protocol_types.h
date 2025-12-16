@@ -191,6 +191,9 @@ typedef struct {
                                                  Currently this is only used by the SDIO driver. Set this flag when
                                                  using SDIO CMD53 byte mode, with user buffer that is behind the cache
                                                  or not aligned to 4 byte boundary. */
+#define SDMMC_HOST_FLAG_SPI_IGNORE_DATA_CRC \
+                                BIT(7)      /*!< SPI mode only: Do not enable CRC verification (skip CMD59).
+                                                 Not recommended as it disables data integrity checking. */
     int slot;                   /*!< slot number, to be passed to host functions */
     int max_freq_khz;           /*!< max frequency supported by the host */
 #define SDMMC_FREQ_DEFAULT      20000       /*!< SD/MMC Default speed (limited by clock divider) */

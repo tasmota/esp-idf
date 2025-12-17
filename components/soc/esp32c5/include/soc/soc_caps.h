@@ -81,7 +81,7 @@
 #define SOC_ASSIST_DEBUG_SUPPORTED      1
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SDIO_SLAVE_SUPPORTED        1
-#define SOC_SPI_FLASH_SUPPORTED         1     // TODO: [ESP32C5] IDF-8715
+#define SOC_SPI_FLASH_SUPPORTED         1
 #define SOC_ECDSA_SUPPORTED             1
 #define SOC_RNG_SUPPORTED               1
 #define SOC_KEY_MANAGER_SUPPORTED       1
@@ -406,27 +406,12 @@
 #define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
 
 /*-------------------------- SPI CAPS ----------------------------------------*/
-#define SOC_SPI_PERIPH_NUM          2
-#define SOC_SPI_PERIPH_CS_NUM(i)    6
-#define SOC_SPI_MAX_CS_NUM          6
-#define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
-
-#define SOC_SPI_SUPPORT_DDRCLK              1
-#define SOC_SPI_SLAVE_SUPPORT_SEG_TRANS     1
-#define SOC_SPI_SUPPORT_CD_SIG              1
-#define SOC_SPI_SUPPORT_CONTINUOUS_TRANS    1
+#define SOC_SPI_PERIPH_NUM                  2
+#define SOC_SPI_PERIPH_CS_NUM(i)            6
+#define SOC_SPI_MAXIMUM_BUFFER_SIZE         64
 #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
 #define SOC_SPI_SUPPORT_SLEEP_RETENTION     1
-#define SOC_SPI_SUPPORT_CLK_XTAL            1
-#define SOC_SPI_SUPPORT_CLK_PLL_F160M       1
-#define SOC_SPI_SUPPORT_CLK_RC_FAST         1
-
-// Peripheral supports DIO, DOUT, QIO, or QOUT
-// host_id = 0 -> SPI0/SPI1, host_id = 1 -> SPI2,
-#define SOC_SPI_PERIPH_SUPPORT_MULTILINE_MODE(host_id)  ({(void)host_id; 1;})
-
-#define SOC_MEMSPI_IS_INDEPENDENT 1
-#define SOC_SPI_MAX_PRE_DIVIDER 16
+#define SOC_SPI_MAX_BITWIDTH(host_id)       (4) // Supported line mode: SPI2: 1, 2, 4
 
 /*-------------------------- SPIRAM CAPS ----------------------------------------*/
 #define SOC_SPIRAM_XIP_SUPPORTED        1
@@ -446,6 +431,7 @@
 #define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 
+#define SOC_MEMSPI_IS_INDEPENDENT                 1
 #define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED        1
 #define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
 #define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
@@ -668,6 +654,7 @@
 #define SOC_BLE_MULTI_CONN_OPTIMIZATION     (1)    /*!< Support multiple connections optimization */
 #define SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED  (1)    /*!< Support For BLE Periodic Adv Enhancements */
 #define SOC_BLE_CTE_SUPPORTED               (1)    /*!< Support Bluetooth LE Constant Tone Extension (CTE) */
+#define SOC_BLE_PERIODIC_ADV_WITH_RESPONSE  (1)    /*!< Support Bluetooth LE Periodic Advertising with Response (PAwR) */
 
 /*------------------------------------- PHY CAPS -------------------------------------*/
 // #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/

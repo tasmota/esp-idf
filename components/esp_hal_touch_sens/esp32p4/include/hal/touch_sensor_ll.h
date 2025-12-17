@@ -60,6 +60,8 @@ extern "C" {
 
 #define TOUCH_LL_SUPPORT_PROX_DONE         (1)
 
+#define TOUCH_LL_INTR_SOURCE                ETS_LP_TOUCH_INTR_SOURCE  // Touch sensor interrupt source, defined in ll for the driver compatibility
+
 /**
  * Enable/disable clock gate of touch sensor.
  *

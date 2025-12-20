@@ -83,7 +83,7 @@
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1
 #define SOC_REG_I2C_SUPPORTED           1
 #define SOC_CLK_TREE_SUPPORTED          1
-// #define SOC_ASSIST_DEBUG_SUPPORTED      1    // TODO: [ESP32H4] IDF-12310
+#define SOC_ASSIST_DEBUG_SUPPORTED      1
 #define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1
 #define SOC_SPIRAM_SUPPORTED            1
@@ -167,8 +167,8 @@
 #define SOC_CPU_HAS_DSP                 1
 #define SOC_CPU_COPROC_NUM              2
 
-#define SOC_CPU_BREAKPOINTS_NUM         4
-#define SOC_CPU_WATCHPOINTS_NUM         4
+#define SOC_CPU_BREAKPOINTS_NUM         3
+#define SOC_CPU_WATCHPOINTS_NUM         3
 #define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE         0x80000000 // bytes
 
 #define SOC_CPU_HAS_PMA                 1
@@ -379,6 +379,7 @@
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
+#define SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED               (1)
 #define SOC_MEMSPI_IS_INDEPENDENT                          1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/

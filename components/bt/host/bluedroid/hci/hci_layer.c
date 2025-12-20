@@ -51,6 +51,10 @@
 
 #define HCI_DOWNSTREAM_DATA_QUEUE_IDX   (0)
 
+#ifndef MIN
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#endif
+
 typedef struct {
     bool timer_is_set;
     osi_alarm_t *command_response_timer;
@@ -452,10 +456,12 @@ static bool filter_incoming_event(BT_HDR *packet)
         STREAM_TO_UINT8(hci_host_env.command_credits, stream);
         STREAM_TO_UINT16(opcode, stream);
         wait_entry = get_waiting_command(opcode);
-        metadata = (hci_cmd_metadata_t *)(wait_entry->data);
         if (!wait_entry) {
             HCI_TRACE_WARNING("%s command complete event with no matching command. opcode: 0x%x.", __func__, opcode);
-        } else if (metadata->command_complete_cb) {
+            goto intercepted;
+        }
+        metadata = (hci_cmd_metadata_t *)(wait_entry->data);
+        if (metadata->command_complete_cb) {
             metadata->command_complete_cb(packet, metadata->context);
 #if (BLE_50_FEATURE_SUPPORT == TRUE)
             BlE_SYNC *sync_info =  btsnd_hcic_ble_get_sync_info();
@@ -482,10 +488,12 @@ static bool filter_incoming_event(BT_HDR *packet)
         // If a command generates a command status event, it won't be getting a command complete event
 
         wait_entry = get_waiting_command(opcode);
-        metadata = (hci_cmd_metadata_t *)(wait_entry->data);
         if (!wait_entry) {
             HCI_TRACE_WARNING("%s command status event with no matching command. opcode: 0x%x", __func__, opcode);
-        } else if (metadata->command_status_cb) {
+            goto intercepted;
+        }
+        metadata = (hci_cmd_metadata_t *)(wait_entry->data);
+        if (metadata->command_status_cb) {
             metadata->command_status_cb(status, &metadata->command, metadata->context);
         }
 
@@ -707,3 +715,27 @@ const char *hci_status_code_to_string(uint8_t status)
     }
 }
 #endif
+
+const char *bt_hex2str(const void *buf, size_t len)
+{
+    static const char hex[] = "0123456789abcdef";
+    static char str[129];
+    const uint8_t *b = buf;
+    size_t i;
+
+    len = MIN(len, (sizeof(str) - 1) / 2);
+
+    for (i = 0; i < len; i++) {
+        str[i * 2] = hex[b[i] >> 4];
+        str[i * 2 + 1] = hex[b[i] & 0xf];
+    }
+
+    str[i * 2] = '\0';
+
+    return str;
+}
+
+int get_hci_work_queue_size(int wq_idx)
+{
+    return osi_thread_queue_wait_size(hci_host_thread, wq_idx);
+}

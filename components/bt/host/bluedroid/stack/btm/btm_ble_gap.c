@@ -2136,6 +2136,7 @@ void BTM_Recovery_Pre_State(void)
 {
 #if ((BLE_42_ADV_EN == TRUE) || (BLE_42_SCAN_EN == TRUE))
     tBTM_BLE_INQ_CB *ble_inq_cb = &btm_cb.ble_ctr_cb.inq_var;
+    BTM_TRACE_DEBUG("%s state=0x%x", __func__, ble_inq_cb->state);
 #endif // #if ((BLE_42_ADV_EN == TRUE) || (BLE_42_SCAN_EN == TRUE))
 #if (BLE_42_ADV_EN == TRUE)
     if (ble_inq_cb->state & BTM_BLE_ADVERTISING) {
@@ -3110,6 +3111,13 @@ void btm_ble_cache_adv_data(BD_ADDR bda, tBTM_INQ_RESULTS *p_cur, UINT8 data_len
         memset(p_le_inq_cb->adv_data_cache, 0, BTM_BLE_CACHE_ADV_DATA_MAX);
         p_cur->adv_data_len = 0;
         p_cur->scan_rsp_len = 0;
+    }
+
+    /* Additional validation to prevent potential integer overflow */
+    if (data_len > BTM_BLE_CACHE_ADV_DATA_MAX) {
+        BTM_TRACE_ERROR("BLE advertising data length exceeds maximum: %u > %u",
+                    data_len, BTM_BLE_CACHE_ADV_DATA_MAX);
+        return;
     }
 
     if (data_len > 0) {

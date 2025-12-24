@@ -68,16 +68,8 @@ if(CONFIG_SOC_DEBUG_PROBE_SUPPORTED)
     list(APPEND srcs "${target_folder}/debug_probe_periph.c")
 endif()
 
-if(CONFIG_SOC_LEDC_SUPPORTED)
-    list(APPEND srcs "${target_folder}/ledc_periph.c")
-endif()
-
 if(CONFIG_SOC_I3C_MASTER_SUPPORTED)
     list(APPEND srcs "${target_folder}/i3c_master_periph.c")
-endif()
-
-if(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
-    list(APPEND srcs "${target_folder}/temperature_sensor_periph.c")
 endif()
 
 if(CONFIG_SOC_MPI_SUPPORTED)

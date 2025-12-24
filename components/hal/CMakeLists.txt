@@ -84,10 +84,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "uart_hal.c" "uart_hal_iram.c")
     endif()
 
-    if(CONFIG_SOC_LEDC_SUPPORTED)
-        list(APPEND srcs "ledc_hal.c" "ledc_hal_iram.c")
-    endif()
-
     if(CONFIG_SOC_I3C_MASTER_SUPPORTED)
         list(APPEND srcs "i3c_master_hal.c")
     endif()
@@ -160,10 +156,6 @@ elseif(NOT BOOTLOADER_BUILD)
     if(CONFIG_SOC_DIG_SIGN_SUPPORTED AND NOT CONFIG_IDF_TARGET_ESP32S2)
         # For ESP32-S2 we do not have DS HAL layer implementation yet
         list(APPEND srcs "ds_hal.c")
-    endif()
-
-    if(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
-        list(APPEND srcs "temperature_sensor_hal.c")
     endif()
 
     if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/${target}/rtc_cntl_hal.c")

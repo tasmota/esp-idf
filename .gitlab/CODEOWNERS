@@ -95,6 +95,7 @@
 /components/esp_event/                @esp-idf-codeowners/system
 /components/esp_gdbstub/              @esp-idf-codeowners/debugging
 /components/esp_hal_*/                @esp-idf-codeowners/peripherals
+/components/esp_hal_pmu/              @esp-idf-codeowners/power-management @esp-idf-codeowners/peripherals
 /components/esp_hid/                  @esp-idf-codeowners/bluetooth
 /components/esp_http_client/          @esp-idf-codeowners/app-utilities
 /components/esp_http_server/          @esp-idf-codeowners/app-utilities
@@ -216,6 +217,7 @@
 /tools/cmake/                 @esp-idf-codeowners/build-config
 /tools/cmake/toolchain-*.cmake      @esp-idf-codeowners/toolchain
 /tools/cmakev2/               @esp-idf-codeowners/build-config
+/tools/docs/                  @esp-idf-codeowners/docs @esp-idf-codeowners/tools
 /tools/esp_app_trace/         @esp-idf-codeowners/debugging
 /tools/gdb_panic_server.py    @esp-idf-codeowners/debugging
 /tools/kconfig*/              @esp-idf-codeowners/build-config

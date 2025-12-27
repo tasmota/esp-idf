@@ -47,8 +47,7 @@ else()
 endif()
 
 if(esp_tee_build)
-    list(APPEND srcs "apm_hal.c"
-                     "brownout_hal.c")
+    list(APPEND srcs "apm_hal.c")
 
     if(CONFIG_SOC_AES_SUPPORTED)
         list(APPEND srcs "aes_hal.c")
@@ -80,16 +79,8 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "systimer_hal.c")
     endif()
 
-    if(CONFIG_SOC_UART_SUPPORTED)
-        list(APPEND srcs "uart_hal.c" "uart_hal_iram.c")
-    endif()
-
     if(CONFIG_SOC_I3C_MASTER_SUPPORTED)
         list(APPEND srcs "i3c_master_hal.c")
-    endif()
-
-    if(CONFIG_SOC_UHCI_SUPPORTED)
-        list(APPEND srcs "uhci_hal.c")
     endif()
 
     if(CONFIG_SOC_SDMMC_HOST_SUPPORTED)
@@ -124,24 +115,8 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "${target}/modem_clock_hal.c")
     endif()
 
-    if(CONFIG_SOC_PAU_SUPPORTED)
-        list(APPEND srcs "${target}/pau_hal.c")
-    endif()
-
-    if(CONFIG_SOC_BOD_SUPPORTED)
-        list(APPEND srcs "brownout_hal.c")
-    endif()
-
-    if(CONFIG_SOC_VBAT_SUPPORTED)
-        list(APPEND srcs "vbat_hal.c")
-    endif()
-
     if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)
         list(APPEND srcs "sdio_slave_hal.c")
-    endif()
-
-    if(CONFIG_SOC_PMU_SUPPORTED)
-        list(APPEND srcs "${target}/pmu_hal.c")
     endif()
 
     if(CONFIG_SOC_APM_SUPPORTED)
@@ -157,11 +132,6 @@ elseif(NOT BOOTLOADER_BUILD)
         # For ESP32-S2 we do not have DS HAL layer implementation yet
         list(APPEND srcs "ds_hal.c")
     endif()
-
-    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/${target}/rtc_cntl_hal.c")
-        list(APPEND srcs "${target}/rtc_cntl_hal.c")
-    endif()
-
 endif()
 
 idf_component_register(SRCS ${srcs}

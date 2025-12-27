@@ -234,7 +234,9 @@
 #define SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP  1
 
 // The Clock Out signal is route to the pin by GPIO matrix
-// #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX    1 TODO: [ESP32H4] IDF-12361
+#define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX        (1)
+#define SOC_CLOCKOUT_HAS_SOURCE_GATE            (1)
+#define SOC_GPIO_CLOCKOUT_CHANNEL_NUM           (3)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT                 6
@@ -447,9 +449,6 @@
 #define SOC_UART_SUPPORT_RTC_CLK        (1)         /*!< Support RTC clock as the clock source */
 #define SOC_UART_SUPPORT_XTAL_CLK       (1)         /*!< Support XTAL clock as the clock source */
 #define SOC_UART_SUPPORT_WAKEUP_INT     (1)         /*!< Support UART wakeup interrupt */
-
-// UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
-#define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
 #define SOC_UART_SUPPORT_SLEEP_RETENTION   (1)         /*!< Support back up registers before sleep */
 

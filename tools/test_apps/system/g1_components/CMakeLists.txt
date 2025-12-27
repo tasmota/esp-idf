@@ -18,8 +18,10 @@ set(esp_hal_components
     esp_hal_gpspi
     esp_hal_timg
     esp_hal_touch_sens
+    esp_hal_uart
     esp_hal_usb
     esp_hal_wdt
+    esp_hal_pmu
 )
 set(COMPONENTS ${g0_components} ${g1_components} ${esp_hal_components} main)
 

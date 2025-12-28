@@ -92,10 +92,6 @@ elseif(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "i3c_master_hal.c")
     endif()
 
-    if(CONFIG_SOC_RMT_SUPPORTED)
-        list(APPEND srcs "rmt_hal.c")
-    endif()
-
     if(CONFIG_SOC_UHCI_SUPPORTED)
         list(APPEND srcs "uhci_hal.c")
     endif()
@@ -150,10 +146,6 @@ elseif(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_JPEG_CODEC_SUPPORTED)
         list(APPEND srcs "jpeg_hal.c")
-    endif()
-
-    if(CONFIG_SOC_PPA_SUPPORTED)
-        list(APPEND srcs "ppa_hal.c")
     endif()
 
     if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)

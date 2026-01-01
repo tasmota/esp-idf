@@ -174,7 +174,7 @@ static esp_err_t parlio_tx_unit_init_dma(parlio_tx_unit_t *tx_unit, const parlio
 
     // configure DMA transfer parameters
     gdma_transfer_config_t trans_cfg = {
-        .max_data_burst_size = config->dma_burst_size ? config->dma_burst_size : 16, // Enable DMA burst transfer for better performance,
+        .max_data_burst_size = config->dma_burst_size ? config->dma_burst_size : 32, // Enable DMA burst transfer for better performance,
         .access_ext_mem = true, // support transmit PSRAM buffer
     };
     ESP_RETURN_ON_ERROR(gdma_config_transfer(tx_unit->dma_chan, &trans_cfg), TAG, "config DMA transfer failed");
@@ -481,7 +481,7 @@ static void parlio_mount_buffer(parlio_tx_unit_t *tx_unit, parlio_tx_trans_desc_
         .flags = {
             // if transmission is loop, we don't need to generate the EOF for 1-bit data width, DIG-559
             .mark_eof = tx_unit->data_width == 1 ? !t->flags.loop_transmission : true,
-            .mark_final = !t->flags.loop_transmission,
+            .mark_final = t->flags.loop_transmission ? GDMA_FINAL_LINK_TO_START : GDMA_FINAL_LINK_TO_NULL,
         }
     };
 

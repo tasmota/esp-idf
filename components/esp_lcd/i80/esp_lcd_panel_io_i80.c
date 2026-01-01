@@ -500,7 +500,7 @@ static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, cons
         .length = trans_desc->data_length,
         .flags = {
             .mark_eof = true,
-            .mark_final = true, // singly link list, mark final descriptor
+            .mark_final = GDMA_FINAL_LINK_TO_NULL, // singly link list, mark final descriptor
         }
     };
     gdma_link_mount_buffers(bus->dma_link, 0, &mount_config, 1, NULL);
@@ -618,7 +618,7 @@ static esp_err_t lcd_i80_init_dma_link(esp_lcd_i80_bus_handle_t bus, const esp_l
     gdma_apply_strategy(bus->dma_chan, &strategy_config);
     // config DMA transfer parameters
     gdma_transfer_config_t trans_cfg = {
-        .max_data_burst_size = bus_config->dma_burst_size ? bus_config->dma_burst_size : 16, // Enable DMA burst transfer for better performance
+        .max_data_burst_size = bus_config->dma_burst_size ? bus_config->dma_burst_size : 32, // Enable DMA burst transfer for better performance
         .access_ext_mem = true, // the LCD can carry pixel buffer from the external memory
     };
     ESP_RETURN_ON_ERROR(gdma_config_transfer(bus->dma_chan, &trans_cfg), TAG, "config DMA transfer failed");
@@ -821,7 +821,7 @@ IRAM_ATTR static void i80_lcd_default_isr_handler(void *args)
                     .length = trans_desc->data_length,
                     .flags = {
                         .mark_eof = true,
-                        .mark_final = true, // singly link list, mark final descriptor
+                        .mark_final = GDMA_FINAL_LINK_TO_NULL, // singly link list, mark final descriptor
                     }
                 };
                 gdma_link_mount_buffers(bus->dma_link, 0, &mount_config, 1, NULL);

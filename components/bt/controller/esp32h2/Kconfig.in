@@ -242,7 +242,7 @@ config BT_LE_CTE_FEATURE_ENABLED
 
 config BT_LE_PERIODIC_ADV_WITH_RESPONSE_ENABLED
     bool "Enable BLE periodic advertising with response"
-    depends on BT_LE_50_FEATURE_SUPPORT
+    depends on BT_LE_50_FEATURE_SUPPORT && SOC_BLE_PERIODIC_ADV_WITH_RESPONSE
     default n
     help
         This enables BLE periodic advertising with response feature
@@ -981,3 +981,11 @@ menu "Scheduling Priority Level Config"
         default 2 if BT_LE_SYNC_SCHED_PRIO_HIGH_LEVEL
         default 1
 endmenu
+
+config BT_LE_CTRL_SLV_FAST_RX_CONN_DATA_EN
+    bool "Enable Peripheral fast PDU reception during latency"
+    default n
+    help
+        When this option is enabled, the Controller continues receiving PDUs
+        In the next connection event instead of entering latency
+        After a data packet is received.

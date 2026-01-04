@@ -227,6 +227,7 @@ void btm_ble_update_resolving_list(BD_ADDR pseudo_bda, BOOLEAN add)
 void btm_ble_clear_resolving_list_complete(UINT8 *p, UINT16 evt_len)
 {
     UINT8 status = 0;
+
     STREAM_TO_UINT8(status, p);
 
     BTM_TRACE_DEBUG("%s status=%d", __func__, status);
@@ -984,6 +985,10 @@ BOOLEAN btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC *p_dev_rec)
 *******************************************************************************/
 void btm_ble_resolving_list_remove_dev(tBTM_SEC_DEV_REC *p_dev_rec)
 {
+    BTM_TRACE_EVENT ("%s - bd_addr=%02x:%02x:%02x:%02x:%02x:%02x", __func__,
+                     p_dev_rec->bd_addr[0], p_dev_rec->bd_addr[1], p_dev_rec->bd_addr[2],
+                     p_dev_rec->bd_addr[3], p_dev_rec->bd_addr[4], p_dev_rec->bd_addr[5]);
+
     UINT8 rl_mask = btm_cb.ble_ctr_cb.rl_state;
 
     BTM_TRACE_EVENT ("%s\n", __func__);

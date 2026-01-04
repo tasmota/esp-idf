@@ -1128,7 +1128,9 @@ static void btu_hcif_esco_connection_chg_evt (UINT8 *p)
 static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_len,
         void *p_cplt_cback)
 {
+#if (BLE_INCLUDED == TRUE)
     uint8_t status;
+#endif // (BLE_INCLUDED == TRUE)
     switch (opcode) {
 #if (CLASSIC_BT_INCLUDED == TRUE)
     case HCI_INQUIRY_CANCEL:
@@ -1140,7 +1142,7 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
         break;
 
     case HCI_DELETE_STORED_LINK_KEY:
-        btm_delete_stored_link_key_complete (p);
+        btm_delete_stored_link_key_complete (p, evt_len);
         break;
 
     case HCI_GET_LINK_QUALITY:
@@ -1151,24 +1153,24 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
         btm_read_local_name_complete (p, evt_len);
         break;
     case HCI_READ_RSSI:
-        btm_read_rssi_complete (p);
+        btm_read_rssi_complete (p, evt_len);
         break;
     case HCI_BLE_READ_CHNL_MAP:
         btm_read_channel_map_complete (p);
         break;
     case HCI_READ_TRANSMIT_POWER_LEVEL:
 #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
-        btm_read_tx_power_complete(p, FALSE);
+        btm_read_tx_power_complete(p, evt_len, FALSE);
 #endif // #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
         break;
 #if (CLASSIC_BT_INCLUDED == TRUE)
     case HCI_CREATE_CONNECTION_CANCEL:
-        btm_create_conn_cancel_complete(p);
+        btm_create_conn_cancel_complete(p, evt_len);
         break;
 #endif // #if (CLASSIC_BT_INCLUDED == TRUE)
     case HCI_READ_LOCAL_OOB_DATA:
 #if BTM_OOB_INCLUDED == TRUE && SMP_INCLUDED == TRUE
-        btm_read_local_oob_complete(p);
+        btm_read_local_oob_complete(p, evt_len);
 #endif
         break;
 
@@ -1240,7 +1242,7 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
 
     case HCI_BLE_READ_ADV_CHNL_TX_POWER:
 #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
-        btm_read_tx_power_complete(p, TRUE);
+        btm_read_tx_power_complete(p, evt_len, TRUE);
 #endif // #if (BLE_HOST_READ_TX_POWER_EN == TRUE)
         break;
 #if (BLE_42_ADV_EN == TRUE)
@@ -1395,10 +1397,6 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
         if ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC) {
             btm_vsc_complete (p, opcode, evt_len, (tBTM_CMPL_CB *)p_cplt_cback);
         }
-        STREAM_TO_UINT8  (status, p);
-        if(status != HCI_SUCCESS) {
-            HCI_TRACE_ERROR("CC evt: op=0x%x, status=0x%x", opcode, status);
-        }
         break;
     }
     }
@@ -1420,6 +1418,10 @@ static void btu_hcif_command_complete_evt_on_task(BT_HDR *event)
     command_opcode_t opcode;
     uint8_t *stream = hack->response->data + hack->response->offset + 3; // 2 to skip the event headers, 1 to skip the command credits
     STREAM_TO_UINT16(opcode, stream);
+
+    if (*stream != HCI_SUCCESS) {
+        HCI_TRACE_WARNING("opcode=0x%04x, status= %02x: %s", opcode, *stream, hci_status_code_to_string(*stream));
+    }
 
     btu_hcif_hdl_command_complete(
         opcode,
@@ -1506,7 +1508,7 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
         void *p_vsc_status_cback)
 {
     if (status != HCI_SUCCESS){
-        HCI_TRACE_WARNING("%s,opcode:0x%04x,status:0x%02x", __func__, opcode,status);
+        HCI_TRACE_WARNING("opcode=0x%04x, status= %02x: %s", opcode, status, hci_status_code_to_string(status));
     }
     BD_ADDR         bd_addr;
     UINT16          handle;

@@ -23,11 +23,13 @@
 #include "hal/mmu_hal.h"
 #include "hal/mmu_ll.h"
 #include "hal/cache_ll.h"
+#include "hal/efuse_hal.h"
 #include "soc/soc_caps.h"
 #include "esp_private/esp_psram_io.h"
 #include "esp_private/esp_psram_extram.h"
 #include "esp_private/esp_mmu_map_private.h"
 #include "esp_private/esp_psram_impl.h"
+#include "esp_private/esp_psram_mspi.h"
 #include "esp_private/startup_internal.h"
 #if SOC_SPIRAM_XIP_SUPPORTED
 #include "esp_private/mmu_psram_flash.h"
@@ -111,17 +113,21 @@ typedef struct {
 static psram_ctx_t s_psram_ctx;
 static const DRAM_ATTR char TAG[] = "esp_psram";
 
-ESP_SYSTEM_INIT_FN(add_psram_to_heap, CORE, BIT(0), 103)
+ESP_SYSTEM_INIT_FN(psram_core_stage_init, CORE, BIT(0), 103)
 {
+    esp_err_t ret = ESP_FAIL;
+
 #if CONFIG_SPIRAM_BOOT_INIT && (CONFIG_SPIRAM_USE_CAPS_ALLOC || CONFIG_SPIRAM_USE_MALLOC)
 
 #if (CONFIG_IDF_TARGET_ESP32C5 && CONFIG_ESP32C5_REV_MIN_FULL <= 100) || (CONFIG_IDF_TARGET_ESP32C61 && CONFIG_ESP32C61_REV_MIN_FULL <= 100)
-    ESP_EARLY_LOGW(TAG, "Due to hardware issue on ESP32-C5/C61 (Rev v1.0), PSRAM contents won't be encrypted (for flash encryption enabled case)");
-    ESP_EARLY_LOGW(TAG, "Please avoid using PSRAM for security sensitive data e.g., TLS stack allocations (CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC)");
+    if (efuse_hal_chip_revision() <= 100) {
+        ESP_EARLY_LOGW(TAG, "Due to hardware issue on ESP32-C5/C61 (Rev v1.0), PSRAM contents won't be encrypted (for flash encryption enabled case)");
+        ESP_EARLY_LOGW(TAG, "Please avoid using PSRAM for security sensitive data e.g., TLS stack allocations (CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC)");
+    }
 #endif
     if (esp_psram_is_initialized()) {
-        esp_err_t r = esp_psram_extram_add_to_heap_allocator();
-        if (r != ESP_OK) {
+        ret = esp_psram_extram_add_to_heap_allocator();
+        if (ret != ESP_OK) {
             ESP_EARLY_LOGE(TAG, "External RAM could not be added to heap!");
             abort();
         }
@@ -130,7 +136,14 @@ ESP_SYSTEM_INIT_FN(add_psram_to_heap, CORE, BIT(0), 103)
 #endif
     }
 #endif
-    return ESP_OK;
+
+    ret = esp_psram_mspi_register_isr();
+    if (ret != ESP_OK) {
+        ESP_EARLY_LOGE(TAG, "Failed to register PSRAM ISR!");
+        abort();
+    }
+
+    return ret;
 }
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -423,8 +436,10 @@ esp_err_t esp_psram_init(void)
 
 #if CONFIG_SPIRAM_FETCH_INSTRUCTIONS || CONFIG_SPIRAM_RODATA
 #if (CONFIG_IDF_TARGET_ESP32C5 && CONFIG_ESP32C5_REV_MIN_FULL <= 100) || (CONFIG_IDF_TARGET_ESP32C61 && CONFIG_ESP32C61_REV_MIN_FULL <= 100)
-    ESP_EARLY_LOGW(TAG, "Due to hardware issue on ESP32-C5/C61 (Rev v1.0), PSRAM contents won't be encrypted (for flash encryption enabled case)");
-    ESP_EARLY_LOGW(TAG, "Please avoid using PSRAM for execution as the code/rodata shall be copied as plaintext and this could pose a security risk.");
+    if (efuse_hal_chip_revision() <= 100) {
+        ESP_EARLY_LOGW(TAG, "Due to hardware issue on ESP32-C5/C61 (Rev v1.0), PSRAM contents won't be encrypted (for flash encryption enabled case)");
+        ESP_EARLY_LOGW(TAG, "Please avoid using PSRAM for execution as the code/rodata shall be copied as plaintext and this could pose a security risk.");
+    }
 #endif
     s_xip_psram_placement(&psram_available_size, &start_page);
 #endif

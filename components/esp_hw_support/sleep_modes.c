@@ -42,6 +42,10 @@
 #include "hal/rtc_io_hal.h"
 #include "hal/clk_tree_hal.h"
 
+#if SOC_IS(ESP32C5) // Remove after all chips rng_ll.h implemented
+#include "hal/rng_ll.h"
+#endif
+
 #if SOC_SLEEP_SYSTIMER_STALL_WORKAROUND
 #include "hal/systimer_ll.h"
 #endif
@@ -136,9 +140,7 @@
 #include "soc/pmu_icg_mapping.h"
 #endif
 
-#if SOC_LP_TIMER_SUPPORTED
-#include "hal/lp_timer_hal.h"
-#endif
+#include "hal/rtc_timer_hal.h"
 
 #if SOC_VBAT_SUPPORTED
 #include "esp_vbat.h"
@@ -174,6 +176,10 @@
 #elif CONFIG_IDF_TARGET_ESP32S3
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (382)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (133)
+# if !CONFIG_PM_SLP_IRAM_OPT
+  #undef DEFAULT_SLEEP_OUT_OVERHEAD_US
+  #define DEFAULT_SLEEP_OUT_OVERHEAD_US     (8628)
+# endif
 #elif CONFIG_IDF_TARGET_ESP32C3
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (105)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (37)
@@ -750,6 +756,13 @@ static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
 #if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
     regi2c_tsens_reg_write();
 #endif
+#if RNG_LL_DEPENDS_ON_LP_PERIPH
+    if (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) {
+        // Re-enable the RNG module.
+        rng_ll_reset();
+        rng_ll_enable();
+    }
+#endif
 }
 
 static SLEEP_FN_ATTR void sleep_low_power_clock_calibration(bool is_dslp)
@@ -906,6 +919,9 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
         if (sleep_flags & PMU_SLEEP_PD_TOP) {
 #if SOC_PM_MMU_TABLE_RETENTION_WHEN_TOP_PD
             esp_sleep_mmu_retention(false);
+#endif
+#if SOC_PM_RETENTION_SW_TRIGGER_REGDMA
+            sleep_retention_do_system_retention(false);
 #endif
 #if CONFIG_IDF_TARGET_ESP32P4 && (CONFIG_ESP_REV_MIN_FULL == 300)
             sleep_flash_p4_rev3_workaround();
@@ -1117,13 +1133,11 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
 
     if (!deep_sleep) {
         if (result == ESP_OK) {
-#if !CONFIG_PM_SLP_IRAM_OPT && !CONFIG_IDF_TARGET_ESP32
+            s_config.ccount_ticks_record = esp_cpu_get_cycle_count();
+#if !CONFIG_PM_SLP_IRAM_OPT && !(CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32P4)
 #if CONFIG_SPIRAM
-# if CONFIG_IDF_TARGET_ESP32P4
-            cache_ll_writeback_all(CACHE_LL_LEVEL_ALL, CACHE_TYPE_DATA, CACHE_LL_ID_ALL);
-# else
+            // TODO: PM-651
             Cache_WriteBack_All();
-# endif
 #endif
             /* When the IRAM optimization for the sleep flow is disabled, all
              * cache contents are forcibly invalidated before exiting the sleep
@@ -1131,12 +1145,6 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
              * flow remains consistent, allowing the use of ccount to
              * dynamically calculate the sleep adjustment time. */
             cache_ll_invalidate_all(CACHE_LL_LEVEL_ALL, CACHE_TYPE_ALL, CACHE_LL_ID_ALL);
-#endif
-            s_config.ccount_ticks_record = esp_cpu_get_cycle_count();
-#if SOC_PM_RETENTION_SW_TRIGGER_REGDMA
-            if (sleep_flags & PMU_SLEEP_PD_TOP) {
-                sleep_retention_do_system_retention(false);
-            }
 #endif
         }
         misc_modules_wake_prepare(sleep_flags);
@@ -1831,7 +1839,6 @@ static SLEEP_FN_ATTR esp_err_t timer_wakeup_prepare(int64_t sleep_duration)
     int64_t ticks = rtc_time_us_to_slowclk(sleep_duration, s_config.rtc_clk_cal_period);
     int64_t target_wakeup_tick = s_config.rtc_ticks_at_sleep_start + ticks;
 
-#if SOC_LP_TIMER_SUPPORTED
 #if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
     int64_t backup_cost_ticks = rtc_time_us_to_slowclk(((pmu_sleep_machine_constant_t *)PMU_instance()->mc)->hp.regdma_a2s_work_time_us, s_config.rtc_clk_cal_period);
     // Last timer wake-up validity check
@@ -1841,11 +1848,7 @@ static SLEEP_FN_ATTR esp_err_t timer_wakeup_prepare(int64_t sleep_duration)
         return ESP_ERR_SLEEP_REJECT;
     }
 #endif
-    lp_timer_hal_set_alarm_target(0, target_wakeup_tick);
-#else
-    rtc_hal_set_wakeup_timer(target_wakeup_tick);
-#endif
-
+    rtc_timer_hal_set_wakeup_time(0, target_wakeup_tick);
     return ESP_OK;
 }
 

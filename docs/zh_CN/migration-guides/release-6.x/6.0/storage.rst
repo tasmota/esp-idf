@@ -3,10 +3,12 @@
 
 :link_to_translation:`en:[English]`
 
-移除已弃用的 VFS SDMMC API
----------------------------
+重大变更
+--------
 
-``esp_vfs_fat_sdmmc_unmount`` 函数已弃用且被移除，请使用 ``esp_vfs_fat_sdcard_unmount`` 代替。
+已被弃用的 API ``esp_vfs_fat_sdmmc_unmount`` 现已移除，请使用 ``esp_vfs_fat_sdcard_unmount`` 代替。
+
+``esp_vfs_fat_register`` 的函数原型已修改为与 ``esp_vfs_fat_register_cfg`` 函数保持一致。``esp_vfs_fat_register_cfg`` 现已弃用。
 
 
 VFS

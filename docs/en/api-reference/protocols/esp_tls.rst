@@ -115,11 +115,7 @@ How to Use Custom TLS Stack with ESP-IDF
 
 To use a custom TLS stack in your project, follow these steps:
 
-1. Enable the custom stack option in menuconfig:
-
-   .. code-block:: none
-
-       idf.py menuconfig > Component config > ESP-TLS > Choose SSL/TLS library for ESP-TLS > Custom TLS stack
+1. Enable the custom stack option ``CONFIG_ESP_TLS_CUSTOM_STACK`` (Component config > ESP-TLS > SSL/TLS Library > Custom TLS stack) in menuconfig.
 
 2. Implement all required functions defined in the :cpp:type:`esp_tls_stack_ops_t` structure. The required functions are:
 
@@ -155,6 +151,7 @@ To use a custom TLS stack in your project, follow these steps:
        #include "esp_tls_custom_stack.h"
 
        static const esp_tls_stack_ops_t my_tls_ops = {
+           .version = ESP_TLS_STACK_OPS_VERSION,
            .create_ssl_handle = my_create_ssl_handle,
            .handshake = my_handshake,
            .read = my_read,
@@ -184,7 +181,10 @@ To use a custom TLS stack in your project, follow these steps:
    .. code-block:: c
 
        void app_main(void) {
-           esp_err_t ret = esp_tls_register_stack(&my_tls_ops);
+           // The second parameter is user context passed to global callbacks
+           // (init_global_ca_store, set_global_ca_store, etc.)
+           // Use NULL if not needed, or pass a pointer for C++ implementations
+           esp_err_t ret = esp_tls_register_stack(&my_tls_ops, NULL);
            if (ret != ESP_OK) {
                ESP_LOGE("APP", "Failed to register TLS stack: %s", esp_err_to_name(ret));
                return;
@@ -418,3 +418,4 @@ API Reference
 
 .. include-build-file:: inc/esp_tls.inc
 .. include-build-file:: inc/esp_tls_errors.inc
+.. include-build-file:: inc/esp_tls_custom_stack.inc

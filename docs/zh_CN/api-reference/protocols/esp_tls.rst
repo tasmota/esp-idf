@@ -115,11 +115,7 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
 
 要在工程中使用自定义 TLS 协议栈，请遵循以下步骤：
 
-1. 在 menuconfig 中启用自定义协议栈选项：
-
-   .. code-block:: none
-
-       idf.py menuconfig > Component config > ESP-TLS > Choose SSL/TLS library for ESP-TLS > Custom TLS stack
+1. 在 menuconfig 中启用自定义协议栈选项 ``CONFIG_ESP_TLS_CUSTOM_STACK`` (Component config > ESP-TLS > SSL/TLS Library > Custom TLS stack)。
 
 2. 实现 :cpp:type:`esp_tls_stack_ops_t` 结构中定义的所有必需函数。必需函数包括：
 
@@ -155,6 +151,7 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
        #include "esp_tls_custom_stack.h"
 
        static const esp_tls_stack_ops_t my_tls_ops = {
+           .version = ESP_TLS_STACK_OPS_VERSION,
            .create_ssl_handle = my_create_ssl_handle,
            .handshake = my_handshake,
            .read = my_read,
@@ -184,7 +181,10 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
    .. code-block:: c
 
        void app_main(void) {
-           esp_err_t ret = esp_tls_register_stack(&my_tls_ops);
+           // 第二个参数是传递给全局回调函数的用户上下文
+           // (init_global_ca_store, set_global_ca_store 等)
+           // 如果不需要可以传 NULL，或者为 C++ 实现传递一个指针
+           esp_err_t ret = esp_tls_register_stack(&my_tls_ops, NULL);
            if (ret != ESP_OK) {
                ESP_LOGE("APP", "Failed to register TLS stack: %s", esp_err_to_name(ret));
                return;
@@ -418,3 +418,4 @@ API 参考
 
 .. include-build-file:: inc/esp_tls.inc
 .. include-build-file:: inc/esp_tls_errors.inc
+.. include-build-file:: inc/esp_tls_custom_stack.inc

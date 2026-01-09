@@ -464,7 +464,7 @@ static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     trans_desc->data = (param && param_len) ? bus->format_buffer : NULL;
     trans_desc->data_length = trans_desc->data ? param_len : 4;
     trans_desc->trans_done_cb = NULL; // no callback for parameter transaction
-    size_t buffer_alignment = esp_ptr_internal(trans_desc->data) ? bus->int_mem_align : bus->ext_mem_align;
+    size_t buffer_alignment = (trans_desc->data == NULL || esp_ptr_internal(trans_desc->data)) ? bus->int_mem_align : bus->ext_mem_align;
     static uint32_t fake_trigger = 0;
     // mount data to DMA links
     gdma_buffer_mount_config_t mount_config = {

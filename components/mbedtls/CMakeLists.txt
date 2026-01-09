@@ -213,7 +213,8 @@ endforeach()
 list(APPEND mbedtls_targets everest p256m)
 
 set(mbedtls_target_sources "${COMPONENT_DIR}/port/mbedtls_debug.c"
-                           "${COMPONENT_DIR}/port/esp_platform_time.c")
+                           "${COMPONENT_DIR}/port/esp_platform_time.c"
+                           "${COMPONENT_DIR}/port/esp_timing.c")
 
 list(APPEND mbedtls_target_sources "${COMPONENT_DIR}/port/esp_psa_crypto_init.c")
 # Add ESP-IDF NVS-based PSA ITS implementation
@@ -342,6 +343,7 @@ if(CONFIG_SOC_AES_SUPPORTED)
     target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/aes/esp_aes_xts.c"
                                   "${COMPONENT_DIR}/port/aes/esp_aes_common.c"
                                   "${COMPONENT_DIR}/port/aes/esp_aes.c"
+                                  "${COMPONENT_DIR}/port/aes/esp_aes_gcm.c"
     )
 endif()
 
@@ -392,16 +394,13 @@ if(CONFIG_MBEDTLS_HARDWARE_GCM OR CONFIG_MBEDTLS_HARDWARE_AES)
     target_compile_definitions(tfpsacrypto PRIVATE ESP_AES_DRIVER_ENABLED)
     target_include_directories(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/include/aes")
     target_sources(tfpsacrypto PRIVATE
-                "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes.c"
-        )
+        "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes.c"
+        "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes_gcm.c"
+    )
     if(CONFIG_MBEDTLS_HARDWARE_SHA)
         target_sources(tfpsacrypto PRIVATE
-                "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_cmac.c"
+            "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_cmac.c"
         )
-    endif()
-    if(CONFIG_SOC_AES_SUPPORT_GCM)
-        target_sources(tfpsacrypto PRIVATE "$ENV{IDF_PATH}/components/mbedtls/port/aes/esp_aes_gcm.c"
-        "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes_gcm.c")
     endif()
 endif()
 

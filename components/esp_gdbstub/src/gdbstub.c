@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -380,6 +380,25 @@ void esp_gdbstub_init(void)
 #endif /* CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME */
 
 #ifdef CONFIG_ESP_GDBSTUB_SUPPORT_TASKS
+
+const StaticTask_t *esp_gdbstub_find_tcb_by_frame(const esp_gdbstub_frame_t *frame)
+{
+    /*
+     * Determine which task owns the current frame.
+     * Perform a search across all tasks, as GDBstub may not include task information
+     * if configured with ESP_GDBSTUB_SUPPORT_TASKS disabled.
+     */
+    TaskIterator_t xTaskIter = {0}; /* Point to the first task list */
+
+    while (xTaskGetNext(&xTaskIter) != -1) {
+        StaticTask_t *tcb = (StaticTask_t *)xTaskIter.pxTaskHandle;
+        if (tcb->pxDummy1 /* pxTopOfStack */ == frame) {
+            return tcb;
+        }
+    }
+
+    return NULL;  /* Task not found. */
+}
 
 /** Send string as a het to uart */
 static void esp_gdbstub_send_str_as_hex(const char *str)

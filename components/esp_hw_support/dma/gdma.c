@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -332,7 +332,12 @@ esp_err_t gdma_connect(gdma_channel_handle_t dma_chan, gdma_trigger_t trig_perip
     }
 
     ESP_RETURN_ON_FALSE(!periph_conflict, ESP_ERR_INVALID_STATE, TAG, "peripheral %d is already used by another channel", trig_periph.instance_id);
-    gdma_hal_connect_peri(hal, pair->pair_id, dma_chan->direction, trig_periph.periph, trig_periph.instance_id);
+    if (trig_periph.bus_id == SOC_GDMA_TRIG_PERIPH_M2M0_BUS) {
+        // M2M transfer
+        gdma_hal_connect_mem(hal, pair->pair_id, dma_chan->direction, trig_periph.instance_id);
+    } else {
+        gdma_hal_connect_peri(hal, pair->pair_id, dma_chan->direction, trig_periph.instance_id);
+    }
     dma_chan->periph_id = trig_periph.instance_id;
     return ESP_OK;
 }
@@ -361,7 +366,7 @@ esp_err_t gdma_disconnect(gdma_channel_handle_t dma_chan)
         }
     }
 
-    gdma_hal_disconnect_peri(hal, pair->pair_id, dma_chan->direction);
+    gdma_hal_disconnect_all(hal, pair->pair_id, dma_chan->direction);
 
     dma_chan->periph_id = GDMA_INVALID_PERIPH_TRIG;
     return ESP_OK;
@@ -411,6 +416,21 @@ esp_err_t gdma_config_transfer(gdma_channel_handle_t dma_chan, const gdma_transf
     // always enable descriptor burst as the descriptor is always word aligned and is in the internal SRAM
     bool en_desc_burst = true;
     bool en_data_burst = max_data_burst_size > 0;
+
+#if SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH
+    // if MSPI encryption is enabled, and DMA wants to read/write external memory
+    if (efuse_hal_flash_encryption_enabled() && config->access_ext_mem) {
+        uint32_t enc_mem_alignment = GDMA_LL_GET(ACCESS_ENCRYPTION_MEM_ALIGNMENT);
+        // when DMA access the encrypted external memory, extra alignment is needed for external memory
+        ext_mem_alignment = MAX(ext_mem_alignment, enc_mem_alignment);
+        if (max_data_burst_size < enc_mem_alignment) {
+            ESP_LOGW(TAG, "GDMA channel access encrypted external memory, adjust burst size to %d", enc_mem_alignment);
+            en_data_burst = true;
+            max_data_burst_size = enc_mem_alignment;
+        }
+    }
+#endif // SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH
+
     gdma_hal_enable_burst(hal, pair->pair_id, dma_chan->direction, en_data_burst, en_desc_burst);
     if (en_data_burst) {
         gdma_hal_set_burst_size(hal, pair->pair_id, dma_chan->direction, max_data_burst_size);
@@ -427,26 +447,6 @@ esp_err_t gdma_config_transfer(gdma_channel_handle_t dma_chan, const gdma_transf
         ext_mem_alignment = MAX(ext_mem_alignment, max_data_burst_size);
     }
 #endif
-
-    // if MSPI encryption is enabled, and DMA wants to read/write external memory
-    if (efuse_hal_flash_encryption_enabled()) {
-        gdma_hal_enable_access_encrypt_mem(hal, pair->pair_id, dma_chan->direction, config->access_ext_mem);
-#if SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH
-        uint32_t enc_mem_alignment = GDMA_LL_GET(ACCESS_ENCRYPTION_MEM_ALIGNMENT);
-        // when DMA access the encrypted external memory, extra alignment is needed for external memory
-        if (config->access_ext_mem) {
-            ext_mem_alignment = MAX(ext_mem_alignment, enc_mem_alignment);
-        }
-#if SOC_HAS(AXI_GDMA)
-        if (group->bus_id == SOC_GDMA_BUS_AXI) {
-            // once AXI-GDMA enables access to encrypted memory, internal memory also needs to align
-            int_mem_alignment = MAX(int_mem_alignment, enc_mem_alignment);
-        }
-#endif // SOC_HAS(AXI_GDMA)
-#endif // SOC_PSRAM_DMA_CAPABLE
-    } else {
-        gdma_hal_enable_access_encrypt_mem(hal, pair->pair_id, dma_chan->direction, false);
-    }
 
     // if the channel is not allowed to access external memory, set a super big (meaningless) alignment value
     // so when the upper layer checks the alignment with an external buffer, the check should fail

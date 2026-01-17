@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,7 +24,6 @@ extern "C" {
 
 // any "dummy" peripheral ID can be used for M2M mode
 #define AXI_DMA_LL_M2M_FREE_PERIPH_ID_MASK (0xFFC0)
-#define AXI_DMA_LL_INVALID_PERIPH_ID       (0x3F)
 
 ///////////////////////////////////// Common /////////////////////////////////////////
 /**
@@ -267,16 +266,25 @@ static inline void axi_dma_ll_rx_set_priority(axi_dma_dev_t *dev, uint32_t chann
 /**
  * @brief Connect DMA RX channel to a given peripheral
  */
-static inline void axi_dma_ll_rx_connect_to_periph(axi_dma_dev_t *dev, uint32_t channel, gdma_trigger_peripheral_t periph, int periph_id)
+static inline void axi_dma_ll_rx_connect_to_periph(axi_dma_dev_t *dev, uint32_t channel, int periph_id)
 {
     dev->in[channel].conf.in_peri_sel.peri_in_sel_chn = periph_id;
-    dev->in[channel].conf.in_conf0.mem_trans_en_chn = (periph == GDMA_TRIG_PERIPH_M2M);
+    dev->in[channel].conf.in_conf0.mem_trans_en_chn = false;
 }
 
 /**
- * @brief Disconnect DMA RX channel from peripheral
+ * @brief Connect DMA RX channel to memory (M2M mode)
  */
-static inline void axi_dma_ll_rx_disconnect_from_periph(axi_dma_dev_t *dev, uint32_t channel)
+static inline void axi_dma_ll_rx_connect_to_mem(axi_dma_dev_t *dev, uint32_t channel, int dummy_id)
+{
+    dev->in[channel].conf.in_peri_sel.peri_in_sel_chn = dummy_id;
+    dev->in[channel].conf.in_conf0.mem_trans_en_chn = true;
+}
+
+/**
+ * @brief Disconnect DMA RX channel from all peripherals
+ */
+static inline void axi_dma_ll_rx_disconnect_all(axi_dma_dev_t *dev, uint32_t channel)
 {
     dev->in[channel].conf.in_peri_sel.peri_in_sel_chn = 0x3F;
     dev->in[channel].conf.in_conf0.mem_trans_en_chn = false;
@@ -294,6 +302,9 @@ static inline void axi_dma_ll_rx_enable_etm_task(axi_dma_dev_t *dev, uint32_t ch
 
 /**
  * @brief Whether to enable access to ecc or aes memory
+ *
+ * @note This function is not used for AXI-GDMA because it will affect the alignment requirement for internal memory.
+ *       We have ensured that the AXI-GDMA can access the encrypted memory by 16-bytes alignment in software.
  */
 static inline void axi_dma_ll_rx_enable_ext_mem_ecc_aes_access(axi_dma_dev_t *dev, uint32_t channel, bool enable)
 {
@@ -502,16 +513,23 @@ static inline void axi_dma_ll_tx_set_priority(axi_dma_dev_t *dev, uint32_t chann
 /**
  * @brief Connect DMA TX channel to a given peripheral
  */
-static inline void axi_dma_ll_tx_connect_to_periph(axi_dma_dev_t *dev, uint32_t channel, gdma_trigger_peripheral_t periph, int periph_id)
+static inline void axi_dma_ll_tx_connect_to_periph(axi_dma_dev_t *dev, uint32_t channel, int periph_id)
 {
-    (void)periph;
     dev->out[channel].conf.out_peri_sel.peri_out_sel_chn = periph_id;
 }
 
 /**
- * @brief Disconnect DMA TX channel from peripheral
+ * @brief Connect DMA TX channel to memory (M2M mode)
  */
-static inline void axi_dma_ll_tx_disconnect_from_periph(axi_dma_dev_t *dev, uint32_t channel)
+static inline void axi_dma_ll_tx_connect_to_mem(axi_dma_dev_t *dev, uint32_t channel, int dummy_id)
+{
+    dev->out[channel].conf.out_peri_sel.peri_out_sel_chn = dummy_id;
+}
+
+/**
+ * @brief Disconnect DMA TX channel from all peripherals
+ */
+static inline void axi_dma_ll_tx_disconnect_all(axi_dma_dev_t *dev, uint32_t channel)
 {
     dev->out[channel].conf.out_peri_sel.peri_out_sel_chn = 0x3F;
 }
@@ -528,6 +546,9 @@ static inline void axi_dma_ll_tx_enable_etm_task(axi_dma_dev_t *dev, uint32_t ch
 
 /**
  * @brief Whether to enable access to ecc or aes memory
+ *
+ * @note This function is not used for AXI-GDMA because it will affect the alignment requirement for internal memory.
+ *       We have ensured that the AXI-GDMA can access the encrypted memory by 16-bytes alignment in software.
  */
 static inline void axi_dma_ll_tx_enable_ext_mem_ecc_aes_access(axi_dma_dev_t *dev, uint32_t channel, bool enable)
 {

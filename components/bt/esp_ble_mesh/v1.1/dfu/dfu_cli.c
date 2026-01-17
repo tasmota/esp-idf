@@ -105,8 +105,10 @@ static void req_timeout_handler(struct k_work *work)
     }
 
     bt_mesh_dfu_cli_rm_req_from_list(req);
+    if (req->params) {
+        bt_mesh_free(req->params);
+    }
     req_free(req);
-
     bt_mesh_r_mutex_unlock(&dfu_req_list.op_lock);
 }
 
@@ -897,7 +899,7 @@ static int handle_status(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx
         }
         bt_mesh_dfu_client_cb_evt_to_btc(req->opcode, BTC_BLE_MESH_EVT_DFU_CLIENT_RECV_GET_RSP,
                                          req->dfu_cli->mod, &req->ctx, req->params,
-                                         sizeof(struct bt_mesh_dfu_metadata_status));
+                                         sizeof(struct bt_mesh_dfu_target_status));
         bt_mesh_free(req->params);
         bt_mesh_dfu_cli_rm_req_from_list(req);
         k_delayed_work_cancel(&req->timer);
@@ -1234,9 +1236,14 @@ int bt_mesh_dfu_cli_send(struct bt_mesh_dfu_cli *cli,
     cli->xfer.flags = 0U;
 
     if (xfer->blob_params) {
-        cli->xfer.flags |= FLAG_SKIP_CAPS_GET;
-        cli->xfer.blob.block_size_log = xfer->blob_params->block_size_log;
-        cli->xfer.blob.chunk_size = xfer->blob_params->chunk_size;
+        if (xfer->blob_params->block_size_log &&
+            xfer->blob_params->chunk_size) {
+            cli->xfer.flags |= FLAG_SKIP_CAPS_GET;
+            cli->xfer.blob.block_size_log = xfer->blob_params->block_size_log;
+            cli->xfer.blob.chunk_size = xfer->blob_params->chunk_size;
+        }
+        memcpy(&cli->xfer.blob.chunk_enh_params, &xfer->blob_params->chunk_enh_params,
+               sizeof(bt_mesh_msg_enh_params_t));
     }
 
     /* Phase will be set based on target status messages: */

@@ -377,6 +377,16 @@ config BT_GATTS_SECURITY_LEVELS_CHAR
     help
         Enable LE GATT Security Levels Characteristic
 
+config BT_GATTS_KEY_MATERIAL_CHAR
+    bool "Enable Encrypted Data Key Material Characteristic"
+    depends on BT_GATTS_ENABLE
+    default n
+    help
+        Enable the Encrypted Data Key Material characteristic in GAP service.
+        This characteristic allows advertising data to be decrypted and authenticated
+        using the key material (session key + IV) as defined in Bluetooth Core
+        Specification Version 5.4. The characteristic requires encrypted link to read.
+
 menuconfig BT_GATTC_ENABLE
     bool "Include GATT client module(GATTC)"
     depends on BT_BLE_ENABLED
@@ -395,7 +405,7 @@ config BT_GATTC_MAX_CACHE_CHAR
 config BT_GATTC_NOTIF_REG_MAX
     int "Max gattc notify(indication) register number"
     depends on BT_GATTC_ENABLE
-    range 1 64
+    range 1 255
     default 5
     help
         Maximum GATTC notify(indication) register number
@@ -1400,6 +1410,16 @@ config BT_BLE_FEAT_CREATE_SYNC_ENH
     help
         Enable the create sync enhancements
 
+config BT_BLE_FEAT_CREATE_SYNC_RETRY_MAX
+    int "Maximum retry count for periodic advertising create sync"
+    depends on BT_BLE_50_EXTEND_SYNC_EN
+    default 3
+    range 0 16
+    help
+        Set the maximum retry count when periodic advertising create sync fails
+        with error code 0x3E (Connection Failed to be Established).
+        Set to 0 to disable retry. Default is 3.
+
 menuconfig BT_BLE_FEAT_ISO_EN
     bool "Enable BLE 5.2 iso feature"
     depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_AUDIO_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
@@ -1514,7 +1534,7 @@ config BT_BLE_FEAT_CONN_SUBRATING
 
 config BT_BLE_FEAT_PAWR_EN
     bool "Enable Periodic Advertisement with Response(PAwR)"
-    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_PAWR_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_PERIODIC_ADV_WITH_RESPONSE) || BT_CONTROLLER_DISABLED)) # NOERROR
     default n
     help
         Enable BLE Periodic Advertisement with Response(PAwR) feature

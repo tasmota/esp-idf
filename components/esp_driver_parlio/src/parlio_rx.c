@@ -444,12 +444,11 @@ static esp_err_t parlio_rx_unit_init_dma(parlio_rx_unit_handle_t rx_unit, size_t
 {
     /* Allocate and connect the GDMA channel */
     gdma_channel_alloc_config_t dma_chan_config = {
-        .direction = GDMA_CHANNEL_DIRECTION_RX,
 #if CONFIG_PARLIO_RX_ISR_CACHE_SAFE
         .flags.isr_cache_safe = true,
 #endif
     };
-    ESP_RETURN_ON_ERROR(PARLIO_GDMA_NEW_CHANNEL(&dma_chan_config, &rx_unit->dma_chan), TAG, "allocate RX DMA channel failed");
+    ESP_RETURN_ON_ERROR(PARLIO_GDMA_NEW_CHANNEL(&dma_chan_config, NULL, &rx_unit->dma_chan), TAG, "allocate RX DMA channel failed");
     gdma_connect(rx_unit->dma_chan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_PARLIO, 0));
 
     /* Set GDMA strategy */
@@ -460,7 +459,7 @@ static esp_err_t parlio_rx_unit_init_dma(parlio_rx_unit_handle_t rx_unit, size_t
     gdma_apply_strategy(rx_unit->dma_chan, &gdma_strategy_conf);
 
     // configure DMA transfer parameters
-    rx_unit->dma_burst_size = dma_burst_size ? dma_burst_size : 16;
+    rx_unit->dma_burst_size = dma_burst_size ? dma_burst_size : 32;
     gdma_transfer_config_t trans_cfg = {
         .max_data_burst_size = rx_unit->dma_burst_size, // Enable DMA burst transfer for better performance,
         .access_ext_mem = true,

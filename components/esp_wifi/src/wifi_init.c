@@ -42,6 +42,10 @@
 #include "esp_roaming.h"
 #endif
 
+#if SOC_MODEM_CLOCK_IS_INDEPENDENT
+#include "esp_private/esp_modem_clock.h"
+#endif
+
 static bool s_wifi_inited = false;
 
 #if (CONFIG_ESP_WIFI_RX_BA_WIN > CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM)
@@ -254,6 +258,10 @@ static esp_err_t wifi_deinit_internal(void)
     esp_phy_modem_deinit();
 #endif
     s_wifi_inited = false;
+
+#if SOC_MODEM_CLOCK_IS_INDEPENDENT
+    modem_clock_configure_wifi_status(s_wifi_inited);
+#endif
 
     return err;
 }
@@ -491,6 +499,10 @@ esp_err_t esp_wifi_init(const wifi_init_config_t *config)
 
     s_wifi_inited = true;
 
+#if SOC_MODEM_CLOCK_IS_INDEPENDENT
+    modem_clock_configure_wifi_status(s_wifi_inited);
+#endif
+
     return result;
 
 _deinit:
@@ -709,6 +721,24 @@ void nan_ndp_resp_timeout_process(void *p)
     /* Do not remove, stub to overwrite weak link in Wi-Fi Lib */
 }
 #endif /* CONFIG_ESP_WIFI_NAN_SYNC_ENABLE */
+
+#if CONFIG_IDF_TARGET_ESP32C5
+#if CONFIG_ESP32C5_REV_MIN_FULL <= 100
+void esp32c5_eco3_rom_ptr_init(void)
+{
+    /* Do not remove, stub to overwrite weak link in Wi-Fi Lib */
+}
+#endif
+#endif
+
+#if CONFIG_IDF_TARGET_ESP32C61
+#if CONFIG_ESP32C61_REV_MIN_FULL <= 100
+void esp32c61_eco4_rom_ptr_init(void)
+{
+    /* Do not remove, stub to overwrite weak link in Wi-Fi Lib */
+}
+#endif
+#endif
 
 #if CONFIG_IDF_TARGET_ESP32C2
 #if CONFIG_ESP32C2_REV_MIN_FULL < 200

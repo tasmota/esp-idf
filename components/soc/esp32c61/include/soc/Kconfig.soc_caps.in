@@ -1015,10 +1015,6 @@ config SOC_UART_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
-config SOC_UART_SUPPORT_FSM_TX_WAIT_SEND
-    bool
-    default y
-
 config SOC_UART_WAKEUP_CHARS_SEQ_MAX_LEN
     int
     default 5
@@ -1284,6 +1280,10 @@ config SOC_BLE_MULTI_CONN_OPTIMIZATION
     default y
 
 config SOC_BLE_CTE_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_SUBRATE_SUPPORTED
     bool
     default y
 

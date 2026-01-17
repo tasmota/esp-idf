@@ -10,7 +10,7 @@
 #include "sdkconfig.h"
 #include "soc/soc_caps.h"
 #include "soc/system_periph_retention.h"
-#include "soc/uart_periph.h"
+#include "hal/uart_periph.h"
 #include "hal/timer_ll.h"
 #if SOC_HAS(I2S)
 #include "hal/i2s_ll.h"
@@ -168,7 +168,7 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_retention_init(void *a
     err = sleep_pau_retention_init();
     if(err) goto error;
 #endif
-#if CONFIG_ESP_ENABLE_PVT
+#if CONFIG_ESP_ENABLE_PVT && SOC_PVT_RETENTION_BY_REGDMA
     err = sleep_pvt_retention_init();
     if(err) goto error;
 #endif

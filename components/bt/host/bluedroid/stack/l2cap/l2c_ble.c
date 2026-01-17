@@ -506,8 +506,13 @@ void l2cble_advertiser_conn_comp (UINT16 handle, BD_ADDR bda, tBLE_ADDR_TYPE typ
 void l2cble_conn_comp(UINT16 handle, UINT8 role, BD_ADDR bda, tBLE_ADDR_TYPE type,
                       UINT16 conn_interval, UINT16 conn_latency, UINT16 conn_timeout)
 {
+#if (BLE_TOPOLOGY_CHECK == TRUE)
     btm_ble_update_link_topology_mask(role, TRUE);
-
+#else
+    btm_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
+    /* make device fall back into undirected adv mode by default */
+    btm_cb.ble_ctr_cb.inq_var.directed_conn = BTM_BLE_CONNECT_EVT;
+#endif // (BLE_TOPOLOGY_CHECK == TRUE)
     if (role == HCI_ROLE_MASTER) {
         l2cble_scanner_conn_comp(handle, bda, type, conn_interval, conn_latency, conn_timeout);
     } else {
@@ -710,6 +715,11 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
     UINT16          cmd_len;
     UINT16          min_interval, max_interval, latency, timeout;
 
+    if (pkt_len < L2CAP_CMD_OVERHEAD) {
+        L2CAP_TRACE_WARNING ("L2CAP - LE - pkt too short: %d", pkt_len);
+        return;
+    }
+
     p_pkt_end = p + pkt_len;
 
     STREAM_TO_UINT8  (cmd_code, p);
@@ -726,6 +736,10 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
     case L2CAP_CMD_REJECT:
     case L2CAP_CMD_ECHO_RSP:
     case L2CAP_CMD_INFO_RSP:
+        if (cmd_len < 2) {
+            L2CAP_TRACE_WARNING ("L2CAP - LE - short cmd: %d", cmd_len);
+            return;
+        }
         p += 2;
         break;
     case L2CAP_CMD_ECHO_REQ:
@@ -734,6 +748,10 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
         break;
 
     case L2CAP_CMD_BLE_UPDATE_REQ:
+        if (cmd_len < 8) {
+            L2CAP_TRACE_WARNING ("L2CAP - LE - short cmd: %d", cmd_len);
+            return;
+        }
         STREAM_TO_UINT16 (min_interval, p); /* 0x0006 - 0x0C80 */
         STREAM_TO_UINT16 (max_interval, p); /* 0x0006 - 0x0C80 */
         STREAM_TO_UINT16 (latency, p);  /* 0x0000 - 0x03E8 */
@@ -776,6 +794,10 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
         break;
 
     case L2CAP_CMD_BLE_UPDATE_RSP: {
+        if (cmd_len < 2) {
+            L2CAP_TRACE_WARNING ("L2CAP - LE - short cmd: %d", cmd_len);
+            return;
+        }
         UINT16 result = 0;
         STREAM_TO_UINT16(result, p); //result = 0 connection param accepted, result = 1 connection param rejected.
         UINT8 status = (result == 0) ? HCI_SUCCESS : HCI_ERR_PARAM_OUT_OF_RANGE;
@@ -788,6 +810,10 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
         break;
     }
     case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ: {
+        if (cmd_len < 10) {
+            L2CAP_TRACE_WARNING ("L2CAP - LE - short cmd: %d", cmd_len);
+            return;
+        }
         tL2C_CCB *p_ccb = NULL;
         tL2C_RCB *p_rcb = NULL;
         UINT16 spsm;
@@ -836,6 +862,10 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
         break;
     }
     case L2CAP_CMD_DISC_REQ: {
+        if (cmd_len < 4) {
+            L2CAP_TRACE_WARNING ("L2CAP - LE - short cmd: %d", cmd_len);
+            return;
+        }
         tL2C_CCB *p_ccb = NULL;
         UINT16 lcid;
         UINT16 rcid;
@@ -945,11 +975,14 @@ BOOLEAN l2cble_init_direct_conn (tL2C_LCB *p_lcb)
 #endif // CONTROLLER_RPA_LIST_ENABLE
 #endif // (defined BLE_PRIVACY_SPT) && (BLE_PRIVACY_SPT == TRUE)
 
+#if (BLE_TOPOLOGY_CHECK == TRUE)
     if (!btm_ble_topology_check(BTM_BLE_STATE_INIT)) {
         l2cu_release_lcb (p_lcb);
         L2CAP_TRACE_ERROR("initiate direct connection fail, topology limitation");
         return FALSE;
     }
+#endif // (BLE_TOPOLOGY_CHECK == TRUE)
+
     uint32_t link_timeout = L2CAP_BLE_LINK_CONNECT_TOUT;
     if(GATTC_CONNECT_RETRY_COUNT) {
         if(!p_lcb->retry_create_con) {
@@ -1079,11 +1112,11 @@ BOOLEAN l2cble_create_conn (tL2C_LCB *p_lcb)
         L2CAP_TRACE_WARNING ("L2CAP - LE - cannot start new connection at conn st: %d", conn_st);
 
         btm_ble_enqueue_direct_conn_req(p_lcb);
-#if (tGATT_BG_CONN_DEV == TRUE)
+#if (GATT_BG_CONN_DEV == TRUE)
         if (conn_st == BLE_BG_CONN) {
             btm_ble_suspend_bg_conn();
         }
-#endif // #if (tGATT_BG_CONN_DEV == TRUE)
+#endif // #if (GATT_BG_CONN_DEV == TRUE)
         rt = TRUE;
     }
     return rt;
@@ -1110,6 +1143,7 @@ void l2c_link_processs_ble_num_bufs (UINT16 num_lm_ble_bufs)
     l2cb.num_lm_ble_bufs = l2cb.controller_le_xmit_window = num_lm_ble_bufs;
 }
 
+#if (BLE_INCLUDED == TRUE)
 /*******************************************************************************
 **
 ** Function         l2c_ble_link_adjust_allocation
@@ -1229,6 +1263,7 @@ void l2c_ble_link_adjust_allocation (void)
         }
     }
 }
+#endif // #if (BLE_INCLUDED == TRUE)
 
 #if (defined BLE_LLT_INCLUDED) && (BLE_LLT_INCLUDED == TRUE)
 /*******************************************************************************

@@ -8,14 +8,12 @@ if(NOT ${target} STREQUAL "linux")
         set(srcs "lldesc.c"
                 "dport_access_common.c"
                 "${target_folder}/interrupts_beta5.c"
-                "${target_folder}/gpio_periph.c"
-                "${target_folder}/uart_periph.c")
+                "${target_folder}/gpio_periph.c")
     else()
         set(srcs "lldesc.c"
                 "dport_access_common.c"
                 "${target_folder}/interrupts.c"
-                "${target_folder}/gpio_periph.c"
-                "${target_folder}/uart_periph.c")
+                "${target_folder}/gpio_periph.c")
     endif()
 endif()
 
@@ -70,10 +68,6 @@ endif()
 
 if(CONFIG_SOC_EMAC_SUPPORTED)
     list(APPEND srcs "${target_folder}/emac_periph.c")
-endif()
-
-if(CONFIG_SOC_LEDC_SUPPORTED)
-    list(APPEND srcs "${target_folder}/ledc_periph.c")
 endif()
 
 if(CONFIG_SOC_I3C_MASTER_SUPPORTED)

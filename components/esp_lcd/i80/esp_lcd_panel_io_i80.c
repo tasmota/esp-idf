@@ -579,10 +579,8 @@ static esp_err_t lcd_i80_init_dma_link(esp_lcd_i80_bus_handle_t bus, const esp_l
 {
     esp_err_t ret = ESP_OK;
     // alloc DMA channel and connect to LCD peripheral
-    gdma_channel_alloc_config_t dma_chan_config = {
-        .direction = GDMA_CHANNEL_DIRECTION_TX,
-    };
-    ret = LCD_GDMA_NEW_CHANNEL(&dma_chan_config, &bus->dma_chan);
+    gdma_channel_alloc_config_t dma_chan_config = {0};
+    ret = LCD_GDMA_NEW_CHANNEL(&dma_chan_config, &bus->dma_chan, NULL);
     ESP_RETURN_ON_ERROR(ret, TAG, "alloc DMA channel failed");
     gdma_connect(bus->dma_chan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_LCD, 0));
     gdma_strategy_config_t strategy_config = {
@@ -592,7 +590,7 @@ static esp_err_t lcd_i80_init_dma_link(esp_lcd_i80_bus_handle_t bus, const esp_l
     gdma_apply_strategy(bus->dma_chan, &strategy_config);
     // config DMA transfer parameters
     gdma_transfer_config_t trans_cfg = {
-        .max_data_burst_size = bus_config->dma_burst_size ? bus_config->dma_burst_size : 16, // Enable DMA burst transfer for better performance
+        .max_data_burst_size = bus_config->dma_burst_size ? bus_config->dma_burst_size : 32, // Enable DMA burst transfer for better performance
         .access_ext_mem = true, // the LCD can carry pixel buffer from the external memory
     };
     ESP_RETURN_ON_ERROR(gdma_config_transfer(bus->dma_chan, &trans_cfg), TAG, "config DMA transfer failed");

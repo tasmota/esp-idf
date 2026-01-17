@@ -283,6 +283,27 @@ typedef uint8_t esp_gap_ble_channels[ESP_GAP_BLE_CHANNELS_LEN];
 
 #define VENDOR_HCI_CMD_MASK                    (0x3F << 10) /**!< 0xFC00 */
 
+/**
+ * @brief BLE time interval conversion macros
+ *
+ * These macros convert time values in milliseconds to BLE interval units.
+ *
+ * - Advertising interval: unit is 0.625ms (range: 20ms to 10240ms)
+ * - Connection interval: unit is 1.25ms (range: 7.5ms to 4000ms)
+ * - Scan interval/window: unit is 0.625ms
+ * - Periodic advertising interval: unit is 1.25ms
+ * - Supervision timeout: unit is 10ms (range: 100ms to 32000ms)
+ *
+ * @note If the input value is not an exact multiple of the unit, the result will be rounded to the nearest value.
+ *       For example, ESP_BLE_GAP_ADV_ITVL_MS(25) = 40 (25ms / 0.625ms = 40), but ESP_BLE_GAP_ADV_ITVL_MS(25.5) = 40 (rounded).
+ */
+#define ESP_BLE_GAP_ADV_ITVL_MS(t)             ((uint16_t)((t) * 1000 / 625))      /*!< Convert advertising interval from ms to 0.625ms units. If input is not a multiple of 0.625ms, it will be rounded to the nearest value. */
+#define ESP_BLE_GAP_SCAN_ITVL_MS(t)             ((uint16_t)((t) * 1000 / 625))      /*!< Convert scan interval from ms to 0.625ms units. If input is not a multiple of 0.625ms, it will be rounded to the nearest value. */
+#define ESP_BLE_GAP_SCAN_WIN_MS(t)              ((uint16_t)((t) * 1000 / 625))      /*!< Convert scan window from ms to 0.625ms units. If input is not a multiple of 0.625ms, it will be rounded to the nearest value. */
+#define ESP_BLE_GAP_CONN_ITVL_MS(t)             ((uint16_t)((t) * 1000 / 1250))     /*!< Convert connection interval from ms to 1.25ms units. If input is not a multiple of 1.25ms, it will be rounded to the nearest value. */
+#define ESP_BLE_GAP_PERIODIC_ADV_ITVL_MS(t)     ((uint16_t)((t) * 1000 / 1250))     /*!< Convert periodic advertising interval from ms to 1.25ms units. If input is not a multiple of 1.25ms, it will be rounded to the nearest value. */
+#define ESP_BLE_GAP_SUPERVISION_TIMEOUT_MS(t)   ((uint16_t)((t) / 10))              /*!< Convert supervision timeout from ms to 10ms units. If input is not a multiple of 10ms, it will be rounded to the nearest value. */
+
 /* relate to BTM_BLE_AD_TYPE_xxx in stack/btm_ble_api.h */
 /// The type of advertising data(not adv_type)
 typedef enum {
@@ -823,9 +844,10 @@ typedef enum {
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_ALL_LIST                   = 0xFFFF,                 /*!< duplicate scan exceptional all list */
 } esp_duplicate_scan_exceptional_list_type_t;
 
+#endif //#if (BLE_42_FEATURE_SUPPORT == TRUE)
+
 typedef uint8_t esp_duplicate_info_t[ESP_BD_ADDR_LEN];
 
-#endif //#if (BLE_42_FEATURE_SUPPORT == TRUE)
 
 #if (BLE_50_FEATURE_SUPPORT == TRUE)
 #define ESP_BLE_GAP_SET_EXT_ADV_PROP_NONCONN_NONSCANNABLE_UNDIRECTED      (0 << 0) /*!< Non-Connectable and Non-Scannable Undirected advertising */
@@ -1894,7 +1916,6 @@ typedef union {
         esp_bt_status_t status;                     /*!< Indicate the add or remove whitelist operation success status */
         esp_ble_wl_operation_t wl_operation;        /*!< The value is ESP_BLE_WHITELIST_ADD if add address to whitelist operation success, ESP_BLE_WHITELIST_REMOVE if remove address from the whitelist operation success */
     } update_whitelist_cmpl;                        /*!< Event parameter of ESP_GAP_BLE_UPDATE_WHITELIST_COMPLETE_EVT */
-#if (BLE_42_FEATURE_SUPPORT == TRUE)
     /**
      * @brief ESP_GAP_BLE_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_COMPLETE_EVT
      */
@@ -1904,7 +1925,6 @@ typedef union {
         uint16_t         length;                     /*!< The length of device_info */
         esp_duplicate_info_t device_info;           /*!< device information, when subcode is ESP_BLE_DUPLICATE_EXCEPTIONAL_LIST_CLEAN, the value is invalid */
     } update_duplicate_exceptional_list_cmpl;       /*!< Event parameter of ESP_GAP_BLE_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_COMPLETE_EVT */
-#endif // #if (BLE_42_FEATURE_SUPPORT == TRUE)
     /**
      * @brief ESP_GAP_BLE_SET_CHANNELS_EVT
       */
@@ -3068,6 +3088,7 @@ esp_err_t esp_ble_gap_clear_whitelist(void);
 
 /**
 * @brief            Get the whitelist size in the controller
+*                   Note: This API returns a constant value indicating the maximum number of whitelists supported by the controller
 *
 * @param[out]       length: the white list length.
 * @return
@@ -3119,6 +3140,25 @@ esp_err_t esp_ble_gap_set_device_name(const char *name);
  *
  */
 esp_err_t esp_ble_gap_get_device_name(void);
+
+#if defined(CONFIG_BT_GATTS_KEY_MATERIAL_CHAR) && CONFIG_BT_GATTS_KEY_MATERIAL_CHAR
+/**
+ * @brief          Set the Encrypted Data Key Material in GAP service
+ *
+ *                 This function sets the session key and IV that will be exposed
+ *                 through the Key Material characteristic (UUID 0x2B88) in the GAP service.
+ *                 The Key Material allows central devices to decrypt encrypted advertising data.
+ *
+ * @param[in]      session_key - 16-byte (128-bit) session key for AES-CCM encryption
+ * @param[in]      iv          - 8-byte (64-bit) initialization vector
+ *
+ * @return
+ *                  - ESP_OK : success
+ *                  - other  : failed
+ *
+ */
+esp_err_t esp_ble_gap_set_key_material(const uint8_t session_key[16], const uint8_t iv[8]);
+#endif // CONFIG_BT_GATTS_KEY_MATERIAL_CHAR
 
 /**
  * @brief          This function is called to get local used address and address type.

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -681,27 +681,24 @@ esp_err_t esp_https_ota_get_bootloader_img_desc(esp_https_ota_handle_t https_ota
     return get_description_from_image(https_ota_handle, new_img_info);
 }
 
-static esp_err_t esp_ota_verify_chip_id(const void *arg)
+static const esp_app_desc_t *esp_https_ota_get_app_desc(const void *data_buf)
 {
-    esp_image_header_t *data = (esp_image_header_t *)(arg);
-    esp_https_ota_dispatch_event(ESP_HTTPS_OTA_VERIFY_CHIP_ID, (void *)(&data->chip_id), sizeof(esp_chip_id_t));
-
-    if (data->chip_id != CONFIG_IDF_FIRMWARE_CHIP_ID) {
-        ESP_LOGE(TAG, "Mismatch chip id, expected %d, found %d", CONFIG_IDF_FIRMWARE_CHIP_ID, data->chip_id);
-        return ESP_ERR_INVALID_VERSION;
-    }
-    return ESP_OK;
+    return (const esp_app_desc_t *)((const uint8_t *)data_buf +
+           sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t));
 }
 
-static esp_err_t esp_ota_verify_chip_revision(const void *arg)
+static esp_err_t esp_https_ota_verify_image(const void *data_buf, esp_partition_type_t part_type, bool verify_spi_mode)
 {
-    esp_image_header_t *data = (esp_image_header_t *)(arg);
-    esp_https_ota_dispatch_event(ESP_HTTPS_OTA_VERIFY_CHIP_REVISION, (void *)(&data->min_chip_rev_full), sizeof(uint16_t));
+    const esp_image_header_t *img_hdr = (const esp_image_header_t *) data_buf;
 
-    if (!bootloader_common_check_chip_revision_validity(data, true)) {
-        return ESP_ERR_INVALID_VERSION;
-    }
-    return ESP_OK;
+    // Dispatch verification events
+    esp_https_ota_dispatch_event(ESP_HTTPS_OTA_VERIFY_CHIP_ID, (void *)(&img_hdr->chip_id), sizeof(esp_chip_id_t));
+    esp_https_ota_dispatch_event(ESP_HTTPS_OTA_VERIFY_CHIP_REVISION, (void *)(&img_hdr->min_chip_rev_full), sizeof(uint16_t));
+
+    // Get app descriptor only if SPI mode verification is needed
+    const esp_app_desc_t *app_desc = verify_spi_mode ? esp_https_ota_get_app_desc(data_buf) : NULL;
+
+    return esp_ota_check_image_validity(part_type, img_hdr, app_desc);
 }
 
 esp_err_t esp_https_ota_perform(esp_https_ota_handle_t https_ota_handle)
@@ -761,12 +758,11 @@ esp_err_t esp_https_ota_perform(esp_https_ota_handle_t https_ota_handle)
             }
 #endif // CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
             if (handle->partition.final->type == ESP_PARTITION_TYPE_APP || handle->partition.final->type == ESP_PARTITION_TYPE_BOOTLOADER) {
-                err = esp_ota_verify_chip_id(data_buf);
-                if (err != ESP_OK) {
-                    return err;
-                }
-
-                err = esp_ota_verify_chip_revision(data_buf);
+                bool verify_spi_mode = false;
+#if CONFIG_ESP_HTTPS_OTA_VERIFY_SPI_MODE
+                verify_spi_mode = (handle->partition.final->type == ESP_PARTITION_TYPE_APP);
+#endif
+                err = esp_https_ota_verify_image(data_buf, handle->partition.final->type, verify_spi_mode);
                 if (err != ESP_OK) {
                     return err;
                 }

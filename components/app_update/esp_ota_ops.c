@@ -1012,6 +1012,52 @@ bool esp_ota_check_rollback_is_possible(void)
     return false;
 }
 
+esp_err_t esp_ota_check_image_validity(esp_partition_type_t part_type,
+                                       const esp_image_header_t *img_hdr,
+                                       const esp_app_desc_t *app_desc)
+{
+    if (img_hdr == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Map partition type to image type for bootloader_common API
+    esp_image_type img_type;
+    if (part_type == ESP_PARTITION_TYPE_APP) {
+        img_type = ESP_IMAGE_APPLICATION;
+    } else if (part_type == ESP_PARTITION_TYPE_BOOTLOADER) {
+        img_type = ESP_IMAGE_BOOTLOADER;
+    } else {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Check chip ID and chip revision validity
+    esp_err_t err = bootloader_common_check_chip_validity(img_hdr, img_type);
+    if (err != ESP_OK) {
+        return ESP_ERR_INVALID_VERSION;
+    }
+
+    // Check SPI flash mode if app descriptor is provided
+    if (part_type == ESP_PARTITION_TYPE_APP && app_desc != NULL) {
+        // Get the running app's descriptor
+        const esp_app_desc_t *running_app_desc = esp_app_get_description();
+
+        if (running_app_desc->spi_flash_mode == 0 || app_desc->spi_flash_mode == 0) {
+            // Older image format, CONFIG_ESPTOOLPY_FLASHMODE_VAL not stored in the app descriptor
+            ESP_LOGD(TAG, "Older image format and hence no SPI flash mode info is available");
+            return ESP_OK;
+        }
+
+        // Compare SPI flash modes as stored in app descriptor (CONFIG_ESPTOOLPY_FLASHMODE_VAL)
+        if (app_desc->spi_flash_mode != running_app_desc->spi_flash_mode) {
+            ESP_LOGE(TAG, "SPI flash mode mismatch: running app has mode %d, new app has mode %d",
+                    running_app_desc->spi_flash_mode, app_desc->spi_flash_mode);
+            return ESP_ERR_OTA_SPI_MODE_MISMATCH;
+        }
+    }
+
+    return ESP_OK;
+}
+
 // if valid == false - will done rollback with reboot. After reboot will boot previous OTA[x] or Factory partition.
 // if valid == true  - it confirm that current OTA[x] is workable. Reboot will not happen.
 static esp_err_t esp_ota_current_ota_is_workable(bool valid)

@@ -88,6 +88,17 @@ menu "Serial flasher config"
         # information get from efuse, so don't care this dout choice.
         default "dout" if ESPTOOLPY_FLASHMODE_OPI
 
+    # Hidden config providing the numeric value of flash mode
+    # This value will be stored in the esp_app_desc_t structure in the binary
+    # Note: legacy images will have this field set to 0 and hence using 1 to start the count
+    config ESPTOOLPY_FLASHMODE_VAL
+        int
+        default 1 if ESPTOOLPY_FLASHMODE_QIO
+        default 2 if ESPTOOLPY_FLASHMODE_QOUT
+        default 3 if ESPTOOLPY_FLASHMODE_DIO
+        default 4 if ESPTOOLPY_FLASHMODE_DOUT
+        default 5 if ESPTOOLPY_FLASHMODE_OPI
+
     orsource "../spi_flash/$IDF_TARGET/Kconfig.flash_freq"
 
     config ESPTOOLPY_FLASHFREQ

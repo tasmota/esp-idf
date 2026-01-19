@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,8 @@
 #include "soc/lp_aon_reg.h"
 #include "esp_private/sleep_event.h"
 #include "esp_private/regi2c_ctrl.h"
+#include "esp_attr.h"
+#include "esp_private/esp_pmu.h"
 
 static const char *TAG = "rtc_clk";
 
@@ -176,6 +178,10 @@ static void rtc_clk_cpu_freq_to_xtal(int cpu_freq, int div)
     clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_XTAL);
     clk_ll_bus_update();
     esp_rom_set_cpu_ticks_per_us(cpu_freq);
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    charge_pump_enable(false);
+    pvt_func_enable(false);
+#endif
 }
 
 static void rtc_clk_cpu_freq_to_8m(void)
@@ -185,6 +191,10 @@ static void rtc_clk_cpu_freq_to_8m(void)
     clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_RC_FAST);
     clk_ll_bus_update();
     esp_rom_set_cpu_ticks_per_us(20);
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    charge_pump_enable(false);
+    pvt_func_enable(false);
+#endif
 }
 
 /**
@@ -194,6 +204,12 @@ static void rtc_clk_cpu_freq_to_8m(void)
  */
 static void rtc_clk_cpu_freq_to_pll_160_mhz(int cpu_freq_mhz)
 {
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    pvt_auto_dbias_init();
+    charge_pump_init();
+    pvt_func_enable(true);
+    charge_pump_enable(true);
+#endif
     // f_hp_root = 160MHz
     uint32_t cpu_divider = CLK_LL_PLL_160M_FREQ_MHZ / cpu_freq_mhz;
     clk_ll_cpu_set_divider(cpu_divider);

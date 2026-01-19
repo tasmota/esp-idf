@@ -298,6 +298,9 @@ INPUT = \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
     $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_ecdsa_contexts.h \
     $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_hmac_opaque_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_rsa_ds_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_sha_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_aes_contexts.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \

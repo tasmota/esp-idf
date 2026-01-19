@@ -45,7 +45,7 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki);
 #if defined(CONFIG_ESP_TLS_USE_DS_PERIPHERAL)
 #include <pk_wrap.h>
 #include "psa/crypto.h"
-#include "psa_crypto_driver_esp_ds.h"
+#include "psa_crypto_driver_esp_rsa_ds.h"
 static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki);
 #endif /* CONFIG_ESP_TLS_USE_DS_PERIPHERAL */
 
@@ -118,7 +118,7 @@ typedef struct esp_tls_pki_t {
     const unsigned char *privkey_password;
     unsigned int privkey_password_len;
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
-    void *esp_ds_data;
+    void *esp_rsa_ds_data;
 #endif
 } esp_tls_pki_t;
 
@@ -601,10 +601,10 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
         }
 
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
-        if (pki->esp_ds_data != NULL) {
+        if (pki->esp_rsa_ds_data != NULL) {
             ret = esp_mbedtls_init_pk_ctx_for_ds(pki);
             if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to initialize pk context for esp_ds");
+                ESP_LOGE(TAG, "Failed to initialize pk context for esp_rsa_ds");
                 return ret;
             }
         } else
@@ -1063,7 +1063,7 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
             ESP_LOGE(TAG, "Client certificate is also required with the DS parameters");
             return ESP_ERR_INVALID_STATE;
         }
-        esp_ds_opaque_set_session_timeout(cfg->timeout_ms);
+        esp_rsa_ds_opaque_set_session_timeout(cfg->timeout_ms);
         /* set private key pointer to NULL since the DS peripheral with its own configuration data is used */
         esp_tls_pki_t pki = {
             .public_cert = &tls->clientcert,
@@ -1074,7 +1074,7 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
             .privkey_pem_bytes = 0,
             .privkey_password = NULL,
             .privkey_password_len = 0,
-            .esp_ds_data = cfg->ds_data,
+            .esp_rsa_ds_data = cfg->ds_data,
         };
 
         esp_err_t esp_ret = set_pki_context(tls, &pki);
@@ -1406,7 +1406,7 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki)
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
 static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
 {
-    esp_ds_data_ctx_t *ds_data = ((const esp_tls_pki_t*)pki)->esp_ds_data;
+    esp_ds_data_ctx_t *ds_data = ((const esp_tls_pki_t*)pki)->esp_rsa_ds_data;
     if (ds_data == NULL) {
         ESP_LOGE(TAG, "DS data context is NULL");
         return ESP_ERR_INVALID_ARG;
@@ -1430,7 +1430,7 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
     psa_set_key_bits(&ds_key_attributes, ds_data->rsa_length_bits);
     psa_set_key_usage_flags(&ds_key_attributes, PSA_KEY_USAGE_SIGN_HASH);
     psa_set_key_algorithm(&ds_key_attributes, alg);
-    psa_set_key_lifetime(&ds_key_attributes, PSA_KEY_LIFETIME_ESP_DS);
+    psa_set_key_lifetime(&ds_key_attributes, PSA_KEY_LIFETIME_ESP_RSA_DS);
     status = psa_import_key(&ds_key_attributes,
                              (const uint8_t *)ds_data,
                              sizeof(esp_ds_data_ctx_t),

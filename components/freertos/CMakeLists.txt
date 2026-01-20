@@ -193,6 +193,11 @@ if(arch STREQUAL "linux")
         PROPERTIES COMPILE_OPTIONS
         "-Wno-strict-prototypes"
         )
+    if(APPLE)
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-u _app_main")
+    else()
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-u app_main")
+    endif()
 else()
     idf_component_get_property(COMPONENT_DIR freertos COMPONENT_DIR)
 

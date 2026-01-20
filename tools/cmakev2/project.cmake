@@ -560,6 +560,11 @@ macro(idf_project_init)
         # Ensure this function is executed only once throughout the entire
         # project.
 
+        # The IDF_TOOLCHAIN variable is established as a CMake cache variable
+        # during the toolchain initialization process in
+        # ``tools/cmake/toolchain.cmake``.
+        idf_build_set_property(IDF_TOOLCHAIN "${IDF_TOOLCHAIN}")
+
         # Warn about the use of deprecated variables.
         deprecate_variable(COMPONENTS)
         deprecate_variable(EXCLUDE_COMPONENTS)

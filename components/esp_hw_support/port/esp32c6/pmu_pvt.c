@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -106,8 +106,6 @@ void pvt_auto_dbias_init(void)
         /*config lp offset for pvt func*/
         uint8_t lp_hp_gap = get_lp_hp_gap();
         set_pvt_hp_lp_gap(lp_hp_gap);
-    } else {
-        ESP_HW_LOGD(TAG, "blk_version is less than 3, pvt auto dbias init not supported in efuse.");
     }
 }
 
@@ -135,8 +133,6 @@ void IRAM_ATTR pvt_func_enable(bool enable)
             CLEAR_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_CLK_EN);
             CLEAR_PERI_REG_MASK(PCR_PVT_MONITOR_FUNC_CLK_CONF_REG, PCR_PVT_MONITOR_FUNC_CLK_EN);
         }
-    } else {
-        ESP_HW_LOGD(TAG, "blk_version is less than 3, pvt enable not supported in efuse.");
     }
 }
 
@@ -148,8 +144,6 @@ void charge_pump_init(void)
         SET_PERI_REG_BITS(PVT_PMUP_CHANNEL_CFG_REG, PVT_PUMP_CHANNEL_CODE0, PVT_PUMP_CHANNEL_CODE, PVT_PUMP_CHANNEL_CODE0_S);   //Set channel code
         WRITE_PERI_REG(PVT_PMUP_BITMAP_LOW0_REG, (1 << PVT_PUMP_BITMAP));  // Select monitor cell for charge pump
         SET_PERI_REG_BITS(PVT_PMUP_DRV_CFG_REG, PVT_PUMP_DRV0, PVT_PUMP_DRV, PVT_PUMP_DRV0_S); //Configure the charging intensity
-    } else {
-        ESP_HW_LOGD(TAG, "blk_version is less than 3, pvt charge_pump init not supported in efuse.");
     }
 }
 
@@ -162,8 +156,6 @@ void IRAM_ATTR charge_pump_enable(bool enable)
         } else {
             CLEAR_PERI_REG_MASK(PVT_PMUP_DRV_CFG_REG, PVT_PUMP_EN); //disable charge pump
         }
-    } else {
-        ESP_HW_LOGD(TAG, "blk_version is less than 3, pvt charge_pump enable not supported in efuse.");
     }
 }
 

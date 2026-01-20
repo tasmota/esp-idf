@@ -712,7 +712,7 @@ function(__project_default)
                          COMPONENTS main
                          MAPFILE_TARGET "${executable}_mapfile")
 
-    if(CONFIG_APP_BUILD_GENERATE_BINARIES)
+    if(CONFIG_APP_BUILD_GENERATE_BINARIES AND TARGET idf::esptool_py)
         # Is it possible to have a configuration where
         # CONFIG_APP_BUILD_GENERATE_BINARIES is not set?
 

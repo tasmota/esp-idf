@@ -17,7 +17,7 @@
 #include "test_mipi_dsi_board.h"
 #include "esp_lcd_ek79007.h"
 #include "driver/ppa.h"
-#include "esp_flash_encrypt.h"
+#include "esp_efuse.h"
 
 #define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
 #define ALIGN_DOWN(num, align)  ((num) & ~((align) - 1))
@@ -250,7 +250,7 @@ TEST_CASE("MIPI DSI use DMA2D (EK79007)", "[mipi_dsi]")
     size_t src_x_start = 50;
     size_t src_y_start = 50;
     // If flash encryption is enabled, the buffer address and size must be aligned to SOC_GDMA_EXT_MEM_ENC_ALIGNMENT.
-    if (esp_flash_encryption_enabled()) {
+    if (esp_efuse_is_flash_encryption_enabled()) {
         test_block_size = ALIGN_DOWN(test_block_size, SOC_GDMA_EXT_MEM_ENC_ALIGNMENT);
         start_alignment = SOC_GDMA_EXT_MEM_ENC_ALIGNMENT;
         src_x_start = ALIGN_DOWN(src_x_start, SOC_GDMA_EXT_MEM_ENC_ALIGNMENT);

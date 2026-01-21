@@ -718,7 +718,7 @@ To check if flash encryption on your {IDF_TARGET_NAME} device is enabled, do one
 Reading and Writing Data in Encrypted Flash
 -------------------------------------------
 
-{IDF_TARGET_NAME} application code can check if flash encryption is currently enabled by calling :cpp:func:`esp_flash_encryption_enabled`. Also, a device can identify the flash encryption mode by calling :cpp:func:`esp_get_flash_encryption_mode`.
+{IDF_TARGET_NAME} application code can check if flash encryption is currently enabled by calling :cpp:func:`esp_efuse_is_flash_encryption_enabled`. Also, a device can identify the flash encryption mode by calling :cpp:func:`esp_get_flash_encryption_mode`.
 
 Once flash encryption is enabled, be more careful with accessing flash contents from code.
 

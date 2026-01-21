@@ -16,7 +16,6 @@
 #include "esp_partition.h"
 #include "esp_image_format.h"
 #include "esp_secure_boot.h"
-#include "esp_flash_encrypt.h"
 #include "spi_flash_mmap.h"
 #include "sdkconfig.h"
 
@@ -342,7 +341,7 @@ esp_err_t esp_ota_write(esp_ota_handle_t handle, const void *data, size_t size)
                 }
             }
 
-            if (esp_flash_encryption_enabled()) {
+            if (esp_efuse_is_flash_encryption_enabled()) {
                 /* Can only write 16 byte blocks to flash, so need to cache anything else */
                 size_t copy_len;
 
@@ -407,7 +406,7 @@ esp_err_t esp_ota_write_with_offset(esp_ota_handle_t handle, const void *data, s
             /* esp_ota_write_with_offset is used to write data in non contiguous manner.
              * Hence, unaligned data(less than 16 bytes) cannot be cached if flash encryption is enabled.
              */
-            if (esp_flash_encryption_enabled() && (size % 16)) {
+            if (esp_efuse_is_flash_encryption_enabled() && (size % 16)) {
                 ESP_LOGE(TAG, "Size should be 16byte aligned for flash encryption case");
                 return ESP_ERR_INVALID_ARG;
             }
@@ -880,7 +879,7 @@ esp_err_t esp_ota_get_bootloader_description(const esp_partition_t *bootloader_p
     esp_partition_t partition = { 0 };
     if (bootloader_partition == NULL) {
         partition.flash_chip = esp_flash_default_chip;
-        partition.encrypted = esp_flash_encryption_enabled();
+        partition.encrypted = esp_efuse_is_flash_encryption_enabled();
         partition.address = CONFIG_BOOTLOADER_OFFSET_IN_FLASH;
         partition.size = CONFIG_PARTITION_TABLE_OFFSET - CONFIG_BOOTLOADER_OFFSET_IN_FLASH;
     } else {

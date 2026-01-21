@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2016-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2016-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -13,7 +13,7 @@
 #include <inttypes.h>
 #include <time.h>
 
-#include "esp_flash_encrypt.h"
+#include "esp_efuse.h"
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "esp_system.h"
@@ -502,7 +502,7 @@ TEST_CASE("Check nvs key partition APIs (read and generate keys)", "[nvs]")
 {
     nvs_sec_cfg_t cfg, cfg2;
 #if CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC
-    if (!esp_flash_encryption_enabled()) {
+    if (!esp_efuse_is_flash_encryption_enabled()) {
         TEST_IGNORE_MESSAGE("flash encryption disabled, skipping nvs_key partition related tests");
     }
 
@@ -529,7 +529,7 @@ TEST_CASE("Check nvs key partition APIs (read and generate keys)", "[nvs]")
 TEST_CASE("test nvs apis with encryption enabled", "[nvs]")
 {
 #if CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC
-    if (!esp_flash_encryption_enabled()) {
+    if (!esp_efuse_is_flash_encryption_enabled()) {
         TEST_IGNORE_MESSAGE("flash encryption disabled, skipping nvs_api tests with encryption enabled");
     }
     const esp_partition_t* key_part = esp_partition_find_first(
@@ -653,7 +653,7 @@ TEST_CASE("test nvs apis for nvs partition generator utility with encryption ena
     extern const char sample_bin_start[] asm("_binary_sample_bin_start");
 
 #if CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC
-    if (!esp_flash_encryption_enabled()) {
+    if (!esp_efuse_is_flash_encryption_enabled()) {
         TEST_IGNORE_MESSAGE("flash encryption disabled, skipping nvs_api tests with encryption enabled");
     }
 

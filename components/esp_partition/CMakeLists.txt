@@ -6,7 +6,7 @@ set(reqs esp_blockdev)
 if(BOOTLOADER_BUILD)
     set(srcs "partition_bootloader.c")
     list(APPEND reqs spi_flash)
-    set(priv_reqs "bootloader_support")
+    set(priv_reqs "bootloader_support" "efuse")
 
     idf_component_register(SRCS "${srcs}"
         INCLUDE_DIRS "include"
@@ -18,7 +18,7 @@ if(BOOTLOADER_BUILD)
 elseif(esp_tee_build)
     set(srcs "partition_tee.c")
     list(APPEND reqs spi_flash)
-    set(priv_reqs "tee_flash_mgr")
+    set(priv_reqs "tee_flash_mgr" "efuse")
 
     idf_component_register(SRCS "${srcs}"
         INCLUDE_DIRS "include"
@@ -29,7 +29,7 @@ elseif(esp_tee_build)
 # regular, OS build
 else()
     set(srcs "partition.c")
-    set(priv_reqs esp_system spi_flash partition_table)
+    set(priv_reqs esp_system spi_flash partition_table efuse)
     set(reqs esp_blockdev)
     set(private_include_dirs)
 

@@ -720,7 +720,12 @@ if(CONFIG_BT_ENABLED)
         )
     endif()
 
-    if(NOT (CONFIG_BT_LE_CRYPTO_STACK_MBEDTLS OR CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS))
+    # Compile TinyCrypt if:
+    # 1. Controller uses TinyCrypt (not mbedTLS), OR
+    # 2. NimBLE uses TinyCrypt (not mbedTLS), OR
+    # 3. Bluedroid Host SMP uses TinyCrypt
+    if(CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT OR
+       (NOT CONFIG_BT_LE_CRYPTO_STACK_MBEDTLS AND NOT CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS))
         list(APPEND include_dirs
                 common/tinycrypt/include
                 common/tinycrypt/port
@@ -979,7 +984,7 @@ set(bt_priv_requires
 )
 
 if(CONFIG_BLE_COMPRESSED_LOG_ENABLE)
-    set(BT_ROOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(CODE_BASE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
     # When log compression is enabled, selected logs are replaced
     # by auto-generated macros that emit pre-encoded data.
     # This eliminates the original format strings, reducing firmware size and

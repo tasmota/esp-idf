@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,6 +11,7 @@
 #include "hal/misc.h"
 #include "hal/assert.h"
 #include "hal/hal_utils.h"
+#include "hal/config.h"
 #include "hal/isp_types.h"
 #include "hal/color_types.h"
 #include "hal/config.h"
@@ -130,8 +131,13 @@ extern "C" {
 /*---------------------------------------------------------------
                       CCM
 ---------------------------------------------------------------*/
+#if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
+#define ISP_LL_CCM_MATRIX_INT_BITS      (4)
+#define ISP_LL_CCM_MATRIX_FRAC_BITS     (8)
+#else
 #define ISP_LL_CCM_MATRIX_INT_BITS      (2)
 #define ISP_LL_CCM_MATRIX_FRAC_BITS     (10)
+#endif
 #define ISP_LL_CCM_MATRIX_TOT_BITS      (ISP_LL_CCM_MATRIX_INT_BITS + ISP_LL_CCM_MATRIX_FRAC_BITS + 1)  // including one sign bit
 
 typedef union {
@@ -1724,6 +1730,23 @@ static inline uint32_t isp_ll_awb_get_accumulated_b_value(isp_dev_t *hw)
 
 #if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
 /**
+ * @brief Set AWB subwindow range
+ *
+ * @param[in] hw              Hardware instance address
+ * @param[in] top_left_x      Top left pixel x axis value
+ * @param[in] top_left_y      Top left pixel y axis value
+ * @param[in] sub_window_xsize Subwindow x size (minimum 4)
+ * @param[in] sub_window_ysize Subwindow y size (minimum 4)
+ */
+static inline void isp_ll_awb_set_subwindow_range(isp_dev_t *hw, uint32_t top_left_x, uint32_t top_left_y, uint32_t sub_window_xsize, uint32_t sub_window_ysize)
+{
+    hw->awb_bx.awb_x_start = top_left_x;
+    hw->awb_bx.awb_x_bsize = sub_window_xsize;
+    hw->awb_by.awb_y_start = top_left_y;
+    hw->awb_by.awb_y_bsize = sub_window_ysize;
+}
+
+/**
  * @brief Enable AWB white balance gain
  *
  * @param[in] hw      Hardware instance address
@@ -1758,6 +1781,11 @@ static inline void isp_ll_awb_set_wb_gain(isp_dev_t *hw, isp_wbg_gain_t gain)
     hw->wbg_coef_b.wbg_b = gain.gain_b;
 }
 #else
+static inline void isp_ll_awb_set_subwindow_range(isp_dev_t *hw, uint32_t top_left_x, uint32_t top_left_y, uint32_t sub_window_xsize, uint32_t sub_window_ysize)
+{
+    // for compatibility
+}
+
 static inline void isp_ll_awb_enable_wb_gain(isp_dev_t *hw, bool enable)
 {
     //for compatibility
@@ -1877,21 +1905,27 @@ static inline void isp_ll_shadow_set_mode(isp_dev_t *hw, isp_ll_shadow_mode_t mo
 /**
  * @brief Update BLC shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.blc_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.blc_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.blc_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.blc_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.blc_update = 1;
+    }
 
     return true;
 }
@@ -1899,21 +1933,27 @@ static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw)
 /**
  * @brief Update DPC shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.dpc_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.dpc_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.dpc_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.dpc_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.dpc_update = 1;
+    }
 
     return true;
 }
@@ -1921,21 +1961,27 @@ static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw)
 /**
  * @brief Update BF shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.bf_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.bf_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.bf_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.bf_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.bf_update = 1;
+    }
 
     return true;
 }
@@ -1943,21 +1989,27 @@ static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw)
 /**
  * @brief Update WBG shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.wbg_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.wbg_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.wbg_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.wbg_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.wbg_update = 1;
+    }
 
     return true;
 }
@@ -1965,21 +2017,27 @@ static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw)
 /**
  * @brief Update CCM shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.ccm_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.ccm_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.ccm_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.ccm_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.ccm_update = 1;
+    }
 
     return true;
 }
@@ -1987,21 +2045,27 @@ static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw)
 /**
  * @brief Update Sharpen shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.sharp_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.sharp_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.sharp_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.sharp_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.sharp_update = 1;
+    }
 
     return true;
 }
@@ -2009,21 +2073,27 @@ static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw)
 /**
  * @brief Update Color shadow register
  *
- * @param[in] hw      Hardware instance address
+ * @param[in] hw            Hardware instance address
+ * @param[in] force_update  Force update
  * @return
  *      - True if update is successful, False otherwise
  */
-static inline bool isp_ll_shadow_update_color(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_color(isp_dev_t *hw, bool force_update)
 {
     //only valid when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
     HAL_ASSERT(hw->shadow_reg_ctrl.shadow_update_sel == ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC);
 
-    if (hw->shadow_reg_ctrl.color_update == 1) {
-        return false;
-    }
+    if (force_update) {
+        //don't care shadow register
+        hw->shadow_reg_ctrl.color_update = 1;
+    } else {
+        if (hw->shadow_reg_ctrl.color_update == 1) {
+            return false;
+        }
 
-    //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
-    hw->shadow_reg_ctrl.color_update = 1;
+        //self clear when ISP_SHADOW_MODE_UPDATE_ONLY_NEXT_VSYNC
+        hw->shadow_reg_ctrl.color_update = 1;
+    }
 
     return true;
 }
@@ -2034,43 +2104,43 @@ static inline void isp_ll_shadow_set_mode(isp_dev_t *hw, isp_ll_shadow_mode_t mo
     //for compatibility
 }
 
-static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_blc(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_dpc(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_bf(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_wbg(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_ccm(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_sharpen(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;
 }
 
-static inline bool isp_ll_shadow_update_color(isp_dev_t *hw)
+static inline bool isp_ll_shadow_update_color(isp_dev_t *hw, bool force_update)
 {
     //for compatibility
     return true;

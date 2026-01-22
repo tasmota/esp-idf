@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -146,6 +146,8 @@ typedef enum {
     SOC_MOD_CLK_RTC_FAST,                      /*!< RTC_FAST_CLK can be sourced from XTAL, RC_FAST, or LP_PLL by configuring soc_rtc_fast_clk_src_t */
     SOC_MOD_CLK_RTC_SLOW,                      /*!< RTC_SLOW_CLK can be sourced from RC_SLOW, XTAL32K, or RC32K by configuring soc_rtc_slow_clk_src_t */
     // For digital domain: peripherals
+    SOC_MOD_CLK_SYS,                           /*!< SYS_CLK is the system clock, derived from HP_ROOT clock source */
+    SOC_MOD_CLK_APB,                           /*!< APB_CLK is highly dependent on the CPU_CLK source */
     SOC_MOD_CLK_PLL_F20M,                      /*!< PLL_F20M_CLK is derived from SPLL (clock gating + default divider 24), its default frequency is 20MHz */
     SOC_MOD_CLK_PLL_F25M,                      /*!< PLL_F25M_CLK is derived from MPLL (clock gating + configurable divider), it will have a frequency of 25MHz */
     SOC_MOD_CLK_PLL_F50M,                      /*!< PLL_F50M_CLK is derived from MPLL (clock gating + configurable divider 10), it will have a frequency of 50MHz */
@@ -274,16 +276,16 @@ typedef enum {
 /**
  * @brief Array initializer for all supported clock sources of LP_UART
  */
-#define SOC_LP_UART_CLKS {SOC_MOD_CLK_RTC_FAST, SOC_MOD_CLK_XTAL_D2}
+#define SOC_LP_UART_CLKS {SOC_MOD_CLK_RC_FAST, SOC_MOD_CLK_XTAL_D2}
 
 /**
  * @brief Type of LP_UART clock source
  */
 typedef enum {
-    LP_UART_SCLK_LP_FAST = SOC_MOD_CLK_RTC_FAST,        /*!< LP_UART source clock is LP(RTC)_FAST */
+    LP_UART_SCLK_RC_FAST = SOC_MOD_CLK_RC_FAST,         /*!< LP_UART source clock is FOSC */
     LP_UART_SCLK_XTAL_D2 = SOC_MOD_CLK_XTAL_D2,         /*!< LP_UART source clock is XTAL_D2 */
     // LP_UART_SCLK_LP_PLL  = SOC_MOD_CLK_LP_PLL,          /*!< LP_UART source clock is LP_PLL (8M PLL) */ TODO: LP_PLL clock requires extra support
-    LP_UART_SCLK_DEFAULT = SOC_MOD_CLK_RTC_FAST,        /*!< LP_UART source clock default choice is LP(RTC)_FAST */
+    LP_UART_SCLK_DEFAULT = SOC_MOD_CLK_RC_FAST,        /*!< LP_UART source clock default choice is FOSC */
 } soc_periph_lp_uart_clk_src_t;
 
 //////////////////////////////////////////////////MCPWM/////////////////////////////////////////////////////////////////

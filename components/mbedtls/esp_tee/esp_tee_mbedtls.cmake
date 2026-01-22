@@ -19,11 +19,11 @@ idf_component_register(SRCS "${srcs}"
                        PRIV_REQUIRES "${priv_requires}")
 
 # Only build mbedtls libraries
-set(ENABLE_TESTING CACHE BOOL OFF)
-set(ENABLE_PROGRAMS CACHE BOOL OFF)
+set(ENABLE_TESTING OFF CACHE BOOL "mbedtls: enable testing")
+set(ENABLE_PROGRAMS OFF CACHE BOOL "mbedtls: enable programs")
 
 # Use pre-generated source files in mbedtls repository
-set(GEN_FILES CACHE BOOL OFF)
+set(GEN_FILES OFF CACHE BOOL "mbedtls: use pre-generated source files")
 
 # Needed to for include_next includes to work from within mbedtls
 include_directories("${COMPONENT_DIR}/port/include")
@@ -118,3 +118,6 @@ if(CONFIG_SOC_HMAC_SUPPORTED)
     # HMAC-based PBKDF2 implementation
     target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/esp_hmac_pbkdf2.c")
 endif()
+
+# PSA Attestation
+target_include_directories(tfpsacrypto PUBLIC "${COMPONENT_DIR}/port/psa_attestation")

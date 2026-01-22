@@ -98,11 +98,6 @@ menu "ESP-TEE (Trusted Execution Environment)"
 
         menu "Secure Storage: Additional supported curves for ECDSA signing"
 
-            config SECURE_TEE_SEC_STG_SUPPORT_SECP192R1_SIGN
-                bool "SECP192R1"
-                help
-                    Enable ECDSA signing with the SECP192R1 curve using TEE secure storage
-
             config SECURE_TEE_SEC_STG_SUPPORT_SECP384R1_SIGN
                 bool "SECP384R1"
                 depends on SOC_ECDSA_SUPPORT_CURVE_P384
@@ -126,6 +121,15 @@ menu "ESP-TEE (Trusted Execution Environment)"
                 This configuration sets the key ID from the TEE secure storage
                 storing the ECDSA keypair for executing sign/verify operations
                 from the TEE side for attestation.
+
+        config SECURE_TEE_ATT_PSA_CERT_REF
+            depends on SECURE_TEE_ATTESTATION
+            string
+            default "0632793520245-10010" if IDF_TARGET_ESP32C6
+            default "0632793520351-10100" if IDF_TARGET_ESP32H2
+            default "XXXXXXXXXXXXX-XXXXX"
+            help
+                PSA certification ID string for the attestation token
 
     endmenu
 

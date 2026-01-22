@@ -3,11 +3,31 @@
 # using gen_soc_caps_kconfig.py, do not edit manually
 #####################################################
 
+config SOC_DEDICATED_GPIO_SUPPORTED
+    bool
+    default y
+
 config SOC_UART_SUPPORTED
     bool
     default y
 
+config SOC_GDMA_SUPPORTED
+    bool
+    default y
+
+config SOC_AHB_GDMA_SUPPORTED
+    bool
+    default y
+
+config SOC_AXI_GDMA_SUPPORTED
+    bool
+    default y
+
 config SOC_GPTIMER_SUPPORTED
+    bool
+    default y
+
+config SOC_ASYNC_MEMCPY_SUPPORTED
     bool
     default y
 
@@ -27,7 +47,7 @@ config SOC_SYSTIMER_SUPPORTED
     bool
     default y
 
-config SOC_FLASH_ENC_SUPPORTED
+config SOC_PSRAM_DMA_CAPABLE
     bool
     default y
 
@@ -113,11 +133,11 @@ config SOC_HP_CPU_HAS_MULTIPLE_CORES
 
 config SOC_CPU_BREAKPOINTS_NUM
     int
-    default 3
+    default 4
 
 config SOC_CPU_WATCHPOINTS_NUM
     int
-    default 3
+    default 4
 
 config SOC_CPU_WATCHPOINT_MAX_REGION_SIZE
     hex
@@ -142,6 +162,30 @@ config SOC_CPU_HAS_LOCKUP_RESET
 config SOC_SIMD_PREFERRED_DATA_ALIGNMENT
     int
     default 16
+
+config SOC_DMA_CAN_ACCESS_FLASH
+    bool
+    default y
+
+config SOC_AHB_GDMA_VERSION
+    int
+    default 2
+
+config SOC_GDMA_SUPPORT_ETM
+    bool
+    default y
+
+config SOC_GDMA_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_GDMA_EXT_MEM_ENC_ALIGNMENT
+    int
+    default 16
+
+config SOC_APM_CTRL_FILTER_SUPPORTED
+    bool
+    default y
 
 config SOC_GPIO_PORT
     int
@@ -380,10 +424,6 @@ config SOC_MODEM_CLOCK_IS_INDEPENDENT
     default y
 
 config SOC_CLK_APLL_SUPPORTED
-    bool
-    default y
-
-config SOC_CLK_SDIO_PLL_SUPPORTED
     bool
     default y
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import datetime
 import logging
@@ -248,3 +248,11 @@ def pytest_collection_modifyitems(session: Session, config: Config, items: list[
         if marker:
             reason = marker.args[0] if marker.args else 'Skipped as this test is specific to build system v1.'
             item.add_marker(pytest.mark.skip(reason=reason))
+
+
+def pytest_report_header(config: Config) -> str:
+    """Add a clear header to the terminal output whether buildv1 or buildv2 testing is in progress."""
+    if config.getoption('--buildv2'):
+        return 'Testing ESP-IDF CMake-based build system v2'
+    else:
+        return 'Testing ESP-IDF CMake-based build system v1'

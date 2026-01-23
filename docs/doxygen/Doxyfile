@@ -189,6 +189,8 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/spi_flash_types.h \
     $(PROJECT_PATH)/components/esp_hal_pcnt/include/hal/pcnt_types.h \
     $(PROJECT_PATH)/components/esp_hal_rmt/include/hal/rmt_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sdio_slave_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/esp_hal_twai/include/hal/twai_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uart_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uhci_types.h \
@@ -276,10 +278,8 @@ INPUT = \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/task.h \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/timers.h \
     $(PROJECT_PATH)/components/hal/include/hal/color_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/efuse_hal.h \
     $(PROJECT_PATH)/components/hal/include/hal/lp_core_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps_init.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_task_info.h \

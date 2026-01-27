@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -32,6 +32,7 @@ extern "C"
 #define ESP_ERR_OTA_SMALL_SEC_VER                (ESP_ERR_OTA_BASE + 0x04)  /*!< Error if the firmware has a secure version less than the running firmware. */
 #define ESP_ERR_OTA_ROLLBACK_FAILED              (ESP_ERR_OTA_BASE + 0x05)  /*!< Error if flash does not have valid firmware in passive partition and hence rollback is not possible */
 #define ESP_ERR_OTA_ROLLBACK_INVALID_STATE       (ESP_ERR_OTA_BASE + 0x06)  /*!< Error if current active firmware is still marked in pending validation state (ESP_OTA_IMG_PENDING_VERIFY), essentially first boot of firmware image post upgrade and hence firmware upgrade is not possible */
+#define ESP_ERR_OTA_ALREADY_IN_PROGRESS              (ESP_ERR_OTA_BASE + 0x07)  /*!< Error if another OTA operation is already in progress on the same partition */
 
 
 /**
@@ -72,6 +73,7 @@ typedef uint32_t esp_ota_handle_t;
  *    - ESP_ERR_INVALID_ARG: partition or out_handle arguments were NULL, or partition doesn't point to an OTA app partition.
  *    - ESP_ERR_NO_MEM: Cannot allocate memory for OTA operation.
  *    - ESP_ERR_OTA_PARTITION_CONFLICT: Partition holds the currently running firmware, cannot update in place.
+ *    - ESP_ERR_OTA_ALREADY_IN_PROGRESS: Another OTA operation is already in progress on the same partition.
  *    - ESP_ERR_NOT_FOUND: Partition argument not found in partition table.
  *    - ESP_ERR_OTA_SELECT_INFO_INVALID: The OTA data partition contains invalid data.
  *    - ESP_ERR_INVALID_SIZE: Partition doesn't fit in configured flash size.
@@ -99,6 +101,7 @@ esp_err_t esp_ota_begin(const esp_partition_t* partition, size_t image_size, esp
  *    - ESP_ERR_INVALID_ARG: partition, out_handle were NULL or image_offset arguments is negative, or partition doesn't point to an OTA app partition.
  *    - ESP_ERR_NO_MEM: Cannot allocate memory for OTA operation.
  *    - ESP_ERR_OTA_PARTITION_CONFLICT: Partition holds the currently running firmware, cannot update in place.
+ *    - ESP_ERR_OTA_ALREADY_IN_PROGRESS: Another OTA operation is already in progress on the same partition.
  *    - ESP_ERR_NOT_FOUND: Partition argument not found in partition table.
  *    - ESP_ERR_OTA_SELECT_INFO_INVALID: The OTA data partition contains invalid data.
  *    - ESP_ERR_INVALID_SIZE: Partition doesn't fit in configured flash size.

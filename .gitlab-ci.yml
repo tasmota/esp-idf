@@ -30,3 +30,7 @@ include:
   - ".gitlab/ci/deploy.yml"
   - ".gitlab/ci/post_deploy.yml"
   - ".gitlab/ci/test-win.yml"
+  - project: "ci/actions/common"
+    file: "templates/idf/deploy-github.yml"
+  - project: "ci/actions/common"
+    file: "templates/idf/deploy-docs.yml"

@@ -8,7 +8,6 @@ components/sdmmc/test_apps:
       temporary: false
       reason: only one target required for running the test
   depends_components:
-    - *common_components
     - sdmmc
     - esp_driver_sdmmc
     - vfs

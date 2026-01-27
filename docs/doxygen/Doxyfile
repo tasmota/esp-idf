@@ -232,7 +232,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_ringbuf/include/freertos/ringbuf.h \
     $(PROJECT_PATH)/components/esp_rom/include/esp_rom_sys.h \
     $(PROJECT_PATH)/components/esp_security/include/esp_ds.h \
-    $(PROJECT_PATH)/components/esp_security/include/esp_hmac.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_expression_with_stack.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_freertos_hooks.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_ipc_isr.h \
@@ -297,6 +296,7 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
     $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_ecdsa_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_hmac_opaque_contexts.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \

@@ -50,6 +50,10 @@ set(private_include_dirs "")
 set(private_requirements "")
 set(ldfragments "")
 
+# ---------------------------------------------------- Set Private Requirements ----------------------------------------
+
+list(APPEND private_requirements esp_hal_systimer)
+
 # ---------------------------------------------------- Set Sources -----------------------------------------------------
 
 # Add common source files

@@ -1443,7 +1443,8 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
     int ret = mbedtls_pk_wrap_psa(pki_l->pk_key, ds_key_id);
     if (ret != 0) {
         ESP_LOGE(TAG, "mbedtls_pk_wrap_psa failed with -0x%04X", -ret);
-        return ret;
+        psa_destroy_key(ds_key_id);
+        return ESP_FAIL;
     }
     ESP_LOGD(TAG, "DS peripheral pk context initialized.");
     return ESP_OK;

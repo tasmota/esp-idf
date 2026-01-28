@@ -71,7 +71,7 @@ Key purpose value: 8
 
 In this case, the HMAC is given out to the software, e.g., to authenticate a message.
 
-The API to calculate the HMAC is :cpp:func:`psa_mac_compute`  with an opaque PSA key with the eFuse key block ID which contains the secret and has the efuse key purpose set to Upstream mode.
+The API to calculate the HMAC is :cpp:func:`psa_mac_compute`, which takes an opaque PSA key referencing an eFuse key block that contains the secret and has its purpose set to Upstream mode.
 
 HMAC for Digital Signature
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -160,7 +160,7 @@ We use ``esp_efuse_write_key`` to set physical key block 4 in the eFuse for the 
         // writing key failed, maybe written already
     }
 
-Now we can use the saved key to calculate an HMAC for software usage using the PSA Crypto API.
+Now we can calculate an HMAC for software usage with the saved key through the PSA Crypto API.
 
 .. code-block:: c
 

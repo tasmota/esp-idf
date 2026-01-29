@@ -24,12 +24,6 @@ CONFIG_OTA = [
     for target in TESTING_TARGETS
 ]
 
-CONFIG_TEST = [
-    # 'config, target, skip_autoflash, markers',
-    ('tee_ota', target, 'y', (pytest.mark.host_test,))
-    for target in TESTING_TARGETS
-]
-
 CONFIG_ALL = [
     # 'config, target, markers',
     (config, target, (pytest.mark.generic,))
@@ -343,7 +337,7 @@ def tee_ota_stage_checks(dut: IdfDut, stage: TeeOtaStage, offset: str) -> None:
 
 @idf_parametrize(
     'config, target, skip_autoflash, markers',
-    CONFIG_TEST,
+    CONFIG_OTA,
     indirect=['config', 'target', 'skip_autoflash'],
 )
 def test_esp_tee_ota_reboot_without_ota_end(dut: IdfDut) -> None:
@@ -366,7 +360,7 @@ def test_esp_tee_ota_reboot_without_ota_end(dut: IdfDut) -> None:
 
 @idf_parametrize(
     'config, target, skip_autoflash, markers',
-    CONFIG_TEST,
+    CONFIG_OTA,
     indirect=['config', 'target', 'skip_autoflash'],
 )
 def test_esp_tee_ota_valid_img(dut: IdfDut) -> None:
@@ -397,7 +391,7 @@ def test_esp_tee_ota_valid_img(dut: IdfDut) -> None:
 
 @idf_parametrize(
     'config, target, skip_autoflash, markers',
-    CONFIG_TEST,
+    CONFIG_OTA,
     indirect=['config', 'target', 'skip_autoflash'],
 )
 def test_esp_tee_ota_rollback(dut: IdfDut) -> None:

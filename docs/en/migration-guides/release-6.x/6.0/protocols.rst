@@ -64,7 +64,7 @@ Removed wolfSSL Support
 The built-in wolfSSL TLS stack support has been removed from ESP-TLS. Users who were using wolfSSL should migrate to either:
 
 1. **mbedTLS (Recommended)**: The default TLS stack, fully integrated and maintained within ESP-IDF.
-2. **Custom TLS Stack**: Register your own TLS implementation using the new custom stack API (see below).
+2. **Custom TLS Stack**: Register your own TLS implementation using the new custom stack API (see Option B below).
 
 **Removed Kconfig Options**
 
@@ -78,13 +78,13 @@ The following Kconfig options have been removed:
 
 If your project was using wolfSSL via ESP-TLS:
 
-1. **Option A - Switch to mbedTLS**:
+1. **Option A - Switch to mbedTLS**
 
    - Remove ``CONFIG_ESP_TLS_USING_WOLFSSL=y`` from your sdkconfig
    - The default ``CONFIG_ESP_TLS_USING_MBEDTLS`` will be used automatically
    - No code changes required for standard TLS operations
 
-2. **Option B - Use Custom Stack API**:
+2. **Option B - Use Custom Stack API**
 
    If you need to continue using wolfSSL or another TLS library, you can register it as a custom stack:
 

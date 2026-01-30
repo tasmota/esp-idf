@@ -108,7 +108,7 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
 
 .. note::
 
-    由于自定义协议栈实现位于 ESP-TLS 内部，切换到自定义协议栈不会更改工程的 ESP-TLS 特定代码。
+    由于自定义协议栈的实现封装在 ESP-TLS 内部，因此切换为自定义协议栈并不会影响项目中与 ESP-TLS 相关的代码。
 
 在 ESP-IDF 中使用自定义 TLS 协议栈
 ----------------------------------------
@@ -121,30 +121,30 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
 
    * ``create_ssl_handle`` - 为新连接初始化 TLS/SSL 上下文
    * ``handshake`` - 执行 TLS 握手
-   * ``read`` - 从 TLS 连接读取解密数据
-   * ``write`` - 写入并加密数据到 TLS 连接
-   * ``conn_delete`` - 清理 TLS 连接并释放资源
+   * ``read`` - 从 TLS 连接读取已解密的数据
+   * ``write`` - 向 TLS 连接写入数据，并在发送前完成加密
+   * ``conn_delete`` - 清理 TLS 连接并释放相关资源
    * ``net_init`` - 初始化网络上下文
    * ``get_ssl_context`` - 获取协议栈特定的 SSL 上下文
    * ``get_bytes_avail`` - 获取可用于读取的字节数
-   * ``init_global_ca_store`` - 初始化全局 CA 存储
+   * ``init_global_ca_store`` - 初始化全局 CA 证书存储
    * ``set_global_ca_store`` - 将 CA 证书加载到全局存储
-   * ``get_global_ca_store`` - 获取全局 CA 存储
-   * ``free_global_ca_store`` - 释放全局 CA 存储
+   * ``get_global_ca_store`` - 获取全局 CA 证书存储
+   * ``free_global_ca_store`` - 释放全局 CA 证书存储
    * ``get_ciphersuites_list`` - 获取支持的密码套件列表
 
    可选函数（如果不支持，可以为 NULL）：
 
-   * ``get_client_session`` - 获取客户端会话票据（如果启用了 CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS）
-   * ``free_client_session`` - 释放客户端会话（如果启用了 CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS）
-   * ``server_session_ticket_ctx_init`` - 初始化服务器会话票据上下文（如果启用了 CONFIG_ESP_TLS_SERVER_SESSION_TICKETS）
-   * ``server_session_ticket_ctx_free`` - 释放服务器会话票据上下文（如果启用了 CONFIG_ESP_TLS_SERVER_SESSION_TICKETS）
-   * ``server_session_create`` - 创建服务器会话（服务器端，如果提供了 server_session_init 可以为 NULL）
-   * ``server_session_init`` - 初始化服务器会话（服务器端，如果提供了 server_session_create 可以为 NULL）
-   * ``server_session_continue_async`` - 继续异步服务器握手（服务器端，如果提供了 server_session_create 可以为 NULL）
-   * ``server_session_delete`` - 删除服务器会话（服务器端，可以为 NULL，将使用 conn_delete）
+   * ``get_client_session`` - 获取客户端会话票据（须启用 :ref:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`）
+   * ``free_client_session`` - 释放客户端会话（须启用 :ref:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`）
+   * ``server_session_ticket_ctx_init`` - 初始化服务器会话票据上下文（须启用 :ref:`CONFIG_ESP_TLS_SERVER_SESSION_TICKETS`）
+   * ``server_session_ticket_ctx_free`` - 释放服务器会话票据上下文（须启用 :ref:`CONFIG_ESP_TLS_SERVER_SESSION_TICKETS`）
+   * ``server_session_create`` - 创建服务器会话（服务器端，如果提供了 server_session_init，该接口可以为 NULL）
+   * ``server_session_init`` - 初始化服务器会话（服务器端，如果提供了 server_session_create，该接口可以为 NULL）
+   * ``server_session_continue_async`` - 继续服务器端的异步握手（服务器端，如果提供了 server_session_create，该接口可以为 NULL）
+   * ``server_session_delete`` - 删除服务器会话（服务器端，该接口可以为 NULL，此时将使用 ``conn_delete`` 进行清理）
 
-3. 创建一个包含函数实现的静态/全局结构：
+3. 创建一个包含函数实现的静态/全局结构体：
 
    .. code-block:: c
 
@@ -176,33 +176,33 @@ ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定�
            .server_session_delete = NULL,
        };
 
-4. 在创建任何 TLS 连接之前注册您的自定义协议栈：
+4. 在创建任何 TLS 连接之前注册自定义协议栈：
 
    .. code-block:: c
 
        void app_main(void) {
            // 第二个参数是传递给全局回调函数的用户上下文
-           // (init_global_ca_store, set_global_ca_store 等)
-           // 如果不需要可以传 NULL，或者为 C++ 实现传递一个指针
+           //（如 init_global_ca_store，set_global_ca_store 等）。
+           // 如果不需要可以传 NULL，对于 C++ 实现则传递相应的指针
            esp_err_t ret = esp_tls_register_stack(&my_tls_ops, NULL);
            if (ret != ESP_OK) {
                ESP_LOGE("APP", "Failed to register TLS stack: %s", esp_err_to_name(ret));
                return;
            }
 
-           // 现在所有 TLS 连接都将使用您的自定义协议栈
+           // 现在所有 TLS 连接都将使用你的自定义协议栈
            // ... 像往常一样使用 esp_tls_conn_new() 等创建 TLS 连接 ...
        }
 
-重要说明
----------------
+.. important::
 
-* 必须在创建任何 TLS 连接之前注册自定义协议栈。在创建 TLS 连接后调用 :cpp:func:`esp_tls_register_stack` 不会影响现有连接。
-* :cpp:type:`esp_tls_stack_ops_t` 结构必须指向静态/全局结构（不在栈上），因为它按引用存储。
-* 您的实现应将协议栈特定的上下文数据存储在 :cpp:type:`esp_tls_t` 结构的 ``priv_ctx`` 和 ``priv_ssl`` 字段中。
-* 所有必需的函数指针必须为非 NULL。可选函数如果不支持可以为 NULL。
-* 注册函数只能调用一次。后续调用将返回 ``ESP_ERR_INVALID_STATE``。
-* 有关详细的函数签名和要求，请参阅 :component_file:`esp-tls/esp_tls_custom_stack.h`。
+    * 必须在创建任何 TLS 连接 **之前** 注册自定义协议栈。在创建 TLS 连接后调用 :cpp:func:`esp_tls_register_stack` 不会影响现有连接。
+    * :cpp:type:`esp_tls_stack_ops_t` 结构必须指向静态或全局结构体（不在栈上），因为系统会以引用方式存储该结构体。
+    * 你的实现应将协议栈特定的上下文数据存储在 :cpp:type:`esp_tls_t` 结构的 ``priv_ctx`` 和 ``priv_ssl`` 字段中。
+    * 所有必需函数的指针必须为非 NULL。可选函数如果不支持可以为 NULL。
+    * 注册函数只能调用一次。后续调用将返回 ``ESP_ERR_INVALID_STATE``。
+    * 更多函数签名和要求，请参阅 :component_file:`esp-tls/esp_tls_custom_stack.h`。
+
 
 ESP-TLS 中的 ATECC608A（安全元件）
 -----------------------------------------

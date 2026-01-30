@@ -194,15 +194,15 @@ To use a custom TLS stack in your project, follow these steps:
            // ... create TLS connections as usual using esp_tls_conn_new(), etc. ...
        }
 
-Important Notes
----------------
+.. important::
 
-* The custom stack must be registered before creating any TLS connections. Calling :cpp:func:`esp_tls_register_stack` after TLS connections have been created will not affect existing connections.
-* The :cpp:type:`esp_tls_stack_ops_t` structure must point to a static/global structure (not on the stack) as it's stored by reference.
-* Your implementation should store stack-specific context data in the ``priv_ctx`` and ``priv_ssl`` fields of the :cpp:type:`esp_tls_t` structure.
-* All required function pointers must be non-NULL. Optional functions can be NULL if not supported.
-* The registration function can only be called once. Subsequent calls will return ``ESP_ERR_INVALID_STATE``.
-* For detailed function signatures and requirements, see :component_file:`esp-tls/esp_tls_custom_stack.h`.
+    * The custom stack must be registered **before** creating any TLS connections. Calling :cpp:func:`esp_tls_register_stack` after TLS connections have been created will not affect existing connections.
+    * The :cpp:type:`esp_tls_stack_ops_t` structure must point to a static/global structure (not on the stack) as it's stored by reference.
+    * Your implementation should store stack-specific context data in the ``priv_ctx`` and ``priv_ssl`` fields of the :cpp:type:`esp_tls_t` structure.
+    * All required function pointers must be non-NULL. Optional functions can be NULL if not supported.
+    * The registration function can only be called once. Subsequent calls will return ``ESP_ERR_INVALID_STATE``.
+    * For detailed function signatures and requirements, see :component_file:`esp-tls/esp_tls_custom_stack.h`.
+
 
 ATECC608A (Secure Element) with ESP-TLS
 --------------------------------------------------

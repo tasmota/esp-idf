@@ -209,7 +209,7 @@ esp_err_t esp_ota_abort(esp_ota_handle_t handle);
 /**
  * @brief Configure OTA data for a new boot partition
  *
- * Equivalent to esp_image_verify() followed by esp_ota_set_boot_partition_without_validate().
+ * Equivalent to esp_image_verify() followed by esp_ota_set_boot_partition_skip_validate().
  *
  * @note If this function returns ESP_OK, calling esp_restart() will boot the newly configured app partition.
  *
@@ -237,7 +237,7 @@ esp_err_t esp_ota_set_boot_partition(const esp_partition_t* partition);
  *    - ESP_ERR_NOT_FOUND: OTA data partition not found.
  *    - ESP_ERR_FLASH_OP_TIMEOUT or ESP_ERR_FLASH_OP_FAIL: Flash erase or write failed.
  */
-esp_err_t esp_ota_set_boot_partition_without_validate(const esp_partition_t* partition);
+esp_err_t esp_ota_set_boot_partition_skip_validate(const esp_partition_t* partition);
 
 /**
  * @brief Get partition info of currently configured boot app

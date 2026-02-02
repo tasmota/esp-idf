@@ -124,6 +124,48 @@ GPIO
 
 - Added the :cpp:type:`esp_err_t` return type to :func:`gpio_uninstall_isr_service`.
 
+GPIO Deep Sleep Wakeup APIs Removed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following GPIO driver APIs have been removed:
+
+- :func:`gpio_deep_sleep_wakeup_enable` - Use :func:`gpio_wakeup_enable_on_hp_periph_powerdown_sleep` instead
+- :func:`gpio_deep_sleep_wakeup_disable` - Use :func:`gpio_wakeup_disable_on_hp_periph_powerdown_sleep` instead
+
+The deprecated macro ``GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO()`` has been removed. Use ``GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO()`` instead.
+
+**Migration Example:**
+
+Old code:
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // Enable GPIO wakeup
+    gpio_deep_sleep_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // Check validity
+    if (GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(GPIO_NUM_0)) {
+        // ...
+    }
+
+New code:
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // Enable GPIO wakeup (works for both deep sleep and light sleep with peripheral powerdown)
+    gpio_wakeup_enable_on_hp_periph_powerdown_sleep(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // Check validity
+    if (GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO(GPIO_NUM_0)) {
+        // ...
+    }
+
+For more details, see the :ref:`GPIO Wakeup API Changes <gpio_wakeup_api_changes>` section in the System migration guide.
+
 LEDC
 ----
 

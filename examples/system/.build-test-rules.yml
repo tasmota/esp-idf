@@ -59,7 +59,7 @@ examples/system/esp_timer:
 
 examples/system/eventfd:
   disable:
-    - if: SOC_GPTIMER_SUPPORTED != 1 and (IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")) or IDF_TARGET in ["esp32s31"] # TODO: [ESP32S31] IDF-14932
+    - if: SOC_GPTIMER_SUPPORTED != 1 and (IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux"))
       reason: no target specific functionality, testing on a single target is sufficient
   depends_components:
     - vfs

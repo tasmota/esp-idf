@@ -478,15 +478,63 @@ typedef struct esp_tls_stack_ops {
      * @note If NULL, conn_delete() will be used instead.
      */
     void (*server_session_delete)(void *user_ctx, esp_tls_t *tls);
+
+    /**
+     * @brief Calculate SHA1 hash (optional, for esp_crypto_sha1 API)
+     *
+     * This function calculates the SHA1 hash of the input data. It is used by
+     * esp_crypto_sha1() API which is needed by components like esp_http_server
+     * for WebSocket key calculation.
+     *
+     * @param user_ctx User context pointer passed to esp_tls_register_stack()
+     * @param input Input data buffer
+     * @param ilen Length of input data
+     * @param output Output buffer for SHA1 hash (must be at least 20 bytes)
+     *
+     * @return
+     *         - 0: Success
+     *         - Negative value: Error occurred
+     *
+     * @note If NULL, esp_crypto_sha1() API calls will fail. This callback must be implemented
+     *       if your application or any dependent component (e.g., esp_http_server for WebSocket)
+     *       uses the esp_crypto_sha1() API.
+     */
+    int (*crypto_sha1)(void *user_ctx, const unsigned char *input, size_t ilen, unsigned char output[20]);
+
+    /**
+     * @brief Base64 encode data (optional, for esp_crypto_base64_encode API)
+     *
+     * This function performs Base64 encoding of the source data. It is used by
+     * esp_crypto_base64_encode() API which is needed by components like esp_http_server
+     * for WebSocket key encoding.
+     *
+     * @param user_ctx User context pointer passed to esp_tls_register_stack()
+     * @param dst Destination buffer for encoded data
+     * @param dlen Size of destination buffer
+     * @param olen Pointer to store the number of bytes written
+     * @param src Source data buffer
+     * @param slen Length of source data
+     *
+     * @return
+     *         - 0: Success
+     *         - -0x002A: Buffer too small
+     *         - Other negative value: Error occurred
+     *
+     * @note If NULL, esp_crypto_base64_encode() API calls will fail. This callback must be
+     *       implemented if your application or any dependent component (e.g., esp_http_server
+     *       for WebSocket) uses the esp_crypto_base64_encode() API.
+     */
+    int (*crypto_base64_encode)(void *user_ctx, unsigned char *dst, size_t dlen, size_t *olen,
+                                const unsigned char *src, size_t slen);
 } esp_tls_stack_ops_t;
 
 /**
  * Compile-time check to detect structure layout changes.
  * If this assertion fails, you MUST increment ESP_TLS_STACK_OPS_VERSION.
  *
- * Field count: 1 (version) + 21 (function pointers) = 22
+ * Field count: 1 (version) + 23 (function pointers) = 24
  */
-ESP_STATIC_ASSERT(sizeof(esp_tls_stack_ops_t) == 22 * sizeof(void *), "esp_tls_stack_ops_t layout changed - update ESP_TLS_STACK_OPS_VERSION!");
+ESP_STATIC_ASSERT(sizeof(esp_tls_stack_ops_t) == 24 * sizeof(void *), "esp_tls_stack_ops_t layout changed - update ESP_TLS_STACK_OPS_VERSION!");
 
 /**
  * @brief Register a custom TLS stack implementation
@@ -671,6 +719,13 @@ int esp_tls_custom_stack_server_session_continue_async(esp_tls_t *tls);
 
 /** @brief Delete server session */
 void esp_tls_custom_stack_server_session_delete(esp_tls_t *tls);
+
+/** @brief Calculate SHA1 hash using registered stack's implementation */
+int esp_tls_custom_stack_crypto_sha1(const unsigned char *input, size_t ilen, unsigned char output[20]);
+
+/** @brief Base64 encode using registered stack's implementation */
+int esp_tls_custom_stack_crypto_base64_encode(unsigned char *dst, size_t dlen, size_t *olen,
+                                              const unsigned char *src, size_t slen);
 
 /** @} */
 

@@ -230,11 +230,30 @@ int esp_tls_custom_stack_server_session_continue_async(esp_tls_t *tls)
 
 void esp_tls_custom_stack_server_session_delete(esp_tls_t *tls)
 {
-    if (s_esp_tls_custom_stack == NULL || !s_esp_tls_custom_stack->server_session_delete) {
-        ESP_LOGE(TAG, "No TLS stack registered or server session not supported.");
-        return;
+    CHECK_STACK_REGISTERED_VOID();
+    if (s_esp_tls_custom_stack->server_session_delete) {
+        s_esp_tls_custom_stack->server_session_delete(s_esp_tls_custom_stack_user_ctx, tls);
+    } else {
+        /* Fall back to conn_delete as documented */
+        s_esp_tls_custom_stack->conn_delete(s_esp_tls_custom_stack_user_ctx, tls);
     }
-    s_esp_tls_custom_stack->server_session_delete(s_esp_tls_custom_stack_user_ctx, tls);
+}
+
+int esp_tls_custom_stack_crypto_sha1(const unsigned char *input, size_t ilen, unsigned char output[20])
+{
+    if (s_esp_tls_custom_stack == NULL || !s_esp_tls_custom_stack->crypto_sha1) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    return s_esp_tls_custom_stack->crypto_sha1(s_esp_tls_custom_stack_user_ctx, input, ilen, output);
+}
+
+int esp_tls_custom_stack_crypto_base64_encode(unsigned char *dst, size_t dlen, size_t *olen,
+                                              const unsigned char *src, size_t slen)
+{
+    if (s_esp_tls_custom_stack == NULL || !s_esp_tls_custom_stack->crypto_base64_encode) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    return s_esp_tls_custom_stack->crypto_base64_encode(s_esp_tls_custom_stack_user_ctx, dst, dlen, olen, src, slen);
 }
 
 #else /* CONFIG_ESP_TLS_CUSTOM_STACK */

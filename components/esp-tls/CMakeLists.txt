@@ -17,8 +17,6 @@ endif()
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} esp-tls-crypto
                     PRIV_INCLUDE_DIRS "private_include"
-                    # mbedtls is public requirements because esp_tls.h
-                    # includes mbedtls header files.
                     REQUIRES mbedtls
                     PRIV_REQUIRES ${priv_req})
 

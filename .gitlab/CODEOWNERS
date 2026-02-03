@@ -130,6 +130,7 @@
 /components/esp_trace/                @esp-idf-codeowners/debugging
 /components/esp_usb_cdc_rom_console/  @esp-idf-codeowners/system @esp-idf-codeowners/peripherals/usb
 /components/esp_wifi/                 @esp-idf-codeowners/wifi
+/components/esp_wifi/remote/          @esp-idf-codeowners/network
 /components/espcoredump/              @esp-idf-codeowners/debugging
 /components/esptool_py/               @esp-idf-codeowners/tools
 /components/fatfs/                    @esp-idf-codeowners/storage

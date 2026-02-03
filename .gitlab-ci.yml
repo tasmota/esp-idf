@@ -16,6 +16,10 @@ workflow:
 # Place the default settings in `.gitlab/ci/common.yml` instead
 
 include:
+  - project: "ci/actions/common"
+    file:
+      - "templates/idf/deploy-github.yml"
+      - "templates/idf/deploy-docs.yml"
   - ".gitlab/ci/danger.yml"
   - ".gitlab/ci/common.yml"
   - ".gitlab/ci/rules.yml"
@@ -30,7 +34,3 @@ include:
   - ".gitlab/ci/deploy.yml"
   - ".gitlab/ci/post_deploy.yml"
   - ".gitlab/ci/test-win.yml"
-  - project: "ci/actions/common"
-    file: "templates/idf/deploy-github.yml"
-  - project: "ci/actions/common"
-    file: "templates/idf/deploy-docs.yml"

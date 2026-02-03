@@ -325,7 +325,6 @@ build_docker:
 test_pytest_qemu:
   extends:
     - .host_test_template
-    - .before_script:build
   artifacts:
     paths:
       - XUNIT_RESULT.xml
@@ -360,7 +359,6 @@ test_pytest_qemu:
 test_pytest_linux:
   extends:
     - .host_test_template
-    - .before_script:build
   artifacts:
     paths:
       - XUNIT_RESULT.xml

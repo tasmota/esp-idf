@@ -6,7 +6,6 @@
 ########################
 .dynamic_build_template:
   extends:
-    - .before_script:build
     - .after_script:build
   image: $ESP_ENV_IMAGE
   tags: [build, shiny]
@@ -44,12 +43,11 @@
       --modified-files ${MR_MODIFIED_FILES}
 
 .dynamic_target_test_template:
-  extends:
-    - .before_script:fetch:target_test
   image: $TARGET_TEST_ENV_IMAGE
   stage: target_test
   timeout: 1 hour
   variables:
+    GIT_STRATEGY: "fetch"
     SUBMODULES_TO_FETCH: "none"
     # set while generating the pipeline
     nodes: ""

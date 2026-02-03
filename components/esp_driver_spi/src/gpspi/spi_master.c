@@ -1210,11 +1210,11 @@ static SPI_MASTER_ISR_ATTR esp_err_t setup_dma_priv_buffer(spi_host_t *host, uin
         }
         buffer = temp;
     }
-    if (use_psram) {
+    *ret_buffer = buffer;
+    if (use_psram || (host->bus_attr->cache_align_int > 1)) {
         esp_err_t ret = esp_cache_msync((void *)buffer, len, is_tx ? (ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED) : ESP_CACHE_MSYNC_FLAG_DIR_M2C);
         ESP_RETURN_ON_FALSE_ISR(ret == ESP_OK, ESP_ERR_INVALID_ARG, SPI_TAG, "sync failed for %s buffer", is_tx ? "TX" : "RX");
     }
-    *ret_buffer = buffer;
     return ESP_OK;
 }
 

@@ -172,6 +172,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/dac_types.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/temperature_sensor_types.h \
     $(PROJECT_PATH)/components/esp_hal_emac/include/hal/eth_types.h \
+    $(PROJECT_PATH)/components/esp_hal_gpio/$(IDF_TARGET)/include/soc/gpio_num.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/gpio_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/rtc_io_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/sdm_types.h \
@@ -189,6 +190,8 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/spi_flash_types.h \
     $(PROJECT_PATH)/components/esp_hal_pcnt/include/hal/pcnt_types.h \
     $(PROJECT_PATH)/components/esp_hal_rmt/include/hal/rmt_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sdio_slave_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/esp_hal_twai/include/hal/twai_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uart_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uhci_types.h \
@@ -275,10 +278,8 @@ INPUT = \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/task.h \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/timers.h \
     $(PROJECT_PATH)/components/hal/include/hal/color_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/efuse_hal.h \
     $(PROJECT_PATH)/components/hal/include/hal/lp_core_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps_init.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_task_info.h \
@@ -323,7 +324,6 @@ INPUT = \
     $(PROJECT_PATH)/components/soc/include/soc/soc_caps_eval.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/adc_channel.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/clk_tree_defs.h \
-    $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/gpio_num.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/soc_caps.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/uart_pins.h \
     $(PROJECT_PATH)/components/spi_flash/include/esp_flash_spi_init.h \

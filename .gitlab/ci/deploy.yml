@@ -47,28 +47,6 @@ check_submodule_sync:
     - git submodule update --recursive
     - echo "IDF was cloned from ${PUBLIC_IDF_URL} completely"
 
-push_to_github:
-  extends:
-    - .deploy_job_template
-    - .before_script:minimal
-    - .rules:protected:deploy
-  needs:
-    # submodule must be synced before pushing to github
-    - check_submodule_sync
-  tags: [ brew, github_sync ]
-  variables:
-    GIT_STRATEGY: fetch  # use brew local mirror first
-    GIT_DEPTH: 0  # github needs full record of commits
-  script:
-    - add_github_ssh_keys
-    - git remote remove github &>/dev/null || true
-    - git remote add github git@github.com:espressif/esp-idf.git
-    - tools/ci/push_to_github.sh
-  environment:
-    name: push_to_github_production
-    deployment_tier: production
-    url: "https://github.com/espressif/esp-idf"
-
 deploy_update_SHA_in_esp-dockerfiles:
   extends:
     - .deploy_job_template

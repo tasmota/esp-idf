@@ -60,6 +60,16 @@ ESP-IDF v6.0 updates to Mbed TLS v4.0, where **PSA Crypto is the primary cryptog
          - 41084
          - 4.97
 
+
+
+Default configuration changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Note: The default Mbed TLS configuration in ESP-IDF v6.0 has been tightened for security and footprint:
+
+  - ``MBEDTLS_ARIA_C`` is disabled by default. Applications that rely on ARIA must explicitly enable it in ``menuconfig`` (Component config -> mbedTLS) or by customizing ``components/mbedtls/config/mbedtls_preset_default.conf``.
+  - Support for ``secp192r1`` is disabled by default, consistent with the removal of support for elliptic curves smaller than 250 bits in certificates and TLS. If an application still requires legacy curve support outside TLS/certificates, it must be enabled explicitly (for example by defining ``PSA_WANT_ECC_SECP_R1_192=1``) and validated for compatibility. Note: this legacy support may be disabled in the next minor ESP-IDF release.
+
 References
 ^^^^^^^^^^
 

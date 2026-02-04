@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -183,10 +183,10 @@ def print_hints_on_download_error(err: str) -> None:
         info('Certificate issues are usually caused by an outdated certificate database on your computer.')
         info('Please check the documentation of your operating system for how to upgrade it.')
 
+        info('The following commands may help resolve this issue:')
         if sys.platform == 'darwin':
-            info('Running "./Install\\ Certificates.command" might be able to fix this issue.')
-
-        info(f'Running "{sys.executable} -m pip install --upgrade certifi" can also resolve this issue in some cases.')
+            info('    ./Install\\ Certificates.command')
+        info(f'    {sys.executable} -m pip install --upgrade pip-system-certs certifi')
 
     # Certificate issue on Windows can be hidden under different errors which might be even translated,
     # e.g. "[WinError -2146881269] ASN1 valor de tag inválido encontrado"

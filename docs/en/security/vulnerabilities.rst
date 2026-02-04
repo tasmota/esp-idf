@@ -7,6 +7,20 @@ This page briefly lists all of the vulnerabilities that are discovered and fixed
 .. note::
    Please refer to ``latest`` version of this documentation guide for up-to-date information.
 
+CVE-2026
+--------
+
+CVE-2026-25532
+~~~~~~~~~~~~~~
+
+WPS Enrollee Fragment Integer Underflow Vulnerability
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-m2h2-683f-9mw7`_
+
+
 CVE-2025
 --------
 
@@ -281,3 +295,4 @@ Security Advisory Concerning Wi-Fi Authentication Bypass
 .. _`GHSA-qhf9-vr2h-jh96` : https://github.com/espressif/esp-idf/security/advisories/GHSA-qhf9-vr2h-jh96
 .. _`GHSA-hmjj-rjvv-w8pq` : https://github.com/espressif/esp-idf/security/advisories/GHSA-hmjj-rjvv-w8pq
 .. _`GHSA-43gh-7r4f-qp57` : https://github.com/espressif/esp-idf/security/advisories/GHSA-43gh-7r4f-qp57
+.. _`GHSA-m2h2-683f-9mw7` : https://github.com/espressif/esp-idf/security/advisories/GHSA-m2h2-683f-9mw7

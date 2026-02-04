@@ -54,7 +54,6 @@ examples/security/tee/tee_attestation:
   enable:
     - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32c5", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_attestation/**/*
@@ -63,7 +62,6 @@ examples/security/tee/tee_basic:
   enable:
     - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32c5", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_basic/**/*
@@ -72,7 +70,6 @@ examples/security/tee/tee_secure_ota:
   enable:
     - if: IDF_TARGET in ["esp32c6", "esp32c5", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
     - protocol_examples_common
   depends_filepatterns:
@@ -82,7 +79,6 @@ examples/security/tee/tee_secure_storage:
   enable:
     - if: IDF_TARGET in ["esp32c6", "esp32h2", "esp32c5", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_secure_storage/**/*

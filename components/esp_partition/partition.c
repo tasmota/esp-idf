@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -726,29 +726,26 @@ esp_err_t esp_partition_ptr_get_blockdev(const esp_partition_t* partition, esp_b
 
     ESP_BLOCKDEV_FLAGS_INST_CONFIG_DEFAULT(out->device_flags);
 
-    if(partition->readonly) {
-        out->device_flags.read_only = 1;
-        out->geometry.write_size = 0;
-        out->geometry.erase_size = 0;
-        out->geometry.recommended_write_size = 0;
-        out->geometry.recommended_erase_size = 0;
+    out->device_flags.read_only = partition->readonly ? 1 : 0;
+
+    if (partition->encrypted) {
+        out->geometry.write_size = 16;
+        out->geometry.recommended_write_size = 16;
+    } else {
+        out->geometry.write_size = 1;
+        out->geometry.recommended_write_size = 1;
     }
-    else {
-        if (partition->encrypted) {
-            out->geometry.write_size = 16;
-            out->geometry.recommended_write_size = 16;
-        } else {
-            out->geometry.write_size = 1;
-            out->geometry.recommended_write_size = 1;
-        }
-        out->geometry.erase_size = partition->erase_size;
-        out->geometry.recommended_erase_size = partition->erase_size;
-    }
+
+    out->geometry.erase_size = partition->erase_size;
+    out->geometry.recommended_erase_size = partition->erase_size;
+
     out->geometry.read_size = 1;
     out->geometry.recommended_read_size = 1;
+
     out->geometry.disk_size = partition->size;
 
     out->ops = &s_bdl_ops;
+
     *out_bdl_handle_ptr = out;
 
     return ESP_OK;

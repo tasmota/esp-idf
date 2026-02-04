@@ -456,6 +456,7 @@ TEST_CASE("check for memory leaks in nvs_set_blob", "[nvs]")
 }
 
 #ifdef CONFIG_NVS_ENCRYPTION
+#include "nvs_xts_aes.h"
 TEST_CASE("check underlying xts code for 32-byte size sector encryption", "[nvs]")
 {
     uint8_t eky_hex[2 * NVS_KEY_SIZE] = { /* Encryption key below*/
@@ -484,16 +485,16 @@ TEST_CASE("check underlying xts code for 32-byte size sector encryption", "[nvs]
                              0xab,0xf9,0x8e,0x22,0xdf,0x5b,0xdd,0x15,
                              0xaf,0x47,0x1f,0x3d,0xb8,0x94,0x6a,0x85 };
 
-    mbedtls_aes_xts_context ectx[1];
-    mbedtls_aes_xts_context dctx[1];
+    XTS_CONTEXT ectx[1];
+    XTS_CONTEXT dctx[1];
 
-    mbedtls_aes_xts_init(ectx);
-    mbedtls_aes_xts_init(dctx);
+    XTS_FUNC(xts_init)(ectx);
+    XTS_FUNC(xts_init)(dctx);
 
-    TEST_ASSERT_TRUE(!mbedtls_aes_xts_setkey_enc(ectx, eky_hex, 2 * NVS_KEY_SIZE * 8));
-    TEST_ASSERT_TRUE(!mbedtls_aes_xts_setkey_enc(dctx, eky_hex, 2 * NVS_KEY_SIZE * 8));
+    TEST_ASSERT_TRUE(!XTS_FUNC(xts_setkey_enc)(ectx, eky_hex, 2 * NVS_KEY_SIZE * 8));
+    TEST_ASSERT_TRUE(!XTS_FUNC(xts_setkey_enc)(dctx, eky_hex, 2 * NVS_KEY_SIZE * 8));
 
-    TEST_ASSERT_TRUE(!mbedtls_aes_crypt_xts(ectx, MBEDTLS_AES_ENCRYPT, 32, ba_hex, ptxt_hex, ptxt_hex));
+    TEST_ASSERT_TRUE(!XTS_FUNC(crypt_xts)(ectx, XTS_MODE(ENCRYPT), 32, ba_hex, ptxt_hex, ptxt_hex));
 
     TEST_ASSERT_TRUE(!memcmp(ptxt_hex, ctxt_hex, 32));
 }

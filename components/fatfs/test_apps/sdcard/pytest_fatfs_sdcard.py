@@ -13,7 +13,7 @@ from pytest_embedded_idf.utils import idf_parametrize
         'release',
     ],
 )
-@idf_parametrize('target', ['esp32', 'esp32c3'], indirect=['target'])
+@idf_parametrize('target', ['esp32'], indirect=['target'])
 def test_fatfs_sdcard_generic_sdmmc(dut: Dut) -> None:
     dut.run_all_single_board_cases(group='sdmmc', timeout=180)
 

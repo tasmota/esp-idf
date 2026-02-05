@@ -177,14 +177,6 @@ ESP-IDF 中的示例使用 :doc:`/api-reference/protocols/esp_tls`，为访问�
 如需直接使用 Mbed TLS API，请参考示例 :example:`protocols/https_mbedtls`。该示例演示了如何用 Mbed TLS 创建 HTTPS 连接。具体做法是配置安全的套接字，并使用证书包进行验证。
 
 
-替代方案
---------
-
-:doc:`/api-reference/protocols/esp_tls` 是底层 SSL/TLS 库的抽象层，因此可以选择使用 Mbed TLS 或 wolfSSL 作为底层库。默认情况下，仅 Mbed TLS 可在 ESP-IDF 中使用，而 wolfSSL 在 `<https://github.com/espressif/esp-wolfSSL>`_ 公开，还提供了上游子模块指针的相关信息。
-
-如需了解更多相关信息或比较 Mbed TLS 和 wolfSSL，请参考文档 :ref:`ESP-TLS：底层 SSL/TLS 库选择 <esp_tls_wolfssl>`。
-
-
 重要配置
 --------
 

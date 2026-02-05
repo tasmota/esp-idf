@@ -264,6 +264,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_wifi/wifi_apps/nan_app/include/esp_nan.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls_errors.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls.h \
+    $(PROJECT_PATH)/components/esp-tls/esp_tls_custom_stack.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_impl.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_rawflash.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_sdmmc.h \

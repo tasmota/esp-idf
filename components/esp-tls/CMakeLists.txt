@@ -4,9 +4,9 @@ if(CONFIG_ESP_TLS_USING_MBEDTLS)
         "esp_tls_mbedtls.c")
 endif()
 
-if(CONFIG_ESP_TLS_USING_WOLFSSL)
+if(CONFIG_ESP_TLS_CUSTOM_STACK)
     list(APPEND srcs
-        "esp_tls_wolfssl.c")
+        "esp_tls_custom_stack.c")
 endif()
 
 set(priv_req http_parser esp_timer)
@@ -17,15 +17,9 @@ endif()
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} esp-tls-crypto
                     PRIV_INCLUDE_DIRS "private_include"
-                    # mbedtls is public requirements because esp_tls.h
-                    # includes mbedtls header files.
                     REQUIRES mbedtls
                     PRIV_REQUIRES ${priv_req})
 
-if(CONFIG_ESP_TLS_USING_WOLFSSL)
-    idf_component_get_property(wolfssl esp-wolfssl COMPONENT_LIB)
-    target_link_libraries(${COMPONENT_LIB} PUBLIC ${wolfssl})
-endif()
 
 if(NOT ${IDF_TARGET} STREQUAL "linux")
 # Increase link multiplicity to get some lwip symbols correctly resolved by the linker

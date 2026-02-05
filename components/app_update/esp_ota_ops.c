@@ -61,6 +61,18 @@ const static char *TAG = "esp_ota_ops";
 
 static ota_ops_entry_t *get_ota_ops_entry(esp_ota_handle_t handle);
 
+/* Check if there's already an ongoing OTA operation on the same staging or final partition */
+static bool esp_ota_check_partition_conflict(const esp_partition_t *partition)
+{
+    ota_ops_entry_t *it;
+    for (it = LIST_FIRST(&s_ota_ops_entries_head); it != NULL; it = LIST_NEXT(it, entries)) {
+        if (it->partition.staging == partition || it->partition.final == partition) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Return true if this is an OTA app partition */
 static bool is_ota_partition(const esp_partition_t *p)
 {
@@ -172,6 +184,12 @@ esp_err_t esp_ota_begin(const esp_partition_t *partition, size_t image_size, esp
 #endif
     }
 
+    // Check if there's already an ongoing OTA operation on this partition
+    if (esp_ota_check_partition_conflict(partition)) {
+        ESP_LOGE(TAG, "OTA operation already in progress on partition %s", partition->label);
+        return ESP_ERR_OTA_ALREADY_IN_PROGRESS;
+    }
+
     new_entry = esp_ota_init_entry(partition);
     if (new_entry == NULL) {
         return ESP_ERR_NO_MEM;
@@ -236,6 +254,12 @@ esp_err_t esp_ota_resume(const esp_partition_t *partition, const size_t erase_si
     const esp_partition_t* running_partition = esp_ota_get_running_partition();
     if (partition == running_partition) {
         return ESP_ERR_OTA_PARTITION_CONFLICT;
+    }
+
+    // Check if there's already an ongoing OTA operation on this partition
+    if (esp_ota_check_partition_conflict(partition)) {
+        ESP_LOGE(TAG, "OTA operation already in progress on partition %s", partition->label);
+        return ESP_ERR_OTA_ALREADY_IN_PROGRESS;
     }
 
     new_entry = esp_ota_init_entry(partition);

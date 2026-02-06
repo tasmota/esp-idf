@@ -191,11 +191,14 @@
 #elif CONFIG_IDF_TARGET_ESP32C6
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (318)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (56)
+#define PVT_REINIT_COST_US                  (60)
 #elif CONFIG_IDF_TARGET_ESP32C5
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (318)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (56)
+#define PVT_REINIT_COST_US                  (25)
 #elif CONFIG_IDF_TARGET_ESP32C61
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (230)
+#define PVT_REINIT_COST_US                  (90)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US    (70)
 #elif CONFIG_IDF_TARGET_ESP32H2
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US       (118)
@@ -960,7 +963,7 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
 #if SOC_PM_RETENTION_SW_TRIGGER_REGDMA
             sleep_retention_do_system_retention(false);
 #endif
-#if CONFIG_IDF_TARGET_ESP32P4 && (CONFIG_ESP_REV_MIN_FULL == 300)
+#if CONFIG_P4_REV3_MSPI_CRASH_AFTER_POWER_UP_WORKAROUND
             sleep_flash_p4_rev3_workaround();
             sleep_retention_do_extra_retention(false);
 #endif
@@ -1173,18 +1176,6 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     if (!deep_sleep) {
         if (result == ESP_OK) {
             s_config.ccount_ticks_record = esp_cpu_get_cycle_count();
-#if !CONFIG_PM_SLP_IRAM_OPT && !(CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32P4)
-#if CONFIG_SPIRAM
-            // TODO: PM-651
-            Cache_WriteBack_All();
-#endif
-            /* When the IRAM optimization for the sleep flow is disabled, all
-             * cache contents are forcibly invalidated before exiting the sleep
-             * flow. This ensures that the code execution time of sleep exit
-             * flow remains consistent, allowing the use of ccount to
-             * dynamically calculate the sleep adjustment time. */
-            cache_ll_invalidate_all(CACHE_LL_LEVEL_ALL, CACHE_TYPE_ALL, CACHE_LL_ID_ALL);
-#endif
         }
         misc_modules_wake_prepare(sleep_flags);
     }
@@ -1477,9 +1468,9 @@ esp_err_t esp_light_sleep_start(void)
     // Re-calibrate the RTC clock
     sleep_low_power_clock_calibration(false);
 
+    uint32_t cur_cpu_freq = esp_clk_cpu_freq() / MHZ;
+    uint32_t xtal_freq = rtc_clk_xtal_freq_get();
     if (s_config.overhead_out_need_remeasure) {
-        uint32_t cur_cpu_freq = esp_clk_cpu_freq() / MHZ;
-        uint32_t xtal_freq = rtc_clk_xtal_freq_get();
         if (cur_cpu_freq < xtal_freq) {
             s_config.sleep_time_overhead_out = DEFAULT_SLEEP_OUT_OVERHEAD_US * xtal_freq / cur_cpu_freq;
         } else {
@@ -1496,6 +1487,18 @@ esp_err_t esp_light_sleep_start(void)
      */
 #if SOC_PMU_SUPPORTED
     int sleep_time_sw_adjustment = LIGHT_SLEEP_TIME_OVERHEAD_US + sleep_time_overhead_in + s_config.sleep_time_overhead_out;
+#if CONFIG_ESP_ENABLE_PVT && !SOC_PVT_EN_WITH_SLEEP
+
+    /* PVT will only be enabled during the wake-up process if the CPU's clock source is PLL when the CPU goes to sleep. */
+    if ((cur_cpu_freq > xtal_freq)
+#if CONFIG_IDF_TARGET_ESP32C5
+         /* On esp32c5, CPU 40m is divided from PLL160/240M */
+        || (xtal_freq == SOC_XTAL_FREQ_48M && cur_cpu_freq == 40)
+#endif
+        ) {
+        sleep_time_sw_adjustment += PVT_REINIT_COST_US;
+    }
+#endif
     int sleep_time_hw_adjustment = pmu_sleep_calculate_hw_wait_time(sleep_flags, rtc_clk_slow_src_get(), s_config.rtc_clk_cal_period, s_config.fast_clk_cal_period);
     s_config.sleep_time_adjustment = sleep_time_sw_adjustment + sleep_time_hw_adjustment;
 #else

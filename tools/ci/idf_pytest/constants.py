@@ -151,6 +151,7 @@ ENV_MARKERS = {
     'recovery_bootloader': 'Runner with recovery bootloader offset set in eFuse',
     'esp32p4_eco4': 'Runner with esp32p4 eco4 connected',
     'esp32c5_eco3': 'Runner with esp32c5 eco3 connected',
+    'rev_default': 'Runner with default revision connected',
 }
 
 # by default the timeout is 1h, for some special cases we need to extend it
@@ -363,3 +364,12 @@ class PytestCase:
         msg += '\nMight be a issue of .build-test-rules.yml files'
         print(msg)
         return msg
+
+
+ECO_MARKERS = [
+    'esp32eco3',
+    'esp32c2eco4',
+    'esp32c3eco7',
+    'esp32p4_eco4',
+    'esp32c5_eco3',
+]

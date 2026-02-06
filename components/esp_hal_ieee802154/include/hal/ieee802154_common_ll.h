@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -414,6 +414,11 @@ static inline void ieee802154_ll_set_pending_mode(bool enable)
     IEEE802154.conf.pending_enhance = enable;
 }
 
+static inline bool ieee802154_ll_get_pending_mode(void)
+{
+    return IEEE802154.conf.pending_enhance;
+}
+
 FORCE_INLINE_ATTR void ieee802154_ll_set_pending_bit(bool pending)
 {
     IEEE802154.pending_cfg.pending = pending;
@@ -470,8 +475,8 @@ static inline void ieee802154_ll_set_security_key(uint8_t *security_key)
 
 static inline void ieee802154_ll_disable_coex(void)
 {
-    IEEE802154.pti.pti = 1;
-    IEEE802154.pti.hw_ack_pti = 1;
+    IEEE802154.pti.pti = 3;
+    IEEE802154.pti.hw_ack_pti = 3;
 }
 
 static inline void ieee802154_ll_clear_debug_cnt(uint32_t clear_bits)

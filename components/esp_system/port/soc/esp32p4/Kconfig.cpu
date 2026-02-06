@@ -1,3 +1,14 @@
+config ESP_FORCE_400MHZ_ON_REV_LESS_V3
+    bool "Force 400MHz on revision < 3.0 (EXPERIMENTAL)"
+    depends on ESP32P4_SELECTS_REV_LESS_V3
+    default n
+    help
+        Running at 400MHz on ESP32-P4 revision < 3.0 requires chips that have
+        passed additional qualification. Enable this option only if you have
+        confirmed with Espressif that your specific chips are qualified for
+        400MHz operation. Using unqualified chips at 400MHz may result in
+        instability or reduced reliability.
+
 choice ESP_DEFAULT_CPU_FREQ_MHZ
     prompt "CPU frequency"
     default ESP_DEFAULT_CPU_FREQ_MHZ_40 if IDF_ENV_FPGA || ESP_BRINGUP_BYPASS_CPU_CLK_SETTING
@@ -14,6 +25,7 @@ choice ESP_DEFAULT_CPU_FREQ_MHZ
         depends on ESP32P4_SELECTS_REV_LESS_V3
     config ESP_DEFAULT_CPU_FREQ_MHZ_400
         bool "400 MHz"
+        depends on !ESP32P4_SELECTS_REV_LESS_V3 || ESP_FORCE_400MHZ_ON_REV_LESS_V3
 endchoice
 
 config ESP_DEFAULT_CPU_FREQ_MHZ

@@ -290,7 +290,7 @@ menu "GAP"
     config BT_NIMBLE_MAX_CCCDS
         int "Maximum number of CCC descriptors to save across reboots"
         default 8
-        depends on BT_NIMBLE_ENABLED && BT_NIMBLE_NVS_PERSIST
+        depends on BT_NIMBLE_ENABLED
         help
             Defines maximum number of CCC descriptors to save
 
@@ -1216,6 +1216,15 @@ menu "Extra Features"
         help
             This option is used to enable encrypted advertising data.
 
+    config BT_NIMBLE_ADV_UUID_CONCAT
+        bool "concatenate uuids while parsing advertising data"
+        default n
+        depends on BT_NIMBLE_ENABLED
+        help
+            Enables concatenation of multiple UUIDs of the same type while parsing
+            advertising data on the central device. When disabled, only the last
+            parsed UUID of a given type is retained.
+
     config BT_NIMBLE_MAX_EADS
         int "Maximum number of EAD devices to save across reboots"
         default 10
@@ -1619,6 +1628,24 @@ menu "Vendor / Optimization"
         depends on BT_NIMBLE_ENABLED
         help
             This enable BLE high duty advertising interval feature
+
+    config BT_NIMBLE_ADV_SEND_CONSTANT_DID
+        bool "Enable BLE Ext Adv to Send with Specific DID"
+        depends on SOC_ESP_NIMBLE_CONTROLLER && BT_NIMBLE_50_FEATURE_SUPPORT && !(IDF_TARGET_ESP32C2)
+        select BT_NIMBLE_VS_SUPPORT
+        help
+            This enable vendor-specific APIs to send specific DID for different advertising data in extended
+            advertising.
+
+    config BT_NIMBLE_SCAN_ALLOW_ENH_ADI_FILTER
+        bool "Enable BLE Ext Scan to Receive Packet with Specific ADI"
+        depends on SOC_ESP_NIMBLE_CONTROLLER && BT_NIMBLE_50_FEATURE_SUPPORT && !(IDF_TARGET_ESP32C2)
+        select BT_NIMBLE_VS_SUPPORT
+        help
+            This enables vendor-specific APIs to only receive specific groups of ADIs, and implements DIDs
+            duplicate filtering for extended scanning. Enabling this can reduce the unnecessary reception of
+            secondary channel PDUs carrying non-targeted ADIs.
+
 endmenu #Vendor
 
 menu "Helper Utils"

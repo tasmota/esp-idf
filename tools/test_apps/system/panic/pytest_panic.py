@@ -39,12 +39,12 @@ CONFIGS = list(
                 'coredump_flash_elf_soft_sha',
                 'coredump_uart_bin_crc',
                 'coredump_uart_elf_crc',
+                'coredump_flash_custom_stack',
                 'gdbstub',
                 'panic',
             ],
             TARGETS_ALL,
-        ),
-        itertools.product(['coredump_flash_custom_stack'], TARGETS_RISCV),
+        )
     )
 )
 

@@ -115,6 +115,12 @@ BluFi (Wi-Fi provisioning over BLE) is affected by the Mbed TLS v4.x / PSA Crypt
 Bootloader Support
 ------------------
 
+**Deprecated APIs**
+
+The following function has been deprecated:
+
+- :cpp:func:`esp_flash_encryption_enabled` – Use :cpp:func:`esp_efuse_is_flash_encryption_enabled` instead. The component dependency has been changed from ``bootloader_support`` to ``efuse``.
+
 **Removed Deprecated APIs**
 
 The following deprecated functions have been removed:

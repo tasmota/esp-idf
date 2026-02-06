@@ -26,7 +26,7 @@
 #include "esp_partition.h"
 #include "esp_flash.h"
 #if !CONFIG_IDF_TARGET_LINUX
-#include "esp_flash_encrypt.h"
+#include "esp_efuse.h"
 #endif
 #include "spi_flash_mmap.h"
 #include "esp_log.h"
@@ -80,7 +80,7 @@ static bool is_partition_encrypted(bool encryption_config, esp_partition_type_t 
     return false;
 #else
     bool ret_encrypted = encryption_config;
-    if (!esp_flash_encryption_enabled()) {
+    if (!esp_efuse_is_flash_encryption_enabled()) {
         /* If flash encryption is not turned on, no partitions should be treated as encrypted */
         ret_encrypted = false;
     } else if (type == ESP_PARTITION_TYPE_APP

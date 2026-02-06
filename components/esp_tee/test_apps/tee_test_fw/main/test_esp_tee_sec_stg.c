@@ -202,6 +202,7 @@ TEST_CASE("Test TEE Secure Storage - Encrypt-decrypt (aes256_gcm)", "[sec_storag
     TEST_ASSERT_NOT_NULL(decryptedtext);
 
     uint8_t tag[12];
+    uint8_t iv[12];
     uint8_t aad[16];
     memset(aad, 0xA5, sizeof(aad));
 
@@ -227,11 +228,11 @@ TEST_CASE("Test TEE Secure Storage - Encrypt-decrypt (aes256_gcm)", "[sec_storag
 
         aead_ctx.input = plaintext;
         aead_ctx.input_len = SZ;
-        TEST_ESP_OK(esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), ciphertext));
+        TEST_ESP_OK(esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext));
 
         aead_ctx.input = ciphertext;
         aead_ctx.input_len = SZ;
-        TEST_ESP_OK(esp_tee_sec_storage_aead_decrypt(&aead_ctx, tag, sizeof(tag), decryptedtext));
+        TEST_ESP_OK(esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), decryptedtext));
 
         TEST_ASSERT_EQUAL_HEX8_ARRAY(plaintext, decryptedtext, SZ);
 
@@ -269,6 +270,7 @@ TEST_CASE("Test TEE Secure Storage - Operations with invalid/non-existent keys",
     uint8_t *ciphertext = heap_caps_malloc(SZ, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
     TEST_ASSERT_NOT_NULL(ciphertext);
     uint8_t tag[12];
+    uint8_t iv[12];
     uint8_t aad[16];
     memset(aad, 0xA5, sizeof(aad));
 
@@ -285,7 +287,7 @@ TEST_CASE("Test TEE Secure Storage - Operations with invalid/non-existent keys",
     esp_err_t err = esp_tee_sec_storage_clear_key(key_cfg.id);
     TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_NOT_FOUND);
     TEST_ESP_OK(esp_tee_sec_storage_gen_key(&key_cfg));
-    TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), ciphertext));
+    TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext));
 
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
 
@@ -300,7 +302,7 @@ TEST_CASE("Test TEE Secure Storage - Operations with invalid/non-existent keys",
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
 
     // Test with non-existent data
-    TEST_ESP_ERR(ESP_ERR_NVS_NOT_FOUND, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), ciphertext));
+    TEST_ESP_ERR(ESP_ERR_NVS_NOT_FOUND, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext));
 
     free(plaintext);
     free(ciphertext);
@@ -309,7 +311,7 @@ TEST_CASE("Test TEE Secure Storage - Operations with invalid/non-existent keys",
 TEST_CASE("Test TEE Secure Storage - Null Pointer and Zero Length", "[sec_storage]")
 {
     const char *key_id = "key_id_misc";
-    uint8_t data[31], tag[12];
+    uint8_t data[31], tag[12], iv[12];
 
     esp_tee_sec_storage_key_cfg_t key_cfg = {
         .id = key_id,
@@ -326,20 +328,24 @@ TEST_CASE("Test TEE Secure Storage - Null Pointer and Zero Length", "[sec_storag
         .input_len = sizeof(data),
     };
 
-    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, NULL, sizeof(tag), data));
-    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, 0, data));
-    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, NULL, sizeof(tag), data));
-    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, tag, 0, data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), NULL, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, 0, data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, NULL, sizeof(iv), tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, 0, tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), NULL, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, 0, data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, NULL, sizeof(iv), tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, 0, tag, sizeof(tag), data));
 
     aead_ctx.input = NULL;
     aead_ctx.input_len = sizeof(data);
-    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), data));
-    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
 
     aead_ctx.input = data;
     aead_ctx.input_len = 0;
-    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), data));
-    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
 
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_id));
 
@@ -385,6 +391,7 @@ static void test_aead_encrypt_decrypt(const char *key_id, const uint8_t *input, 
     TEST_ASSERT_NOT_NULL(decrypted);
 
     uint8_t tag[12];
+    uint8_t iv[12];
     uint8_t aad[16];
     esp_fill_random(aad, sizeof(aad));
 
@@ -396,11 +403,11 @@ static void test_aead_encrypt_decrypt(const char *key_id, const uint8_t *input, 
 
     ctx.input = input;
     ctx.input_len = len;
-    TEST_ESP_OK(esp_tee_sec_storage_aead_encrypt(&ctx, tag, sizeof(tag), ciphertext));
+    TEST_ESP_OK(esp_tee_sec_storage_aead_encrypt(&ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext));
 
     ctx.input = ciphertext;
     ctx.input_len = len;
-    TEST_ESP_OK(esp_tee_sec_storage_aead_decrypt(&ctx, tag, sizeof(tag), decrypted));
+    TEST_ESP_OK(esp_tee_sec_storage_aead_decrypt(&ctx, iv, sizeof(iv), tag, sizeof(tag), decrypted));
 
     TEST_ASSERT_EQUAL_HEX8_ARRAY(input, decrypted, len);
 

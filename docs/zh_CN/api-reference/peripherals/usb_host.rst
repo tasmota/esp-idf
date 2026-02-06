@@ -425,8 +425,8 @@ USB 主机库事件
 
 自动挂起定时器可以配置为以下几种模式：
 
-- **单次** (:cpp:enumerator:`USB_HOST_LIB_PM_SUSPEND_ONE_SHOT`)：定时器超时一次后停止。
-- **周期性** (:cpp:enumerator:`USB_HOST_LIB_PM_SUSPEND_PERIODIC`)：定时器在每次超时后自动重启，无限重复。
+- **单次** (:cpp:enumerator:`USB_HOST_LIB_AUTO_SUSPEND_ONE_SHOT`)：定时器超时一次后停止。
+- **周期性** (:cpp:enumerator:`USB_HOST_LIB_AUTO_SUSPEND_PERIODIC`)：定时器在每次超时后自动重启，无限重复。
 
 由传输提交触发自动恢复
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -469,7 +469,7 @@ USB 主机库事件
 
         // 将自动挂起定时器设置为周期模式，周期为 1 秒，
         // 用于在无操作 1 秒后自动挂起设备，并在超时后自动重启
-        usb_host_lib_set_auto_suspend(USB_HOST_LIB_PM_SUSPEND_PERIODIC, 1000);
+        usb_host_lib_set_auto_suspend(USB_HOST_LIB_AUTO_SUSPEND_PERIODIC, 1000);
 
         while (1) {
             uint32_t event_flags;
@@ -507,8 +507,7 @@ CDC-ACM
 """""""
 
 * 通信设备 Class（抽象控制模型）的主机 Class 驱动程序通过 `乐鑫组件注册表 <https://components.espressif.com/component/espressif/usb_host_cdc_acm>`__ 作为受管理的组件分发。
-* 示例 :example:`peripherals/usb/host/cdc/cdc_acm_host` 演示了使用 CDC-ACM 主机驱动程序组件，实现 {IDF_TARGET_NAME} 与 USB CDC-ACM 设备的通信。
-* 示例 :example:`peripherals/usb/host/cdc/cdc_acm_vcp` 演示了如何扩展 CDC-ACM 的主机驱动程序，以支持 VCP 设备（即虚拟通信端口设备，如 CP210x、FTDI FT23x 或 CH34x），以及如何使用 CDC-ACM API 控制设备并发送数据。
+* 示例 :example:`peripherals/usb/host/cdc` 演示了如何使用 CDC-ACM 主机驱动程序，让 {IDF_TARGET_NAME} 与 USB CDC-ACM 设备通信，包括 CP210x、FTDI FT23x 或 CH34x 等厂商设备。
 * 示例 `esp_modem <https://github.com/espressif/esp-protocols/tree/master/components/esp_modem/examples>`__ 中也使用了 CDC-ACM 驱动程序，该程序在这些示例中与蜂窝模块通信。
 
 MSC

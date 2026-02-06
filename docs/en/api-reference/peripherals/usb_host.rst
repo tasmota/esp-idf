@@ -507,8 +507,7 @@ CDC-ACM
 """""""
 
 * A host class driver for the Communication Device Class (Abstract Control Model) is distributed as a managed component via the `ESP Component Registry <https://components.espressif.com/component/espressif/usb_host_cdc_acm>`__.
-* :example:`peripherals/usb/host/cdc/cdc_acm_host` demonstrates how to use the CDC-ACM Host Driver to enable communication between {IDF_TARGET_NAME} and a USB CDC-ACM device.
-* :example:`peripherals/usb/host/cdc/cdc_acm_vcp` demonstrates how to extend the CDC-ACM driver for Virtual Communication Port (VCP) devices like CP210x, FTDI FT23x or CH34x devices, and how to control the device and send data using the CDC-ACM API.
+* :example:`peripherals/usb/host/cdc` demonstrates how to use the CDC-ACM Host Driver to enable communication between {IDF_TARGET_NAME} and a USB CDC-ACM device, including vendor-specific devices such as CP210x, FTDI FT23x or CH34x.
 * The CDC-ACM driver is also used in `esp_modem examples <https://github.com/espressif/esp-protocols/tree/master/components/esp_modem/examples>`__, where it is used for communication with cellular modems.
 
 MSC

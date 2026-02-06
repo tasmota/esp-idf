@@ -1,7 +1,6 @@
 .build_template:
   stage: build
   extends:
-    - .before_script:build
     - .after_script:build
   image: $ESP_ENV_IMAGE
   tags: [build, shiny]

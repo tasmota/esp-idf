@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -774,10 +774,10 @@ esp_err_t esp_srp_exchange_proofs(esp_srp_handle_t *hd, char *username, uint16_t
                       "Hash operation failed: status=%d, hash_len=%d", status, hash_len);
     int pad_len = hd->len_n - hd->len_g;
     s = calloc(pad_len, sizeof(char));
-    ESP_RETURN_ON_FALSE(s, ESP_ERR_NO_MEM, TAG, "Failed to allocate memory");
+    ESP_GOTO_ON_FALSE(s, ESP_ERR_NO_MEM, error, TAG, "Failed to allocate memory");
 
     status = psa_hash_setup(&hash_op, PSA_ALG_SHA_512);
-    ESP_RETURN_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, TAG, "Failed to setup hash operation: %d", status);
+    ESP_GOTO_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, error, TAG, "Failed to setup hash operation: %d", status);
 
     psa_hash_update(&hash_op, (unsigned char *)s, pad_len);
     psa_hash_update(&hash_op, (unsigned char *)hd->bytes_g, hd->len_g);
@@ -790,7 +790,7 @@ esp_err_t esp_srp_exchange_proofs(esp_srp_handle_t *hd, char *username, uint16_t
 
     unsigned char digest[SHA512_HASH_SZ];
     status = psa_hash_setup(&hash_op, PSA_ALG_SHA_512);
-    ESP_RETURN_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, TAG, "Failed to setup hash operation: %d", status);
+    ESP_GOTO_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, error, TAG, "Failed to setup hash operation: %d", status);
 
     psa_hash_update(&hash_op, hash_n_xor_g, SHA512_HASH_SZ);
     psa_hash_update(&hash_op, hash_I, SHA512_HASH_SZ);
@@ -808,7 +808,7 @@ esp_err_t esp_srp_exchange_proofs(esp_srp_handle_t *hd, char *username, uint16_t
 
     /* M is now validated, let's proceed to H(AMK) */
     status = psa_hash_setup(&hash_op, PSA_ALG_SHA_512);
-    ESP_RETURN_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, TAG, "Failed to setup hash operation: %d", status);
+    ESP_GOTO_ON_FALSE(status == PSA_SUCCESS, ESP_FAIL, error, TAG, "Failed to setup hash operation: %d", status);
 
     psa_hash_update(&hash_op, (unsigned char *)hd->bytes_A, hd->len_A);
     psa_hash_update(&hash_op, digest, SHA512_HASH_SZ);

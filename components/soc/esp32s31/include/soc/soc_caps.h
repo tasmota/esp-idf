@@ -31,6 +31,7 @@
 // #define SOC_UHCI_SUPPORTED              1      // TODO: [ESP32S31] IDF-14791
 #define SOC_AHB_GDMA_SUPPORTED          1
 #define SOC_AXI_GDMA_SUPPORTED          1
+#define SOC_LP_AHB_GDMA_SUPPORTED       1
 // #define SOC_DMA2D_SUPPORTED             1      // TODO: [ESP32S31] IDF-14762
 #define SOC_GPTIMER_SUPPORTED           1
 // #define SOC_PCNT_SUPPORTED              1      // TODO: [ESP32S31] IDF-14699
@@ -164,8 +165,9 @@
 // #define SOC_GPIO_ETM_TASKS_PER_GROUP  8 // TODO: [ESP32S31] IDF-14786
 
 // GPIO0~7 on ESP32S31 can support chip deep sleep wakeup
-#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
-#define SOC_LP_IO_HAS_INDEPENDENT_WAKEUP_SOURCE   (1)
+// #define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP  (1) // TODO: [ESP32S31] IDF-14643
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP           SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+#define SOC_LP_IO_HAS_INDEPENDENT_WAKEUP_SOURCE     (1)
 
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
@@ -193,6 +195,10 @@
 /*-------------------------- Sigma Delta Modulator CAPS -----------------*/
 #define SOC_SDM_SUPPORT_SLEEP_RETENTION     1
 
+/*-------------------------- LEDC CAPS ---------------------------------------*/
+// TODO: [ESP32S31] IDF-14709
+#define SOC_LEDC_CHANNEL_NUM                (6)
+
 /*-------------------------- MMU CAPS ----------------------------------------*/
 // TODO: [ESP32S31] IDF-14669
 #define SOC_MMU_PERIPH_NUM                    (2U)
@@ -211,10 +217,6 @@
 #define SOC_MSPI_HAS_INDEPENT_IOMUX               1
 #define SOC_MEMSPI_IS_INDEPENDENT                 1
 #define SOC_MEMSPI_SUPPORT_CONTROL_DUMMY_OUT      1
-
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED       1
 
 #define SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT        1
 
@@ -258,6 +260,7 @@
 
 /*-------------------------- Flash Encryption CAPS----------------------------*/
 // TODO: [ESP32S31] IDF-14628
+#define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 
 /*-------------------------- UART CAPS ---------------------------------------*/
@@ -288,4 +291,4 @@
 
 #define SOC_CLK_ANA_I2C_MST_HAS_ROOT_GATE         (1)     /*!< Any regi2c operation needs enable the analog i2c master clock first */
 
-#define SOC_PERIPH_CLK_CTRL_SHARED                (1)     /*!< Peripheral clock control (e.g. set clock source) is shared between various peripherals */
+#define SOC_RCC_IS_INDEPENDENT                    1       /*!< Reset and Clock Control has own registers for each module */

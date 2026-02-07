@@ -14,6 +14,8 @@ components/esp_driver_uart/test_apps/rs485:
     - esp_driver_uart
     - esp_hal_uart
     - esp_driver_gpio
+    - esp_hw_support
+    - soc
 
 components/esp_driver_uart/test_apps/uart:
   disable:
@@ -25,17 +27,22 @@ components/esp_driver_uart/test_apps/uart:
     - esp_driver_uart
     - esp_hal_uart
     - esp_driver_gpio
+    - esp_hw_support
+    - soc
 
 components/esp_driver_uart/test_apps/uart_vfs:
   depends_components:
     - esp_driver_uart
     - esp_hal_uart
     - vfs
+    - esp_hw_support
+    - soc
 
 components/esp_driver_uart/test_apps/uhci:
   disable:
     - if: SOC_UHCI_SUPPORTED != 1
   depends_components:
     - esp_driver_uart
-    - esp_hal_uart
-    - esp_driver_gpio
+    - esp_driver_dma
+    - esp_hw_support
+    - soc

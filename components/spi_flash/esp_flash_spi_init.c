@@ -1,27 +1,24 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "sdkconfig.h"
-#include "esp_flash.h"
-#include "memspi_host_driver.h"
-#include "esp_flash_spi_init.h"
+#include "driver/gpio.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_efuse.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "hal/spi_types.h"
 #include "esp_private/spi_share_hw_ctrl.h"
+#include "esp_private/mspi_intr.h"
 #include "esp_ldo_regulator.h"
-#include "hal/spi_flash_hal.h"
-#include "spi_flash_chip_driver.h"
 #include "hal/gpio_hal.h"
-#include "esp_flash_internal.h"
 #include "esp_rom_gpio.h"
-#include "esp_private/spi_flash_os.h"
 #include "esp_private/cache_utils.h"
+#include "esp_private/log_util.h"
+#include "esp_private/startup_internal.h"
 #include "esp_spi_flash_counters.h"
 #include "esp_rom_spiflash.h"
 #include "bootloader_flash.h"
@@ -29,6 +26,15 @@
 #include "esp_private/esp_clk_tree_common.h"
 #include "clk_ctrl_os.h"
 #include "soc/soc_caps.h"
+#include "hal/spi_flash_hal.h"
+#include "hal/mspi_ll.h"
+
+#include "esp_flash.h"
+#include "esp_flash_spi_init.h"
+#include "esp_flash_chips/spi_flash_chip_driver.h"
+#include "esp_private/memspi_host_driver.h"
+#include "esp_private/esp_flash_internal.h"
+#include "esp_private/spi_flash_os.h"
 
 __attribute__((unused)) static const char TAG[] = "spi_flash";
 
@@ -38,12 +44,6 @@ __attribute__((unused)) static const char TAG[] = "spi_flash";
 
 #if CONFIG_SPI_FLASH_ROM_IMPL && (CONFIG_ESPTOOLPY_FLASHSIZE_32MB || CONFIG_ESPTOOLPY_FLASHSIZE_64MB || CONFIG_ESPTOOLPY_FLASHSIZE_128MB)
 #error "Flash chip size equal or over 32MB memory cannot use driver in ROM"
-#endif
-
-#if SOC_PERIPH_CLK_CTRL_SHARED
-#define GPSPI_FLASH_RCC_CLOCK_ATOMIC() PERIPH_RCC_ATOMIC()
-#else
-#define GPSPI_FLASH_RCC_CLOCK_ATOMIC()
 #endif
 
 /* This pointer is defined in ROM and extern-ed on targets where CONFIG_SPI_FLASH_ROM_IMPL = y*/
@@ -149,7 +149,7 @@ esp_flash_t *esp_flash_default_chip = NULL;
 // 1. Frequency limit workaround is enabled (CONFIG_SPI_FLASH_FREQ_LIMIT_C5_240MHZ)
 // 2. Flash frequency requires timing tuning (80MHz or 120MHz, i.e., > 40MHz)
 // 3. CPU frequency reduction will trigger MSPI timing tuning to enter low speed mode
-//    This happens when: SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED && CONFIG_SPIRAM &&
+//    This happens when: MSPI_TIMING_LL_PSRAM_FREQ_AXI_CONSTRAINED && CONFIG_SPIRAM &&
 //                      (target_cpu_freq < CONFIG_SPIRAM_SPEED)
 //    Note: The runtime check for CPU freq < PSRAM speed is done in clk_utils.c,
 //          which calls mspi_timing_change_speed_mode_cache_safe(true) to enter low speed mode.
@@ -293,7 +293,7 @@ static uint32_t init_gpspi_clock(esp_flash_t *chip, const esp_flash_spi_device_c
     esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clk_src_freq);
 
     // Enable GPSPI clock
-    GPSPI_FLASH_RCC_CLOCK_ATOMIC() {
+    PERIPH_RCC_ATOMIC() {
         gpspi_flash_ll_enable_clock(spi_flash_ll_get_hw(config->host_id), true);
         gpspi_flash_ll_set_clk_source(spi_flash_ll_get_hw(config->host_id), clk_src);
     }
@@ -349,7 +349,7 @@ static void deinit_gpspi_clock(esp_flash_t *chip)
     }
 
     // Disable GPSPI clock
-    GPSPI_FLASH_RCC_CLOCK_ATOMIC() {
+    PERIPH_RCC_ATOMIC() {
         gpspi_flash_ll_enable_clock(spi_flash_ll_get_hw(host_id), false);
     }
 
@@ -643,4 +643,34 @@ esp_err_t esp_flash_app_init(void)
 #endif
     err = esp_flash_app_enable_os_functions(&default_chip);
     return err;
+}
+
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
+ESP_SYSTEM_INIT_FN(init_flash, CORE, BIT(0), 130)
+{
+#if CONFIG_SPI_FLASH_ROM_IMPL
+    spi_flash_rom_impl_init();
+#endif
+
+    esp_flash_app_init();
+    esp_err_t flash_ret = esp_flash_init_default_chip();
+    assert(flash_ret == ESP_OK);
+    (void)flash_ret;
+#if CONFIG_SPI_FLASH_BROWNOUT_RESET
+    spi_flash_needs_reset_check();
+#endif // CONFIG_SPI_FLASH_BROWNOUT_RESET
+    // The log library will call the registered callback function to check if the cache is disabled.
+    esp_log_util_set_cache_enabled_cb(spi_flash_cache_enabled);
+    // Register MSPI Flash interrupt
+#if MSPI_LL_INTR_EVENT_SUPPORTED && MSPI_LL_INTR_SHARED
+    esp_mspi_register_isr(NULL);
+#endif
+    //else register flash standalone ISR to deal with CPU / API flash access
+    return ESP_OK;
+}
+#endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
+
+void esp_flash_spi_init_include_func(void)
+{
+    // Linker hook function, exists to make the linker examine this file
 }

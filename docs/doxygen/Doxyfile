@@ -96,6 +96,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_cosine.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_oneshot.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_types.h \
+    $(PROJECT_PATH)/components/esp_driver_dma/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/dedic_gpio.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/gpio.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/gpio_etm.h \
@@ -171,6 +172,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/dac_types.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/temperature_sensor_types.h \
     $(PROJECT_PATH)/components/esp_hal_emac/include/hal/eth_types.h \
+    $(PROJECT_PATH)/components/esp_hal_gpio/$(IDF_TARGET)/include/soc/gpio_num.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/gpio_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/rtc_io_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/sdm_types.h \
@@ -188,6 +190,8 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/spi_flash_types.h \
     $(PROJECT_PATH)/components/esp_hal_pcnt/include/hal/pcnt_types.h \
     $(PROJECT_PATH)/components/esp_hal_rmt/include/hal/rmt_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sdio_slave_types.h \
+    $(PROJECT_PATH)/components/esp_hal_sd/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/esp_hal_twai/include/hal/twai_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uart_types.h \
     $(PROJECT_PATH)/components/esp_hal_uart/include/hal/uhci_types.h \
@@ -197,7 +201,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_https_server/include/esp_https_server.h \
     $(PROJECT_PATH)/components/esp_hw_support/etm/include/esp_etm.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_clk_tree.h \
-    $(PROJECT_PATH)/components/esp_hw_support/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_chip_info.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_cpu.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_crc.h \
@@ -232,7 +235,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_ringbuf/include/freertos/ringbuf.h \
     $(PROJECT_PATH)/components/esp_rom/include/esp_rom_sys.h \
     $(PROJECT_PATH)/components/esp_security/include/esp_ds.h \
-    $(PROJECT_PATH)/components/esp_security/include/esp_hmac.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_expression_with_stack.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_freertos_hooks.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_ipc_isr.h \
@@ -276,10 +278,8 @@ INPUT = \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/task.h \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/timers.h \
     $(PROJECT_PATH)/components/hal/include/hal/color_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/efuse_hal.h \
     $(PROJECT_PATH)/components/hal/include/hal/lp_core_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/sd_types.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps_init.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_caps.h \
     $(PROJECT_PATH)/components/heap/include/esp_heap_task_info.h \
@@ -297,6 +297,7 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
     $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_ecdsa_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_hmac_opaque_contexts.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \
@@ -323,7 +324,6 @@ INPUT = \
     $(PROJECT_PATH)/components/soc/include/soc/soc_caps_eval.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/adc_channel.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/clk_tree_defs.h \
-    $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/gpio_num.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/soc_caps.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/uart_pins.h \
     $(PROJECT_PATH)/components/spi_flash/include/esp_flash_spi_init.h \

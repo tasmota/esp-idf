@@ -4,6 +4,8 @@ components/esp_driver_gpio/test_apps:
   depends_components:
     - esp_driver_gpio
     - esp_hal_gpio
+    - esp_hw_support
+    - soc
 
 components/esp_driver_gpio/test_apps/gpio_extensions:
   enable:
@@ -12,3 +14,5 @@ components/esp_driver_gpio/test_apps/gpio_extensions:
   depends_components:
     - esp_driver_gpio
     - esp_hal_gpio
+    - esp_hw_support
+    - soc

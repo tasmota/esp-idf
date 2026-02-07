@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * SPDX-FileContributor: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileContributor: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -224,30 +224,36 @@ FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackTLS(UBaseType_t uxStackPointer, u
     LOW ADDRESS
             |---------------------------|   Linker Symbols
             | Section                   |   --------------
-            | .flash.rodata             |
-         0x0|---------------------------| <- _flash_rodata_start
-          ^ | Other Data                |
-          | |---------------------------| <- _thread_local_start
-          | | .tbss                     | ^
-          V |                           | |
-      0xNNN | int example;              | | tls_area_size
-            |                           | |
-            | .tdata                    | V
-            |---------------------------| <- _thread_local_end
+            | .flash.tdata              |
+         0x0|---------------------------| <- _thread_local_data_start  ^
+            | .flash.tdata              |                              |
+            | int var_1 = 1;            |                              |
+            |                           | <- _thread_local_data_end    |
+            |                           | <- _thread_local_bss_start   | tls_area_size
+            |                           |                              |
+            | .flash.tbss (NOLOAD)      |                              |
+            | int var_2;                |                              |
+            |---------------------------| <- _thread_local_bss_end     V
             | Other data                |
             | ...                       |
             |---------------------------|
     HIGH ADDRESS
     */
     // Calculate the TLS area's size (rounded up to multiple of 16 bytes).
-    extern int _thread_local_start, _thread_local_end, _flash_rodata_start, _flash_rodata_align;
-    const uint32_t tls_area_size = ALIGNUP(16, (uint32_t)&_thread_local_end - (uint32_t)&_thread_local_start);
+    extern int _tls_section_alignment;
+    extern char _thread_local_data_start, _thread_local_data_end;
+    extern char _thread_local_bss_start, _thread_local_bss_end;
+    const uint32_t tls_data_size = (uint32_t)&_thread_local_data_end - (uint32_t)&_thread_local_data_start;
+    const uint32_t tls_bss_size = (uint32_t)&_thread_local_bss_end - (uint32_t)&_thread_local_bss_start;
+    const uint32_t tls_area_size = ALIGNUP(16, tls_data_size + tls_bss_size);
     // TODO: check that TLS area fits the stack
 
     // Allocate space for the TLS area on the stack. The area must be allocated at a 16-byte aligned address
     uxStackPointer = STACKPTR_ALIGN_DOWN(16, uxStackPointer - (UBaseType_t)tls_area_size);
-    // Initialize the TLS area with the initialization values of each TLS variable
-    memcpy((void *)uxStackPointer, &_thread_local_start, tls_area_size);
+    // Initialize the TLS data with the initialization values of each TLS variable
+    memcpy((void *)uxStackPointer, &_thread_local_data_start, tls_data_size);
+    // Initialize the TLS bss with zeroes
+    memset((void *)(uxStackPointer + tls_data_size), 0, tls_bss_size);
 
     /*
     Calculate the THREADPTR register's initialization value based on the link-time offset and the TLS area allocated on
@@ -274,10 +280,10 @@ FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackTLS(UBaseType_t uxStackPointer, u
         - "offset = address - tls_section_vma + align_up(TCB_SIZE, tls_section_alignment)"
         - TCB_SIZE is hardcoded to 8
     */
-    const uint32_t tls_section_align = (uint32_t)&_flash_rodata_align;  // ALIGN value of .flash.rodata section
+    const uint32_t tls_section_align = (uint32_t)&_tls_section_alignment;  // ALIGN value of .flash.tdata section
     #define TCB_SIZE 8
     const uint32_t base = ALIGNUP(tls_section_align, TCB_SIZE);
-    *ret_threadptr_reg_init = (uint32_t)uxStackPointer - ((uint32_t)&_thread_local_start - (uint32_t)&_flash_rodata_start) - base;
+    *ret_threadptr_reg_init = (uint32_t)uxStackPointer - base;
 
     return uxStackPointer;
 }

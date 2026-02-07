@@ -185,7 +185,7 @@ class IdfLocalPlugin:
                 if eco_marker in case.all_markers:
                     break
             else:
-                item.add_marker('eco_default')
+                item.add_marker('rev_default')
 
             if 'host_test' in case.all_markers:
                 item.add_marker('skip_app_downloader')  # host_test jobs will build the apps itself

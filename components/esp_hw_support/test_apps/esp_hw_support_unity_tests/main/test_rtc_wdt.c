@@ -17,6 +17,7 @@
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_private/rtc_ctrl.h"
+#include "esp_private/esp_sleep_internal.h"
 
 /* As the RTC slow clock used by RWDT is derived using RC oscillator by default,
  * the timing accuracy is not very precise, and may vary from chip to chip.
@@ -178,10 +179,54 @@ static void rtc_wdt_setup_then_reset_RTC(void)
     }
 }
 
+#if SOC_LIGHT_SLEEP_SUPPORTED && CONFIG_ESP_SLEEP_ENABLE_RTC_WDT_IN_SLEEP
+/* MULTI test case for light sleep prepare timeout then RTC WDT resets RTC */
+static void rtc_wdt_light_sleep_prepare_timeout(void)
+{
+    uint32_t stage_timeout_ticks = (uint32_t)(1000 * rtc_clk_slow_freq_get_hz() / 1000ULL);   /* 1000ms for interrupt */
+    esp_sleep_enable_timer_wakeup(3000000);
+
+    /* Setup RTC WDT */
+    // Here enable RTC_WDT then the setup in sleep flow will be skipped
+    wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, true);
+    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
+    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE0, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_RTC);
+    wdt_hal_enable(&rtc_wdt_ctx);
+    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
+    TEST_ASSERT_TRUE(wdt_hal_is_enabled(&rtc_wdt_ctx));
+    printf("RTC WDT setup stage-0 RESET (1000ms)\n");
+
+    esp_light_sleep_start();
+    /* Wait for RTC WDT to reset the main system and RTC */
+    esp_restart();
+}
+#endif
+
+#if SOC_DEEP_SLEEP_SUPPORTED && CONFIG_ESP_SLEEP_ENABLE_RTC_WDT_IN_SLEEP
+/* MULTI test case for deep sleep prepare timeout then RTC WDT resets RTC */
+static void rtc_wdt_deep_sleep_prepare_timeout(void)
+{
+    uint32_t stage_timeout_ticks = (uint32_t)(1000 * rtc_clk_slow_freq_get_hz() / 1000ULL);   /* 1000ms for interrupt */
+    esp_sleep_enable_timer_wakeup(3000000);
+
+    /* Setup RTC WDT */
+    // Here enable RTC_WDT then the setup in sleep flow will be skipped
+    wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, true);
+    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
+    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE0, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_RTC);
+    wdt_hal_enable(&rtc_wdt_ctx);
+    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
+    TEST_ASSERT_TRUE(wdt_hal_is_enabled(&rtc_wdt_ctx));
+    printf("RTC WDT setup stage-0 RESET (1000ms)\n");
+
+    esp_deep_sleep_start();
+}
+#endif
+
 static void rtc_wdt_verify_SYSTEM_reset(void)
 {
     printf("Confirming if reset reason matches 0x9 (main system reset)\n");
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
     TEST_ASSERT_EQUAL(RESET_REASON_CORE_RWDT, esp_rom_get_reset_reason(CONFIG_ESP_MAIN_TASK_AFFINITY));
 #else
     TEST_ASSERT_EQUAL(RESET_REASON_CORE_RTC_WDT, esp_rom_get_reset_reason(CONFIG_ESP_MAIN_TASK_AFFINITY));
@@ -191,7 +236,7 @@ static void rtc_wdt_verify_SYSTEM_reset(void)
 static void rtc_wdt_verify_RTC_reset(void)
 {
     printf("Confirming if reset reason matches 0x10 (main system + RTC reset)\n");
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
     TEST_ASSERT_EQUAL(RESET_REASON_SYS_RWDT, esp_rom_get_reset_reason(CONFIG_ESP_MAIN_TASK_AFFINITY));
 #else
     TEST_ASSERT_EQUAL(RESET_REASON_SYS_RTC_WDT, esp_rom_get_reset_reason(CONFIG_ESP_MAIN_TASK_AFFINITY));
@@ -211,3 +256,21 @@ TEST_CASE_MULTIPLE_STAGES(
     rtc_wdt_setup_then_reset_RTC,
     rtc_wdt_verify_RTC_reset
 )
+
+#if SOC_LIGHT_SLEEP_SUPPORTED && CONFIG_ESP_SLEEP_ENABLE_RTC_WDT_IN_SLEEP
+TEST_CASE_MULTIPLE_STAGES(
+    "Light sleep prepare timeout then RTC WDT resets RTC",
+    "[rtc_wdt][lightsleep][reset]",
+    rtc_wdt_light_sleep_prepare_timeout,
+    rtc_wdt_verify_RTC_reset
+)
+#endif
+
+#if SOC_DEEP_SLEEP_SUPPORTED && CONFIG_ESP_SLEEP_ENABLE_RTC_WDT_IN_SLEEP
+TEST_CASE_MULTIPLE_STAGES(
+    "Deep sleep prepare timeout then RTC WDT resets RTC",
+    "[rtc_wdt][deepsleep][reset]",
+    rtc_wdt_deep_sleep_prepare_timeout,
+    rtc_wdt_verify_RTC_reset
+)
+#endif

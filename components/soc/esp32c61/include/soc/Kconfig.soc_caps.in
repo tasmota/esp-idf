@@ -451,15 +451,15 @@ config SOC_GPIO_OUT_RANGE_MAX
     int
     default 29
 
-config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+config SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
     bool
     default y
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK
     int
     default 0
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT
     int
     default 7
 
@@ -779,10 +779,6 @@ config SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR
     bool
     default y
 
-config SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED
-    bool
-    default y
-
 config SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY
     bool
     default y
@@ -791,15 +787,7 @@ config SOC_MEMSPI_IS_INDEPENDENT
     bool
     default y
 
-config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
+config SOC_SPI_MEM_FLASH_SUPPORT_HPM
     bool
     default y
 
@@ -1216,6 +1204,10 @@ config SOC_WIFI_NAN_SUPPORT
     default y
 
 config SOC_BLE_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_MESH_SUPPORTED
     bool
     default y
 

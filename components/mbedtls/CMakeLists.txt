@@ -4,8 +4,7 @@ idf_build_get_property(esp_tee_build ESP_TEE_BUILD)
 
 if(esp_tee_build)
     include(${COMPONENT_DIR}/esp_tee/esp_tee_mbedtls.cmake)
-return()
-
+    return()
 elseif(BOOTLOADER_BUILD)   # TODO: IDF-11673
     if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL_BOOTLOADER)
         set(include_dirs "${COMPONENT_DIR}/mbedtls/include"
@@ -15,14 +14,14 @@ elseif(BOOTLOADER_BUILD)   # TODO: IDF-11673
 
     idf_component_register(SRCS "${srcs}"
                            INCLUDE_DIRS "${include_dirs}"
-                           PRIV_REQUIRES hal)
+                           PRIV_REQUIRES esp_hal_dma)
     return()
 endif()
 
 if(NOT ${IDF_TARGET} STREQUAL "linux")
     set(priv_requires soc esp_hw_support)
     if(NOT BOOTLOADER_BUILD)
-        list(APPEND priv_requires esp_pm)
+        list(APPEND priv_requires esp_pm esp_driver_dma)
         set(requires esp_security)
     endif()
 endif()
@@ -187,11 +186,10 @@ endif()
 # Core libraries from the mbedTLS project
 set(mbedtls_targets mbedtls mbedx509 tfpsacrypto builtin)
 
-target_include_directories(tfpsacrypto PUBLIC "port/include")
+add_library(mbed-builtin ALIAS builtin)
+set_target_properties(builtin PROPERTIES OUTPUT_NAME "mbed-builtin")
 
-if(CONFIG_MBEDTLS_HARDWARE_SHA OR CONFIG_MBEDTLS_HARDWARE_AES)
-    target_include_directories(tfpsacrypto PUBLIC "${COMPONENT_DIR}/port/psa_driver/include")
-endif()
+target_include_directories(tfpsacrypto PUBLIC "port/include")
 
 message(STATUS "Setting up mbedtls configuration")
 foreach(target ${mbedtls_targets})
@@ -227,7 +225,7 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
         )
         target_link_libraries(tfpsacrypto PRIVATE "$<$<TARGET_EXISTS:idf::nvs_flash>:idf::nvs_flash>")
         # Define compile definition to indicate ESP-IDF PSA ITS implementation is available
-        target_compile_definitions(tfpsacrypto PRIVATE "$<$<TARGET_EXISTS:idf::nvs_flash>:ESP_PSA_ITS_AVAILABLE>")
+        target_compile_definitions(tfpsacrypto PUBLIC "$<$<TARGET_EXISTS:idf::nvs_flash>:ESP_PSA_ITS_AVAILABLE>")
     else()
         # For v1: check if component is in build before adding source and linking
         idf_build_get_property(build_components BUILD_COMPONENTS)
@@ -235,7 +233,7 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
             target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/psa_crypto_storage/esp_psa_its.c")
             idf_component_get_property(nvs_flash_lib nvs_flash COMPONENT_LIB)
             target_link_libraries(tfpsacrypto PRIVATE ${nvs_flash_lib})
-            target_compile_definitions(tfpsacrypto PRIVATE ESP_PSA_ITS_AVAILABLE)
+            target_compile_definitions(tfpsacrypto PUBLIC ESP_PSA_ITS_AVAILABLE)
         endif()
     endif()
 endif()
@@ -325,6 +323,10 @@ if(AES_PERIPHERAL_TYPE STREQUAL "dma")
     target_sources(tfpsacrypto PRIVATE "${AES_DMA_SRCS}")
 endif()
 
+if(CONFIG_SOC_SHA_GDMA OR CONFIG_SOC_AES_GDMA)
+    target_link_libraries(tfpsacrypto PRIVATE idf::esp_driver_dma)
+endif()
+
 if((SHA_PERIPHERAL_TYPE STREQUAL "core" AND CONFIG_SOC_SHA_SUPPORT_DMA) OR AES_PERIPHERAL_TYPE STREQUAL "dma")
     target_link_libraries(tfpsacrypto PRIVATE idf::esp_mm)
     target_link_libraries(builtin PRIVATE idf::esp_mm)
@@ -353,13 +355,13 @@ endif()
 
 if(CONFIG_SOC_SHA_SUPPORTED)
     if(CONFIG_MBEDTLS_HARDWARE_SHA)
-        target_compile_definitions(tfpsacrypto PRIVATE ESP_SHA_DRIVER_ENABLED)
         target_sources(tfpsacrypto PRIVATE
             "${COMPONENT_DIR}/port/psa_driver/esp_sha/psa_crypto_driver_esp_sha.c"
             "${COMPONENT_DIR}/port/psa_driver/esp_sha/${SHA_PERIPHERAL_TYPE}/psa_crypto_driver_esp_sha256.c"
             "${COMPONENT_DIR}/port/psa_driver/esp_sha/${SHA_PERIPHERAL_TYPE}/psa_crypto_driver_esp_sha512.c"
-
-            "${COMPONENT_DIR}/port/sha/esp_sha.c")
+            "${COMPONENT_DIR}/port/sha/esp_sha.c"
+            "${COMPONENT_DIR}/port/psa_driver/esp_mac/psa_crypto_driver_esp_hmac_transparent.c"
+        )
     endif()
     target_sources(tfpsacrypto PRIVATE
             "${COMPONENT_DIR}/port/psa_driver/esp_sha/${SHA_PERIPHERAL_TYPE}/psa_crypto_driver_esp_sha1.c"
@@ -368,10 +370,16 @@ if(CONFIG_SOC_SHA_SUPPORTED)
 endif()
 
 if(CONFIG_MBEDTLS_ROM_MD5)
-    target_compile_definitions(tfpsacrypto PRIVATE ESP_MD5_DRIVER_ENABLED)
     target_sources(tfpsacrypto PRIVATE
         "${COMPONENT_DIR}/port/psa_driver/esp_md/psa_crypto_driver_esp_md5.c"
     )
+endif()
+
+if(CONFIG_SOC_HMAC_SUPPORTED)
+    target_sources(tfpsacrypto PRIVATE
+        "${COMPONENT_DIR}/port/psa_driver/esp_mac/psa_crypto_driver_esp_hmac_opaque.c"
+    )
+    target_link_libraries(tfpsacrypto PRIVATE idf::efuse)
 endif()
 
 if(CONFIG_SOC_DIG_SIGN_SUPPORTED)
@@ -402,15 +410,14 @@ if(CONFIG_MBEDTLS_HARDWARE_MPI)
 endif()
 
 if(CONFIG_MBEDTLS_HARDWARE_GCM OR CONFIG_MBEDTLS_HARDWARE_AES)
-    target_compile_definitions(tfpsacrypto PRIVATE ESP_AES_DRIVER_ENABLED)
     target_include_directories(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/include/aes")
     target_sources(tfpsacrypto PRIVATE
         "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes.c"
         "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_aes_gcm.c"
     )
-    if(CONFIG_MBEDTLS_HARDWARE_SHA)
+    if(CONFIG_MBEDTLS_CMAC_C)
         target_sources(tfpsacrypto PRIVATE
-            "${COMPONENT_DIR}/port/psa_driver/esp_aes/psa_crypto_driver_esp_cmac.c"
+            "${COMPONENT_DIR}/port/psa_driver/esp_mac/psa_crypto_driver_esp_cmac.c"
         )
     endif()
 endif()
@@ -424,14 +431,6 @@ if(CONFIG_SOC_ECC_SUPPORTED)
 endif()
 
 if(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN OR CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY OR CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
-    # ESP_ECDSA_DRIVER_ENABLED needs to be public because users would use OPAQUE key contexts in their applications.
-    target_compile_definitions(tfpsacrypto PUBLIC ESP_ECDSA_DRIVER_ENABLED)
-    if(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN OR CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
-        target_compile_definitions(tfpsacrypto PRIVATE ESP_ECDSA_SIGN_DRIVER_ENABLED)
-    endif()
-    if(CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY)
-        target_compile_definitions(tfpsacrypto PRIVATE ESP_ECDSA_VERIFY_DRIVER_ENABLED)
-    endif()
     target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/psa_driver/esp_ecdsa/psa_crypto_driver_esp_ecdsa.c")
     target_include_directories(tfpsacrypto PUBLIC "${COMPONENT_DIR}/port/psa_driver/include")
     target_link_libraries(tfpsacrypto PRIVATE idf::efuse)

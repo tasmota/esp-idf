@@ -38,12 +38,12 @@
 #include "hal/efuse_hal.h"
 #if CONFIG_SPIRAM
 #include "hal/ldo_ll.h"
+#include "hal/mspi_ll.h"
 #endif
 
 #if (CONFIG_ESP_REV_MIN_FULL == 300)
 #include "soc/hp_system_reg.h"
 #include "hal/mmu_ll.h"
-#include "hal/mspi_ll.h"
 #endif
 
 #define HP(state)   (PMU_MODE_HP_ ## state)
@@ -267,6 +267,7 @@ static void pmu_sleep_digital_init(pmu_context_t *ctx, const pmu_sleep_digital_c
 {
     pmu_ll_hp_set_dig_pad_slp_sel   (ctx->hal->dev, HP(SLEEP), dig->syscntl.dig_pad_slp_sel);
     pmu_ll_hp_set_hold_all_lp_pad   (ctx->hal->dev, HP(SLEEP), dig->syscntl.lp_pad_hold_all);
+    pmu_ll_hp_set_pause_watchdog    (ctx->hal->dev, HP(SLEEP), dig->syscntl.dig_pause_wdt);
 
     // Lowpower workaround for LP pad holding, JTAG IOs is located on lp_pad on esp32p4, if hold its
     // default state on sleep, there's a high current leakage.
@@ -425,12 +426,15 @@ TCM_IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt,
                 _psram_ctrlr_ll_enable_core_clock(PSRAM_CTRLR_LL_MSPI_ID_2, false);
                 _psram_ctrlr_ll_enable_module_clock(PSRAM_CTRLR_LL_MSPI_ID_2, false);
             }
+            mspi_ll_hold_all_psram_pins();
 #endif
             rtc_clk_mpll_disable();
         }
     } else {
 #if CONFIG_P4_REV3_MSPI_CRASH_AFTER_POWER_UP_WORKAROUND
+    if (efuse_hal_chip_revision() == 300) {
         lp_clkrst_ll_boot_from_lp_ram(true);
+    }
 #endif
     }
 
@@ -461,8 +465,10 @@ TCM_IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt,
         ldo_ll_enable(LDO_ID2UNIT(CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN), true);
 #endif
 #if CONFIG_P4_REV3_MSPI_CRASH_AFTER_POWER_UP_WORKAROUND
-        // Set reset vector back to HP ROM after deepsleep request rejected
-        lp_clkrst_ll_boot_from_lp_ram(false);
+        if (efuse_hal_chip_revision() == 300) {
+            // Set reset vector back to HP ROM after deepsleep request rejected
+            lp_clkrst_ll_boot_from_lp_ram(false);
+        }
 #endif
     }
 
@@ -499,6 +505,7 @@ TCM_IRAM_ATTR bool pmu_sleep_finish(bool dslp)
         }
         _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_2, PSRAM_CLK_SRC_MPLL);
         _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_3, PSRAM_CLK_SRC_MPLL);
+        mspi_ll_unhold_all_psram_pins();
 #endif
     }
 

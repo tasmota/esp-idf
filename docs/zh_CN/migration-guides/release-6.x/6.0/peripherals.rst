@@ -124,6 +124,48 @@ GPIO
 
 - 为 :func:`gpio_uninstall_isr_service` 添加了 :cpp:type:`esp_err_t` 返回类型。
 
+GPIO 深度睡眠唤醒 API 已移除
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+以下 GPIO 驱动 API 已被移除：
+
+- :func:`gpio_deep_sleep_wakeup_enable` - 请使用 :func:`gpio_wakeup_enable_on_hp_periph_powerdown_sleep` 替代
+- :func:`gpio_deep_sleep_wakeup_disable` - 请使用 :func:`gpio_wakeup_disable_on_hp_periph_powerdown_sleep` 替代
+
+已弃用的宏 ``GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO()`` 已被移除。请使用 ``GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO()`` 替代。
+
+**迁移示例：**
+
+旧代码：
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // 启用 GPIO 唤醒
+    gpio_deep_sleep_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // 检查有效性
+    if (GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(GPIO_NUM_0)) {
+        // ...
+    }
+
+新代码：
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // 启用 GPIO 唤醒（同时支持深度睡眠和外设电源域掉电时的 Light Sleep）
+    gpio_wakeup_enable_on_hp_periph_powerdown_sleep(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // 检查 GPIO 外设掉电的睡眠唤醒有效性
+    if (GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO(GPIO_NUM_0)) {
+        // ...
+    }
+
+更多详细信息，请参阅系统迁移指南中的 :ref:`GPIO 唤醒 API 变更 <gpio_wakeup_api_changes>` 部分。
+
 LEDC
 ----
 
@@ -148,54 +190,56 @@ UART
 
 - ``soc/uart_channel.h`` 头文件已被移除。所有 UART GPIO 查找宏都可以在 ``soc/uart_pins.h`` 中找到。例如，``UART_NUM_0_TXD_DIRECT_GPIO_NUM`` 等同于 ``U0TXD_GPIO_NUM``。
 
-I2C
----
+.. only:: SOC_I2C_SUPPORTED
 
-旧版 I2C 驱动生命周期终止
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+    I2C
+    ---
 
-.. warning::
+    旧版 I2C 驱动生命周期终止
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    旧版 I2C 驱动（``driver/i2c.h``）已在 ESP-IDF v6.0 中被标记为 **生命周期终止（End-of-Life, EOL）**，并计划在 **v7.0 中彻底移除**。
+    .. warning::
 
-    - ESP-IDF 将不再为旧版驱动提供及时的更新、错误修复或安全补丁。
-    - 强烈建议用户尽快迁移到新版 I2C 驱动：``driver/i2c_master.h`` 和 ``driver/i2c_slave.h``。
-    - 如需暂时抑制编译警告，可在 menuconfig 中启用 ``Component config``  > ``Legacy Driver Configurations`` > ``Legacy I2C Driver Configurations`` > ``Suppress legacy driver deprecated warning``。
+        旧版 I2C 驱动（``driver/i2c.h``）已在 ESP-IDF v6.0 中被标记为 **生命周期终止（End-of-Life, EOL）**，并计划在 **v7.0 中彻底移除**。
 
-新版 I2C 驱动主要改进了从机和主机的使用方式，详细内容请参考 :ref:`I2C 迁移指南 <migration_guide_i2c_driver_5_2>` 和 :doc:`I2C 驱动编程指南 <../../../api-reference/peripherals/i2c>`。
+        - ESP-IDF 将不再为旧版驱动提供及时的更新、错误修复或安全补丁。
+        - 强烈建议用户尽快迁移到新版 I2C 驱动：``driver/i2c_master.h`` 和 ``driver/i2c_slave.h``。
+        - 如需暂时抑制编译警告，可在 menuconfig 中启用 ``Component config``  > ``Legacy Driver Configurations`` > ``Legacy I2C Driver Configurations`` > ``Suppress legacy driver deprecated warning``。
 
-I2C 从机驱动更新
-~~~~~~~~~~~~~~~~~~
+    新版 I2C 驱动主要改进了从机和主机的使用方式，详细内容请参考 :ref:`I2C 迁移指南 <migration_guide_i2c_driver_5_2>` 和 :doc:`I2C 驱动编程指南 <../../../api-reference/peripherals/i2c>`。
 
-I2C 从机驱动在 v5.4 上已经被重新设计。在当前版本上，旧的 I2C 从机驱动已经被移除。
+    I2C 从机驱动更新
+    ~~~~~~~~~~~~~~~~~~
 
-主要概念更新
-^^^^^^^^^^^^
+    I2C 从机驱动在 v5.4 上已经被重新设计。在当前版本上，旧的 I2C 从机驱动已经被移除。
 
-- 旧版本的 I2C 从机驱动是主动读写，这不符合 I2C 从机的一般用法。在新版的 I2C 从机中，I2C 的读写通过主机驱动产生的事件以触发回调被动完成。
+    主要概念更新
+    ^^^^^^^^^^^^
 
-主要用法更新
-^^^^^^^^^^^^
+    - 旧版本的 I2C 从机驱动是主动读写，这不符合 I2C 从机的一般用法。在新版的 I2C 从机中，I2C 的读写通过主机驱动产生的事件以触发回调被动完成。
 
-- ``i2c_slave_receive`` 被移除，在新驱动中使用回调接收数据。
-- ``i2c_slave_transmit`` 已被 ``i2c_slave_write`` 取代。
-- ``i2c_slave_write_ram`` 被移除。
-- ``i2c_slave_read_ram`` 被移除。
+    主要用法更新
+    ^^^^^^^^^^^^
 
-I2C 主机驱动更新
-~~~~~~~~~~~~~~~~~~
+    - ``i2c_slave_receive`` 被移除，在新驱动中使用回调接收数据。
+    - ``i2c_slave_transmit`` 已被 ``i2c_slave_write`` 取代。
+    - ``i2c_slave_write_ram`` 被移除。
+    - ``i2c_slave_read_ram`` 被移除。
 
-I2C 主机驱动的 API 也有一些用法上的改动。
+    I2C 主机驱动更新
+    ~~~~~~~~~~~~~~~~~~
 
-主要用法更新
-^^^^^^^^^^^^
+    I2C 主机驱动的 API 也有一些用法上的改动。
 
-当主机在 I2C 总线上检测到 NACK，以下的函数目前会返回 ``ESP_ERR_INVALID_RESPONSE``，而不是像之前一样返回 ``ESP_ERR_INVALID_STATE``：
+    主要用法更新
+    ^^^^^^^^^^^^
 
-- ``i2c_master_transmit``
-- ``i2c_master_multi_buffer_transmit``
-- ``i2c_master_transmit_receive``
-- ``i2c_master_execute_defined_operations``
+    当主机在 I2C 总线上检测到 NACK，以下的函数目前会返回 ``ESP_ERR_INVALID_RESPONSE``，而不是像之前一样返回 ``ESP_ERR_INVALID_STATE``：
+
+    - ``i2c_master_transmit``
+    - ``i2c_master_multi_buffer_transmit``
+    - ``i2c_master_transmit_receive``
+    - ``i2c_master_execute_defined_operations``
 
 旧版定时器组驱动被移除
 ----------------------
@@ -224,9 +268,10 @@ I2C 主机驱动的 API 也有一些用法上的改动。
 
     旧版的 RMT 驱动 ``driver/rmt.h`` 在 5.0 的版本中就已经被弃用（请参考 :ref:`deprecate_rmt_legacy_driver`）。从 6.0 版本开始，旧版驱动被完全移除。新驱动位于 :component:`esp_driver_rmt` 组件中，头文件引用路径为 ``driver/rmt_tx.h``, ``driver/rmt_rx.h`` 和 ``driver/rmt_encoder.h``。
 
-GDMA
-----
+DMA 驱动
+--------
 
+- DMA 核心驱动程序现已从原来的 ``esp_hw_support`` 组件中移出，现作为单独的 ``esp_driver_dma`` 组件提供。如果你使用了 ``esp_async_memcpy.h`` 和 ``esp_dma_utils.h`` 驱动，请确保在项目中添加对 ``esp_driver_dma`` 组件的依赖。
 - ``GDMA_ISR_IRAM_SAFE`` Kconfig 选项会带来不必要的风险，因此被移除。现在，不同的 GDMA 通道它们的中断在 Cache 关闭期间的行为可以互不影响。
 - ``gdma_new_channel`` 已经被移除。现在当申请一个 GDMA 通道时，必须要根据实际使用的总线调用 ``gdma_new_ahb_channel`` 或 ``gdma_new_axi_channel`` 函数。
 - :cpp:type:`async_memcpy_config_t` 中的 ``sram_trans_align`` 和 ``psram_trans_align`` 成员均已经被移除。请使用 :cpp:member:`async_memcpy_config_t::dma_burst_size` 来设置 DMA 的突发传输大小。
@@ -277,6 +322,27 @@ LCD
 - NT35510 LCD 设备驱动已经从 ESP-IDF 中移动到外部仓库，并且托管在了 `ESP Component Registry <https://components.espressif.com/components/espressif/esp_lcd_nt35510/versions/1.0.0/readme>`__ 上。如果你的项目使用到了 NT35510 驱动，你可以通过运行 ``idf.py add-dependency "espressif/esp_lcd_nt35510"`` 将它添加到你的项目中。
 - :cpp:type:`esp_lcd_dpi_panel_config_t` 结构体中的 ``use_dma2d`` 成员已被移除。请使用 :func:`esp_lcd_dpi_panel_enable_dma2d` 函数来启用 DMA2D 功能。当不使用 DMA2D 时，可以减小 10KB 左右的二进制文件大小。
 
+颜色类型 (Color Types)
+----------------------
+
+位于 ``components/hal/include/hal/color_types.h`` 头文件中的以下类型已被移除，请使用 FourCC 格式（:cpp:type:`esp_color_fourcc_t`）替代：
+
+- :cpp:type:`color_space_t` - 颜色空间枚举类型已被移除。请使用 FourCC 格式来指定颜色空间和像素格式。
+- :cpp:type:`color_space_pixel_format_t` - 颜色空间像素格式联合体已被移除。请使用 :cpp:type:`esp_color_fourcc_t` 类型和相应的 FourCC 宏定义来指定像素格式。
+
+迁移示例：
+
+.. code-block:: c
+
+    /* 旧版 */
+    color_space_pixel_format_t format = {
+        .color_space = COLOR_SPACE_RGB,
+        .pixel_format = COLOR_PIXEL_RGB565
+    };
+
+    /* 新版 */
+    esp_color_fourcc_t format = ESP_COLOR_FOURCC_RGB565;
+
 SPI
 ---
 
@@ -310,9 +376,28 @@ SPI flash 驱动
 - ``esp_flash_os_functions_t::start`` 新增了一个参数 ``flags``。调用者和实现者应正确处理此参数。
 - Kconfig 选项 ``CONFIG_SPI_FLASH_ROM_DRIVER_PATCH`` 已被移除，考虑到这个选项不会被广泛被用户使用，且有因误用而导致出现严重的问题，遂决定移除。
 
-.. note::
+头文件重组
+~~~~~~~~~~
 
-    启用 :ref:`CONFIG_FREERTOS_IN_IRAM` 会显著增加 IRAM 使用量。在优化 SPI 性能时，需进行权衡。
+为了更好地反映其可见性和预期用途，多个内部头文件已重新组织：
+
+- **Flash 芯片驱动相关头文件** 已移至 ``esp_flash_chips/`` 目录：
+  - ``spi_flash_chip_driver.h``
+  - ``spi_flash_chip_*.h``
+  - ``spi_flash_defs.h``
+  - ``spi_flash_override.h``
+  - ``esp_flash_types.h``
+  - ``esp_flash_t`` 结构体定义已从 ``esp_flash.h`` 移至 ``esp_flash_chips/esp_flash_types.h``。应用程序不应直接访问结构体成员；请改用公开 API（例如，使用 :cpp:func:`esp_flash_get_size` 而不是直接访问 ``chip->size``）。
+  - ``esp_flash_os_functions_t`` 结构体定义已从 ``esp_flash.h`` 移至 ``esp_flash_chips/esp_flash_types.h``。
+  - ``spi_flash_chip_t`` 类型的前向声明已从 ``esp_flash.h`` 和所有 ROM 头文件（``components/esp_rom/esp32xx/include/esp32xx/rom/esp_flash.h``）中移除。该类型现在仅在 ``esp_flash_chips/esp_flash_types.h`` 中定义。应用程序不应直接使用此类型；它仅用于自定义芯片驱动实现。
+
+  .. note::
+
+      ``esp_flash_chips/`` 中的头文件是**半公开的** - 它们面向需要为不支持的 flash 芯片实现自定义芯片驱动的专家用户，但**不被视为稳定 API**，可能会在不通知的情况下更改。对于大多数用例，您应该改用 ``esp_flash.h`` 中的公开 API。更多详情请参阅 :doc:`SPI Flash 驱动覆盖 <../../../api-reference/peripherals/spi_flash/spi_flash_override_driver>`。
+
+- **内部头文件** 已移至 ``esp_private/`` 目录，且不包含在公共（稳定）头文件中：
+  - ``esp_flash_internal.h``
+  - ``memspi_host_driver.h``
 
 Touch Element
 -------------

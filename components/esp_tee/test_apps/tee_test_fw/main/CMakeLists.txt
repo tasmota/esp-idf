@@ -25,7 +25,7 @@ set(mbedtls_test_srcs_dir "${idf_path}/components/mbedtls/test_apps/main")
 if(CONFIG_SOC_AES_SUPPORTED)
     list(APPEND srcs "${mbedtls_test_srcs_dir}/test_psa_aes.c"
                      "${mbedtls_test_srcs_dir}/test_psa_aes_gcm.c"
-                     "${mbedtls_test_srcs_dir}/test_aes_perf.c"
+                     "${mbedtls_test_srcs_dir}/test_psa_aes_perf.c"
     )
 endif()
 
@@ -37,7 +37,7 @@ endif()
 
 # Mixed
 if(CONFIG_SOC_AES_SUPPORTED AND CONFIG_SOC_SHA_SUPPORTED)
-    list(APPEND srcs "${mbedtls_test_srcs_dir}/test_aes_sha_parallel.c")
+    list(APPEND srcs "${mbedtls_test_srcs_dir}/test_psa_aes_sha_parallel.c")
 endif()
 
 #ECC

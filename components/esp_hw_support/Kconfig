@@ -272,6 +272,34 @@ menu "Hardware Settings"
                 to configure the value of tRES1, different types of flash require different tRES1 values, usually no
                 more than 35us, please refer to the datasheet of the used Flash to configure this option.
 
+        config ESP_SLEEP_ENABLE_RTC_WDT_IN_SLEEP
+            bool "Enable rtc wdt during sleep (EXPERIMENTAL)"
+            depends on IDF_EXPERIMENTAL_FEATURES
+            depends on (SOC_LIGHT_SLEEP_SUPPORTED || SOC_DEEP_SLEEP_SUPPORTED)
+            default n
+            help
+                If enabled, rtc watchdog will remain active during sleep to prevent program runaway. Specifically, its
+                timeout will be set as the sum of the sleep duration, hardware overhead time, and RTC slow clock
+                compensation time.
+
+                NOTE: This feature only works when a timer wakeup is used. In the current phase, the RTC slow clock
+                compensation time remains zero (pending implementation). When using the RC_SLOW_CLK clock without
+                calibration, the maximum continuous sleep duration is typically around 5 minutes, and may vary
+                between chips. Therefore, avoid configuring sleep periods longer than this when enabling this option.
+
+
+        config ESP_SLEEP_ENABLE_RTC_WDT_IN_DEEP_SLEEP
+            bool "Enable rtc wdt during deep sleep (EXPERIMENTAL)"
+            depends on IDF_EXPERIMENTAL_FEATURES
+            depends on SOC_DEEP_SLEEP_SUPPORTED
+            default n
+            help
+                If enabled, rtc watchdog will remain active during deep sleep to prevent program runaway.
+
+                NOTE: This feature only works when a timer wakeup is used. In the current phase, the RTC watchdog
+                will not be disabled or reset after waking from deep sleep. Even though it will be reconfigured
+                during the bootloader phase, there remains a concern that a timeout could occur before this
+                reconfiguration is completed.
     endmenu
 
     menu "RTC Clock Config"
@@ -304,9 +332,16 @@ menu "Hardware Settings"
             help
                 Place analog i2c master control functions (e.g. regi2c_ctrl_read_reg, regi2c_ctrl_write_reg) into IRAM,
                 so that these functions can be IRAM-safe and able to be called in the other IRAM interrupt context.
+
+        config ESP_MODEM_CLOCK_ENABLE_CHECKING
+            bool "Enable modem clock configuration checking"
+            depends on SOC_MODEM_CLOCK_SUPPORTED
+            default n
+            help
+                If enabled, this option will perform additional checks on modem clock configuration
+                to ensure proper operation and detect potential configuration issues.
     endmenu
 
-    rsource "./dma/Kconfig.dma"
     rsource "./etm/Kconfig.etm"
 
     menu "Main XTAL Config"

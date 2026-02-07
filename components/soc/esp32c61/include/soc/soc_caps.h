@@ -188,10 +188,11 @@
 #define SOC_GPIO_IN_RANGE_MAX           29
 #define SOC_GPIO_OUT_RANGE_MAX          29
 
-// GPIO0~6 on ESP32C61 can support chip deep sleep wakeup
-#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
-#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
-#define SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT      (7)
+// GPIO0~6 on ESP32C61 can support chip HP peripheral powerdown-ed sleep wakeup
+#define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP      (1)
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP               SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK      (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT   (7)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_7~GPIO_NUM_29)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x3FFFFF80ULL
@@ -326,13 +327,11 @@
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
-#define SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED            (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 
 #define SOC_MEMSPI_IS_INDEPENDENT                 1
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
+
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -493,7 +492,7 @@
 
 // /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */
-// #define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
+#define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
 #define SOC_ESP_NIMBLE_CONTROLLER           (1)    /*!< Support BLE EMBEDDED controller V1 */
 #define SOC_BLE_50_SUPPORTED                (1)    /*!< Support Bluetooth 5.0 */
 #define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)   /*!< Support BLE device privacy mode */

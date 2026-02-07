@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2016-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2016-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <sys/lock.h>
 #include <sys/param.h>
 #include <assert.h>
@@ -48,7 +49,6 @@
 #include "esp_private/sleep_cpu.h"
 #include "esp_private/sleep_gpio.h"
 #include "esp_private/sleep_modem.h"
-#include "esp_private/uart_share_hw_ctrl.h"
 #include "esp_private/esp_clk_utils.h"
 #include "esp_sleep.h"
 #include "esp_memory_utils.h"
@@ -834,10 +834,21 @@ static inline void IRAM_ATTR other_core_should_skip_light_sleep(int core_id)
 }
 
 // Adjust RTOS tick count based on the amount of time spent in sleep.
-FORCE_INLINE_ATTR void pm_step_tick(int64_t slept_us)
+FORCE_INLINE_ATTR void pm_step_tick(int64_t slept_us, TickType_t xExpectedIdleTime)
 {
     uint32_t slept_ticks = slept_us / (portTICK_PERIOD_MS * 1000LL);
     if (slept_ticks) {
+#if CONFIG_PM_LIGHTSLEEP_TICK_OVERFLOW_PROTECTION
+        /* Limit slept_ticks when oversleep is within tolerance to prevent assertion failure */
+        if ((slept_ticks > xExpectedIdleTime) &&
+            (slept_ticks <= (xExpectedIdleTime + CONFIG_PM_LIGHTSLEEP_TICK_OVERFLOW_TOLERANCE))) {
+            slept_ticks = xExpectedIdleTime;
+        }
+#endif // CONFIG_PM_LIGHTSLEEP_TICK_OVERFLOW_PROTECTION
+        if (slept_ticks > xExpectedIdleTime) {
+            ESP_EARLY_LOGE(TAG, "Light sleep overslept: expect %"PRIu32" idle ticks but slept %"PRIu32" ticks.",
+                     (uint32_t)xExpectedIdleTime, slept_ticks);
+        }
         /* Adjust RTOS tick count based on the amount of time spent in sleep */
         vTaskStepTick(slept_ticks);
 
@@ -886,7 +897,7 @@ void vApplicationSleep( TickType_t xExpectedIdleTime )
             // In this case, there is no need to call vTaskStepTick, because the OS tick count will
             // automatically catch up in the next systick interrupt handler.
             if (err == ESP_OK) {
-                pm_step_tick(slept_us);
+                pm_step_tick(slept_us, xExpectedIdleTime);
             }
             other_core_should_skip_light_sleep(core_id);
 #ifdef WITH_PROFILING
@@ -979,7 +990,7 @@ void esp_pm_impl_init(void)
 
     ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)clk_source, true));
     /* When DFS is enabled, override system setting and use REFTICK as UART clock source */
-    HP_UART_SRC_CLK_ATOMIC() {
+    PERIPH_RCC_ATOMIC() {
         uart_ll_set_sclk(UART_LL_GET_HW(CONFIG_ESP_CONSOLE_UART_NUM), (soc_module_clk_t)clk_source);
     }
     uint32_t sclk_freq;
@@ -987,7 +998,7 @@ void esp_pm_impl_init(void)
     // Return value unused if asserts are disabled
     esp_err_t __attribute__((unused)) err = esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_source, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &sclk_freq);
     assert(err == ESP_OK);
-    HP_UART_SRC_CLK_ATOMIC() {
+    PERIPH_RCC_ATOMIC() {
         uart_ll_set_baudrate(UART_LL_GET_HW(CONFIG_ESP_CONSOLE_UART_NUM), CONFIG_ESP_CONSOLE_UART_BAUDRATE, sclk_freq);
     }
 #endif // CONFIG_ESP_CONSOLE_UART

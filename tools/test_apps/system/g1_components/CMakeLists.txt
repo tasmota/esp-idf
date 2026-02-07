@@ -24,6 +24,7 @@ set(esp_hal_components
     esp_hal_pmu
     esp_hal_rtc_timer
     esp_hal_clock
+    esp_hal_security
 )
 set(COMPONENTS ${g0_components} ${g1_components} ${esp_hal_components} main)
 
@@ -116,6 +117,9 @@ set(extra_components_which_shouldnt_be_included
 
     # esp_security is required by mbedtls and spi_flash
     esp_security
+
+    # esp_driver_dma is required by mbedtls
+    esp_driver_dma
 
     # esp_usb_cdc_rom_console is used by the panic handler, will be conditional on cdc console option when
     # the new build-system is implemented

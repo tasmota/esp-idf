@@ -6,3 +6,6 @@ components/esp_driver_twai/test_apps/test_twai:
       reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
+    - esp_hal_twai
+    - esp_hw_support
+    - soc

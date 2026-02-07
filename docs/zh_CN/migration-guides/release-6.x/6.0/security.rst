@@ -60,6 +60,16 @@ ESP-IDF v6.0 已升级至 Mbed TLS v4.0，**PSA Crypto 成为主要加密接口*
          - 41084
          - 4.97
 
+
+
+默认配置更改
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- 注意：默认的 Mbed TLS 配置在 ESP-IDF v6.0 中已收紧，以提升安全性并降低资源占用：
+
+  - ``MBEDTLS_ARIA_C`` 默认禁用。依赖 ARIA 的应用必须在 ``menuconfig`` (Component config -> mbedTLS) 中显式启用，或通过自定义 ``components/mbedtls/config/mbedtls_preset_default.conf`` 来启用。
+  - 默认禁用 ``secp192r1``，这与证书和 TLS 中移除对 250 位以下椭圆曲线的支持策略保持一致。如果某个应用在 TLS／证书之外仍然需要旧版曲线支持，则必须显式启用该功能（例如通过定义 ``PSA_WANT_ECC_SECP_R1_192=1``），并验证其兼容性。注意：该旧版支持可能会在下一次 ESP-IDF 小版本更新中被禁用。
+
 参考文档
 ^^^^^^^^^^
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -38,6 +38,9 @@ extern "C" {
 #define MSPI_LL_CORE_CLOCK_80_MHZ                     80
 #define MSPI_LL_CORE_CLOCK_120_MHZ                    120
 #define MSPI_TIMING_LL_CORE_CLOCK_MHZ_DEFAULT         MSPI_LL_CORE_CLOCK_80_MHZ
+
+// PSRAM frequency should be constrained by AXI frequency to avoid FIFO underflow.
+#define MSPI_TIMING_LL_PSRAM_FREQ_AXI_CONSTRAINED     1
 
 #define MSPI_LL_EVENT_SLV_ST_END                      (1<<3)
 #define MSPI_LL_EVENT_MST_ST_END                      (1<<4)
@@ -240,6 +243,18 @@ static inline void mspi_timing_ll_set_flash_extra_dummy(uint8_t mspi_id, uint8_t
         SET_PERI_REG_BITS(SPI_MEM_TIMING_CALI_REG(mspi_id), SPI_MEM_EXTRA_DUMMY_CYCLELEN_V, 0, SPI_MEM_EXTRA_DUMMY_CYCLELEN_S);
     }
     REG_SET_BIT(SPI_MEM_TIMING_CALI_REG(MSPI_TIMING_LL_MSPI_ID_0), SPI_MEM_TIMING_CALI_UPDATE);
+}
+
+/**
+ * Set MSPI Flash user dummy
+ *
+ * @param mspi_id      SPI0 / SPI1
+ * @param user_dummy   user dummy
+ */
+__attribute__((always_inline))
+static inline void mspi_timing_ll_set_flash_user_dummy(uint8_t mspi_id, uint8_t user_dummy)
+{
+    REG_SET_FIELD(SPI_MEM_USER1_REG(mspi_id), SPI_MEM_USR_DUMMY_CYCLELEN, user_dummy);
 }
 
 /**

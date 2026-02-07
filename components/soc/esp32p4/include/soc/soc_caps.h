@@ -76,6 +76,8 @@
 #define SOC_APM_SUPPORTED               1
 #define SOC_PMU_SUPPORTED               1
 #define SOC_PMU_PVT_SUPPORTED           1
+#define SOC_PVT_EN_WITH_SLEEP           1
+#define SOC_PVT_RETENTION_BY_REGDMA     1
 #define SOC_DCDC_SUPPORTED              1
 #define SOC_PAU_SUPPORTED               1     //TODO: IDF-7531
 #define SOC_LP_TIMER_SUPPORTED          1
@@ -118,6 +120,8 @@
 
 #define SOC_AES_SUPPORT_AES_128 (1)
 #define SOC_AES_SUPPORT_AES_256 (1)
+
+#define SOC_AES_SUPPORT_PSEUDO_ROUND_FUNCTION (1)
 
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
@@ -703,8 +707,9 @@
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS 1
-#define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
-#define SOC_FLASH_ENCRYPTION_XTS_AES_256    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_128    1  /* SOC_EFUSE_XTS_AES_KEY_128 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128 (1) */
+#define SOC_FLASH_ENCRYPTION_XTS_AES_256    1  /* SOC_EFUSE_XTS_AES_KEY_256 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256 (1) */
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1 /*!< Only available in chip version above 3.0 */
 /*-------------------------- MEMPROT CAPS ------------------------------------*/
 
 /*-------------------------- UART CAPS ---------------------------------------*/

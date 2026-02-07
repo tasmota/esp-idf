@@ -199,7 +199,8 @@ void *hostap_init(void)
     }
 #endif /* CONFIG_SAE */
 
-    os_memcpy(hapd->conf->ssid.wpa_passphrase, esp_wifi_ap_get_prof_password_internal(), strlen((char *)esp_wifi_ap_get_prof_password_internal()));
+    os_snprintf(hapd->conf->ssid.wpa_passphrase, WIFI_PASSWORD_LEN_MAX,
+                "%s", esp_wifi_ap_get_prof_password_internal());
     hapd->conf->ssid.wpa_passphrase[WIFI_PASSWORD_LEN_MAX - 1] = '\0';
     hapd->conf->max_num_sta = esp_wifi_ap_get_max_sta_conn();
     auth_conf->transition_disable = esp_wifi_ap_get_transition_disable_internal();
@@ -210,6 +211,7 @@ void *hostap_init(void)
     }
 
 #ifdef CONFIG_SAE
+    dl_list_init(&hapd->sae_commit_queue);
     auth_conf->sae_require_mfp = 1;
 #endif /* CONFIG_SAE */
 
@@ -262,7 +264,7 @@ void hostapd_cleanup(struct hostapd_data *hapd)
 
     struct hostapd_sae_commit_queue *q, *tmp;
 
-    if (dl_list_empty(&hapd->sae_commit_queue)) {
+    if (!dl_list_empty(&hapd->sae_commit_queue)) {
         dl_list_for_each_safe(q, tmp, &hapd->sae_commit_queue,
                               struct hostapd_sae_commit_queue, list) {
             dl_list_del(&q->list);

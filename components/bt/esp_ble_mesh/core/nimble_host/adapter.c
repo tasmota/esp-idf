@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: 2017 Nordic Semiconductor ASA
  * SPDX-FileCopyrightText: 2015-2016 Intel Corporation
- * SPDX-FileContributor: 2018-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileContributor: 2018-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,20 +10,12 @@
 
 #include "btc/btc_task.h"
 #include "osi/alarm.h"
-
-#include "mbedtls/aes.h"
-#include "mbedtls/ecp.h"
-
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "host/ble_att.h"
 #include "host/ble_gatt.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-
-#include <tinycrypt/aes.h>
-#include <tinycrypt/constants.h>
-
 #include "mesh/hci.h"
 #include "mesh/common.h"
 #include "prov_pvnr.h"
@@ -64,10 +56,6 @@
 
 static uint16_t proxy_svc_start_handle, prov_svc_start_handle;
 struct bt_mesh_dev bt_mesh_dev;
-
-/* P-256 Variables */
-static uint8_t bt_mesh_public_key[64];
-static uint8_t bt_mesh_private_key[32];
 
 /* Scan related functions */
 static bt_mesh_scan_cb_t *bt_mesh_scan_dev_found_cb;
@@ -474,7 +462,7 @@ void bt_mesh_ble_ext_adv_report(struct ble_gap_ext_disc_desc *desc)
 
         /* Here, only a shallow copy needs to be implemented;
          * deep copying behavior occurs in btc_ble_mesh_ble_copy_req_data. */
-        adv_rpt.data                = desc->length_data ? desc->data : NULL;
+        adv_rpt.data                = desc->length_data ? (uint8_t *)desc->data : NULL;
 
         adv_rpt.event_type          = desc->props;
         adv_rpt.addr_type           = desc->addr.type;
@@ -2606,199 +2594,11 @@ void bt_mesh_gatt_deinit(void)
 }
 #endif /* CONFIG_BLE_MESH_DEINIT */
 
-void ble_sm_alg_ecc_init(void);
-
 void bt_mesh_adapt_init(void)
 {
-    /* initialization of P-256 parameters */
-    ble_sm_alg_ecc_init();
-
-    /* Set "bt_mesh_dev.flags" to 0 (only the "BLE_MESH_DEV_HAS_PUB_KEY"
-     * flag is used) here, because we need to make sure each time after
-     * the private key is initialized, a corresponding public key must
-     * be generated.
-     */
+    /* Use unified crypto module initialization */
+    bt_mesh_crypto_init();
     bt_mesh_atomic_set(bt_mesh_dev.flags, 0);
-    bt_mesh_rand(bt_mesh_private_key, sizeof(bt_mesh_private_key));
-}
-
-void bt_mesh_set_private_key(const uint8_t pri_key[32])
-{
-    memcpy(bt_mesh_private_key, pri_key, 32);
-}
-
-int ble_sm_alg_gen_key_pair(uint8_t *pub, uint8_t *priv);
-
-const uint8_t *bt_mesh_pub_key_get(void)
-{
-    uint8_t pri_key[32] = {0};
-
-#if 1
-    if (bt_mesh_atomic_test_bit(bt_mesh_dev.flags, BLE_MESH_DEV_HAS_PUB_KEY)) {
-        return bt_mesh_public_key;
-    }
-#else
-    /* BLE Mesh BQB test case MESH/NODE/PROV/UPD/BV-12-C requires
-     * different public key for each provisioning procedure.
-     * Note: if enabled, when Provisioner provision multiple devices
-     * at the same time, this may cause invalid confirmation value.
-     */
-    if (bt_mesh_rand(bt_mesh_private_key, 32)) {
-        BT_ERR("%s, Unable to generate bt_mesh_private_key", __func__);
-        return NULL;
-    }
-#endif
-
-    int rc = ble_sm_alg_gen_key_pair(bt_mesh_public_key, pri_key);
-    if (rc != 0) {
-        BT_ERR("Failed to generate the key pair");
-        return NULL;
-    }
-    memcpy(bt_mesh_private_key, pri_key, 32);
-
-    bt_mesh_atomic_set_bit(bt_mesh_dev.flags, BLE_MESH_DEV_HAS_PUB_KEY);
-
-    BT_DBG("Public Key %s", bt_hex(bt_mesh_public_key, sizeof(bt_mesh_public_key)));
-
-    return bt_mesh_public_key;
-}
-
-bool bt_mesh_check_public_key(const uint8_t key[64])
-{
-    struct mbedtls_ecp_point pt = {0};
-    mbedtls_ecp_group grp = {0};
-    bool rc = false;
-
-    uint8_t pub[65] = {0};
-    /* Hardcoded first byte of pub key for MBEDTLS_ECP_PF_UNCOMPRESSED */
-    pub[0] = 0x04;
-    memcpy(&pub[1], key, 64);
-
-    /* Initialize the required structures here */
-    mbedtls_ecp_point_init(&pt);
-    mbedtls_ecp_group_init(&grp);
-
-    /* Below 3 steps are to validate public key on curve secp256r1 */
-    if (mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1) != 0) {
-        goto exit;
-    }
-
-    if (mbedtls_ecp_point_read_binary(&grp, &pt, pub, 65) != 0) {
-        goto exit;
-    }
-
-    if (mbedtls_ecp_check_pubkey(&grp, &pt) != 0) {
-        goto exit;
-    }
-
-    rc = true;
-
-exit:
-    mbedtls_ecp_point_free(&pt);
-    mbedtls_ecp_group_free(&grp);
-    return rc;
-
-}
-
-int ble_sm_alg_gen_dhkey(uint8_t *peer_pub_key_x, uint8_t *peer_pub_key_y,
-                         uint8_t *our_priv_key, uint8_t *out_dhkey);
-
-int bt_mesh_dh_key_gen(const uint8_t remote_pub_key[64], uint8_t dhkey[32])
-{
-    BT_DBG("private key = %s", bt_hex(bt_mesh_private_key, 32));
-
-    return ble_sm_alg_gen_dhkey((uint8_t *)&remote_pub_key[0], (uint8_t *)&remote_pub_key[32],
-                                bt_mesh_private_key, dhkey);
-}
-
-int bt_mesh_encrypt_le(const uint8_t key[16], const uint8_t plaintext[16],
-                       uint8_t enc_data[16])
-{
-    uint8_t tmp[16] = {0};
-
-    BT_DBG("key %s plaintext %s", bt_hex(key, 16), bt_hex(plaintext, 16));
-
-#if CONFIG_MBEDTLS_HARDWARE_AES
-    mbedtls_aes_context ctx = {0};
-
-    mbedtls_aes_init(&ctx);
-
-    sys_memcpy_swap(tmp, key, 16);
-
-    if (mbedtls_aes_setkey_enc(&ctx, tmp, 128) != 0) {
-        mbedtls_aes_free(&ctx);
-        return -EINVAL;
-    }
-
-    sys_memcpy_swap(tmp, plaintext, 16);
-
-    if (mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT,
-                              tmp, enc_data) != 0) {
-        mbedtls_aes_free(&ctx);
-        return -EINVAL;
-    }
-
-    mbedtls_aes_free(&ctx);
-#else /* CONFIG_MBEDTLS_HARDWARE_AES */
-    struct tc_aes_key_sched_struct s = {0};
-
-    sys_memcpy_swap(tmp, key, 16);
-
-    if (tc_aes128_set_encrypt_key(&s, tmp) == TC_CRYPTO_FAIL) {
-        return -EINVAL;
-    }
-
-    sys_memcpy_swap(tmp, plaintext, 16);
-
-    if (tc_aes_encrypt(enc_data, tmp, &s) == TC_CRYPTO_FAIL) {
-        return -EINVAL;
-    }
-#endif /* CONFIG_MBEDTLS_HARDWARE_AES */
-
-    sys_mem_swap(enc_data, 16);
-
-    BT_DBG("enc_data %s", bt_hex(enc_data, 16));
-
-    return 0;
-}
-
-int bt_mesh_encrypt_be(const uint8_t key[16], const uint8_t plaintext[16],
-                       uint8_t enc_data[16])
-{
-    BT_DBG("key %s plaintext %s", bt_hex(key, 16), bt_hex(plaintext, 16));
-
-#if CONFIG_MBEDTLS_HARDWARE_AES
-    mbedtls_aes_context ctx = {0};
-
-    mbedtls_aes_init(&ctx);
-
-    if (mbedtls_aes_setkey_enc(&ctx, key, 128) != 0) {
-        mbedtls_aes_free(&ctx);
-        return -EINVAL;
-    }
-
-    if (mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT,
-                              plaintext, enc_data) != 0) {
-        mbedtls_aes_free(&ctx);
-        return -EINVAL;
-    }
-
-    mbedtls_aes_free(&ctx);
-#else /* CONFIG_MBEDTLS_HARDWARE_AES */
-    struct tc_aes_key_sched_struct s = {0};
-
-    if (tc_aes128_set_encrypt_key(&s, key) == TC_CRYPTO_FAIL) {
-        return -EINVAL;
-    }
-
-    if (tc_aes_encrypt(enc_data, plaintext, &s) == TC_CRYPTO_FAIL) {
-        return -EINVAL;
-    }
-#endif /* CONFIG_MBEDTLS_HARDWARE_AES */
-
-    BT_DBG("enc_data %s", bt_hex(enc_data, 16));
-
-    return 0;
 }
 
 #if CONFIG_BLE_MESH_USE_DUPLICATE_SCAN

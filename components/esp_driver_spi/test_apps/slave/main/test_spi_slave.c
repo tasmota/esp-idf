@@ -312,6 +312,7 @@ static void test_slave_iram_master_normal(void)
 
     spi_device_handle_t dev_handle = {0};
     spi_device_interface_config_t devcfg = SPI_DEVICE_TEST_DEFAULT_CONFIG();
+    devcfg.cs_ena_pretrans = 1;
     TEST_ESP_OK(spi_bus_add_device(TEST_SPI_HOST, &devcfg, &dev_handle));
 
     uint8_t *master_send = heap_caps_malloc(TEST_BUFFER_SZ, MALLOC_CAP_DMA);
@@ -688,7 +689,7 @@ TEST_CASE("test_spi_slave_sleep_retention", "[spi]")
 
             // check if the sleep happened as expected
             TEST_ASSERT_EQUAL(0, sleep_ctx.sleep_request_result);
-#if SOC_SPI_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && !SOC_PM_TOP_PD_NOT_ALLOWED
+#if SOC_SPI_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
             // check if the power domain also is powered down
             TEST_ASSERT_EQUAL((buscfg.flags & SPICOMMON_BUSFLAG_SLP_ALLOW_PD) ? PMU_SLEEP_PD_TOP : 0, (sleep_ctx.sleep_flags) & PMU_SLEEP_PD_TOP);
 #endif

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,7 @@
 #include "soc/lp_aon_reg.h"
 #include "esp_private/sleep_event.h"
 #include "esp_private/regi2c_ctrl.h"
+#include "esp_attr.h"
 
 static const char *TAG = "rtc_clk";
 
@@ -184,12 +185,16 @@ static void rtc_clk_bbpll_configure(soc_xtal_freq_t xtal_freq, int pll_freq)
  * Must satisfy: cpu_freq = XTAL_FREQ / div.
  * Does not disable the PLL.
  */
-static void rtc_clk_cpu_freq_to_xtal(int cpu_freq, int div)
+static FORCE_IRAM_ATTR void rtc_clk_cpu_freq_to_xtal(int cpu_freq, int div)
 {
     clk_ll_ahb_set_ls_divider(div);
     clk_ll_cpu_set_ls_divider(div);
     clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_XTAL);
     esp_rom_set_cpu_ticks_per_us(cpu_freq);
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    charge_pump_enable(false);
+    pvt_func_enable(false);
+#endif
 }
 
 static void rtc_clk_cpu_freq_to_8m(void)
@@ -198,6 +203,10 @@ static void rtc_clk_cpu_freq_to_8m(void)
     clk_ll_cpu_set_ls_divider(1);
     clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_RC_FAST);
     esp_rom_set_cpu_ticks_per_us(20);
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    charge_pump_enable(false);
+    pvt_func_enable(false);
+#endif
 }
 
 /**
@@ -207,6 +216,12 @@ static void rtc_clk_cpu_freq_to_8m(void)
  */
 static void rtc_clk_cpu_freq_to_pll_mhz(int cpu_freq_mhz)
 {
+#if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
+    pvt_auto_dbias_init();
+    charge_pump_init();
+    pvt_func_enable(true);
+    charge_pump_enable(true);
+#endif
     clk_ll_cpu_set_hs_divider(CLK_LL_PLL_480M_FREQ_MHZ / cpu_freq_mhz);
     clk_ll_cpu_set_src(SOC_CPU_CLK_SRC_PLL);
     esp_rom_set_cpu_ticks_per_us(cpu_freq_mhz);
@@ -345,7 +360,7 @@ void rtc_clk_cpu_freq_set_xtal(void)
     rtc_clk_bbpll_disable();
 }
 
-void rtc_clk_cpu_set_to_default_config(void)
+FORCE_IRAM_ATTR void rtc_clk_cpu_set_to_default_config(void)
 {
     int freq_mhz = (int)rtc_clk_xtal_freq_get();
 
@@ -364,7 +379,7 @@ void rtc_clk_cpu_freq_to_pll_and_pll_lock_release(int cpu_freq_mhz)
     clk_ll_cpu_clk_src_lock_release();
 }
 
-soc_xtal_freq_t rtc_clk_xtal_freq_get(void)
+FORCE_IRAM_ATTR soc_xtal_freq_t rtc_clk_xtal_freq_get(void)
 {
     uint32_t xtal_freq_mhz = clk_ll_xtal_load_freq_mhz();
     if (xtal_freq_mhz == 0) {

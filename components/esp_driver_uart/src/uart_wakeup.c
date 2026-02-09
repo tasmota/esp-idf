@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,6 +15,7 @@
 #include "driver/uart_wakeup.h"
 #include "hal/uart_hal.h"
 #include "esp_private/esp_sleep_internal.h"
+#include "esp_private/uart_share_hw_ctrl.h"
 #include "esp_log.h"
 
 const __attribute__((unused)) static char *TAG = "uart_wakeup";
@@ -71,6 +72,10 @@ esp_err_t uart_wakeup_setup(uart_port_t uart_num, const uart_wakeup_cfg_t *cfg)
 
     // This should be mocked at ll level if the selection of the UART wakeup mode is not supported by this SOC.
     uart_ll_set_wakeup_mode(hw, cfg->wakeup_mode);
+
+    HP_UART_PAD_CLK_ATOMIC() {
+        uart_ll_enable_pad_sleep_clock(hw, true);
+    }
 
 #if SOC_PM_SUPPORT_PMU_CLK_ICG
     // When hp uarts are utilized, the main XTAL need to be PU and UARTx & IOMX ICG need to be ungate

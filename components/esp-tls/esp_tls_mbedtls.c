@@ -118,7 +118,7 @@ typedef struct esp_tls_pki_t {
     const unsigned char *privkey_password;
     unsigned int privkey_password_len;
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
-    void *esp_rsa_ds_data;
+    void *esp_ds_data;
 #endif
 } esp_tls_pki_t;
 
@@ -601,7 +601,7 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
         }
 
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
-        if (pki->esp_rsa_ds_data != NULL) {
+        if (pki->esp_ds_data != NULL) {
             ret = esp_mbedtls_init_pk_ctx_for_ds(pki);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to initialize pk context for esp_rsa_ds");
@@ -1074,7 +1074,7 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
             .privkey_pem_bytes = 0,
             .privkey_password = NULL,
             .privkey_password_len = 0,
-            .esp_rsa_ds_data = cfg->ds_data,
+            .esp_ds_data = cfg->ds_data,
         };
 
         esp_err_t esp_ret = set_pki_context(tls, &pki);
@@ -1406,7 +1406,7 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki)
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
 static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
 {
-    esp_ds_data_ctx_t *ds_data = ((const esp_tls_pki_t*)pki)->esp_rsa_ds_data;
+    esp_ds_data_ctx_t *ds_data = ((const esp_tls_pki_t*)pki)->esp_ds_data;
     if (ds_data == NULL) {
         ESP_LOGE(TAG, "DS data context is NULL");
         return ESP_ERR_INVALID_ARG;

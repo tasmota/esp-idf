@@ -165,6 +165,7 @@ pytest_buildv2_system_win:
       --junitxml=${CI_PROJECT_DIR}\XUNIT_RESULT.xml
       --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
       --
+      buildv2
       test_non_default_target.py
       test_component_manager.py
       test_build.py

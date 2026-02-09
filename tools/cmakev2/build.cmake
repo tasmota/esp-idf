@@ -715,35 +715,55 @@ endfunction()
 
     .. code-block:: cmake
 
-        idf_build_generate_metadata(<binary>
+        idf_build_generate_metadata([BINARY <binary>]
+                                    [EXECUTABLE <executable>]
                                     [OUTPUT_FILE <file>])
 
-    *binary[in]*
+    *BINARY[in,opt]*
 
         Binary target for which to generate a metadata file.
+
+    *EXECUTABLE[in,opt]*
+
+        Executable target for which to generate a metadata file.
 
     *OUTPUT_FILE[in,opt]*
 
         Optional output file path for storing the metadata. If not provided,
         the default path ``<build>/project_description.json`` is used.
 
-    Generate metadata for the specified ``binary`` and store it in the
-    specified ``OUTPUT_FILE``. If no ``OUTPUT_FILE`` is provided, the default
-    location ``<build>/project_description.json`` will be used.
+    Generate metadata for the specified ``binary`` or ``executable`` target and
+    store it in the specified ``OUTPUT_FILE``. If no ``OUTPUT_FILE`` is
+    provided, the default location ``<build>/project_description.json`` will be
+    used.
 #]]
-function(idf_build_generate_metadata binary)
+function(idf_build_generate_metadata)
     set(options)
-    set(one_value OUTPUT_FILE)
+    set(one_value OUTPUT_FILE BINARY EXECUTABLE)
     set(multi_value)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
-    # The EXECUTABLE_TARGET property is set by the idf_build_binary or
-    # the idf_sign_binary function.
-    get_target_property(executable "${binary}" EXECUTABLE_TARGET)
-    if(NOT executable)
-        idf_die("Binary target '${binary}' is missing 'EXECUTABLE_TARGET' property.")
+    if(NOT DEFINED ARG_BINARY AND NOT DEFINED ARG_EXECUTABLE)
+        idf_die("BINARY or EXECUTABLE option is required")
     endif()
-    __get_executable_library_or_die(TARGET "${executable}" OUTPUT library)
+
+    if(DEFINED ARG_BINARY)
+        # The EXECUTABLE_TARGET property is set by the idf_build_binary or
+        # the idf_sign_binary function.
+        get_target_property(ARG_EXECUTABLE "${ARG_BINARY}" EXECUTABLE_TARGET)
+        if(NOT ARG_EXECUTABLE)
+            idf_die("Binary target '${ARG_BINARY}' is missing 'EXECUTABLE_TARGET' property.")
+        endif()
+
+        # The BINARY_PATH property is set by the idf_build_binary or
+        # the idf_sign_binary function.
+        get_target_property(binary_path ${ARG_BINARY} BINARY_PATH)
+        if(NOT binary_path)
+            idf_die("Binary target '${ARG_BINARY}' is missing 'BINARY_PATH' property.")
+        endif()
+        get_filename_component(PROJECT_BIN "${binary_path}" NAME)
+    endif()
+    __get_executable_library_or_die(TARGET "${ARG_EXECUTABLE}" OUTPUT library)
 
     idf_build_get_property(PROJECT_NAME PROJECT_NAME)
     idf_build_get_property(PROJECT_VER PROJECT_VER)
@@ -752,14 +772,7 @@ function(idf_build_generate_metadata binary)
     idf_build_get_property(BUILD_DIR BUILD_DIR)
     idf_build_get_property(SDKCONFIG SDKCONFIG)
     idf_build_get_property(SDKCONFIG_DEFAULTS SDKCONFIG_DEFAULTS)
-    set(PROJECT_EXECUTABLE "$<TARGET_FILE_NAME:${executable}>")
-    # The BINARY_PATH property is set by the idf_build_binary or
-    # the idf_sign_binary function.
-    get_target_property(binary_path ${binary} BINARY_PATH)
-    if(NOT binary_path)
-        idf_die("Binary target '${binary}' is missing 'BINARY_PATH' property.")
-    endif()
-    get_filename_component(PROJECT_BIN "${binary_path}" NAME)
+    set(PROJECT_EXECUTABLE "$<TARGET_FILE_NAME:${ARG_EXECUTABLE}>")
     if(NOT PROJECT_BIN)
         set(PROJECT_BIN "")
     endif()

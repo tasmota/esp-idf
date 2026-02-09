@@ -560,6 +560,11 @@ macro(idf_project_init)
         # Ensure this function is executed only once throughout the entire
         # project.
 
+        # The IDF_TOOLCHAIN variable is established as a CMake cache variable
+        # during the toolchain initialization process in
+        # ``tools/cmake/toolchain.cmake``.
+        idf_build_set_property(IDF_TOOLCHAIN "${IDF_TOOLCHAIN}")
+
         # Warn about the use of deprecated variables.
         deprecate_variable(COMPONENTS)
         deprecate_variable(EXCLUDE_COMPONENTS)
@@ -707,7 +712,7 @@ function(__project_default)
                          COMPONENTS main
                          MAPFILE_TARGET "${executable}_mapfile")
 
-    if(CONFIG_APP_BUILD_GENERATE_BINARIES)
+    if(CONFIG_APP_BUILD_GENERATE_BINARIES AND TARGET idf::esptool_py)
         # Is it possible to have a configuration where
         # CONFIG_APP_BUILD_GENERATE_BINARIES is not set?
 
@@ -726,7 +731,7 @@ function(__project_default)
                              TARGET app-flash
                              NAME "app"
                              FLASH)
-            idf_build_generate_metadata("${executable}_binary_signed")
+            idf_build_generate_metadata(BINARY "${executable}_binary_signed")
         else()
             idf_build_binary("${executable}"
                              OUTPUT_FILE "${build_dir}/${executable}.bin"
@@ -743,10 +748,12 @@ function(__project_default)
 
             idf_create_dfu("${executable}_binary"
                            TARGET dfu)
-            idf_build_generate_metadata("${executable}_binary")
+            idf_build_generate_metadata(BINARY "${executable}_binary")
         endif()
 
         idf_build_generate_flasher_args()
+    else()
+        idf_build_generate_metadata(EXECUTABLE "${executable}")
     endif()
 
     idf_create_menuconfig("${executable}"

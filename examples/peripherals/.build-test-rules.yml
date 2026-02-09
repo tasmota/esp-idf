@@ -713,10 +713,6 @@ examples/peripherals/touch_sensor/touch_sens_sleep:
 examples/peripherals/twai/cybergear:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
     - esp_hal_twai
@@ -725,10 +721,6 @@ examples/peripherals/twai/cybergear:
 examples/peripherals/twai/twai_error_recovery:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
     - esp_hal_twai
@@ -737,10 +729,6 @@ examples/peripherals/twai/twai_error_recovery:
 examples/peripherals/twai/twai_network/twai_listen_only:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET in ["esp32p4", "esp32h2"]
-      temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
     - esp_hal_twai
@@ -749,10 +737,6 @@ examples/peripherals/twai/twai_network/twai_listen_only:
 examples/peripherals/twai/twai_network/twai_sender:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET in ["esp32p4", "esp32c5"]
-      temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
     - esp_hal_twai
@@ -761,10 +745,6 @@ examples/peripherals/twai/twai_network/twai_sender:
 examples/peripherals/twai/twai_utils:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32p4"
-      temporary: true
-      reason: p4 rev3 migration # TODO: IDF-14393
   depends_components:
     - esp_driver_twai
     - esp_hal_twai

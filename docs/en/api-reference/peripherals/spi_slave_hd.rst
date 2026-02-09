@@ -63,6 +63,12 @@ Send/Receive Data by DMA Channels
 
 To send data to the master through the sending DMA channel, the application should properly wrap the data in an :cpp:type:`spi_slave_hd_data_t` descriptor structure before calling :cpp:func:`spi_slave_hd_queue_trans` with the data descriptor and the channel argument of :cpp:enumerator:`SPI_SLAVE_CHAN_TX`. The pointers to descriptors are stored in the queue, and the data is sent to the master in the same order they are enqueued using :cpp:func:`spi_slave_hd_queue_trans`, upon receiving the master's ``Rd_DMA`` command.
 
+.. only:: SOC_PSRAM_DMA_CAPABLE
+
+    The driver supports using PSRAM for DMA transfer. Directly passing a PSRAM address as :cpp:member:`spi_slave_hd_data_t::data` is supported. For the DMA receive channel, its memory address and transfer length have alignment requirements, using :cpp:func:`heap_caps_malloc` to allocate memory can automatically handle the alignment requirements. For the buffers that you can not control, you can also use the :c:macro:`SPI_SLAVE_HD_TRANS_DMA_BUFFER_ALIGN_AUTO` flag to enable driver to automatically align the buffer from PSRAM.
+
+    Note that this feature shares the MSPI bus bandwidth (bus frequency * bus width), so the transmission bandwidth of the host to this device should be less than the PSRAM bandwidth, otherwise **data may be lost**, and then getting the transmission result will return the :c:macro:`ESP_ERR_INVALID_STATE` error.
+
 The application should check the result of data sending by calling :cpp:func:`spi_slave_hd_get_trans_res` with the channel set as :cpp:enumerator:`SPI_SLAVE_CHAN_TX`. This function blocks until the transaction with the command ``Rd_DMA`` from the master successfully completes (or timeout). The ``out_trans`` argument of the function outputs the pointer of the data descriptor which is just finished, providing information about the sending.
 
 Receiving data from the master through the receiving DMA channel is quite similar. The application calls :cpp:func:`spi_slave_hd_queue_trans` with proper data descriptor and the channel argument of :cpp:enumerator:`SPI_SLAVE_CHAN_RX`. And the application calls the :cpp:func:`spi_slave_hd_get_trans_res` later to get the descriptor to the receiving buffer before it handles the data in the receiving buffer.

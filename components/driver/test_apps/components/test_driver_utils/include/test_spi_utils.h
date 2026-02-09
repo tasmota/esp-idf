@@ -266,10 +266,9 @@ void spitest_gpio_output_sel(uint32_t gpio_num, int func, uint32_t signal_idx);
 //use this function to fix the input source when assign multiple functions to a same pin
 void spitest_gpio_input_sel(uint32_t gpio_num, int func, uint32_t signal_idx);
 
-//Note this cs_num is the ID of the connected devices' ID, e.g. if 2 devices are connected to the bus,
-//then the cs_num of the 1st and 2nd devices are 0 and 1 respectively.
-//Enable `soft_master` to connect to soft spi master instead of hardware master.
-void same_pin_func_sel(spi_bus_config_t bus, uint8_t cs_pin, uint8_t cs_dev_id, bool soft_master);
+// Connect master and slave to the same pin
+// master_id and slave_id are the IDs of the master and slave devices, set 0 for each to use soft master/slave.
+void same_pin_func_sel(spi_host_device_t master_id, spi_host_device_t slave_id, spi_bus_config_t bus, uint8_t cs_pin);
 
 // Soft simulated spi master host for slave testing
 // `speed_hz` max 500kHz

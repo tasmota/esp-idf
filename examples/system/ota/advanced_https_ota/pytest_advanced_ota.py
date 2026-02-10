@@ -540,7 +540,7 @@ def test_examples_protocol_advanced_https_ota_example_invalid_chip_id(dut: Dut) 
         dut.expect('Starting Advanced OTA example', timeout=30)
         print('writing to device: {}'.format('https://' + host_ip + ':' + str(server_port) + '/' + random_bin_name))
         dut.write('https://' + host_ip + ':' + str(server_port) + '/' + random_bin_name)
-        dut.expect(r'esp_https_ota: Mismatch chip id, expected 0, found \d', timeout=10)
+        dut.expect(r'boot_comm: mismatch chip ID, expected 0, found \d', timeout=10)
         try:
             os.remove(random_binary_file)
         except OSError:

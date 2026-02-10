@@ -258,7 +258,6 @@ variables:
   tags:
     - macos-tart
   image: macos-sequoia-idf-v6.1
-  cache: []  # cache are built for amd64 linux runners, useless here
   after_script: []  # ccache now is disabled for macos brew runners
   timeout: 30m
 

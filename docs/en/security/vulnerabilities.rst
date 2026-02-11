@@ -21,6 +21,28 @@ WPS Enrollee Fragment Integer Underflow Vulnerability
 * Advisory pointer: `GHSA-m2h2-683f-9mw7`_
 
 
+CVE-2026-25508
+~~~~~~~~~~~~~~
+
+Use-after-free Vulnerability in BLE Provisioning
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-h7r3-gmg9-xjmg`_
+
+
+CVE-2026-25507
+~~~~~~~~~~~~~~
+
+Out-of-bounds Read Vulnerability in BLE Provisioning
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-9j5x-rf36-54x9`_
+
+
 CVE-2025
 --------
 
@@ -296,3 +318,5 @@ Security Advisory Concerning Wi-Fi Authentication Bypass
 .. _`GHSA-hmjj-rjvv-w8pq` : https://github.com/espressif/esp-idf/security/advisories/GHSA-hmjj-rjvv-w8pq
 .. _`GHSA-43gh-7r4f-qp57` : https://github.com/espressif/esp-idf/security/advisories/GHSA-43gh-7r4f-qp57
 .. _`GHSA-m2h2-683f-9mw7` : https://github.com/espressif/esp-idf/security/advisories/GHSA-m2h2-683f-9mw7
+.. _`GHSA-h7r3-gmg9-xjmg` : https://github.com/espressif/esp-idf/security/advisories/GHSA-h7r3-gmg9-xjmg
+.. _`GHSA-9j5x-rf36-54x9` : https://github.com/espressif/esp-idf/security/advisories/GHSA-9j5x-rf36-54x9

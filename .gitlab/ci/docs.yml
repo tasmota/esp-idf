@@ -16,9 +16,6 @@
 .patterns-example-readme: &patterns-example-readme
   - "examples/**/*.md"
 
-.patterns-docs-preview: &patterns-docs-preview
-  - "docs/**/*"
-
 .if-protected-check: &if-protected-check
   if: '($CI_COMMIT_REF_NAME == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/ || $CI_COMMIT_TAG =~ /^v\d+\.\d+(\.\d+)?($|-)/)'
 

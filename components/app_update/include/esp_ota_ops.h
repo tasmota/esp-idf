@@ -13,6 +13,7 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_app_desc.h"
+#include "esp_app_format.h"
 #include "esp_bootloader_desc.h"
 #include "esp_flash_partitions.h"
 #include "soc/soc_caps.h"
@@ -32,7 +33,8 @@ extern "C"
 #define ESP_ERR_OTA_SMALL_SEC_VER                (ESP_ERR_OTA_BASE + 0x04)  /*!< Error if the firmware has a secure version less than the running firmware. */
 #define ESP_ERR_OTA_ROLLBACK_FAILED              (ESP_ERR_OTA_BASE + 0x05)  /*!< Error if flash does not have valid firmware in passive partition and hence rollback is not possible */
 #define ESP_ERR_OTA_ROLLBACK_INVALID_STATE       (ESP_ERR_OTA_BASE + 0x06)  /*!< Error if current active firmware is still marked in pending validation state (ESP_OTA_IMG_PENDING_VERIFY), essentially first boot of firmware image post upgrade and hence firmware upgrade is not possible */
-#define ESP_ERR_OTA_ALREADY_IN_PROGRESS              (ESP_ERR_OTA_BASE + 0x07)  /*!< Error if another OTA operation is already in progress on the same partition */
+#define ESP_ERR_OTA_ALREADY_IN_PROGRESS          (ESP_ERR_OTA_BASE + 0x07)  /*!< Error if another OTA operation is already in progress on the same partition */
+#define ESP_ERR_OTA_SPI_MODE_MISMATCH            (ESP_ERR_OTA_BASE + 0x08)  /*!< Error if the firmware's SPI flash mode doesn't match the running firmware */
 
 
 /**
@@ -419,6 +421,31 @@ esp_err_t esp_ota_erase_last_boot_app_partition(void);
  *        - False: The rollback is not possible.
  */
 bool esp_ota_check_rollback_is_possible(void);
+
+/**
+ * @brief Check image validity including chip ID, chip revision, and optionally SPI flash mode.
+ *
+ * This function performs comprehensive validation of an OTA image:
+ * - Verifies the chip ID matches the current chip
+ * - Verifies the chip revision meets the image requirements
+ * - Optionally verifies the SPI flash mode matches (if app_desc is provided)
+ *
+ * For bootloader partitions (ESP_PARTITION_TYPE_BOOTLOADER), the maximum chip revision check is skipped.
+ * For application partitions (ESP_PARTITION_TYPE_APP), both minimum and maximum chip revision are checked.
+ *
+ * @param[in] part_type Partition type (ESP_PARTITION_TYPE_APP or ESP_PARTITION_TYPE_BOOTLOADER)
+ * @param[in] img_hdr Pointer to the image header for chip ID and revision checks
+ * @param[in] app_desc Pointer to the app descriptor for SPI mode check (can be NULL to skip SPI mode verification)
+ *
+ * @return
+ *      - ESP_OK: Image is valid for this chip
+ *      - ESP_ERR_INVALID_ARG: img_hdr is NULL or part_type is not APP or BOOTLOADER
+ *      - ESP_ERR_INVALID_VERSION: Chip ID or chip revision mismatch
+ *      - ESP_ERR_OTA_SPI_MODE_MISMATCH: SPI flash mode does not match (only when app_desc is provided)
+ */
+esp_err_t esp_ota_check_image_validity(esp_partition_type_t part_type,
+                                       const esp_image_header_t *img_hdr,
+                                       const esp_app_desc_t *app_desc);
 
 #if SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS > 1 && (CONFIG_SECURE_BOOT_V2_ENABLED || __DOXYGEN__)
 

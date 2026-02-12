@@ -167,6 +167,7 @@
 
 /docs/                                      @esp-idf-codeowners/docs
 /docs/docs_not_updated/                     @esp-idf-codeowners/all-maintainers
+/docs/**/api-guides/build-system*           @esp-idf-codeowners/build-config
 /docs/**/api-guides/tools/                  @esp-idf-codeowners/tools
 /docs/**/api-guides/kconfig/                @esp-idf-codeowners/tools
 /docs/en/api-guides/core_dump.rst           @esp-idf-codeowners/debugging

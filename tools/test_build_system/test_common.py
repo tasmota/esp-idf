@@ -339,3 +339,47 @@ def test_merge_bin_cmd(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
     assert (test_app_copy / 'build' / 'merged-binary-2.bin').is_file()
     idf_py('merge-bin', '--format', 'hex')
     assert (test_app_copy / 'build' / 'merged-binary.hex').is_file()
+
+
+def test_hints_components_loading(idf_copy: Path, test_app_copy: Path, idf_py: IdfPyFunc) -> None:
+    logging.info('Testing component hint loading mechanism')
+    logging.debug('Creating test IDF component')
+
+    # Create a test IDF component with hints
+    idf_test_component_dir = idf_copy / 'components' / 'test_idf_comp'
+    idf_test_component_dir.mkdir(parents=True, exist_ok=True)
+    idf_component_hints = textwrap.dedent("""
+        -
+            re: "test_idf_component_error"
+            hint: "HINT FROM IDF COMPONENT: This is a test hint from ESP-IDF component"
+        """)
+    (idf_test_component_dir / 'hints.yml').write_text(idf_component_hints)
+    (idf_test_component_dir / 'CMakeLists.txt').write_text(
+        'idf_component_register(SRCS "test_comp.c" INCLUDE_DIRS ".")'
+    )
+    (idf_test_component_dir / 'test_comp.c').touch()
+
+    logging.debug('Creating test project component')
+    # Create a test project component with hints
+    project_component_dir = test_app_copy / 'components' / 'test_project_comp'
+    project_component_dir.mkdir(parents=True, exist_ok=True)
+    project_component_hints = textwrap.dedent("""
+        -
+            re: "test_project_component_error"
+            hint: "HINT FROM PROJECT COMPONENT: This is a test hint from project component"
+        """)
+    (project_component_dir / 'hints.yml').write_text(project_component_hints)
+    (project_component_dir / 'CMakeLists.txt').write_text('idf_component_register(SRCS "test_comp.c" INCLUDE_DIRS ".")')
+    (project_component_dir / 'test_comp.c').touch()
+
+    error_code = """
+    test_idf_component_error();
+    test_project_component_error();
+    """
+    replace_in_file(test_app_copy / 'main' / 'build_test_app.c', '// placeholder_inside_main', error_code)
+
+    ret = idf_py('build', check=False)
+    assert 'HINT FROM IDF COMPONENT' in ret.stderr, 'Hint from IDF component should be displayed in build output'
+    assert 'HINT FROM PROJECT COMPONENT' in ret.stderr, (
+        'Hint from project component should be displayed in build output'
+    )

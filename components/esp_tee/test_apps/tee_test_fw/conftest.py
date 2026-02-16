@@ -324,7 +324,7 @@ class TEESerial(IdfSerial):
             'type': 'aes256',
             'input': 'aes256_key.bin',
             'write_once': False,
-            'b64': 'qZxftt2T8mOpLxALIfsDqI65srqPxrJtCVnDU8wrKXbFCJekDRzXqINlU5s=',
+            'b64': 'qZxftt2T8mOpLxALIfsDqI65srqPxrJtCVnDU8wrKXY=',
         },
         {'key': 'p256_key0', 'type': 'ecdsa_p256', 'input': None, 'write_once': False},
         {

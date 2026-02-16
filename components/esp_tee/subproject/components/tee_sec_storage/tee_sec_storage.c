@@ -35,7 +35,6 @@
 
 #define AES256_KEY_LEN                      32
 #define AES256_KEY_BITS                     (AES256_KEY_LEN * 8)
-#define AES256_DEFAULT_IV_LEN               16
 #define AES256_GCM_IV_LEN                   12
 #define ECDSA_SECP384R1_KEY_LEN             48
 #define ECDSA_SECP256R1_KEY_LEN             32
@@ -62,7 +61,6 @@ typedef struct {
 /* Structure to hold AES-256 key and IV */
 typedef struct {
     uint8_t key[AES256_KEY_LEN];          /* Key for AES-256 */
-    uint8_t iv[AES256_DEFAULT_IV_LEN];    /* Initialization vector for AES-256 */
 } __attribute__((aligned(4))) __attribute__((__packed__)) sec_stg_aes256_t;
 
 /* Structure to hold the cryptographic keys in NVS */
@@ -449,9 +447,7 @@ static int generate_aes256_key(sec_stg_key_t *keyctx)
     }
 
     ESP_LOGD(TAG, "Generating AES-256 key...");
-
     esp_fill_random(&keyctx->aes256.key, AES256_KEY_LEN);
-    esp_fill_random(&keyctx->aes256.iv, AES256_DEFAULT_IV_LEN);
 
     return 0;
 }

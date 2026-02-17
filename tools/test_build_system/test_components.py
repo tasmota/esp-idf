@@ -581,6 +581,7 @@ def test_component_validation_with_common_platform_example(idf_py: IdfPyFunc, te
     )
 
 
+@pytest.mark.buildv2_skip('Build system v2 does not support MINIMAL_BUILD')
 def test_minimal_build_without_main_component(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
     logging.info('Verify that the build fails when using `MINIMAL_BUILD` without main component')
 

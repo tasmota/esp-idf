@@ -134,7 +134,6 @@ examples/system/ota/advanced_https_ota:
       temporary: true
       reason: lack of runners
   depends_components:
-    - *common_components
     - app_update
     - esp_https_ota
     - esp_http_client
@@ -155,7 +154,6 @@ examples/system/ota/native_ota_example:
     - if: IDF_TARGET != "esp32"
       reason: Only esp32 has ethernet runners
   depends_components:
-    - *common_components
     - app_update
     - esp_https_ota
     - esp_http_client
@@ -185,7 +183,6 @@ examples/system/ota/partitions_ota:
       temporary: true
       reason: lack of runners with recovery_bootloader lablel
   depends_components:
-    - *common_components
     - app_update
     - esp_https_ota
     - esp_http_client
@@ -216,7 +213,6 @@ examples/system/ota/simple_ota_example:
       temporary: true
       reason: lack of runners
   depends_components:
-    - *common_components
     - app_update
     - esp_https_ota
     - esp_http_client

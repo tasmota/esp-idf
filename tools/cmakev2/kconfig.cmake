@@ -905,3 +905,78 @@ function(idf_create_save_defconfig)
         VERBATIM
     )
 endfunction()
+
+#[[
+.. cmakev2:function:: idf_create_config_report
+
+    .. code-block:: cmake
+
+        idf_create_config_report(<executable>
+                                 TARGET <target>)
+
+    *executable[in]*
+
+    Executable target for which to create the config-report target.
+
+    *TARGET[in]*
+
+        Name of the config-report target to be created.
+
+    Create a config-report target with the name specified by the ``TARGET``
+    option for an ``executable``. This target generates a JSON file with the
+    project configuration report in the build/config directory. The report
+    contains information about the Kconfig parsing, including errors, warnings,
+    and other diagnostic information.
+#]]
+function(idf_create_config_report executable)
+    set(options)
+    set(one_value TARGET)
+    set(multi_value)
+    cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
+
+    if(NOT DEFINED ARG_TARGET)
+        idf_die("TARGET option is required")
+    endif()
+
+    if(TARGET "${ARG_TARGET}")
+        idf_die("TARGET '${ARG_TARGET}' for config-report already exists")
+    endif()
+
+    idf_build_get_property(python PYTHON)
+    idf_build_get_property(idf_path IDF_PATH)
+    idf_build_get_property(kconfgen_cmd __BASE_KCONFGEN_CMD)
+    idf_build_get_property(config_dir CONFIG_DIR)
+    idf_build_get_property(target IDF_TARGET)
+    idf_build_get_property(toolchain IDF_TOOLCHAIN)
+    idf_build_get_property(idf_init_version __IDF_INIT_VERSION)
+    idf_build_get_property(idf_env_fpga __IDF_ENV_FPGA)
+
+    # Get KCONFIG_REPORT_VERBOSITY from environment or use default
+    set(kconfig_report_verbosity "$ENV{KCONFIG_REPORT_VERBOSITY}")
+    if(NOT kconfig_report_verbosity)
+        set(kconfig_report_verbosity "default")
+        idf_msg("KCONFIG_REPORT_VERBOSITY not set, using default")
+    endif()
+
+    __create_executable_config_env_file("${executable}")
+    get_target_property(config_env_dir "${executable}" CONFIG_ENV_DIR)
+
+    add_custom_target("${ARG_TARGET}"
+        # Prepare Kconfig source files
+        COMMAND ${python} "${idf_path}/tools/kconfig_new/prepare_kconfig_files.py"
+        --list-separator=semicolon
+        --env-file "${config_env_dir}/config.env"
+        # Generate config report
+        COMMAND ${kconfgen_cmd}
+        --env "IDF_TARGET=${target}"
+        --env "IDF_TOOLCHAIN=${toolchain}"
+        --env "IDF_ENV_FPGA=${idf_env_fpga}"
+        --env "IDF_INIT_VERSION=${idf_init_version}"
+        --output report "${config_dir}/kconfig_parse_report.json"
+        --env "KCONFIG_REPORT_VERBOSITY=${kconfig_report_verbosity}"
+        --env-file "${config_env_dir}/config.env"
+        USES_TERMINAL
+        VERBATIM
+        COMMENT "Generating configuration report..."
+    )
+endfunction()

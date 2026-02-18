@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
@@ -341,7 +341,9 @@ def test_merge_bin_cmd(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
     assert (test_app_copy / 'build' / 'merged-binary.hex').is_file()
 
 
-def test_hints_components_loading(idf_copy: Path, test_app_copy: Path, idf_py: IdfPyFunc) -> None:
+def test_hints_components_loading(
+    idf_copy: Path, test_app_copy: Path, idf_py: IdfPyFunc, request: pytest.FixtureRequest
+) -> None:
     logging.info('Testing component hint loading mechanism')
     logging.debug('Creating test IDF component')
 
@@ -377,6 +379,18 @@ def test_hints_components_loading(idf_copy: Path, test_app_copy: Path, idf_py: I
     test_project_component_error();
     """
     replace_in_file(test_app_copy / 'main' / 'build_test_app.c', '// placeholder_inside_main', error_code)
+
+    # The default test app in buildv2 only includes the 'main' component. Hence, the IDF component
+    # and project components must be explicitly added as dependencies for them to be included in the build.
+    # Consequently, the hints from the IDF and project components will not be displayed in the build output
+    # unless they are explicitly required. In contrast, buildv1 automatically includes all discovered components
+    # unless MINIMAL_BUILD is set. Hence, add the components to the main component's REQUIRES list.
+    if request.config.getoption('buildv2', False):
+        replace_in_file(
+            test_app_copy / 'main' / 'CMakeLists.txt',
+            '# placeholder_inside_idf_component_register',
+            'REQUIRES test_idf_comp test_project_comp',
+        )
 
     ret = idf_py('build', check=False)
     assert 'HINT FROM IDF COMPONENT' in ret.stderr, 'Hint from IDF component should be displayed in build output'

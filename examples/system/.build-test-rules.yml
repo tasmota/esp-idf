@@ -8,6 +8,9 @@ examples/system/app_trace_basic:
     - if: IDF_TARGET == "esp32h4"
       temporary: true
       reason: not supported yet #TODO: OCD-1137
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: not support yet   #TODO: OCD-1290
   depends_components:
     - esp_trace
     - app_trace
@@ -82,6 +85,9 @@ examples/system/gcov:
     - if: IDF_TARGET == "esp32h4"
       temporary: true
       reason: not supported yet #TODO: OCD-1138
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: not support yet   #TODO: OCD-1291
   depends_components:
     - esp_trace
     - app_trace
@@ -266,6 +272,9 @@ examples/system/sysview_tracing:
     - if: IDF_TARGET == "esp32h4"
       temporary: true
       reason: not supported yet #TODO: OCD-1136
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: not support yet   #TODO: OCD-1289
   depends_components:
     - esp_trace
     - app_trace
@@ -280,6 +289,12 @@ examples/system/sysview_tracing_heap_log:
     - if: IDF_TARGET == "esp32h4"
       temporary: true
       reason: not supported yet #TODO: OCD-1136
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: not support yet   #TODO: OCD-1289
+    - if: IDF_TARGET == "esp32p4"
+      temporary: true
+      reason: lack of eco6 runners
   depends_components:
     - esp_trace
     - app_trace

@@ -3,10 +3,12 @@ Storage
 
 :link_to_translation:`zh_CN:[中文]`
 
-Removed VFS SDMMC Deprecated API
---------------------------------
+Breaking Changes
+----------------
 
 Deprecated ``esp_vfs_fat_sdmmc_unmount`` function is now removed. Please use ``esp_vfs_fat_sdcard_unmount`` instead.
+
+Function prototype for ``esp_vfs_fat_register`` has been changed to match ``esp_vfs_fat_register_cfg`` function. ``esp_vfs_fat_register_cfg`` is now deprecated.
 
 
 VFS

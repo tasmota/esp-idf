@@ -88,3 +88,6 @@ entries:
         gpio_periph: GPIO_HOLD_MASK (noflash)
     if PM_SLP_IRAM_OPT = y && SOC_TEMP_SENSOR_SUPPORTED = y:
         temperature_sensor_periph:temperature_sensor_attributes (noflash)
+    if PM_SLP_IRAM_OPT = y:
+        if IDF_TARGET_ESP32 = y:
+            rtc_io_periph:rtc_io_desc (noflash_data)

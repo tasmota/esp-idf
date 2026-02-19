@@ -1,7 +1,7 @@
 {
   "name": "framework-espidf",
-  "version": "3.50502",
-  "description": "Espressif IoT Development Framework. Tasmota framework for ESP32 chip",
+  "version": "3.50503",
+  "description": "Espressif IoT Development Framework",
   "keywords": [
     "framework",
     "esp32",

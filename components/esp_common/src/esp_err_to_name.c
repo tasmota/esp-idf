@@ -290,6 +290,15 @@ static const esp_err_msg_t esp_err_msg_table[] = {
                                                                                 post upgrade and hence firmware upgrade
                                                                                 is not possible */
 #   endif
+#   ifdef      ESP_ERR_OTA_ALREADY_IN_PROGRESS
+    ERR_TBL_IT(ESP_ERR_OTA_ALREADY_IN_PROGRESS),                /*  5383 0x1507 Error if another OTA operation is
+                                                                                already in progress on the same
+                                                                                partition */
+#   endif
+#   ifdef      ESP_ERR_OTA_SPI_MODE_MISMATCH
+    ERR_TBL_IT(ESP_ERR_OTA_SPI_MODE_MISMATCH),                  /*  5384 0x1508 Error if the firmware's SPI flash mode
+                                                                                doesn't match the running firmware */
+#   endif
     // components/efuse/include/esp_efuse.h
 #   ifdef      ESP_ERR_EFUSE
     ERR_TBL_IT(ESP_ERR_EFUSE),                                  /*  5632 0x1600 Base error code for efuse api. */
@@ -745,30 +754,6 @@ static const esp_err_msg_t esp_err_msg_table[] = {
 #   endif
 #   ifdef      ESP_ERR_MBEDTLS_SSL_READ_FAILED
     ERR_TBL_IT(ESP_ERR_MBEDTLS_SSL_READ_FAILED),                /* 32797 0x801d mbedtls api returned failed */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_SSL_SET_HOSTNAME_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_SET_HOSTNAME_FAILED),        /* 32817 0x8031 wolfSSL api returned error */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_SSL_CONF_ALPN_PROTOCOLS_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_CONF_ALPN_PROTOCOLS_FAILED), /* 32818 0x8032 wolfSSL api returned error */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_CERT_VERIFY_SETUP_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_CERT_VERIFY_SETUP_FAILED),       /* 32819 0x8033 wolfSSL api returned error */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_KEY_VERIFY_SETUP_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_KEY_VERIFY_SETUP_FAILED),        /* 32820 0x8034 wolfSSL api returned error */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_SSL_HANDSHAKE_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_HANDSHAKE_FAILED),           /* 32821 0x8035 wolfSSL api returned failed */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_CTX_SETUP_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_CTX_SETUP_FAILED),               /* 32822 0x8036 wolfSSL api returned failed */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_SSL_SETUP_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_SETUP_FAILED),               /* 32823 0x8037 wolfSSL api returned failed */
-#   endif
-#   ifdef      ESP_ERR_WOLFSSL_SSL_WRITE_FAILED
-    ERR_TBL_IT(ESP_ERR_WOLFSSL_SSL_WRITE_FAILED),               /* 32824 0x8038 wolfSSL api returned failed */
 #   endif
     // components/esp_https_ota/include/esp_https_ota.h
 #   ifdef      ESP_ERR_HTTPS_OTA_BASE

@@ -211,21 +211,44 @@ endfunction()
         The component name that should be added as a dependency to the
         evaluated component. It may be provided multiple times.
 
-    Add a dependency on a specific component only if it is included in the
-    build.
+    Add a dependency on a specific component only if the component is
+    recognized by the build system. The component is included if needed and
+    added as a requirement for the currently evaluated component using
+    target_link_libraries. This function should be avoided in cmakev2, where
+    dependencies should be added based on configuration options. This is purely
+    for backward compatibility with cmakev1.
 #]]
-function(idf_component_optional_requires req_type)
+function(idf_component_optional_requires type)
     set(optional_reqs ${ARGN})
     foreach(req ${optional_reqs})
         __get_component_interface(COMPONENT "${req}" OUTPUT req_interface)
         if("${req_interface}" STREQUAL "NOTFOUND")
+            # The component is not recognized by the build system.
             continue()
         endif()
-        idf_component_get_property(req_alias "${req}" COMPONENT_ALIAS)
-        # The component alias is created only after the component is included,
-        # meaning the add_subdirectory command for it has been called. This can
-        # be used to detect if a component has already been added to the build.
-        target_link_libraries(${COMPONENT_TARGET} ${req_type} "$<$<TARGET_EXISTS:${req_alias}>:${req_interface}>")
+        idf_component_include("${req}")
+
+        # Map the requested type into PRIV_REQUIRES and REQUIRES, allowing the
+        # requirement to be added to the appropriate component dependency
+        # property.
+        if("${type}" STREQUAL "PRIVATE")
+            set(req_type PRIV_REQUIRES)
+        elseif("${type}" STREQUAL "PUBLIC")
+            set(req_type REQUIRES)
+        else()
+            set(req_type "")
+        endif()
+
+        if(req_type)
+            idf_component_get_property(req_name "${req}" COMPONENT_NAME)
+            idf_component_get_property(target_reqs ${COMPONENT_TARGET} ${req_type})
+            if(NOT "${req_name}" IN_LIST target_reqs)
+                idf_component_set_property(${COMPONENT_TARGET} ${req_type} "${req_name}" APPEND)
+                target_link_libraries(${COMPONENT_TARGET} ${type} ${req_interface})
+            endif()
+        else()
+            target_link_libraries(${COMPONENT_TARGET} ${type} ${req_interface})
+        endif()
     endforeach()
 endfunction()
 

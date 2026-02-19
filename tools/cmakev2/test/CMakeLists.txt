@@ -232,7 +232,7 @@ function(test_executable)
                      NAME fatfs_example)
     idf_create_menuconfig(fatfs_example
                           TARGET menuconfig-fatfs)
-    idf_build_generate_metadata(fatfs_example_bin
+    idf_build_generate_metadata(BINARY fatfs_example_bin
                                 OUTPUT_FILE project_description_fatfs.json)
     idf_build_generate_depgraph(fatfs_example
                                 OUTPUT_FILE component_deps_fatfs.dot)
@@ -257,7 +257,7 @@ function(test_executable)
                      NAME hello_world_example)
     idf_create_menuconfig(hello_world_example
                           TARGET menuconfig-hello_world)
-    idf_build_generate_metadata(hello_world_example_bin
+    idf_build_generate_metadata(BINARY hello_world_example_bin
                                 OUTPUT_FILE project_description_hello_world.json)
     idf_build_generate_depgraph(hello_world_example
                                 OUTPUT_FILE component_deps_hello_world.dot)

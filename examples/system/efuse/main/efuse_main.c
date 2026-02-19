@@ -166,7 +166,7 @@ void app_main(void)
 
 
 #if CONFIG_IDF_TARGET_ESP32C2
-    if (esp_secure_boot_enabled() || esp_flash_encryption_enabled()) {
+    if (esp_secure_boot_enabled() || esp_efuse_is_flash_encryption_enabled()) {
         ESP_LOGW(TAG, "BLOCK3 is used for secure boot or/and flash encryption");
         ESP_LOGW(TAG, "eFuses from the custom eFuse table can not be used as they are placed in BLOCK3");
         ESP_LOGI(TAG, "Done");

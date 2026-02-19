@@ -381,6 +381,20 @@ extern "C" esp_err_t nvs_erase_all(nvs_handle_t c_handle)
     return handle->erase_all();
 }
 
+extern "C" esp_err_t nvs_purge_all(nvs_handle_t c_handle)
+{
+    Lock lock;
+    ESP_LOGD(TAG, "%s", __func__);
+    NVSHandleSimple *handle;
+    auto err = nvs_find_ns_handle(c_handle, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return handle->purge_all();
+}
+
+
 template<typename T>
 static esp_err_t nvs_set(nvs_handle_t c_handle, const char* key, T value)
 {

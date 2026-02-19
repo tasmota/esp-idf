@@ -79,6 +79,14 @@ As not every transaction requires both writing and reading data, you can choose 
 
     A Host should not start a transaction before its Device is ready for receiving data. It is recommended to use another GPIO pin for a handshake signal to sync the Devices. For more details, see :ref:`transaction_interval`.
 
+.. only:: SOC_PSRAM_DMA_CAPABLE
+
+    Using PSRAM for DMA transfer
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    SPI Slave driver supports using PSRAM for DMA transfer. Directly passing a PSRAM address as :cpp:member:`spi_slave_transaction_t::tx_buffer` or :cpp:member:`spi_slave_transaction_t::rx_buffer` is supported. For the rx_buffer, it has alignment requirements, using :cpp:func:`heap_caps_malloc` to allocate memory can automatically handle the alignment requirements. For the buffers that you can not control, you can also use the :c:macro:`SPI_SLAVE_TRANS_DMA_BUFFER_ALIGN_AUTO` flag to enable driver to automatically align the buffer from PSRAM.
+
+    Note that this feature shares the MSPI bus bandwidth (bus frequency * bus width), so the transmission bandwidth of the host to this device should be less than the PSRAM bandwidth, otherwise **data may be lost**, and the ``spi_slave_transmit`` function will return the :c:macro:`ESP_ERR_INVALID_STATE` error.
 
 Driver Usage
 ------------

@@ -8,10 +8,6 @@ ESP x509 证书包
 
 ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义 x509 根证书用于 TLS 服务器验证。
 
-.. note::
-
-    目前在使用 WolfSSL 时该证书包不可用。
-
 该证书包中包括 Mozilla NSS 根证书存储区的完整根证书列表。使用 gen_crt_bundle.py python 程序，可将证书的主题名称和公钥存储在文件中，并嵌入 {IDF_TARGET_NAME} 二进制文件。
 
 生成证书包时，你需选择：

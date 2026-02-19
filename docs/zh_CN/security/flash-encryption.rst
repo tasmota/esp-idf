@@ -718,7 +718,7 @@ flash 加密设置
 在加密的 flash 中读写数据
 -------------------------------------
 
-{IDF_TARGET_NAME} 应用程序代码可以通过调用函数 :cpp:func:`esp_flash_encryption_enabled` 来检查当前是否启用了 flash 加密。此外，设备可以通过调用函数 :cpp:func:`esp_get_flash_encryption_mode` 来识别 flash 加密模式。
+{IDF_TARGET_NAME} 应用程序代码可以通过调用函数 :cpp:func:`esp_efuse_is_flash_encryption_enabled` 来检查当前是否启用了 flash 加密。此外，设备可以通过调用函数 :cpp:func:`esp_get_flash_encryption_mode` 来识别 flash 加密模式。
 
 一旦启用 flash 加密，使用代码访问 flash 内容时要更加小心。
 

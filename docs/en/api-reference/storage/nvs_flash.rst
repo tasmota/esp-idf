@@ -71,7 +71,34 @@ A data type check is performed when reading a value. An error is returned if the
 Namespaces
 ^^^^^^^^^^
 
-To mitigate potential conflicts in key names between different components, NVS assigns each key-value pair to one of namespaces. Namespace names follow the same rules as key names, i.e., the maximum length is 15 characters. Furthermore, there can be no more than 254 different namespaces in one NVS partition. Namespace name is specified in the :cpp:func:`nvs_open` or :cpp:type:`nvs_open_from_partition` call. This call returns an opaque handle, which is used in subsequent calls to the ``nvs_get_*``, ``nvs_set_*``, and :cpp:func:`nvs_commit` functions. This way, a handle is associated with a namespace, and key names will not collide with same names in other namespaces. Please note that the namespaces with the same name in different NVS partitions are considered as separate namespaces.
+To mitigate potential conflicts in key names between different components, NVS assigns each key-value pair to one of namespaces. Namespace names follow the same rules as key names, i.e., the maximum length is 15 characters. Furthermore, there can be no more than 254 different namespaces in one NVS partition. Namespace name is specified in the :cpp:func:`nvs_open` or :cpp:type:`nvs_open_from_partition` call.
+
+The open mode parameter controls the access level and security behavior:
+
+- ``NVS_READONLY``: Read-only access. All write operations will be rejected.
+- ``NVS_READWRITE``: Standard read-write access. Erased data is marked as deleted but remains in flash.
+- ``NVS_READWRITE_PURGE``: Secure read-write access. Erased data is physically purged from flash memory.
+
+This call returns an opaque handle, which is used in subsequent calls to the ``nvs_get_*``, ``nvs_set_*``, and :cpp:func:`nvs_commit` functions. This way, a handle is associated with a namespace, and key names will not collide with same names in other namespaces. Please note that the namespaces with the same name in different NVS partitions are considered as separate namespaces.
+
+.. _data_purging_security:
+
+Data Purging and Security
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default, when NVS updates or erases key-value pairs, the old data is only marked as erased but remains physically present in flash memory. This approach optimizes write performance and flash wear leveling, but the erased data could potentially be recovered with physical access to the flash chip.
+
+For applications requiring enhanced security where sensitive data must be physically removed from flash memory, NVS provides two mechanisms:
+
+**Purging Mode**
+    When opening a namespace with ``NVS_READWRITE_PURGE`` mode, all write and erase operations automatically purge (physically wipe) the previously stored data in addition to writing new values. This ensures that old data cannot be recovered from flash memory.
+
+**Manual Purging**
+    The :cpp:func:`nvs_purge_all` function allows applications to explicitly purge all erased items within a namespace at any time. This can be used with handles opened in either ``NVS_READWRITE`` or ``NVS_READWRITE_PURGE`` mode.
+
+.. note::
+
+    Purging operations require additional flash write cycles compared to standard erase operations. Applications should balance security requirements with flash wear considerations when deciding whether to use purging features.
 
 NVS Iterators
 ^^^^^^^^^^^^^
@@ -101,6 +128,8 @@ Security, Tampering, and Robustness
     NVS is not directly compatible with the {IDF_TARGET_NAME} flash encryption system. However, data can still be stored in encrypted form if NVS encryption is used together with {IDF_TARGET_NAME} flash encryption or with the help of the HMAC peripheral. Please refer to :doc:`nvs_encryption` for more details.
 
 If NVS encryption is not used, it is possible for anyone with physical access to the flash chip to alter, erase, or add key-value pairs. With NVS encryption enabled, it is not possible to alter or add a key-value pair and get recognized as a valid pair without knowing corresponding NVS encryption keys. However, there is no tamper-resistance against the erase operation.
+
+**Data Recovery Prevention**: By default, when key-value pairs are updated or erased, the old data remains physically present in flash memory and is only marked as invalid. For sensitive applications where old data must not be recoverable, use the ``NVS_READWRITE_PURGE`` mode when opening namespaces, or call :cpp:func:`nvs_purge_all` to explicitly purge erased data. See the :ref:`Data Purging and Security <data_purging_security>` section for details.
 
 The library does try to recover from conditions when flash memory is in an inconsistent state. In particular, one should be able to power off the device at any point and time and then power it back on. This should not result in loss of data, except for the new key-value pair if it was being written at the moment of powering off. The library should also be able to initialize properly with any random data present in flash memory.
 
@@ -206,6 +235,10 @@ Log of Key-Value Pairs
 ^^^^^^^^^^^^^^^^^^^^^^
 
 NVS stores key-value pairs sequentially, with new key-value pairs being added at the end. When a value of any given key has to be updated, a new key-value pair is added at the end of the log and the old key-value pair is marked as erased.
+
+**Standard Erase Behavior**: By default, erased entries remain physically present in flash memory with only their state bits changed to indicate they are no longer valid. This optimizes performance and reduces flash wear.
+
+**Purge Behavior**: When using ``NVS_READWRITE_PURGE`` mode or calling :cpp:func:`nvs_purge_all`, the library physically overwrites the content of erased entries to prevent data recovery. This operation incurs additional flash write cycles but provides enhanced security for sensitive data.
 
 Pages and Entries
 ^^^^^^^^^^^^^^^^^

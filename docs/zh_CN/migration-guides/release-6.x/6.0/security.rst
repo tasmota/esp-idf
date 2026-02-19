@@ -115,6 +115,12 @@ BluFi（基于 BLE 的 Wi-Fi 配网）功能受到 ESP-IDF v6.0 中 Mbed TLS v4.
 引导加载程序支持
 ----------------
 
+**已弃用的 API**
+
+以下函数已被弃用：
+
+- :cpp:func:`esp_flash_encryption_enabled` 已被弃用。请使用 :cpp:func:`esp_efuse_is_flash_encryption_enabled` 代替。需要依赖的组件由 ``bootloader_support`` 替换为 ``efuse``。
+
 **已移除的废弃 API**
 
 以下废弃函数已被移除：

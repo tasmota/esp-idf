@@ -16,7 +16,6 @@
 #include "esp_partition.h"
 #include "esp_image_format.h"
 #include "esp_secure_boot.h"
-#include "esp_flash_encrypt.h"
 #include "spi_flash_mmap.h"
 #include "sdkconfig.h"
 
@@ -60,6 +59,18 @@ static uint32_t s_ota_ops_last_handle = 0;
 const static char *TAG = "esp_ota_ops";
 
 static ota_ops_entry_t *get_ota_ops_entry(esp_ota_handle_t handle);
+
+/* Check if there's already an ongoing OTA operation on the same staging or final partition */
+static bool esp_ota_check_partition_conflict(const esp_partition_t *partition)
+{
+    ota_ops_entry_t *it;
+    for (it = LIST_FIRST(&s_ota_ops_entries_head); it != NULL; it = LIST_NEXT(it, entries)) {
+        if (it->partition.staging == partition || it->partition.final == partition) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /* Return true if this is an OTA app partition */
 static bool is_ota_partition(const esp_partition_t *p)
@@ -172,6 +183,12 @@ esp_err_t esp_ota_begin(const esp_partition_t *partition, size_t image_size, esp
 #endif
     }
 
+    // Check if there's already an ongoing OTA operation on this partition
+    if (esp_ota_check_partition_conflict(partition)) {
+        ESP_LOGE(TAG, "OTA operation already in progress on partition %s", partition->label);
+        return ESP_ERR_OTA_ALREADY_IN_PROGRESS;
+    }
+
     new_entry = esp_ota_init_entry(partition);
     if (new_entry == NULL) {
         return ESP_ERR_NO_MEM;
@@ -236,6 +253,12 @@ esp_err_t esp_ota_resume(const esp_partition_t *partition, const size_t erase_si
     const esp_partition_t* running_partition = esp_ota_get_running_partition();
     if (partition == running_partition) {
         return ESP_ERR_OTA_PARTITION_CONFLICT;
+    }
+
+    // Check if there's already an ongoing OTA operation on this partition
+    if (esp_ota_check_partition_conflict(partition)) {
+        ESP_LOGE(TAG, "OTA operation already in progress on partition %s", partition->label);
+        return ESP_ERR_OTA_ALREADY_IN_PROGRESS;
     }
 
     new_entry = esp_ota_init_entry(partition);
@@ -342,7 +365,7 @@ esp_err_t esp_ota_write(esp_ota_handle_t handle, const void *data, size_t size)
                 }
             }
 
-            if (esp_flash_encryption_enabled()) {
+            if (esp_efuse_is_flash_encryption_enabled()) {
                 /* Can only write 16 byte blocks to flash, so need to cache anything else */
                 size_t copy_len;
 
@@ -407,7 +430,7 @@ esp_err_t esp_ota_write_with_offset(esp_ota_handle_t handle, const void *data, s
             /* esp_ota_write_with_offset is used to write data in non contiguous manner.
              * Hence, unaligned data(less than 16 bytes) cannot be cached if flash encryption is enabled.
              */
-            if (esp_flash_encryption_enabled() && (size % 16)) {
+            if (esp_efuse_is_flash_encryption_enabled() && (size % 16)) {
                 ESP_LOGE(TAG, "Size should be 16byte aligned for flash encryption case");
                 return ESP_ERR_INVALID_ARG;
             }
@@ -880,7 +903,7 @@ esp_err_t esp_ota_get_bootloader_description(const esp_partition_t *bootloader_p
     esp_partition_t partition = { 0 };
     if (bootloader_partition == NULL) {
         partition.flash_chip = esp_flash_default_chip;
-        partition.encrypted = esp_flash_encryption_enabled();
+        partition.encrypted = esp_efuse_is_flash_encryption_enabled();
         partition.address = CONFIG_BOOTLOADER_OFFSET_IN_FLASH;
         partition.size = CONFIG_PARTITION_TABLE_OFFSET - CONFIG_BOOTLOADER_OFFSET_IN_FLASH;
     } else {
@@ -987,6 +1010,52 @@ bool esp_ota_check_rollback_is_possible(void)
         }
     }
     return false;
+}
+
+esp_err_t esp_ota_check_image_validity(esp_partition_type_t part_type,
+                                       const esp_image_header_t *img_hdr,
+                                       const esp_app_desc_t *app_desc)
+{
+    if (img_hdr == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Map partition type to image type for bootloader_common API
+    esp_image_type img_type;
+    if (part_type == ESP_PARTITION_TYPE_APP) {
+        img_type = ESP_IMAGE_APPLICATION;
+    } else if (part_type == ESP_PARTITION_TYPE_BOOTLOADER) {
+        img_type = ESP_IMAGE_BOOTLOADER;
+    } else {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Check chip ID and chip revision validity
+    esp_err_t err = bootloader_common_check_chip_validity(img_hdr, img_type);
+    if (err != ESP_OK) {
+        return ESP_ERR_INVALID_VERSION;
+    }
+
+    // Check SPI flash mode if app descriptor is provided
+    if (part_type == ESP_PARTITION_TYPE_APP && app_desc != NULL) {
+        // Get the running app's descriptor
+        const esp_app_desc_t *running_app_desc = esp_app_get_description();
+
+        if (running_app_desc->spi_flash_mode == 0 || app_desc->spi_flash_mode == 0) {
+            // Older image format, CONFIG_ESPTOOLPY_FLASHMODE_VAL not stored in the app descriptor
+            ESP_LOGD(TAG, "Older image format and hence no SPI flash mode info is available");
+            return ESP_OK;
+        }
+
+        // Compare SPI flash modes as stored in app descriptor (CONFIG_ESPTOOLPY_FLASHMODE_VAL)
+        if (app_desc->spi_flash_mode != running_app_desc->spi_flash_mode) {
+            ESP_LOGE(TAG, "SPI flash mode mismatch: running app has mode %d, new app has mode %d",
+                    running_app_desc->spi_flash_mode, app_desc->spi_flash_mode);
+            return ESP_ERR_OTA_SPI_MODE_MISMATCH;
+        }
+    }
+
+    return ESP_OK;
 }
 
 // if valid == false - will done rollback with reboot. After reboot will boot previous OTA[x] or Factory partition.

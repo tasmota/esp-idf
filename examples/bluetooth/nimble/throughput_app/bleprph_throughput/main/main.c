@@ -22,7 +22,7 @@ static uint8_t ext_adv_pattern[] = {
     0x02, BLE_HS_ADV_TYPE_FLAGS, 0x06,
     0x03, BLE_HS_ADV_TYPE_COMP_UUIDS16, 0xab, 0xcd,
     0x03, BLE_HS_ADV_TYPE_COMP_UUIDS16, 0xAB, 0xF2,
-    0x0e, BLE_HS_ADV_TYPE_COMP_NAME, 'n', 'i', 'm', 'b', 'l', 'e', '-', 'b', 'l', 'e', 'p', 'r', 'p', 'h'
+    0x0c, BLE_HS_ADV_TYPE_COMP_NAME, 'n', 'i', 'm', 'b', 'l', 'e', '_', 'p', 'r', 'p', 'h'
 };
 
 static uint8_t s_current_phy;
@@ -507,8 +507,11 @@ void app_main(void)
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
     /* Initialize Notify Task */
-    xTaskCreate(notify_task, "notify_task", 4096, NULL, 10, NULL);
-
+    BaseType_t task_rc = xTaskCreate(notify_task, "notify_task", 4096, NULL, 10, NULL);
+    if (task_rc != pdPASS) {
+        ESP_LOGE(tag, "Failed to create notify_task (rc=%d)", task_rc);
+        return ;
+    }
 #if MYNEWT_VAL(BLE_GATTS)
     rc = gatt_svr_init();
     assert(rc == 0);

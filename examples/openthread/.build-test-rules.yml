@@ -4,8 +4,10 @@
 # Or delete TODO without modifying the configuration if it is sure that current rules are correct.
 .openthread_dependencies: &openthread_dependencies
   depends_components:
-    - *common_components
     - esp_coex
+    - esp_driver_spi
+    - esp_driver_uart
+    - esp_hal_uart
     - esp_netif
     - esp_phy
     - esp_system
@@ -20,8 +22,8 @@
 
 .openthread_sleep_dependencies: &openthread_sleep_dependencies
   depends_components:
-    - *common_components
     - esp_hw_support
+    - soc
 
 examples/openthread/ot_br:
   enable:

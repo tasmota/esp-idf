@@ -367,6 +367,18 @@ config SOC_CPU_WATCHPOINT_MAX_REGION_SIZE
     hex
     default 0x40
 
+config SOC_DS_SIGNATURE_MAX_BIT_LEN
+    int
+    default 4096
+
+config SOC_DS_KEY_PARAM_MD_IV_LENGTH
+    int
+    default 16
+
+config SOC_DS_KEY_CHECK_MAX_WAIT_US
+    int
+    default 1100
+
 config SOC_DAC_CHAN_NUM
     int
     default 2
@@ -566,22 +578,6 @@ config SOC_MEMSPI_SUPPORT_CONTROL_DUMMY_OUT
 config SOC_MEMSPI_IS_INDEPENDENT
     bool
     default y
-
-config SOC_SYSTIMER_COUNTER_NUM
-    int
-    default 1
-
-config SOC_SYSTIMER_ALARM_NUM
-    int
-    default 3
-
-config SOC_SYSTIMER_BIT_WIDTH_LO
-    int
-    default 32
-
-config SOC_SYSTIMER_BIT_WIDTH_HI
-    int
-    default 32
 
 config SOC_LP_TIMER_BIT_WIDTH_LO
     int

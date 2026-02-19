@@ -108,6 +108,7 @@ def _test_gcov(openocd_dut: 'OpenOCD', dut: IdfDut) -> None:
                     assert os.path.isfile(gcda_path), f'Expected .gcda file not found: {gcda_path}'
                 print('Basic verification passed (all .gcda files exist)')
 
+    time.sleep(1)  # Wait for the USJ port to be ready
     dut.expect_exact('example: Ready for OpenOCD connection', timeout=5)
     with openocd_dut.run() as openocd:
         openocd.write('reset run')

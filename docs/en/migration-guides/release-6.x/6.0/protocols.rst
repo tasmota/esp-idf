@@ -58,7 +58,44 @@ For more information:
 ESP-TLS
 -------
 
-**Removed Deprecated API**
+Removed wolfSSL Support
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The built-in wolfSSL TLS stack support has been removed from ESP-TLS. Users who were using wolfSSL should migrate to either:
+
+1. **mbedTLS (Recommended)**: The default TLS stack, fully integrated and maintained within ESP-IDF.
+2. **Custom TLS Stack**: Register your own TLS implementation using the new custom stack API (see Option B below).
+
+**Removed Kconfig Options**
+
+The following Kconfig options have been removed:
+
+- ``CONFIG_ESP_TLS_USING_WOLFSSL`` - Use ``CONFIG_ESP_TLS_USING_MBEDTLS`` or ``CONFIG_ESP_TLS_CUSTOM_STACK`` instead
+- ``CONFIG_ESP_DEBUG_WOLFSSL`` - For mbedTLS debugging, use ``CONFIG_MBEDTLS_DEBUG``
+- ``CONFIG_ESP_TLS_OCSP_CHECKALL`` - OCSP functionality should be handled by the chosen TLS stack
+
+**Migration Steps for wolfSSL Users**
+
+If your project was using wolfSSL via ESP-TLS:
+
+1. **Option A - Switch to mbedTLS**
+
+   - Remove ``CONFIG_ESP_TLS_USING_WOLFSSL=y`` from your sdkconfig
+   - The default ``CONFIG_ESP_TLS_USING_MBEDTLS`` will be used automatically
+   - No code changes required for standard TLS operations
+
+2. **Option B - Use Custom Stack API**
+
+   If you need to continue using wolfSSL or another TLS library, you can register it as a custom stack:
+
+   - Enable ``CONFIG_ESP_TLS_CUSTOM_STACK`` in menuconfig
+   - Implement the :cpp:type:`esp_tls_stack_ops_t` interface for your TLS library
+   - Call :cpp:func:`esp_tls_register_stack` before creating any TLS connections
+
+   For detailed documentation on implementing a custom TLS stack, see :ref:`esp_tls_custom_stack`.
+
+Removed Deprecated API
+~~~~~~~~~~~~~~~~~~~~~~
 
 The deprecated :cpp:func:`esp_tls_conn_http_new` function has been removed. Use either:
 

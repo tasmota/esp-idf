@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,7 +26,7 @@
 #include "esp_partition.h"
 #include "esp_flash.h"
 #if !CONFIG_IDF_TARGET_LINUX
-#include "esp_flash_encrypt.h"
+#include "esp_efuse.h"
 #endif
 #include "spi_flash_mmap.h"
 #include "esp_log.h"
@@ -80,7 +80,7 @@ static bool is_partition_encrypted(bool encryption_config, esp_partition_type_t 
     return false;
 #else
     bool ret_encrypted = encryption_config;
-    if (!esp_flash_encryption_enabled()) {
+    if (!esp_efuse_is_flash_encryption_enabled()) {
         /* If flash encryption is not turned on, no partitions should be treated as encrypted */
         ret_encrypted = false;
     } else if (type == ESP_PARTITION_TYPE_APP
@@ -726,29 +726,26 @@ esp_err_t esp_partition_ptr_get_blockdev(const esp_partition_t* partition, esp_b
 
     ESP_BLOCKDEV_FLAGS_INST_CONFIG_DEFAULT(out->device_flags);
 
-    if(partition->readonly) {
-        out->device_flags.read_only = 1;
-        out->geometry.write_size = 0;
-        out->geometry.erase_size = 0;
-        out->geometry.recommended_write_size = 0;
-        out->geometry.recommended_erase_size = 0;
+    out->device_flags.read_only = partition->readonly ? 1 : 0;
+
+    if (partition->encrypted) {
+        out->geometry.write_size = 16;
+        out->geometry.recommended_write_size = 16;
+    } else {
+        out->geometry.write_size = 1;
+        out->geometry.recommended_write_size = 1;
     }
-    else {
-        if (partition->encrypted) {
-            out->geometry.write_size = 16;
-            out->geometry.recommended_write_size = 16;
-        } else {
-            out->geometry.write_size = 1;
-            out->geometry.recommended_write_size = 1;
-        }
-        out->geometry.erase_size = partition->erase_size;
-        out->geometry.recommended_erase_size = partition->erase_size;
-    }
+
+    out->geometry.erase_size = partition->erase_size;
+    out->geometry.recommended_erase_size = partition->erase_size;
+
     out->geometry.read_size = 1;
     out->geometry.recommended_read_size = 1;
+
     out->geometry.disk_size = partition->size;
 
     out->ops = &s_bdl_ops;
+
     *out_bdl_handle_ptr = out;
 
     return ESP_OK;

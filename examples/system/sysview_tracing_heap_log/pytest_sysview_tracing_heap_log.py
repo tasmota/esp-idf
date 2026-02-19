@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Unlicense OR CC0-1.0
 import os.path
+import time
 import typing
 
 import pexpect.fdpexpect
@@ -32,6 +33,7 @@ def _test_examples_sysview_tracing_heap_log(openocd_dut: 'OpenOCD', idf_path: st
             else:
                 f_w.write(line)
 
+    time.sleep(1)  # Wait for the USJ port to be ready
     dut.expect_exact('example: Ready for OpenOCD connection', timeout=5)
     with openocd_dut.run() as oocd:
         if dut.target == 'esp32p4':

@@ -112,10 +112,11 @@ tee_sec_stg_encrypt  <key_id> <plaintext>
       <key_id>  TEE Secure storage key ID
    <plaintext>  Plaintext to be encrypted
 
-tee_sec_stg_decrypt  <key_id> <ciphertext> <tag>
+tee_sec_stg_decrypt  <key_id> <ciphertext> <iv> <tag>
   Decrypt data using AES-GCM key with the given ID from secure storage
       <key_id>  TEE Secure storage key ID
   <ciphertext>  Ciphertext to be decrypted
+          <iv>  AES-GCM initialization vector
          <tag>  AES-GCM authentication tag
 
 help  [<string>] [-v <0|1>]
@@ -180,10 +181,12 @@ esp32c6> tee_sec_stg_gen_key aes256_k0 0
 I (2784) tee_sec_stg: Generated AES256 key with ID key0
 esp32c6> tee_sec_stg_encrypt aes256_k0 b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
 I (3084) tee_sec_stg: Ciphertext -
-58054310a96d48c2dccdf2e34005aa63b40817723d3ec3d597ab362efea084c1
+f72e44dda3b2d0a44ffc8cafd2f28b7933776dce78684c5514f9398daf3dc344
+I (3294) tee_sec_stg: IV -
+ef5c08c05828cf933440f121
 I (3594) tee_sec_stg: Tag -
-caeedb43e08dc3b4e35a58b2412908cc
-esp32c6> tee_sec_stg_decrypt aes256_k0 58054310a96d48c2dccdf2e34005aa63b40817723d3ec3d597ab362efea084c1 caeedb43e08dc3b4e35a58b2412908cc
+826a2e65f0e1d8aede1fb12e78957f0d
+esp32c6> tee_sec_stg_decrypt aes256_k0 f72e44dda3b2d0a44ffc8cafd2f28b7933776dce78684c5514f9398daf3dc344 ef5c08c05828cf933440f121 826a2e65f0e1d8aede1fb12e78957f0d
 I (4314) tee_sec_stg: Decrypted plaintext -
 b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
 ```

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import datetime
 import logging
@@ -241,10 +241,23 @@ def idf_py(default_idf_env: EnvDict) -> IdfPyFunc:
 
 
 def pytest_collection_modifyitems(session: Session, config: Config, items: list[Item]) -> None:
-    if not config.getoption('--buildv2', False):
-        return
+    buildv2_dir = Path(__file__).parent / 'buildv2'
+    is_buildv2 = config.getoption('--buildv2', False)
+
     for item in items:
-        marker = item.get_closest_marker('buildv2_skip')
-        if marker:
-            reason = marker.args[0] if marker.args else 'Skipped as this test is specific to build system v1.'
-            item.add_marker(pytest.mark.skip(reason=reason))
+        if is_buildv2:
+            marker = item.get_closest_marker('buildv2_skip')
+            if marker:
+                reason = marker.args[0] if marker.args else 'Skipped as this test is specific to build system v1.'
+                item.add_marker(pytest.mark.skip(reason=reason))
+        else:
+            if buildv2_dir in item.path.parents or item.path == buildv2_dir:
+                item.add_marker(pytest.mark.skip(reason='Skipped as build system v2 tests are disabled.'))
+
+
+def pytest_report_header(config: Config) -> str:
+    """Add a clear header to the terminal output whether buildv1 or buildv2 testing is in progress."""
+    if config.getoption('--buildv2'):
+        return 'Testing ESP-IDF CMake-based build system v2'
+    else:
+        return 'Testing ESP-IDF CMake-based build system v1'

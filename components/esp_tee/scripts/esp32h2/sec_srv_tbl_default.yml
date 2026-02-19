@@ -278,11 +278,11 @@ secure_services:
       - id: 179
         type: custom
         function: esp_tee_sec_storage_aead_encrypt
-        args: 4
+        args: 6
       - id: 180
         type: custom
         function: esp_tee_sec_storage_aead_decrypt
-        args: 4
+        args: 6
       - id: 181
         type: custom
         function: esp_tee_sec_storage_ecdsa_sign_pbkdf2

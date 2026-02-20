@@ -397,3 +397,9 @@ def test_hints_components_loading(
     assert 'HINT FROM PROJECT COMPONENT' in ret.stderr, (
         'Hint from project component should be displayed in build output'
     )
+
+
+def test_sbom_create_cmd(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
+    logging.info('Test if sbom-create command works correctly')
+    idf_py('sbom-create', '--spdx-file', 'test_app.spdx')
+    assert (test_app_copy / 'test_app.spdx').is_file()

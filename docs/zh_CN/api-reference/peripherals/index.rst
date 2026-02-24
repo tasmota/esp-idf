@@ -8,6 +8,8 @@
 
     :SOC_ADC_SUPPORTED: adc/index
     :SOC_ANA_CMPR_SUPPORTED: ana_cmpr
+    :SOC_GDMA_SUPPORT_CRC: async_crc
+    :SOC_ASYNC_MEMCPY_SUPPORTED: async_memcpy
     :SOC_BITSCRAMBLER_SUPPORTED: bitscrambler
     :SOC_CLK_TREE_SUPPORTED: clk_tree
     :SOC_DAC_SUPPORTED: dac

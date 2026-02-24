@@ -130,6 +130,7 @@
 /components/esp_trace/                @esp-idf-codeowners/debugging
 /components/esp_usb_cdc_rom_console/  @esp-idf-codeowners/system @esp-idf-codeowners/peripherals/usb
 /components/esp_wifi/                 @esp-idf-codeowners/wifi
+/components/esp_wifi/remote/          @esp-idf-codeowners/network
 /components/espcoredump/              @esp-idf-codeowners/debugging
 /components/esptool_py/               @esp-idf-codeowners/tools
 /components/fatfs/                    @esp-idf-codeowners/storage
@@ -142,7 +143,6 @@
 /components/log/                      @esp-idf-codeowners/system
 /components/lwip/                     @esp-idf-codeowners/lwip
 /components/mbedtls/                  @esp-idf-codeowners/app-utilities/mbedtls @esp-idf-codeowners/security
-/components/mqtt/                     @esp-idf-codeowners/network
 /components/nvs_flash/                @esp-idf-codeowners/storage
 /components/nvs_sec_provider/         @esp-idf-codeowners/storage @esp-idf-codeowners/security
 /components/openthread/               @esp-idf-codeowners/ieee802154
@@ -167,6 +167,7 @@
 
 /docs/                                      @esp-idf-codeowners/docs
 /docs/docs_not_updated/                     @esp-idf-codeowners/all-maintainers
+/docs/**/api-guides/build-system*           @esp-idf-codeowners/build-config
 /docs/**/api-guides/tools/                  @esp-idf-codeowners/tools
 /docs/**/api-guides/kconfig/                @esp-idf-codeowners/tools
 /docs/en/api-guides/core_dump.rst           @esp-idf-codeowners/debugging

@@ -161,7 +161,7 @@ There are also some format specific options, which are listed below:
 Hints on How to Resolve Errors
 ==============================
 
-``idf.py`` will try to suggest hints on how to resolve errors. It works with a database of hints stored in :idf_file:`tools/idf_py_actions/hints.yml` and the hints will be printed if a match is found for the given error. The menuconfig target is not supported at the moment by automatic hints on resolving errors.
+``idf.py`` will try to suggest hints on how to resolve errors. It works with a database of hints stored in :idf_file:`tools/idf_py_actions/hints.yml`. In addition, it loads component-specific hints from ``hints.yml`` file located in the root directory of any ESP-IDF or project component. The hints will be printed if a match is found for the given error. The menuconfig target is not supported at the moment by automatic hints on resolving errors.
 
 The ``--no-hints`` argument of ``idf.py`` can be used to turn the hints off in case they are not desired.
 

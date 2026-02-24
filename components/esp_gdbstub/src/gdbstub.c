@@ -392,12 +392,23 @@ const StaticTask_t *esp_gdbstub_find_tcb_by_frame(const esp_gdbstub_frame_t *fra
 
     while (xTaskGetNext(&xTaskIter) != -1) {
         StaticTask_t *tcb = (StaticTask_t *)xTaskIter.pxTaskHandle;
-        if (tcb->pxDummy1 /* pxTopOfStack */ == frame) {
+        /*
+         * For the currently running task, pxTopOfStack is not up-to-date — it is only
+         * updated on the next context switch. Therefore we cannot rely on it to match
+         * the frame to a task. Instead, check if the frame lies within the task's stack.
+         */
+        if ((uintptr_t)frame >= (uintptr_t)tcb->pxDummy6 /* pxStack */ &&
+            (uintptr_t)frame <= (uintptr_t)tcb->pxDummy8 /* pxEndOfStack */) {
             return tcb;
         }
     }
 
-    return NULL;  /* Task not found. */
+    /*
+     * If no task stack contains the frame, it is likely allocated on the interrupt/exception
+     * stack (e.g. during a panic event). In that case, return the current task handle,
+     * which is the task that was running on this core when the exception occurred.
+     */
+    return (const StaticTask_t *)xTaskGetCurrentTaskHandle();
 }
 
 /** Send string as a het to uart */

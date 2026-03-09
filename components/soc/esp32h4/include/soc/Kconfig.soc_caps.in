@@ -767,6 +767,10 @@ config SOC_MEMSPI_IS_INDEPENDENT
     bool
     default y
 
+config SOC_MEMSPI_ENCRYPTION_ALIGNMENT
+    int
+    default 16
+
 config SOC_SYSTIMER_SUPPORT_ETM
     bool
     default y
@@ -806,6 +810,10 @@ config SOC_TWAI_MASK_FILTER_NUM
 config SOC_TWAI_RANGE_FILTER_NUM
     int
     default 1
+
+config SOC_TWAI_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
 
 config SOC_EFUSE_DIS_DOWNLOAD_ICACHE
     bool
@@ -1012,6 +1020,10 @@ config SOC_PM_SUPPORT_MODEM_CLOCK_DOMAIN_ICG
     default y
 
 config SOC_PM_CPU_RETENTION_BY_SW
+    bool
+    default y
+
+config SOC_PM_FPU_RETENTION_BY_SW
     bool
     default y
 

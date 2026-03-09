@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -261,29 +261,22 @@ ext_ble_prox_cent_should_connect(const struct ble_gap_ext_disc_desc *disc)
     /* The device has to advertise support for Proximity sensor (link loss)
     * service (0x1803).
     */
-    do {
+    while (offset < disc->length_data) {
         ad_struct_len = disc->data[offset];
 
-        if (!ad_struct_len) {
+        if (ad_struct_len == 0 || offset + ad_struct_len + 1 > disc->length_data) {
             break;
         }
 
         /* Search if Proximity Sensor (Link loss) UUID is advertised */
-        if (disc->data[offset + 1] == 0x03) {
-            int uuid_offset = offset + 2;
-            int uuid_end = offset + 1 + disc->data[offset];  // len includes type+data
-            while (uuid_offset + 1 < uuid_end) {
-                // BLE uses little-endian: 0x1803 is stored as 0x03 0x18
-                if (disc->data[uuid_offset] == 0x03 && disc->data[uuid_offset + 1] == 0x18) {
-                    return 1;
-                }
-                uuid_offset += 2;
+        if (disc->data[offset] == 0x03 && disc->data[offset + 1] == 0x03) {
+            if ( disc->data[offset + 2] == 0x18 && disc->data[offset + 3] == 0x03 ) {
+                return 1;
             }
         }
 
         offset += ad_struct_len + 1;
-
-    } while ( offset < disc->length_data );
+    }
 
     return 0;
 }

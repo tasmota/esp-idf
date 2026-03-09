@@ -1578,6 +1578,7 @@ esp_err_t ledc_fade_func_install(int intr_alloc_flags)
             break;
         }
     }
+    LEDC_CHECK(speed_mode < LEDC_SPEED_MODE_MAX, "LEDC not initialized, call ledc_timer_config first", ESP_ERR_INVALID_STATE);
 
     //OR intr_alloc_flags with ESP_INTR_FLAG_IRAM because the fade isr is in IRAM
     return esp_intr_alloc_intrstatus(
@@ -1827,6 +1828,10 @@ esp_err_t ledc_fill_multi_fade_param_list(ledc_mode_t speed_mode, ledc_channel_t
                 scale = LEDC_LL_DUTY_SCALE_MAX;
             }
             step = duty_delta / scale;
+            // Ensure step * cycle doesn't exceed cycles_per_phase to prevent underflow to surplus_cycles_last_phase
+            if (step > cycles_per_phase) {
+                step = cycles_per_phase;
+            }
         }
 
         // Prepare for next phase calculation

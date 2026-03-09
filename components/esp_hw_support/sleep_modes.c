@@ -161,6 +161,10 @@
 #include "esp_private/sleep_retention.h"
 #endif
 
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED
+#include "esp_private/esp_psram_impl.h"
+#endif
+
 // If light sleep time is less than that, don't power down flash
 #define FLASH_PD_MIN_SLEEP_TIME_US  2000
 
@@ -1382,6 +1386,10 @@ static SLEEP_FN_ATTR esp_err_t esp_light_sleep_inner(uint32_t sleep_flags, uint3
 #endif
     }
 
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED
+    esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
+#endif
+
 #if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
     if (sleep_flags & RTC_SLEEP_PD_VDDSDIO) {
         /* Cache Resume 2: flash is ready now, we can resume the cache and access flash safely after */
@@ -2222,6 +2230,9 @@ esp_err_t esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(uint64_t gpio_pin_
 {
     if (mode > ESP_GPIO_WAKEUP_GPIO_HIGH) {
         ESP_LOGE(TAG, "invalid mode");
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (gpio_pin_mask == 0) {
         return ESP_ERR_INVALID_ARG;
     }
     gpio_int_type_t intr_type = ((mode == ESP_GPIO_WAKEUP_GPIO_LOW) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);

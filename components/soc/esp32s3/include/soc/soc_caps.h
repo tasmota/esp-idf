@@ -265,6 +265,10 @@
 #define SOC_RTC_CNTL_TAGMEM_PD_DMA_BUS_WIDTH    (128)
 #define SOC_RTC_CNTL_TAGMEM_PD_DMA_ADDR_ALIGN   (SOC_RTC_CNTL_TAGMEM_PD_DMA_BUS_WIDTH >> 3)
 
+/* RTC_CNTL registers on this SoC are not atomic and require software protection
+ * (e.g., spinlocks) when accessed from multiple cores or threads. */
+#define SOC_RTC_CNTL_NEEDS_ATOMIC_ACCESS 1
+
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT   22
 #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED 1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
@@ -284,10 +288,6 @@
 #define SOC_SPI_SUPPORT_OCT                 1
 #define SOC_SPI_MAX_BITWIDTH(host_id)       ((host_id == 2) ? 4 : 8) // Supported line mode: SPI3: 1, 2, 4, SPI1/2: 1, 2, 4, 8
 #define SOC_SPI_SCT_SUPPORTED(host_id)      ((host_id) == 1)
-
-// Peripheral supports output given level during its "dummy phase"
-#define SOC_MEMSPI_SUPPORT_CONTROL_DUMMY_OUT       1
-#define SOC_MEMSPI_IS_INDEPENDENT                  1
 
 /*-------------------------- SPIRAM CAPS ----------------------------------------*/
 #define SOC_SPIRAM_SUPPORTED            1
@@ -456,6 +456,12 @@
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 
 #define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
+
+// Peripheral supports output given level during its "dummy phase"
+#define SOC_MEMSPI_SUPPORT_CONTROL_DUMMY_OUT       1
+#define SOC_MEMSPI_IS_INDEPENDENT                  1
+
+#define SOC_MEMSPI_ENCRYPTION_ALIGNMENT           16    /*!< 16-byte alignment restriction to mem addr and size if encryption is enabled */
 
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)

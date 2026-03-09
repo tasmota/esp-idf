@@ -139,8 +139,8 @@
 #define SOC_INT_HW_NESTED_SUPPORTED     1       // Support for hardware interrupts nesting
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
 
-#define SOC_CPU_BREAKPOINTS_NUM             4
-#define SOC_CPU_WATCHPOINTS_NUM             4
+#define SOC_CPU_BREAKPOINTS_NUM             3
+#define SOC_CPU_WATCHPOINTS_NUM             3
 #define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE  0x80000000 // bytes
 
 #define SOC_CPU_HAS_PMA                 1
@@ -332,6 +332,8 @@
 #define SOC_MEMSPI_IS_INDEPENDENT                 1
 
 #define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
+
+#define SOC_MEMSPI_ENCRYPTION_ALIGNMENT           16    /*!< 16-byte alignment restriction to mem addr and size if encryption is enabled */
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_SUPPORT_ETM            1  // Systimer comparator can generate ETM event

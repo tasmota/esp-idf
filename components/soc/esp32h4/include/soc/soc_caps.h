@@ -382,6 +382,8 @@
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 #define SOC_MEMSPI_IS_INDEPENDENT                          1
 
+#define SOC_MEMSPI_ENCRYPTION_ALIGNMENT           16    /*!< 16-byte alignment restriction to mem addr and size if encryption is enabled */
+
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_SUPPORT_ETM            1  // Systimer comparator can generate ETM event
 
@@ -398,9 +400,10 @@
 #define SOC_MWDT_SUPPORT_XTAL              (1)
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-#define SOC_TWAI_CONTROLLER_NUM         1U
-#define SOC_TWAI_MASK_FILTER_NUM        3
-#define SOC_TWAI_RANGE_FILTER_NUM       1U
+#define SOC_TWAI_CONTROLLER_NUM             1U
+#define SOC_TWAI_MASK_FILTER_NUM            3U
+#define SOC_TWAI_RANGE_FILTER_NUM           1U
+#define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_DOWNLOAD_ICACHE 0
@@ -488,6 +491,7 @@
 #define SOC_PM_SUPPORT_MODEM_CLOCK_DOMAIN_ICG      (1)
 
 #define SOC_PM_CPU_RETENTION_BY_SW          (1)
+#define SOC_PM_FPU_RETENTION_BY_SW          (1)
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA    (1)
 #define SOC_PM_MODEM_CLK_CONF_RETENTION     (1)  /*!< In esp32H4, i2c lpcon is placed in modem domain*/
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN (1)

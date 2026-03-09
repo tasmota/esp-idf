@@ -29,6 +29,20 @@ check_api_usage:
     - tools/ci/check_api_violation.sh
     - tools/ci/check_examples_extra_component_dirs.sh
 
+check_wifi_remote_api:
+  extends:
+    - .pre_check_template
+    - .rules:build:check
+  script:
+    - cd components/esp_wifi/remote/scripts/
+    - python generate_and_check.py
+    - git diff --exit-code || { echo 'Differences found. Please run generate_and_check.py and commit the changes.'; exit 1; }
+
+check_examples_documented:
+  extends: .pre_check_template
+  script:
+    - python3 tools/ci/check_examples_documented.py
+
 check_blobs:
   extends:
     - .pre_check_template
@@ -139,6 +153,21 @@ check_submodule_sync:
     - git config --get-regexp '^submodule\..*\.url$' || true
     - git submodule update --recursive
     - echo "IDF was cloned from ${PUBLIC_IDF_URL} completely"
+
+
+snapshot_known_failure_cases:
+  extends:
+    - .pre_check_template
+  script:
+    - run_cmd idf-ci gitlab download-known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
+    - mkdir -p artifacts
+    - mv ${KNOWN_FAILURE_CASES_FILE_NAME} artifacts/${KNOWN_FAILURE_CASES_FILE_NAME}.freeze
+  artifacts:
+    paths:
+      - artifacts/${KNOWN_FAILURE_CASES_FILE_NAME}.freeze
+    expire_in: 1 week
+    when: always
+
 
 pipeline_variables:
   extends:

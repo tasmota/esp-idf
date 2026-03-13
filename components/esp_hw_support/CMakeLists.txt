@@ -198,6 +198,11 @@ if(CONFIG_IDF_TARGET_ESP32H4)
     )
 endif()
 
+if(NOT CONFIG_ESP32P4_SELECTS_REV_LESS_V3 AND CONFIG_IDF_TARGET_ESP32P4)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang") # TODO: LLVM-478 IDF-14338
+        message(FATAL_ERROR "ESP32-P4 rev. 3.0 or higher is not supported in Clang-based toolchain")
+    endif()
+endif()
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${public_include_dirs}

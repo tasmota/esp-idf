@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2018-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2018-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -278,6 +278,9 @@ static esp_err_t create_secure_context(const struct httpd_ssl_config *config, ht
     cfg->userdata = config->ssl_userdata;
     cfg->alpn_protos = config->alpn_protos;
     cfg->tls_handshake_timeout_ms = config->tls_handshake_timeout_ms;
+#ifdef CONFIG_ESP_TLS_SERVER_MIN_AUTH_MODE_OPTIONAL
+    cfg->client_cert_authmode_optional = config->client_cert_authmode_optional;
+#endif // CONFIG_ESP_TLS_SERVER_MIN_AUTH_MODE_OPTIONAL
 
 #if defined(CONFIG_ESP_HTTPS_SERVER_CERT_SELECT_HOOK)
     cfg->cert_select_cb = config->cert_select_cb;
@@ -426,8 +429,9 @@ esp_err_t httpd_ssl_start(httpd_handle_t *pHandle, struct httpd_ssl_config *conf
 
     ret = httpd_start(&handle, &config->httpd);
     if (ret != ESP_OK) {
-        free(ssl_ctx);
-        ssl_ctx = NULL;
+        if (ssl_ctx) {
+            free_secure_context(ssl_ctx);
+        }
         return ret;
     }
 

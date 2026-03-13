@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -97,6 +97,16 @@
 #define OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE 1
 #else
 #define OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE 0
+#endif // CONFIG_OPENTHREAD_RADIO_TREL
+
+#if CONFIG_OPENTHREAD_RADIO_TREL
+/**
+ * @def OPENTHREAD_CONFIG_TREL_USE_HEAP_ENABLE
+ *
+ * Set to 1 to allow TREL modules to use heap allocated objects (e.g. for the TREL peer table).
+ *
+ */
+#define OPENTHREAD_CONFIG_TREL_USE_HEAP_ENABLE 1
 #endif // CONFIG_OPENTHREAD_RADIO_TREL
 
 /**
@@ -866,6 +876,16 @@
  */
 #ifndef OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD
 #define OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD (OPENTHREAD_CONFIG_MAC_CSL_REQUEST_AHEAD_US + 320)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER
+ *
+ * Additional time for CSL receiver to remain in rx active after SFD has been received, in units of microseconds.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER
+#define OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER 0
 #endif
 
 /**

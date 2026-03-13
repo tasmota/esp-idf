@@ -33,8 +33,6 @@ if(BOOTLOADER_BUILD)
         if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND NOT CONFIG_IDF_TARGET_LINUX)
             list(APPEND compile_options "-fno-shrink-wrap")  # Disable shrink-wrapping to reduce binary size
         endif()
-    elseif(CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_NONE)
-        list(APPEND compile_options "-O0")
     elseif(CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_PERF)
         list(APPEND compile_options "-O2")
     endif()
@@ -173,6 +171,10 @@ if(CONFIG_COMPILER_NO_MERGE_CONSTANTS)
     list(APPEND compile_options "-fno-merge-constants")
 endif()
 
+if(CONFIG_COMPILER_ENABLE_TEXT_SECTION_LITERALS)
+    list(APPEND compile_options "-mtext-section-literals")
+endif()
+
 if(CONFIG_COMPILER_STACK_CHECK_MODE_NORM)
     list(APPEND compile_options "-fstack-protector")
 elseif(CONFIG_COMPILER_STACK_CHECK_MODE_STRONG)
@@ -189,9 +191,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATE
     list(APPEND c_compile_options "-fzero-init-padding-bits=all" "-fno-malloc-dce")
 endif()
 
-# if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0 AND CONFIG_IDF_TARGET_ARCH_RISCV)
-#     list(APPEND compile_options "-mespv-spec=2p1")  # Use xespv2p1 instruction set
-# endif()
+if(CONFIG_COMPILER_CXX_GLIBCXX_CONSTEXPR_COLD_CONSTEXPR)
+    list(APPEND cxx_compile_options "-D_GLIBCXX20_CONSTEXPR=__attribute__((cold)) constexpr")
+    list(APPEND cxx_compile_options "-D_GLIBCXX23_CONSTEXPR=__attribute__((cold)) constexpr")
+elseif(CONFIG_COMPILER_CXX_GLIBCXX_CONSTEXPR_COLD)
+    list(APPEND cxx_compile_options "-D_GLIBCXX20_CONSTEXPR=__attribute__((cold))")
+    list(APPEND cxx_compile_options "-D_GLIBCXX23_CONSTEXPR=__attribute__((cold))")
+endif()
 
 __generate_prefix_map(prefix_map_compile_options)
 list(APPEND compile_options ${prefix_map_compile_options})

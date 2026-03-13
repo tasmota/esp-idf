@@ -349,11 +349,11 @@ config SOC_BRANCH_PREDICTOR_SUPPORTED
 
 config SOC_CPU_BREAKPOINTS_NUM
     int
-    default 4
+    default 3
 
 config SOC_CPU_WATCHPOINTS_NUM
     int
-    default 4
+    default 3
 
 config SOC_CPU_WATCHPOINT_MAX_REGION_SIZE
     hex
@@ -1360,6 +1360,10 @@ config SOC_BLE_MULTI_CONN_OPTIMIZATION
     default y
 
 config SOC_BLE_CTE_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_SUBRATE_SUPPORTED
     bool
     default y
 

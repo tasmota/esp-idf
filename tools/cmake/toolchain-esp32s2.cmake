@@ -1,10 +1,3 @@
-include($ENV{IDF_PATH}/tools/cmake/utilities.cmake)
-
-set(CMAKE_SYSTEM_NAME Generic)
-
-set(CMAKE_C_COMPILER xtensa-esp32s2-elf-gcc)
-set(CMAKE_CXX_COMPILER xtensa-esp32s2-elf-g++)
-set(CMAKE_ASM_COMPILER xtensa-esp32s2-elf-gcc)
 set(_CMAKE_TOOLCHAIN_PREFIX xtensa-esp32s2-elf-)
 
 set(_CMAKE_TOOLCHAIN_COMMON_FLAGS "-mlongcalls -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero")

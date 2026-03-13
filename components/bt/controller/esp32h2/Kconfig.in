@@ -227,6 +227,13 @@ config BT_LE_POWER_CONTROL_ENABLED
     help
         Set this option to enable the Power Control feature on controller
 
+config BT_LE_SUBRATE_ENABLED
+    bool "Enable BLE connection subrating"
+    depends on BT_LE_50_FEATURE_SUPPORT && !BT_NIMBLE_ENABLED && !BT_BLUEDROID_ENABLED && SOC_BLE_SUBRATE_SUPPORTED
+    default n
+    help
+        Set this option to enable the Connection Subrating feature on controller
+
 config BT_LE_CTE_FEATURE_ENABLED
     bool "Enable Bluetooth LE Direction Finding (AoA/AoD)"
     depends on BT_LE_50_FEATURE_SUPPORT && SOC_BLE_CTE_SUPPORTED && !(BT_LE_SECURITY_ENABLE)
@@ -997,3 +1004,12 @@ config BT_LE_CTRL_DL_ITVL_PHY_SYNC_EN
         When this option is enabled, the Controller automatically initiates a data length update
         Using the appropriate data length parameters
         When a PHY update or a connection interval update occurs.
+
+config BT_LE_CTRL_ADV_FAST_TX_EN
+    bool "Reduce adv enable-to-air latency (READ DOCS FIRST) (EXPERIMENTAL)"
+    default n
+    help
+        Reduce the latency between issuing the advertising enable command
+        and the actual on-air transmission by executing the advertising TX
+        path from IRAM.
+        Note: Enabling this option increases IRAM usage.

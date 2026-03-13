@@ -146,6 +146,13 @@ extern "C" {
     #else
         #define DEFAULT_BT_LE_POWER_CONTROL_ENABLED (0)
     #endif
+    #if defined(CONFIG_BT_BLE_FEAT_CONN_SUBRATING)
+        #define DEFAULT_BT_LE_SUBRATE_ENABLED (CONFIG_BT_BLE_FEAT_CONN_SUBRATING)
+    #elif defined(CONFIG_BT_LE_SUBRATE_ENABLED)
+        #define DEFAULT_BT_LE_SUBRATE_ENABLED (CONFIG_BT_LE_SUBRATE_ENABLED)
+    #else
+        #define DEFAULT_BT_LE_SUBRATE_ENABLED (0)
+    #endif
     #if defined(CONFIG_BT_LE_50_FEATURE_SUPPORT)
         #define DEFAULT_BT_LE_50_FEATURE_SUPPORT (1)
     #else
@@ -167,7 +174,6 @@ extern "C" {
         #define DEFAULT_BT_LE_HCI_UART_RTS_PIN (-1)
     #endif
 
-    #define DEFAULT_BT_LE_SUBRATE_ENABLED 0
     #define DEFAULT_BT_ADV_SEND_CONSTANT_DID     (0)
     #define DEFAULT_BT_SCAN_ALLOW_ENH_ADI_FILTER (0)
 #endif
@@ -293,6 +299,20 @@ extern "C" {
     #define DEFAULT_BT_LE_HCI_UART_DATA_BITS (0)
     #define DEFAULT_BT_LE_HCI_UART_STOP_BITS (0)
     #define DEFAULT_BT_LE_HCI_UART_PARITY (0)
+#endif
+
+#ifdef CONFIG_BT_LE_CTRL_ADV_FAST_TX_EN
+#define DEFAULT_BT_LE_CTRL_ENH_MEM_RESV_ADV (1<<0)
+#else
+#define DEFAULT_BT_LE_CTRL_ENH_MEM_RESV_ADV (0)
+#endif
+
+#define DEFAULT_BT_LE_CTRL_ENH_MEM_RESV_FLAGS DEFAULT_BT_LE_CTRL_ENH_MEM_RESV_ADV
+
+#ifdef CONFIG_BT_LE_CTRL_ADV_FAST_TX_EN
+#define DEFAULT_BT_LE_CTRL_RXBUF_MEM_RESV CONFIG_BT_LE_CTRL_ADV_FAST_TX_EN
+#else
+#define DEFAULT_BT_LE_CTRL_RXBUF_MEM_RESV  (0)
 #endif
 
 /* Unchanged configuration */

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -154,7 +154,7 @@ static int esp_ecdsa_validate_efuse_block(mbedtls_ecp_group_id grp_id, int efuse
 {
     int low_blk = efuse_blk;
     esp_efuse_purpose_t expected_key_purpose_low;
-#if SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES
+#if SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && ((!defined(CONFIG_IDF_TARGET_ESP32P4) && SOC_EFUSE_ECDSA_KEY_P192) || EFUSE_LL_HAS_ECDSA_KEY_P192)
 #if SOC_ECDSA_SUPPORT_CURVE_P384
     int high_blk;
     HAL_ECDSA_EXTRACT_KEY_BLOCKS(efuse_blk, high_blk, low_blk);
@@ -178,23 +178,25 @@ static int esp_ecdsa_validate_efuse_block(mbedtls_ecp_group_id grp_id, int efuse
             ESP_LOGE(TAG, "Unsupported ECDSA curve ID: %d", grp_id);
             return MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
     }
-#else /* SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES */
+#else /* SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && ((!defined(CONFIG_IDF_TARGET_ESP32P4) && SOC_EFUSE_ECDSA_KEY_P192) || EFUSE_LL_HAS_ECDSA_KEY_P192) */
     expected_key_purpose_low = ESP_EFUSE_KEY_PURPOSE_ECDSA_KEY;
-#endif  /* !SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES */
+#endif  /* !SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && ((!defined(CONFIG_IDF_TARGET_ESP32P4) && SOC_EFUSE_ECDSA_KEY_P192) || EFUSE_LL_HAS_ECDSA_KEY_P192) */
 
     if (expected_key_purpose_low != esp_efuse_get_key_purpose((esp_efuse_block_t)low_blk)) {
         ESP_LOGE(TAG, "Key burned in efuse has incorrect purpose");
         return MBEDTLS_ERR_ECP_INVALID_KEY;
     }
 
-#if SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && SOC_ECDSA_SUPPORT_CURVE_P384
-    // Only check high block purpose for P384 curves that actually use it
+#if SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && ((!defined(CONFIG_IDF_TARGET_ESP32P4) && SOC_EFUSE_ECDSA_KEY_P192) || EFUSE_LL_HAS_ECDSA_KEY_P192)
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+// Only check high block purpose for P384 curves that actually use it
     if (grp_id == MBEDTLS_ECP_DP_SECP384R1 &&
         expected_key_purpose_high != esp_efuse_get_key_purpose((esp_efuse_block_t)high_blk)) {
         ESP_LOGE(TAG, "Key burned in efuse has incorrect purpose for high block");
         return MBEDTLS_ERR_ECP_INVALID_KEY;
     }
-#endif
+#endif // SOC_ECDSA_SUPPORT_CURVE_P384
+#endif // SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES && ((!defined(CONFIG_IDF_TARGET_ESP32P4) && SOC_EFUSE_ECDSA_KEY_P192) || EFUSE_LL_HAS_ECDSA_KEY_P192)
 
     return 0;
 }
@@ -215,6 +217,13 @@ int esp_ecdsa_load_pubkey(mbedtls_ecp_keypair *keypair, int efuse_blk)
 {
     int ret = -1;
     bool use_km_key = (efuse_blk == USE_ECDSA_KEY_FROM_KEY_MANAGER)? true: false;
+
+    // Check if ECDSA peripheral is supported on this chip revision
+    if (!ecdsa_ll_is_supported()) {
+        ESP_LOGE(TAG, "ECDSA peripheral not supported on this chip revision");
+        return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
+    }
+
     if (!use_km_key) {
         int high_blk, low_blk;
         HAL_ECDSA_EXTRACT_KEY_BLOCKS(efuse_blk, high_blk, low_blk);
@@ -443,6 +452,12 @@ static int esp_ecdsa_sign(mbedtls_ecp_group *grp, mbedtls_mpi* r, mbedtls_mpi* s
 
     if (!grp || !r || !s || !d || !msg) {
         return MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
+    }
+
+    // Check if ECDSA peripheral is supported on this chip revision
+    if (!ecdsa_ll_is_supported()) {
+        ESP_LOGE(TAG, "ECDSA peripheral not supported on this chip revision");
+        return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
     }
 
     if ((grp->id == MBEDTLS_ECP_DP_SECP192R1 && msg_len != ECDSA_SHA_LEN) ||
@@ -1021,6 +1036,12 @@ static int esp_ecdsa_verify(mbedtls_ecp_group *grp,
         return MBEDTLS_ERR_ECP_BAD_INPUT_DATA;
     }
 
+    // Check if ECDSA peripheral is supported on this chip revision
+    if (!ecdsa_ll_is_supported()) {
+        ESP_LOGE(TAG, "ECDSA peripheral not supported on this chip revision");
+        return MBEDTLS_ERR_ECP_FEATURE_UNAVAILABLE;
+    }
+
     if ((grp->id == MBEDTLS_ECP_DP_SECP192R1 && blen != ECDSA_SHA_LEN) ||
         (grp->id == MBEDTLS_ECP_DP_SECP256R1 && blen != ECDSA_SHA_LEN)
 #if SOC_ECDSA_SUPPORT_CURVE_P384
@@ -1103,16 +1124,16 @@ int __wrap_mbedtls_ecdsa_verify_restartable(mbedtls_ecp_group *grp,
                          const mbedtls_mpi *s,
                          mbedtls_ecdsa_restart_ctx *rs_ctx)
 {
-    if ((grp->id == MBEDTLS_ECP_DP_SECP192R1 && blen == ECDSA_SHA_LEN && esp_efuse_is_ecdsa_p192_curve_supported()) ||
+    if (ecdsa_ll_is_supported() &&
+        ((grp->id == MBEDTLS_ECP_DP_SECP192R1 && blen == ECDSA_SHA_LEN && esp_efuse_is_ecdsa_p192_curve_supported()) ||
         (grp->id == MBEDTLS_ECP_DP_SECP256R1 && blen == ECDSA_SHA_LEN && esp_efuse_is_ecdsa_p256_curve_supported())
 #if SOC_ECDSA_SUPPORT_CURVE_P384
         || (grp->id == MBEDTLS_ECP_DP_SECP384R1 && blen == ECDSA_SHA_LEN_P384)
 #endif
-    ) {
+    )) {
         return esp_ecdsa_verify(grp, buf, blen, Q, r, s);
-    } else {
-        return __real_mbedtls_ecdsa_verify_restartable(grp, buf, blen, Q, r, s, rs_ctx);
     }
+    return __real_mbedtls_ecdsa_verify_restartable(grp, buf, blen, Q, r, s, rs_ctx);
 }
 
 /*

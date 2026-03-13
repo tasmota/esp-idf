@@ -1,10 +1,3 @@
-include($ENV{IDF_PATH}/tools/cmake/utilities.cmake)
-
-set(CMAKE_SYSTEM_NAME Generic)
-
-set(CMAKE_C_COMPILER riscv32-esp-elf-gcc)
-set(CMAKE_CXX_COMPILER riscv32-esp-elf-g++)
-set(CMAKE_ASM_COMPILER riscv32-esp-elf-gcc)
 set(_CMAKE_TOOLCHAIN_PREFIX riscv32-esp-elf-)
 
 set(_CMAKE_TOOLCHAIN_COMMON_FLAGS "-march=rv32imafc_zicsr_zifencei_zaamo_zalrsc_xespdsp -mabi=ilp32f")

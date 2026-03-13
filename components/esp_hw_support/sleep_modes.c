@@ -126,6 +126,10 @@
 #include "hal/gpio_ll.h"
 #endif
 
+#if SOC_MSPI_HAS_INDEPENT_IOMUX
+#include "hal/mspi_ll.h"
+#endif
+
 #if SOC_PM_SUPPORT_PMU_CLK_ICG
 #include "soc/pmu_icg_mapping.h"
 #endif
@@ -358,7 +362,7 @@ static void touch_wakeup_prepare(void);
 #if SOC_VBAT_SUPPORTED
 static void vbat_under_volt_wakeup_prepare(void);
 #endif
-#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 static void gpio_deep_sleep_wakeup_prepare(void);
 #endif
 
@@ -548,6 +552,7 @@ static void s_do_deep_sleep_phy_callback(void)
 #endif
 
 static int s_cache_suspend_cnt = 0;
+static uint32_t s_cache_state = 0;
 
 // Must be called from critical sections.
 static void FORCE_IRAM_ATTR suspend_cache(void) {
@@ -559,7 +564,7 @@ static void FORCE_IRAM_ATTR suspend_cache(void) {
         // fully check the access to external memory, writeback & invalidate is needed here.
         Cache_WriteBack_Invalidate_All(CACHE_MAP_MASK);
 #endif
-        spi_flash_disable_cache(esp_cpu_get_core_id(), NULL);
+        spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
     }
 }
 
@@ -568,7 +573,7 @@ static void FORCE_IRAM_ATTR resume_cache(void) {
     s_cache_suspend_cnt--;
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
-        spi_flash_restore_cache(esp_cpu_get_core_id(), 0);
+        spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
     }
 }
 
@@ -920,6 +925,9 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
 
 #if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
         if(!(sleep_flags & RTC_SLEEP_PD_VDDSDIO) && (sleep_flags & PMU_SLEEP_PD_TOP)) {
+#if SOC_MSPI_HAS_INDEPENT_IOMUX
+            mspi_ll_hold_all_flash_pins();
+#else // !SOC_MSPI_HAS_INDEPENT_IOMUX
 #if CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND
             /* Cache suspend also means SPI bus IDLE, then we can hold SPI CS pin safely */
             gpio_ll_hold_en(&GPIO, MSPI_IOMUX_PIN_NUM_CS0);
@@ -928,16 +936,14 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
             /* Cache suspend also means SPI bus IDLE, then we can hold SPI CS pin safely */
             gpio_ll_hold_en(&GPIO, MSPI_IOMUX_PIN_NUM_CS1);
 #endif
+#endif // !SOC_MSPI_HAS_INDEPENT_IOMUX
         }
-#endif
-
-#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
         if (sleep_flags & PMU_SLEEP_PD_TOP) {
 #if CONFIG_IDF_TARGET_ESP32P4 && (CONFIG_ESP_REV_MIN_FULL == 300)
             sleep_retention_do_extra_retention(true);
 #endif
         }
-#endif
+#endif // CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
 
 #if SOC_PMU_SUPPORTED
 #if SOC_PM_CPU_RETENTION_BY_SW && ESP_SLEEP_POWER_DOWN_CPU
@@ -968,17 +974,19 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
             sleep_retention_do_extra_retention(false);
 #endif
         }
-#endif
 
-#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
         /* Unhold the SPI CS pin */
         if(!(sleep_flags & RTC_SLEEP_PD_VDDSDIO) && (sleep_flags & PMU_SLEEP_PD_TOP)) {
+#if SOC_MSPI_HAS_INDEPENT_IOMUX
+            mspi_ll_unhold_all_flash_pins();
+#else // !SOC_MSPI_HAS_INDEPENT_IOMUX
 #if CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND
             gpio_ll_hold_dis(&GPIO, MSPI_IOMUX_PIN_NUM_CS0);
 #endif
 #if CONFIG_ESP_SLEEP_PSRAM_LEAKAGE_WORKAROUND && CONFIG_SPIRAM
             gpio_ll_hold_dis(&GPIO, MSPI_IOMUX_PIN_NUM_CS1);
 #endif
+#endif // !SOC_MSPI_HAS_INDEPENT_IOMUX
         }
 #endif
         /* Cache Resume 1: Resume cache for continue running*/
@@ -1043,8 +1051,8 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     // for !(s_config.wakeup_triggers & RTC_EXT1_TRIG_EN), ext1 wakeup will be turned off in hardware in the real call to sleep
 #endif
 
-#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
-    if (deep_sleep && (s_config.wakeup_triggers & RTC_GPIO_TRIG_EN)) {
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    if ((sleep_flags & RTC_SLEEP_PD_DIG) && (s_config.wakeup_triggers & RTC_GPIO_TRIG_EN)) {
         gpio_deep_sleep_wakeup_prepare();
     }
 #endif
@@ -1684,6 +1692,10 @@ esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source)
         s_config.wakeup_triggers &= ~RTC_TOUCH_TRIG_EN;
 #endif
     } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_GPIO, RTC_GPIO_TRIG_EN)) {
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        s_config.gpio_wakeup_mask = 0;
+        s_config.gpio_trigger_mode = 0;
+#endif
         s_config.wakeup_triggers &= ~RTC_GPIO_TRIG_EN;
 #if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
     } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART, (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN | RTC_UART2_TRIG_EN))) {
@@ -2102,7 +2114,7 @@ uint64_t esp_sleep_get_ext1_wakeup_status(void)
 
 #endif // SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
 
-#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 uint64_t esp_sleep_get_gpio_wakeup_status(void)
 {
     if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_GPIO) {
@@ -2162,12 +2174,12 @@ esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepslee
             continue;
         }
         err = gpio_deep_sleep_wakeup_enable(gpio_idx, intr_type);
-
+        if (err != ESP_OK) return err;
         s_config.gpio_wakeup_mask |= BIT(gpio_idx);
         if (mode == ESP_GPIO_WAKEUP_GPIO_HIGH) {
-            s_config.gpio_trigger_mode |= (mode << gpio_idx);
+            s_config.gpio_trigger_mode |= BIT(gpio_idx);
         } else {
-            s_config.gpio_trigger_mode &= ~(mode << gpio_idx);
+            s_config.gpio_trigger_mode &= ~BIT(gpio_idx);
         }
     }
     s_config.wakeup_triggers |= RTC_GPIO_TRIG_EN;

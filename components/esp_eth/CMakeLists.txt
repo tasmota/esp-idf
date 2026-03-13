@@ -35,7 +35,8 @@ if(CONFIG_ETH_ENABLED)
                          "src/phy/esp_eth_phy_ip101.c"
                          "src/phy/esp_eth_phy_ksz80xx.c"
                          "src/phy/esp_eth_phy_lan87xx.c"
-                         "src/phy/esp_eth_phy_rtl8201.c")
+                         "src/phy/esp_eth_phy_rtl8201.c"
+                         "src/phy/esp_eth_phy_jl1101.c")
     endif()
 
     if(CONFIG_ETH_SPI_ETHERNET_DM9051)

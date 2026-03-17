@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -147,7 +147,7 @@ bool  wpa_attach(void)
     return ret;
 }
 
-uint8_t  *wpa_ap_get_wpa_ie(uint8_t *ie_len)
+uint8_t  *wpa_ap_get_wpa_ie(size_t *ie_len)
 {
     struct hostapd_data *hapd = (struct hostapd_data *)esp_wifi_get_hostap_private_internal();
 
@@ -370,6 +370,11 @@ static int check_n_add_wps_sta(struct hostapd_data *hapd, struct sta_info *sta_i
     }
 
     sta_info->wps_ie = wps_ie;
+
+    if (sta_info->eapol_sm) {
+        ieee802_1x_free_station(hapd, sta_info);
+    }
+
     sta_info->eapol_sm = ieee802_1x_alloc_eapol_sm(hapd, sta_info);
 
     if (sta_info->eapol_sm) {

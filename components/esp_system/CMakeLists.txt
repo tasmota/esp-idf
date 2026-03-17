@@ -24,10 +24,14 @@ if(CONFIG_IDF_ENV_FPGA OR CONFIG_ESP_BRINGUP_BYPASS_RANDOM_SETTING)
 endif()
 
 if(BOOTLOADER_BUILD OR esp_tee_build)
-        # "_esp_error_check_failed()" requires spi_flash module
-        # Bootloader relies on some Kconfig options defined in esp_system.
-        idf_component_register(SRCS "${srcs}" REQUIRES spi_flash
-                               INCLUDE_DIRS include)
+    set(include_dirs "include")
+    if(esp_tee_build)
+        list(APPEND include_dirs "port/include/private")
+    endif()
+    # "_esp_error_check_failed()" requires spi_flash module
+    # Bootloader relies on some Kconfig options defined in esp_system.
+    idf_component_register(SRCS "${srcs}" INCLUDE_DIRS "${include_dirs}"
+                           REQUIRES spi_flash)
 else()
     list(APPEND srcs "crosscore_int.c"
             "esp_ipc.c"
@@ -71,7 +75,8 @@ else()
 
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS include
-                        PRIV_REQUIRES spi_flash esp_timer esp_mm esp_hal_mspi esp_hal_wdt esp_hal_uart
+                        PRIV_REQUIRES spi_flash esp_timer esp_mm
+                                      esp_hal_mspi esp_hal_wdt esp_hal_uart esp_hal_dma esp_hal_clock
                                     # [refactor-todo] requirements due to init code,
                                     # should be removable once using component init functions
                                     # link-time registration is used.
@@ -99,7 +104,7 @@ else()
 
     # Generate sections.ld.in and pass it through linker script generator
     set(sections_name "ld/${target}/sections.ld.in")
-    if(CONFIG_ESP32P4_REV_MIN_300)
+    if(CONFIG_IDF_TARGET_ESP32P4 AND NOT CONFIG_ESP32P4_SELECTS_REV_LESS_V3)
         set(sections_name "ld/${target}/sections.rev3.ld.in")
     endif()
     target_linker_script(${COMPONENT_LIB} INTERFACE "${sections_name}"

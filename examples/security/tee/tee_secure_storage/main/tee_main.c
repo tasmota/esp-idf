@@ -1,7 +1,7 @@
 /*
  * TEE Secure Storage example
  *
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -16,6 +16,7 @@
 #include "freertos/task.h"
 
 #include "psa/crypto.h"
+#include "psa_crypto_driver_esp_ecdsa.h"
 
 #include "esp_tee_sec_storage.h"
 #include "secure_service_num.h"
@@ -24,6 +25,7 @@
 #define SHA256_DIGEST_SZ         (32)
 #define ECDSA_SECP256R1_KEY_LEN  (32)
 #define AES256_GCM_TAG_LEN       (16)
+#define AES256_GCM_IV_LEN        (12)
 #define AES256_GCM_AAD_LEN       (16)
 
 #define SIGN_KEY_STR_ID          (CONFIG_EXAMPLE_TEE_SEC_STG_SIGN_KEY_STR_ID)
@@ -34,41 +36,32 @@ static const char *message = "Lorem ipsum dolor sit amet, consectetur adipiscing
 
 static const char *TAG = "example_tee_sec_stg";
 
-static esp_err_t verify_ecdsa_secp256r1_sign(const uint8_t *digest, size_t len, const esp_tee_sec_storage_ecdsa_pubkey_t *pubkey, const esp_tee_sec_storage_ecdsa_sign_t *sign)
+static esp_err_t verify_ecdsa_secp256r1_sign(const uint8_t *digest, size_t len, const uint8_t *pub_key, size_t pub_key_len, const uint8_t *signature, size_t signature_len)
 {
-    if (pubkey == NULL || digest == NULL || sign == NULL) {
+    if (pub_key == NULL || pub_key_len == 0 || digest == NULL || len == 0 || signature == NULL || signature_len == 0) {
         return ESP_ERR_INVALID_ARG;
-    }
-
-    if (len == 0) {
-        return ESP_ERR_INVALID_SIZE;
     }
 
     esp_err_t err = ESP_FAIL;
 
-    psa_key_id_t key_id = 0;
-    psa_key_attributes_t key_attributes = PSA_KEY_ATTRIBUTES_INIT;
-    psa_set_key_type(&key_attributes, PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1));
-    psa_set_key_usage_flags(&key_attributes, PSA_KEY_USAGE_SIGN_HASH | PSA_KEY_USAGE_EXPORT | PSA_KEY_USAGE_VERIFY_HASH);
-    psa_set_key_algorithm(&key_attributes, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
+    psa_key_id_t pub_key_id = 0;
+    psa_key_attributes_t pub_key_attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&pub_key_attr, PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1));
+    psa_set_key_usage_flags(&pub_key_attr, PSA_KEY_USAGE_SIGN_HASH | PSA_KEY_USAGE_EXPORT | PSA_KEY_USAGE_VERIFY_HASH);
+    psa_set_key_algorithm(&pub_key_attr, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
 
-    uint8_t pub_key[2 * ECDSA_SECP256R1_KEY_LEN + 1];
-    pub_key[0] = 0x04;
-    memcpy(pub_key + 1, pubkey->pub_x, ECDSA_SECP256R1_KEY_LEN);
-    memcpy(pub_key + 1 + ECDSA_SECP256R1_KEY_LEN, pubkey->pub_y, ECDSA_SECP256R1_KEY_LEN);
-
-    psa_status_t status = psa_import_key(&key_attributes, pub_key, sizeof(pub_key), &key_id);
+    psa_status_t status = psa_import_key(&pub_key_attr, pub_key, pub_key_len, &pub_key_id);
     if (status != PSA_SUCCESS) {
         goto exit;
     }
 
-    status = psa_verify_hash(key_id, PSA_ALG_ECDSA(PSA_ALG_SHA_256), digest, len, sign->signature, sizeof(sign->signature));
+    status = psa_verify_hash(pub_key_id, PSA_ALG_ECDSA(PSA_ALG_SHA_256), digest, len, signature, signature_len);
     if (status != PSA_SUCCESS) {
         goto exit;
     }
 
-    psa_destroy_key(key_id);
-    psa_reset_key_attributes(&key_attributes);
+    psa_destroy_key(pub_key_id);
+    psa_reset_key_attributes(&pub_key_attr);
 
     err = ESP_OK;
 
@@ -79,6 +72,9 @@ exit:
 
 static void example_tee_sec_stg_sign_verify(void *pvParameter)
 {
+    psa_key_id_t priv_key_id = 0;
+    psa_key_attributes_t priv_key_attr = PSA_KEY_ATTRIBUTES_INIT;
+
     char *msg = (char *)pvParameter;
     ESP_LOGI(TAG, "Message-to-be-signed: %s", msg);
 
@@ -107,31 +103,55 @@ static void example_tee_sec_stg_sign_verify(void *pvParameter)
         goto exit;
     }
 
-    esp_tee_sec_storage_ecdsa_sign_t sign = {};
-    err = esp_tee_sec_storage_ecdsa_sign(&cfg, msg_digest, msg_digest_len, &sign);
-    if (err != ESP_OK) {
+    esp_ecdsa_opaque_key_t opaque_key = {
+        .curve = ESP_ECDSA_CURVE_SECP256R1,
+        .tee_key_id = cfg.id,
+    };
+
+    psa_algorithm_t alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
+    psa_set_key_type(&priv_key_attr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
+    psa_set_key_bits(&priv_key_attr, ECDSA_SECP256R1_KEY_LEN * 8);
+    psa_set_key_usage_flags(&priv_key_attr, PSA_KEY_USAGE_SIGN_HASH);
+    psa_set_key_algorithm(&priv_key_attr, alg);
+    psa_set_key_lifetime(&priv_key_attr, PSA_KEY_LIFETIME_ESP_ECDSA_VOLATILE);
+
+    status = psa_import_key(&priv_key_attr, (uint8_t*) &opaque_key, sizeof(opaque_key), &priv_key_id);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to import private key!");
+        goto exit;
+    }
+
+    uint8_t signature[2 * ECDSA_SECP256R1_KEY_LEN];
+    size_t signature_len = 0;
+    status = psa_sign_hash(priv_key_id, alg, msg_digest, msg_digest_len, signature, sizeof(signature), &signature_len);
+    if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to generate signature!");
+        psa_destroy_key(priv_key_id);
         goto exit;
     }
 
-    ESP_LOG_BUFFER_HEX("Signature", &sign, sizeof(sign));
+    ESP_LOG_BUFFER_HEX("Signature", signature, signature_len);
 
-    esp_tee_sec_storage_ecdsa_pubkey_t pubkey = {};
-    err = esp_tee_sec_storage_ecdsa_get_pubkey(&cfg, &pubkey);
-    if (err != ESP_OK) {
+    uint8_t pub_key[2 * ECDSA_SECP256R1_KEY_LEN + 1];
+    size_t pub_key_len = 0;
+    status = psa_export_public_key(priv_key_id, pub_key, sizeof(pub_key), &pub_key_len);
+    if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to fetch public-key!");
+        psa_destroy_key(priv_key_id);
         goto exit;
     }
 
-    err = verify_ecdsa_secp256r1_sign(msg_digest, msg_digest_len, &pubkey, &sign);
+    err = verify_ecdsa_secp256r1_sign(msg_digest, msg_digest_len, pub_key, pub_key_len, signature, signature_len);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to verify signature!");
+        psa_destroy_key(priv_key_id);
         goto exit;
     }
 
     ESP_LOGI(TAG, "Signature verified successfully!");
 
 exit:
+    psa_reset_key_attributes(&priv_key_attr);
     vTaskDelete(NULL);
 }
 
@@ -146,6 +166,7 @@ static void example_tee_sec_stg_encrypt_decrypt(void *pvParameter)
     }
 
     uint8_t tag[AES256_GCM_TAG_LEN];
+    uint8_t iv[AES256_GCM_IV_LEN];
     uint8_t aad_buf[AES256_GCM_AAD_LEN];
     memset(aad_buf, 0xA5, sizeof(aad_buf));
 
@@ -183,7 +204,7 @@ static void example_tee_sec_stg_encrypt_decrypt(void *pvParameter)
 
     ctx.input = (const uint8_t *)plaintext;
     ctx.input_len = plaintext_len;
-    err = esp_tee_sec_storage_aead_encrypt(&ctx, tag, sizeof(tag), ciphertext);
+    err = esp_tee_sec_storage_aead_encrypt(&ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to encrypt data!");
         goto exit;
@@ -193,13 +214,14 @@ static void example_tee_sec_stg_encrypt_decrypt(void *pvParameter)
 
     ctx.input = (const uint8_t *)ciphertext;
     ctx.input_len = plaintext_len;
-    err = esp_tee_sec_storage_aead_decrypt(&ctx, tag, sizeof(tag), ciphertext);
+    err = esp_tee_sec_storage_aead_decrypt(&ctx, iv, sizeof(iv), tag, sizeof(tag), ciphertext);
     if (err != ESP_OK || memcmp(ciphertext, plaintext, plaintext_len) != 0) {
         ESP_LOGE(TAG, "Encryption verification failed!");
         err = ESP_FAIL;
         goto exit;
     }
 
+    ESP_LOG_BUFFER_HEX("IV", iv, sizeof(iv));
     ESP_LOG_BUFFER_HEX("Tag", tag, sizeof(tag));
     ESP_LOGI(TAG, "Done with encryption/decryption!");
 

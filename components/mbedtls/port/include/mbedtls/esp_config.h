@@ -60,8 +60,6 @@
  */
 #define MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
 
-#define PSA_WANT_ECC_SECP_R1_192                1
-
 /**
  * \name SECTION: System support
  *
@@ -191,18 +189,29 @@
    with software fallback.
 */
 #ifdef CONFIG_MBEDTLS_HARDWARE_SHA
+#define ESP_SHA_DRIVER_ENABLED
 #define MBEDTLS_PSA_ACCEL_ALG_SHA_1
+#undef MBEDTLS_PSA_BUILTIN_ALG_SHA_1
 #define MBEDTLS_PSA_ACCEL_ALG_SHA_224
+#undef MBEDTLS_PSA_BUILTIN_ALG_SHA_224
 #define MBEDTLS_PSA_ACCEL_ALG_SHA_256
+#undef MBEDTLS_PSA_BUILTIN_ALG_SHA_256
+#undef MBEDTLS_SHA1_C
+#undef MBEDTLS_SHA224_C
+#define ESP_HMAC_TRANSPARENT_DRIVER_ENABLED
+#define MBEDTLS_PSA_ACCEL_ALG_HMAC
+#define MBEDTLS_PSA_BUILTIN_ALG_HMAC
 #if SOC_SHA_SUPPORT_SHA512
 #define MBEDTLS_PSA_ACCEL_ALG_SHA_384
+#undef MBEDTLS_PSA_ACCEL_ALG_SHA_384
 #define MBEDTLS_PSA_ACCEL_ALG_SHA_512
-#endif
-#if SOC_SHA_SUPPORT_SHA512
+#undef MBEDTLS_PSA_ACCEL_ALG_SHA_512
+#undef MBEDTLS_SHA512_C
+#undef MBEDTLS_SHA384_C
+#undef MBEDTLS_PSA_BUILTIN_ALG_HMAC
 #else
 #undef MBEDTLS_SHA512_ALT
 #endif
-
 #else
 #undef MBEDTLS_SHA1_ALT
 #undef MBEDTLS_SHA256_ALT
@@ -213,9 +222,15 @@
    with software fallback.
 */
 #ifdef CONFIG_MBEDTLS_ROM_MD5
+#define ESP_MD5_DRIVER_ENABLED
 #define MBEDTLS_PSA_ACCEL_ALG_MD5
 #undef MBEDTLS_PSA_BUILTIN_ALG_MD5
+#else
+#if !defined(MBEDTLS_PSA_BUILTIN_ALG_HMAC)
+    /* If ROM MD5 is not enabled, use the builtin HMAC algorithm for HMAC(MD5) operations */
+    #define MBEDTLS_PSA_BUILTIN_ALG_HMAC
 #endif
+#endif /* MBEDTLS_PSA_BUILTIN_ALG_HMAC */
 
 /* The following MPI (bignum) functions have hardware support.
  * Uncommenting these macros will use the hardware-accelerated
@@ -235,6 +250,16 @@
 #undef MBEDTLS_MPI_EXP_MOD_ALT_FALLBACK
 #undef MBEDTLS_MPI_EXP_MOD_ALT
 #undef MBEDTLS_MPI_MUL_MPI_ALT
+#endif
+
+#if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY) || defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
+#define ESP_ECDSA_DRIVER_ENABLED
+#ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY
+#define ESP_ECDSA_VERIFY_DRIVER_ENABLED
+#endif
+#if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
+#define ESP_ECDSA_SIGN_DRIVER_ENABLED
+#endif
 #endif
 
 #ifdef CONFIG_MBEDTLS_ATCA_HW_ECDSA_SIGN
@@ -263,6 +288,10 @@
 #undef MBEDTLS_ECP_MUL_ALT_SOFT_FALLBACK
 #undef MBEDTLS_ECP_VERIFY_ALT
 #undef MBEDTLS_ECP_VERIFY_ALT_SOFT_FALLBACK
+#endif
+
+#ifdef SOC_HMAC_SUPPORTED
+#define ESP_HMAC_OPAQUE_DRIVER_ENABLED
 #endif
 
 /**
@@ -477,6 +506,9 @@
  */
 #ifdef CONFIG_MBEDTLS_CMAC_C
 #define PSA_WANT_ALG_CMAC 1
+#ifdef CONFIG_MBEDTLS_HARDWARE_AES
+#define ESP_CMAC_DRIVER_ENABLED
+#endif
 #else
 #ifdef CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL
 /* The mbedtls present in ROM is built with the MBEDTLS_CMAC_C symbol being enabled,
@@ -1711,10 +1743,18 @@
 #undef PSA_WANT_KEY_TYPE_AES
 #endif
 
+/* PSA Crypto RSA DS Driver */
+#ifdef CONFIG_MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL
+#define ESP_RSA_DS_DRIVER_ENABLED
+#else
+#undef ESP_RSA_DS_DRIVER_ENABLED
+#endif
+
 /* The following units have ESP32 hardware support,
    uncommenting each _ALT macro will use the
    hardware-accelerated implementation. */
 #ifdef CONFIG_MBEDTLS_HARDWARE_AES
+#define ESP_AES_DRIVER_ENABLED
 #define MBEDTLS_PSA_ACCEL_ALG_CBC_NO_PADDING
 #undef MBEDTLS_PSA_BUILTIN_ALG_CBC_NO_PADDING
 #define MBEDTLS_PSA_ACCEL_ALG_CBC_PKCS7
@@ -1968,7 +2008,6 @@
 #ifdef CONFIG_MBEDTLS_CHACHA20_C
 #define PSA_WANT_KEY_TYPE_CHACHA20 1
 #else
-#undef MBEDTLS_CHACHA20_C
 #undef PSA_WANT_KEY_TYPE_CHACHA20
 #endif
 
@@ -1979,12 +2018,11 @@
  *
  * Module:  library/chachapoly.c
  *
- * This module requires: MBEDTLS_CHACHA20_C, MBEDTLS_POLY1305_C
+ * This module requires: MBEDTLS_CHACHA20_C
  */
 #ifdef CONFIG_MBEDTLS_CHACHAPOLY_C
 #define PSA_WANT_ALG_CHACHA20_POLY1305 1
 #else
-#undef MBEDTLS_CHACHAPOLY_C
 #undef PSA_WANT_ALG_CHACHA20_POLY1305
 #endif
 
@@ -2481,20 +2519,6 @@
 #define MBEDTLS_PLATFORM_C
 
 /**
- * \def MBEDTLS_POLY1305_C
- *
- * Enable the Poly1305 MAC algorithm.
- *
- * Module:  library/poly1305.c
- * Caller:  library/chachapoly.c
- */
-#ifdef CONFIG_MBEDTLS_POLY1305_C
-#define MBEDTLS_POLY1305_C
-#else
-#undef MBEDTLS_POLY1305_C
-#endif
-
-/**
  * \def MBEDTLS_RIPEMD160_C
  *
  * Enable the RIPEMD-160 hash algorithm.
@@ -2641,34 +2665,6 @@
 #undef PSA_WANT_ALG_SHA_224
 #endif
 
-/* MBEDTLS_SHAxx_ALT to enable hardware SHA support
-   with software fallback.
-*/
-#ifdef CONFIG_MBEDTLS_HARDWARE_SHA
-    #define MBEDTLS_PSA_ACCEL_ALG_SHA_1
-    #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_1
-    #define MBEDTLS_PSA_ACCEL_ALG_SHA_224
-    #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_224
-    #define MBEDTLS_PSA_ACCEL_ALG_SHA_256
-    #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_256
-    #undef MBEDTLS_SHA1_C
-    #undef MBEDTLS_SHA224_C
-    #if SOC_SHA_SUPPORT_SHA512
-        #define MBEDTLS_PSA_ACCEL_ALG_SHA_512
-        #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_512
-        #define MBEDTLS_PSA_ACCEL_ALG_SHA_384
-        #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_384
-        #undef MBEDTLS_SHA512_C
-        #undef MBEDTLS_SHA384_C
-    #else
-        #undef MBEDTLS_SHA512_ALT
-    #endif
-#else
-    #undef MBEDTLS_SHA1_ALT
-    #undef MBEDTLS_SHA256_ALT
-    #undef MBEDTLS_SHA512_ALT
-#endif
-
 /* MBEDTLS_MD_CAN_SHA* macros indicate whether a hash algorithm is available
  * either via legacy implementation (MBEDTLS_SHA*_C) or via PSA (PSA_WANT_ALG_SHA_*).
  * These are used for TLS 1.3 signature algorithm configuration.
@@ -2707,6 +2703,10 @@
 #define PSA_WANT_ALG_SHA3_256 1
 #define PSA_WANT_ALG_SHA3_384 1
 #define PSA_WANT_ALG_SHA3_512 1
+#if !defined(MBEDTLS_PSA_BUILTIN_ALG_HMAC)
+    /* If SHA3 is enabled, use the builtin HMAC algorithm for HMAC(SHA3) operations */
+    #define MBEDTLS_PSA_BUILTIN_ALG_HMAC
+#endif /* MBEDTLS_PSA_BUILTIN_ALG_HMAC */
 #else
 #undef PSA_WANT_ALG_SHA3_224
 #undef PSA_WANT_ALG_SHA3_256

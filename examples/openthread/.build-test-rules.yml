@@ -58,10 +58,6 @@ examples/openthread/ot_sleepy_device/deep_sleep:
 examples/openthread/ot_sleepy_device/light_sleep:
   enable:
     - if: SOC_IEEE802154_SUPPORTED == 1
-  disable:
-    - if: IDF_TARGET in ["esp32c5"]
-      temporary: true
-      reason: Not supported yet, TZ-958
   <<: [*openthread_dependencies, *openthread_sleep_dependencies]
 
 examples/openthread/ot_trel:

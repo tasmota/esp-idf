@@ -32,7 +32,6 @@ extern "C" {
 
 // any "valid" peripheral ID can be used for M2M mode
 #define GDMA_LL_M2M_FREE_PERIPH_ID_MASK  (0x3FF)
-#define GDMA_LL_INVALID_PERIPH_ID        (0x3F)
 
 #define GDMA_LL_EVENT_TX_L3_FIFO_UDF (1<<7)
 #define GDMA_LL_EVENT_TX_L3_FIFO_OVF (1<<6)
@@ -72,6 +71,7 @@ extern "C" {
 #define GDMA_LL_AHB_BURST_SIZE_ADJUSTABLE 1 // AHB GDMA supports adjustable burst size
 #define GDMA_LL_AHB_RX_BURST_NEEDS_ALIGNMENT  1
 #define GDMA_LL_MAX_BURST_SIZE_PSRAM          64 // PSRAM controller doesn't support burst access with size > 64 bytes
+#define GDMA_LL_ACCESS_ENCRYPTION_MEM_ALIGNMENT 16 // The alignment of the memory and size when DMA accesses encrypted memory
 
 #define GDMA_LL_AHB_M2M_CAPABLE_PAIR_MASK   0x1F  // pair 0,1,2,3,4 are M2M capable
 
@@ -371,18 +371,27 @@ static inline void gdma_ll_rx_set_priority(gdma_dev_t *dev, uint32_t channel, ui
 /**
  * @brief Connect DMA RX channel to a given peripheral
  */
-static inline void gdma_ll_rx_connect_to_periph(gdma_dev_t *dev, uint32_t channel, gdma_trigger_peripheral_t periph, int periph_id)
+static inline void gdma_ll_rx_connect_to_periph(gdma_dev_t *dev, uint32_t channel, int periph_id)
 {
     dev->channel[channel].in.peri_sel.sel = periph_id;
-    dev->channel[channel].in.conf0.mem_trans_en = (periph == GDMA_TRIG_PERIPH_M2M);
+    dev->channel[channel].in.conf0.mem_trans_en = false;
 }
 
 /**
- * @brief Disconnect DMA RX channel from peripheral
+ * @brief Connect DMA RX channel to memory (M2M mode)
  */
-static inline void gdma_ll_rx_disconnect_from_periph(gdma_dev_t *dev, uint32_t channel)
+static inline void gdma_ll_rx_connect_to_mem(gdma_dev_t *dev, uint32_t channel, int dummy_id)
 {
-    dev->channel[channel].in.peri_sel.sel = GDMA_LL_INVALID_PERIPH_ID;
+    dev->channel[channel].in.peri_sel.sel = dummy_id;
+    dev->channel[channel].in.conf0.mem_trans_en = true;
+}
+
+/**
+ * @brief Disconnect DMA RX channel from peripheral/memory
+ */
+static inline void gdma_ll_rx_disconnect_all(gdma_dev_t *dev, uint32_t channel)
+{
+    dev->channel[channel].in.peri_sel.sel = 0x3F;
     dev->channel[channel].in.conf0.mem_trans_en = false;
 }
 
@@ -630,18 +639,25 @@ static inline void gdma_ll_tx_set_priority(gdma_dev_t *dev, uint32_t channel, ui
 /**
  * @brief Connect DMA TX channel to a given peripheral
  */
-static inline void gdma_ll_tx_connect_to_periph(gdma_dev_t *dev, uint32_t channel, gdma_trigger_peripheral_t periph, int periph_id)
+static inline void gdma_ll_tx_connect_to_periph(gdma_dev_t *dev, uint32_t channel, int periph_id)
 {
-    (void)periph;
     dev->channel[channel].out.peri_sel.sel = periph_id;
 }
 
 /**
- * @brief Disconnect DMA TX channel from peripheral
+ * @brief Connect DMA TX channel to memory (M2M mode)
  */
-static inline void gdma_ll_tx_disconnect_from_periph(gdma_dev_t *dev, uint32_t channel)
+static inline void gdma_ll_tx_connect_to_mem(gdma_dev_t *dev, uint32_t channel, int dummy_id)
 {
-    dev->channel[channel].out.peri_sel.sel = GDMA_LL_INVALID_PERIPH_ID;
+    dev->channel[channel].out.peri_sel.sel = dummy_id;
+}
+
+/**
+ * @brief Disconnect DMA TX channel from all peripherals
+ */
+static inline void gdma_ll_tx_disconnect_all(gdma_dev_t *dev, uint32_t channel)
+{
+    dev->channel[channel].out.peri_sel.sel = 0x3F;
 }
 
 #ifdef __cplusplus

@@ -21,7 +21,7 @@
 #define IDF_PERFORMANCE_MAX_TIME_SHA1_32KB                                      5000
 #define IDF_PERFORMANCE_MAX_TIME_SHA512_32KB                                    4500
 
-#define IDF_PERFORMANCE_MAX_RSA_2048KEY_PUBLIC_OP                               19000
+#define IDF_PERFORMANCE_MAX_RSA_2048KEY_PUBLIC_OP                               21500
 #define IDF_PERFORMANCE_MAX_RSA_2048KEY_PRIVATE_OP                              750000
 #define IDF_PERFORMANCE_MAX_RSA_3072KEY_PUBLIC_OP                               33000
 #define IDF_PERFORMANCE_MAX_RSA_3072KEY_PRIVATE_OP                              950000

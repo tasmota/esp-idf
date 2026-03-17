@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -67,6 +67,7 @@
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
 #define SOC_RTC_SLOW_MEM_SUPPORTED      1
 #define SOC_RTC_MEM_SUPPORTED           1
+#define SOC_RTC_TIMER_V1_SUPPORTED      1
 #define SOC_PSRAM_DMA_CAPABLE           1
 #define SOC_XT_WDT_SUPPORTED            1
 #define SOC_I2S_SUPPORTED               1
@@ -158,6 +159,17 @@
 #define SOC_CPU_WATCHPOINTS_NUM             2
 #define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE  0x40 // bytes
 
+/*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/
+/** The maximum length of a Digital Signature in bits. */
+#define SOC_DS_SIGNATURE_MAX_BIT_LEN (4096)
+
+/** Initialization vector (IV) length for the RSA key parameter message digest (MD) in bytes. */
+#define SOC_DS_KEY_PARAM_MD_IV_LENGTH (16)
+
+/** Maximum wait time for DS parameter decryption key. If overdue, then key error.
+    See TRM DS chapter for more details */
+#define SOC_DS_KEY_CHECK_MAX_WAIT_US (1100)
+
 /*-------------------------- DAC CAPS ----------------------------------------*/
 #define SOC_DAC_CHAN_NUM      2
 #define SOC_DAC_RESOLUTION      8 // DAC resolution ratio 8 bit
@@ -190,21 +202,14 @@
 #define SOC_DEDIC_GPIO_HAS_INTERRUPT    (1) /*!< Dedicated GPIO has its own interrupt source */
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-S2 has 2 I2C
-#define SOC_I2C_NUM                 (2U)
-#define SOC_HP_I2C_NUM              (2U)
+#define SOC_I2C_NUM                             (2U)
+#define SOC_HP_I2C_NUM                          (2U)
 
-#define SOC_I2C_FIFO_LEN       (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM    (16) /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE       (1)
-#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE (1)
+#define SOC_I2C_SUPPORT_REF_TICK                (1)
+#define SOC_I2C_SUPPORT_APB                     (1)
 
-// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
-//ESP32-S2 support hardware clear bus
-#define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
-
-#define SOC_I2C_SUPPORT_REF_TICK   (1)
-#define SOC_I2C_SUPPORT_APB        (1)
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 // ESP32-S2 has 1 I2S
@@ -297,6 +302,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V1_SUPPORTED
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/
 #define SOC_TOUCH_SENSOR_VERSION            (2)     /*!< Hardware version of touch sensor */

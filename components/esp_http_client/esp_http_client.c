@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -1864,6 +1864,17 @@ esp_err_t esp_http_client_close(esp_http_client_handle_t client)
     return ESP_OK;
 }
 
+esp_err_t esp_http_client_clear_response_buffer(esp_http_client_handle_t client)
+{
+    if (client == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (client->response != NULL && client->response->buffer != NULL) {
+        esp_http_client_cached_buf_cleanup(client->response->buffer);
+    }
+    return ESP_OK;
+}
+
 esp_err_t esp_http_client_set_post_field(esp_http_client_handle_t client, const char *data, int len)
 {
     esp_err_t err = ESP_OK;
@@ -2084,4 +2095,13 @@ bool esp_http_client_is_persistent_connection(esp_http_client_handle_t client)
         return true;
     }
     return false;
+}
+
+int esp_http_client_get_socket(esp_http_client_handle_t client)
+{
+    if (client == NULL || client->transport == NULL) {
+        return -1;
+    }
+
+    return esp_transport_get_socket(client->transport);
 }

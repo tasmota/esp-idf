@@ -29,7 +29,7 @@
 #include "hal/cache_types.h"
 #include "hal/cache_ll.h"
 #include "hal/cache_hal.h"
-#include "hal/sha_types.h"
+#include "rom/sha.h"
 
 #include "esp_cpu.h"
 #include "esp_image_format.h"
@@ -1213,7 +1213,7 @@ void bootloader_debug_buffer(const void *buffer, size_t length, const char *labe
 #endif
 }
 
-static esp_err_t bootloader_sha_flash_contents(esp_sha_type type, uint32_t flash_offset, uint32_t len, uint8_t *digest)
+static esp_err_t bootloader_sha_flash_contents(SHA_TYPE type, uint32_t flash_offset, uint32_t len, uint8_t *digest)
 {
     if (digest == NULL) {
         return ESP_ERR_INVALID_ARG;

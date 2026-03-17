@@ -96,6 +96,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_cosine.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_oneshot.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_types.h \
+    $(PROJECT_PATH)/components/esp_driver_dma/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/dedic_gpio.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/gpio.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/gpio_etm.h \
@@ -166,6 +167,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_event/include/esp_event.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/adc_types.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/dac_types.h \
+    $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/temperature_sensor_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/gpio_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/rtc_io_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/sdm_types.h \
@@ -173,9 +175,11 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_timg/include/hal/timer_types.h \
     $(PROJECT_PATH)/components/esp_hal_i2c/include/hal/i2c_types.h \
     $(PROJECT_PATH)/components/esp_hal_i2s/include/hal/i2s_types.h \
+    $(PROJECT_PATH)/components/esp_hal_jpeg/include/hal/jpeg_types.h \
     $(PROJECT_PATH)/components/esp_hal_lcd/include/hal/lcd_types.h \
     $(PROJECT_PATH)/components/esp_hal_ledc/include/hal/ledc_types.h \
     $(PROJECT_PATH)/components/esp_hal_parlio/include/hal/parlio_types.h \
+    $(PROJECT_PATH)/components/esp_hal_mcpwm/include/hal/mcpwm_types.h \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/esp_flash_err.h \
     $(PROJECT_PATH)/components/esp_hal_mspi/include/hal/spi_flash_types.h \
     $(PROJECT_PATH)/components/esp_hal_twai/include/hal/twai_types.h \
@@ -189,7 +193,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_https_server/include/esp_https_server.h \
     $(PROJECT_PATH)/components/esp_hw_support/etm/include/esp_etm.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_clk_tree.h \
-    $(PROJECT_PATH)/components/esp_hw_support/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_chip_info.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_cpu.h \
     $(PROJECT_PATH)/components/esp_hw_support/include/esp_crc.h \
@@ -224,7 +227,6 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_ringbuf/include/freertos/ringbuf.h \
     $(PROJECT_PATH)/components/esp_rom/include/esp_rom_sys.h \
     $(PROJECT_PATH)/components/esp_security/include/esp_ds.h \
-    $(PROJECT_PATH)/components/esp_security/include/esp_hmac.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_expression_with_stack.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_freertos_hooks.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_ipc_isr.h \
@@ -254,6 +256,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_wifi/wifi_apps/nan_app/include/esp_nan.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls_errors.h \
     $(PROJECT_PATH)/components/esp-tls/esp_tls.h \
+    $(PROJECT_PATH)/components/esp-tls/esp_tls_custom_stack.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_impl.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_rawflash.h \
     $(PROJECT_PATH)/components/fatfs/diskio/diskio_sdmmc.h \
@@ -268,9 +271,7 @@ INPUT = \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/task.h \
     $(PROJECT_PATH)/components/freertos/FreeRTOS-Kernel/include/freertos/timers.h \
     $(PROJECT_PATH)/components/hal/include/hal/color_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/mcpwm_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/sdio_slave_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/temperature_sensor_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/efuse_hal.h \
     $(PROJECT_PATH)/components/hal/include/hal/eth_types.h \
     $(PROJECT_PATH)/components/hal/include/hal/lp_core_types.h \
@@ -291,7 +292,11 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/esp_sntp.h \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
-    $(PROJECT_PATH)/components/mbedtls/port/include/ecdsa/ecdsa_alt.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_ecdsa_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_hmac_opaque_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_rsa_ds_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_sha_contexts.h \
+    $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_aes_contexts.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \

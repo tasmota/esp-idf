@@ -223,13 +223,13 @@ static void level_delimiter_sender_task_spi(void *args)
     // Connect SPI signals to parlio rx signals
     connect_signal_internally(TEST_CLK_GPIO,
                               spi_periph_signal[TEST_SPI_HOST].spiclk_out,
-                              parlio_periph_signals.groups[0].rx_units[0].clk_in_sig);
+                              soc_parlio_signals[0].rx_units[0].clk_in_sig);
     connect_signal_internally(TEST_VALID_GPIO,
                               spi_periph_signal[TEST_SPI_HOST].spics_out[0],
-                              parlio_periph_signals.groups[0].rx_units[0].data_sigs[TEST_VALID_SIG]);
+                              soc_parlio_signals[0].rx_units[0].data_sigs[TEST_VALID_SIG]);
     connect_signal_internally(TEST_DATA0_GPIO,
                               spi_periph_signal[TEST_SPI_HOST].spid_out,
-                              parlio_periph_signals.groups[0].rx_units[0].data_sigs[0]);
+                              soc_parlio_signals[0].rx_units[0].data_sigs[0]);
 
     // Prepare the data the be transmitted
     uint8_t *data = NULL;
@@ -379,7 +379,7 @@ TEST_CASE("parallel_rx_unit_pulse_delimiter_test_via_i2s", "[parlio_rx]")
 {
     parlio_rx_pulse_delimiter_config_t pls_deli_cfg = {
         .valid_sig_line_id = TEST_VALID_SIG,
-        .sample_edge = PARLIO_SAMPLE_EDGE_NEG,
+        .sample_edge = PARLIO_SAMPLE_EDGE_POS,
         .bit_pack_order = PARLIO_BIT_PACK_ORDER_MSB,
         .eof_data_len = TEST_EOF_DATA_LEN,
         .timeout_ticks = 0,

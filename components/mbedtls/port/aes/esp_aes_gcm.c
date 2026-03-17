@@ -15,13 +15,10 @@
  *  http://csrc.nist.gov/publications/fips/fips197/fips-197.pdf
  */
 #include <string.h>
-#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
 #include "aes/esp_aes.h"
 #include "aes/esp_aes_gcm.h"
 #include "esp_aes_internal.h"
 #include "hal/aes_hal.h"
-
-#include "mbedtls/gcm.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,7 +16,11 @@ extern "C" {
 #include "esp_err.h"
 #include "esp_bit_defs.h"
 
-#define MAX_ECDSA_SUPPORTED_KEY_LEN         32   /*!< Maximum supported size for the ECDSA key */
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+#define MAX_ECDSA_SUPPORTED_KEY_LEN         48   /*!< Maximum supported size for the ECDSA key (SECP384R1) */
+#else
+#define MAX_ECDSA_SUPPORTED_KEY_LEN         32   /*!< Maximum supported size for the ECDSA key (SECP256R1) */
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
 #define MAX_AES_SUPPORTED_KEY_LEN           32   /*!< Maximum supported size for the AES key */
 
 #define SEC_STORAGE_FLAG_NONE               0      /*!< No flags */
@@ -29,7 +33,9 @@ extern "C" {
 typedef enum {
     ESP_SEC_STG_KEY_AES256 = 0,
     ESP_SEC_STG_KEY_ECDSA_SECP256R1 = 1,
-    ESP_SEC_STG_KEY_ECDSA_SECP192R1 = 2,
+#if SOC_ECDSA_SUPPORT_CURVE_P384
+    ESP_SEC_STG_KEY_ECDSA_SECP384R1 = 3,
+#endif /* SOC_ECDSA_SUPPORT_CURVE_P384 */
     ESP_SEC_STG_TYPE_MAX,
 } esp_tee_sec_storage_type_t;
 
@@ -138,25 +144,29 @@ esp_err_t esp_tee_sec_storage_ecdsa_get_pubkey(const esp_tee_sec_storage_key_cfg
  * @brief Perform encryption using AES256-GCM with the key from secure storage
  *
  * @param[in]  ctx      Pointer to the AEAD operation context
+ * @param[out] iv       Pointer to the output buffer for the generated initialization vector
+ * @param[in]  iv_len   Length of the initialization vector buffer
  * @param[out] tag      Pointer to the authentication tag buffer
  * @param[in]  tag_len  Length of the authentication tag
  * @param[out] output   Pointer to the output data buffer
  *
  * @return esp_err_t ESP_OK on success, appropriate error code otherwise.
  */
-esp_err_t esp_tee_sec_storage_aead_encrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, uint8_t *tag, size_t tag_len, uint8_t *output);
+esp_err_t esp_tee_sec_storage_aead_encrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, uint8_t *iv, size_t iv_len, uint8_t *tag, size_t tag_len, uint8_t *output);
 
 /**
  * @brief Perform decryption using AES256-GCM with the key from secure storage
  *
  * @param[in]  ctx      Pointer to the AEAD operation context
+ * @param[in]  iv       Pointer to the initialization vector used during encryption
+ * @param[in]  iv_len   Length of the initialization vector
  * @param[in]  tag      Pointer to the authentication tag buffer
  * @param[in]  tag_len  Length of the authentication tag
  * @param[out] output   Pointer to the output data buffer
  *
  * @return esp_err_t ESP_OK on success, appropriate error code otherwise.
  */
-esp_err_t esp_tee_sec_storage_aead_decrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, const uint8_t *tag, size_t tag_len, uint8_t *output);
+esp_err_t esp_tee_sec_storage_aead_decrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, const uint8_t *iv, size_t iv_len, const uint8_t *tag, size_t tag_len, uint8_t *output);
 
 /**
  * @brief Generate and return the signature for the specified message digest using

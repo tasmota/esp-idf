@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 # pylint: disable=W0621  # redefined-outer-name
 import base64
@@ -324,7 +324,7 @@ class TEESerial(IdfSerial):
             'type': 'aes256',
             'input': 'aes256_key.bin',
             'write_once': False,
-            'b64': 'qZxftt2T8mOpLxALIfsDqI65srqPxrJtCVnDU8wrKXbFCJekDRzXqINlU5s=',
+            'b64': 'qZxftt2T8mOpLxALIfsDqI65srqPxrJtCVnDU8wrKXY=',
         },
         {'key': 'p256_key0', 'type': 'ecdsa_p256', 'input': None, 'write_once': False},
         {
@@ -337,6 +337,19 @@ class TEESerial(IdfSerial):
                 'd0wyUThkNDhONHNFUHFYc0RvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSkYxYXRZQUxrdnB4cCt4N3c1dmVPQ1Vj'
                 'RUhFRTY5azkvcFB5eFdTbEZkbW5wMnBmbVJpZwp5NnRTMDNaM2tnN2hYcitTQmNLbmRCV2RlZW81Vm9XV29nPT0K'
                 'LS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo='
+            ),
+        },
+        {
+            'key': 'p384_key0',
+            'type': 'ecdsa_p384',
+            'input': 'ecdsa_p384_key.pem',
+            'write_once': True,
+            'b64': (
+                'LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1JR2tBZ0VCQkRDQUIreENyckkrOWJObWlzVlVsSG1R'
+                'T3dZMHIyNWVIL09DalVMUVY4NHZtZU0wWDVLMnYrRE4KZkdSUkRZd0NheGlnQndZRks0RUVBQ0toWkFOaUFB'
+                'UVFWcHFObVY0Qm1aemw5VWZBcm0veVpiak9QZTJoUEtDRQp0RERZLy9FS0lOZExvY1dvMUgwWWhzYTBuU2xj'
+                'cGk2SDM3eXlSVHNxUnFueFBOeXFYZDdqbXo1WkIySWZHWHhBCmptZnZLVmJIcVNJV0JDRUx0WUxwS2t3UHNCO'
+                'XV4WW89Ci0tLS0tRU5EIEVDIFBSSVZBVEUgS0VZLS0tLS0='
             ),
         },
     ]

@@ -8,10 +8,6 @@ Overview
 
 The ESP x509 Certificate Bundle API provides an easy way to include a bundle of custom x509 root certificates for TLS server verification.
 
-.. note::
-
-    The bundle is currently not available when using WolfSSL.
-
 The bundle comes with the complete list of root certificates from Mozilla's NSS root certificate store. Using the gen_crt_bundle.py python utility, the certificates' subject name and public key are stored in a file and embedded in the {IDF_TARGET_NAME} binary.
 
 When generating the bundle you may choose between:

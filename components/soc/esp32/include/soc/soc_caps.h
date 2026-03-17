@@ -1,6 +1,6 @@
 
 /*
- * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -86,6 +86,7 @@
 #define SOC_RTC_FAST_MEM_SUPPORTED  1
 #define SOC_RTC_SLOW_MEM_SUPPORTED  1
 #define SOC_RTC_MEM_SUPPORTED       1
+#define SOC_RTC_TIMER_V1_SUPPORTED  1
 #define SOC_I2S_SUPPORTED           1
 #define SOC_I2S_I80_LCD_SUPPORTED   1
 #define SOC_LCD_I80_SUPPORTED       1
@@ -196,19 +197,16 @@
 #define SOC_GPIO_CLOCKOUT_CHANNEL_NUM  (3)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32 has 2 I2C
 #define SOC_I2C_NUM                (2U)
-#define SOC_HP_I2C_NUM             (2)
+#define SOC_HP_I2C_NUM             (2U)
 
-#define SOC_I2C_FIFO_LEN        (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM     (16) /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE   (1)
-
-#define SOC_I2C_SUPPORT_APB     (1)
+#define SOC_I2C_SUPPORT_APB        (1)
 #define SOC_I2C_SUPPORT_10BIT_ADDR (1)
 
+#define SOC_I2C_SUPPORT_SLAVE      (1)
+
 // On ESP32, the stop bit should be independent, we can't put trans data and stop command together
-#define SOC_I2C_STOP_INDEPENDENT (1)
+#define SOC_I2C_STOP_INDEPENDENT   (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 // ESP32 has 2 I2S
@@ -278,6 +276,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V1_SUPPORTED
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/
 #define SOC_TOUCH_SENSOR_VERSION            (1U)     /*!<Hardware version of touch sensor */

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -733,6 +733,19 @@ int64_t esp_http_client_get_content_range(esp_http_client_handle_t client);
 esp_err_t esp_http_client_close(esp_http_client_handle_t client);
 
 /**
+ * @brief      Clear cached response buffer (e.g. data received during fetch headers).
+ *             Use this when reusing the same client handle for a new request after
+ *             closing the connection, so the next request does not see stale data.
+ *
+ * @param[in]  client  The esp_http_client handle
+ *
+ * @return
+ *     - ESP_OK
+ *     - ESP_ERR_INVALID_ARG if client is NULL
+ */
+esp_err_t esp_http_client_clear_response_buffer(esp_http_client_handle_t client);
+
+/**
  * @brief      This function must be the last function to call for an session.
  *             It is the opposite of the esp_http_client_init function and must be called with the same handle as input that a esp_http_client_init call returned.
  *             This might close all connections this handle has used and possibly has kept open until now.
@@ -901,6 +914,17 @@ esp_http_state_t esp_http_client_get_state(esp_http_client_handle_t client);
  * @return     true if persistent connection is supported, false otherwise
  */
 bool esp_http_client_is_persistent_connection(esp_http_client_handle_t client);
+
+/**
+ * @brief       Get the socket from the underlying transport
+ *
+ * @param client The HTTP client handle
+ *
+ * @return
+ *     - -1 if the client is NULL or the transport is not initialized
+ *     - The socket file descriptor if successful
+ */
+int esp_http_client_get_socket(esp_http_client_handle_t client);
 
 #ifdef __cplusplus
 }

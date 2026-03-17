@@ -32,7 +32,7 @@ menu "mbedTLS"
 
         config MBEDTLS_THREADING_C
             bool "Enable the threading abstraction layer"
-            default n
+            default y
             help
                 If you do intend to use contexts between threads, you will need to enable
                 this layer to prevent race conditions.
@@ -40,14 +40,14 @@ menu "mbedTLS"
         config MBEDTLS_THREADING_ALT
             bool "Enable threading alternate implementation"
             depends on MBEDTLS_THREADING_C
-            default y
+            default n
             help
                 Enable threading alt to allow your own alternate threading implementation.
 
         config MBEDTLS_THREADING_PTHREAD
             bool "Enable threading pthread implementation"
             depends on MBEDTLS_THREADING_C
-            default n
+            default y
             help
                 Enable the pthread wrapper layer for the threading layer.
 
@@ -868,7 +868,7 @@ menu "mbedTLS"
 
         config MBEDTLS_ARIA_C
             bool "ARIA block cipher"
-            default y
+            default n
 
         config MBEDTLS_CAMELLIA_SMALL_MEMORY
             bool "Use small memory implementation of Camellia"
@@ -1162,12 +1162,6 @@ menu "mbedTLS"
     endmenu
 
     menu "Hash functions"
-        config MBEDTLS_POLY1305_C
-            bool "Poly1305 MAC algorithm"
-            default n
-            help
-                Enable support for Poly1305 MAC algorithm.
-
         config MBEDTLS_RIPEMD160_C
             bool "Enable RIPEMD-160 hash algorithm"
             default n
@@ -1235,7 +1229,7 @@ menu "mbedTLS"
 
         config MBEDTLS_SHA3_C
             bool "Enable the SHA3 cryptographic hash algorithm"
-            default y
+            default n
             help
                 Enabling MBEDTLS_SHA3_C adds support for SHA3.
                 Enabling this configuration option increases the flash footprint
@@ -1272,6 +1266,7 @@ menu "mbedTLS"
             help
                 Enable hardware accelerated ECDSA peripheral to verify signature
                 on curve SECP192R1 and SECP256R1 in mbedTLS.
+                Note that SECP192R1 support is disabled by default.
 
         menu "Enable Software Countermeasure for ECDSA signing using on-chip ECDSA peripheral"
             depends on MBEDTLS_HARDWARE_ECDSA_SIGN
@@ -1312,6 +1307,7 @@ menu "mbedTLS"
             help
                 Enable hardware accelerated ECDSA peripheral to sign data
                 on curve SECP192R1 and SECP256R1 in mbedTLS.
+                Note that SECP192R1 support is disabled by default.
 
                 Note that for signing, the private key has to be burnt in an efuse key block
                 with key purpose set to ECDSA_KEY.
@@ -1332,6 +1328,7 @@ menu "mbedTLS"
             help
                 Enable hardware accelerated ECC point multiplication and point verification for points
                 on curve SECP192R1 and SECP256R1 in mbedTLS
+                Note that SECP192R1 support is disabled by default.
 
         config MBEDTLS_ECC_OTHER_CURVES_SOFT_FALLBACK
             bool "Fallback to software implementation for curves not supported in hardware"
@@ -1540,6 +1537,13 @@ menu "mbedTLS"
             help
                 This option enables hardware acceleration for ECDSA sign function, only
                 when using ATECC608A cryptoauth chip.
+
+        config MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL
+            bool "Enable hardware RSA digital signature peripheral acceleration"
+            default n
+            depends on SOC_DIG_SIGN_SUPPORTED
+            help
+                Enable hardware accelerated digital signature peripheral for RSA digital signature generation.
     endmenu
 
     menu "Entropy and Random Number Generation"
@@ -1608,7 +1612,7 @@ menu "mbedTLS"
         config MBEDTLS_CHACHAPOLY_C
             bool "ChaCha20-Poly1305 AEAD algorithm"
             default n
-            depends on MBEDTLS_CHACHA20_C && MBEDTLS_POLY1305_C
+            depends on MBEDTLS_CHACHA20_C
             help
                 Enable support for ChaCha20-Poly1305 AEAD algorithm.
 

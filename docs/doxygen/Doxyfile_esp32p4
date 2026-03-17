@@ -38,7 +38,6 @@ INPUT += \
     $(PROJECT_PATH)/components/esp_lcd/dsi/include/esp_lcd_mipi_dsi.h \
     $(PROJECT_PATH)/components/esp_lcd/rgb/include/esp_lcd_panel_rgb.h \
     $(PROJECT_PATH)/components/esp_hal_cam/include/hal/isp_types.h \
-    $(PROJECT_PATH)/components/hal/include/hal/jpeg_types.h \
     $(PROJECT_PATH)/components/ulp/lp_core/include/lp_core_etm.h \
     $(PROJECT_PATH)/components/ulp/lp_core/include/lp_core_i2c.h \
     $(PROJECT_PATH)/components/ulp/lp_core/include/lp_core_spi.h \

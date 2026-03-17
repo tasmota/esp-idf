@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -131,7 +131,7 @@ esp_err_t bootloader_flash_erase_range(uint32_t start_addr, uint32_t size)
 #elif CONFIG_IDF_TARGET_ESP32C5
 #include "esp32c5/rom/opi_flash.h"
 #endif
-#include "spi_flash/spi_flash_defs.h"
+#include "esp_flash_chips/spi_flash_defs.h"
 
 #if ESP_TEE_BUILD
 #include "esp_fault.h"
@@ -232,19 +232,20 @@ static uint32_t current_read_mapping = UINT32_MAX;
  */
 static void rom_read_api_workaround(void)
 {
-#if CONFIG_ESP32C6_REV_MIN_0
-    extern void spi_common_set_dummy_output(esp_rom_spiflash_read_mode_t mode);
-    extern void spi_dummy_len_fix(uint8_t spi, uint8_t freqdiv);
+#if CONFIG_ESP32C6_REV_MIN_FULL == 0
+    if (efuse_hal_chip_revision() == 0) {
+        extern void spi_common_set_dummy_output(esp_rom_spiflash_read_mode_t mode);
+        extern void spi_dummy_len_fix(uint8_t spi, uint8_t freqdiv);
 
-    static bool is_first_call = true;
-    if (is_first_call) {
-        uint32_t dummy_val = UINT32_MAX;
-        uint32_t dest_addr = ESP_PARTITION_TABLE_OFFSET + ESP_PARTITION_TABLE_MAX_LEN;
-        esp_rom_spiflash_write(dest_addr, &dummy_val, sizeof(dummy_val));
-        is_first_call = false;
-    }
+        static bool is_first_call = true;
+        if (is_first_call) {
+            uint32_t dummy_val = UINT32_MAX;
+            uint32_t dest_addr = ESP_PARTITION_TABLE_OFFSET + ESP_PARTITION_TABLE_MAX_LEN;
+            esp_rom_spiflash_write(dest_addr, &dummy_val, sizeof(dummy_val));
+            is_first_call = false;
+        }
 
-    uint32_t freqdiv = 0;
+        uint32_t freqdiv = 0;
 
 #if CONFIG_ESPTOOLPY_FLASHFREQ_80M
     freqdiv = 1;
@@ -265,10 +266,11 @@ static void rom_read_api_workaround(void)
     read_mode = ESP_ROM_SPIFLASH_DOUT_MODE;
 #endif
 
-    esp_rom_spiflash_config_clk(freqdiv, 1);
-    spi_dummy_len_fix(1, freqdiv);
-    esp_rom_spiflash_config_readmode(read_mode);
-    spi_common_set_dummy_output(read_mode);
+        esp_rom_spiflash_config_clk(freqdiv, 1);
+        spi_dummy_len_fix(1, freqdiv);
+        esp_rom_spiflash_config_readmode(read_mode);
+        spi_common_set_dummy_output(read_mode);
+    }
 #endif
 }
 
@@ -537,16 +539,8 @@ static esp_err_t bootloader_flash_read_allow_decrypt(size_t src_addr, void *dest
 
 esp_err_t bootloader_flash_read(size_t src_addr, void *dest, size_t size, bool allow_decrypt)
 {
-    if (src_addr & 3) {
-        ESP_EARLY_LOGE(TAG, "bootloader_flash_read src_addr 0x%x not 4-byte aligned", src_addr);
-        return ESP_FAIL;
-    }
-    if (size & 3) {
-        ESP_EARLY_LOGE(TAG, "bootloader_flash_read size 0x%x not 4-byte aligned", size);
-        return ESP_FAIL;
-    }
-    if ((intptr_t)dest & 3) {
-        ESP_EARLY_LOGE(TAG, "bootloader_flash_read dest 0x%x not 4-byte aligned", (intptr_t)dest);
+    if ((src_addr & 3) || (size & 3) || ((intptr_t)dest & 3)) {
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_read src_addr 0x%x, size 0x%x or dest 0x%x not 4-byte aligned", src_addr, size, (intptr_t)dest);
         return ESP_FAIL;
     }
 

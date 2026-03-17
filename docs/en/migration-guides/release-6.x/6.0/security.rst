@@ -26,13 +26,13 @@ ESP-IDF v6.0 updates to Mbed TLS v4.0, where **PSA Crypto is the primary cryptog
 
 - **Breaking change**: In Mbed TLS v4.0, **most legacy cryptography APIs have been removed** and PSA Crypto is the primary interface. If your application directly uses legacy ``mbedtls_*`` cryptography primitives, you may need to migrate to PSA Crypto APIs.
 - **Breaking change**: ``psa_crypto_init()`` must be called before any cryptographic operation, including indirect operations such as parsing keys/certificates or starting a TLS handshake. ESP-IDF initializes PSA during normal startup; however, code that runs earlier than the normal startup sequence must call ``psa_crypto_init()`` explicitly.
-- **New API**: ``esp_ecdsa_free_pk_context(mbedtls_pk_context *key_ctx)`` was added (``ecdsa/ecdsa_alt.h``). If your application initializes a PK context with a hardware-backed ECDSA key using ``esp_ecdsa_set_pk_context()``, use ``esp_ecdsa_free_pk_context()`` to free it. With PSA-backed Mbed TLS v4.x, ``mbedtls_pk_free()`` does not deallocate the manually created keypair structure in this case.
+- **Breaking change**: ``esp_ecdsa_load_pubkey()``, ``esp_ecdsa_privkey_load_mpi()``, ``esp_ecdsa_privkey_load_pk_context()``, ``esp_ecdsa_set_pk_context()``, ``esp_ecdsa_tee_load_pubkey()`` and ``esp_ecdsa_tee_set_pk_context()`` have been deprecated and removed. The legacy ``esp_ecdsa_pk_conf_t`` configuration is replaced by ``esp_ecdsa_opaque_key_t``, which represents an hardware-backed ECDSA opaque key. Applications can populate this structure and import it via ``psa_import_key()``, enabling all ECDSA operations through standard PSA Crypto APIs.
 - **Breaking change**: APIs that previously required an application-provided RNG callback (``f_rng``, ``p_rng``) have changed in Mbed TLS v4.0 to use the PSA RNG instead. Update application code to the new prototypes (for example X.509 write APIs, SSL cookie setup, and SSL ticket setup).
 - **Breaking change**: TLS 1.2 / DTLS 1.2 interoperability may be affected because Mbed TLS v4.0 removes support for key exchanges based on finite-field DHE and RSA key exchange without forward secrecy (and static ECDH). If a peer requires removed suites, TLS connections may fail; update server/client cipher suite configuration accordingly.
 - **Breaking change**: certificates/peers using elliptic curves of less than 250 bits (for example secp192r1/secp224r1) are no longer supported in certificates and in TLS.
 - **Note**:
 
-  - void relying on Mbed TLS private declarations (for example headers under ``mbedtls/private/`` or declarations enabled via ``MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS`` / ``MBEDTLS_ALLOW_PRIVATE_ACCESS``). Such private interfaces may change without notice.
+  - Avoid relying on Mbed TLS private declarations (for example headers under ``mbedtls/private/`` or declarations enabled via ``MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS`` / ``MBEDTLS_ALLOW_PRIVATE_ACCESS``). Such private interfaces may change without notice.
   - The PSA Crypto migration (TF-PSA-Crypto) can increase flash footprint, depending on the features enabled. As reference points:
 
     .. list-table::
@@ -59,6 +59,19 @@ ESP-IDF v6.0 updates to Mbed TLS v4.0, where **PSA Crypto is the primary cryptog
          - 826909
          - 41084
          - 4.97
+
+
+
+Default configuration changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Note: The default Mbed TLS configuration in ESP-IDF v6.0 has been tightened for security and footprint:
+
+  - ``MBEDTLS_ARIA_C`` is disabled by default. Applications that rely on ARIA must explicitly enable it in ``menuconfig`` (Component config -> mbedTLS) or by customizing ``components/mbedtls/config/mbedtls_preset_default.conf``.
+  - Support for ``secp192r1`` is disabled by default, consistent with the removal of support for elliptic curves smaller than 250 bits in certificates and TLS. If an application still requires legacy curve support outside TLS/certificates, it must be enabled explicitly (for example by defining ``PSA_WANT_ECC_SECP_R1_192=1``) and validated for compatibility. Note: this legacy support may be disabled in the next minor ESP-IDF release.
+- ``MBEDTLS_THREADING_C`` is enabled by default. This provides thread-safety for the PSA Crypto key management API and ``psa_crypto_init()``. It is recommended to keep this configuration enabled when using PSA Crypto from multiple threads (for example, concurrent TLS connections, certificate operations, or any scenario where cryptographic operations may be invoked from different threads). Applications that only call PSA functions from a single thread are not affected by this change and can optionally disable threading support if desired.
+- ``MBEDTLS_THREADING_PTHREAD`` is enabled by default. This enables Mbed TLS threading support using pthread primitives.
+- ``MBEDTLS_THREADING_ALT`` is disabled by default. This disables Mbed TLS threading support using alternate threading primitives.
 
 References
 ^^^^^^^^^^

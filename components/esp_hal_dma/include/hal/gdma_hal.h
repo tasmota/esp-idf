@@ -80,8 +80,9 @@ struct gdma_hal_context_t {
     void (*append)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir); /// Append a descriptor to the channel
     void (*reset)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir); /// Reset the channel
     void (*set_priority)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, uint32_t priority); /// Set the channel priority
-    void (*connect_peri)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, gdma_trigger_peripheral_t periph, int periph_sub_id); /// Connect the channel to a peripheral
-    void (*disconnect_peri)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir); /// Disconnect the channel from a peripheral
+    void (*connect_peri)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, int periph_id); /// Connect the channel to a peripheral
+    void (*connect_mem)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, int dummy_id); /// Connect the channel to memory (for M2M)
+    void (*disconnect_all)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir); /// Disconnect the channel from all peripherals/memory
     void (*enable_burst)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_data_burst, bool en_desc_burst); /// Enable burst mode
     void (*set_burst_size)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, uint32_t burst_sz); /// Set burst transfer size
     void (*set_strategy)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_owner_check, bool en_desc_write_back, bool eof_till_popped); /// Set some misc strategy of the channel behaviour
@@ -90,7 +91,6 @@ struct gdma_hal_context_t {
     void (*clear_intr)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, uint32_t intr_event_mask); /// Clear the channel interrupt
     uint32_t (*read_intr_status)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool raw); /// Read the channel interrupt status
     uint32_t (*get_eof_desc_addr)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool is_success); /// Get the address of the descriptor with success/error EOF flag set
-    void (*enable_access_encrypt_mem)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_or_dis); /// Enable the access to the encrypted memory
 #if SOC_GDMA_SUPPORT_CRC
     void (*clear_crc)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir); /// Clear the CRC interim results
     void (*set_crc_poly)(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, const gdma_hal_crc_config_t *config); /// Set the CRC polynomial
@@ -116,9 +116,11 @@ void gdma_hal_reset(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction
 
 void gdma_hal_set_priority(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, uint32_t priority);
 
-void gdma_hal_connect_peri(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, gdma_trigger_peripheral_t periph, int periph_sub_id);
+void gdma_hal_connect_peri(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, int periph_id);
 
-void gdma_hal_disconnect_peri(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir);
+void gdma_hal_connect_mem(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, int dummy_id);
+
+void gdma_hal_disconnect_all(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir);
 
 void gdma_hal_enable_burst(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_data_burst, bool en_desc_burst);
 
@@ -135,8 +137,6 @@ uint32_t gdma_hal_get_intr_status_reg(gdma_hal_context_t *hal, int chan_id, gdma
 uint32_t gdma_hal_read_intr_status(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool raw);
 
 uint32_t gdma_hal_get_eof_desc_addr(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool is_success);
-
-void gdma_hal_enable_access_encrypt_mem(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_or_dis);
 
 #if SOC_GDMA_SUPPORT_CRC
 void gdma_hal_build_parallel_crc_matrix(int crc_width, uint32_t crc_poly_hex, int data_width,

@@ -30,12 +30,12 @@ Tree Structure for ESP-TLS Component
     ├── esp_tls.c
     ├── esp_tls.h
     ├── esp_tls_mbedtls.c
-    ├── esp_tls_wolfssl.c
+    ├── esp_tls_custom_stack.c
     └── private_include
         ├── esp_tls_mbedtls.h
-        └── esp_tls_wolfssl.h
+        └── esp_tls_custom_stack.h
 
-The ESP-TLS component has a file :component_file:`esp-tls/esp_tls.h` which contains the public API headers for the component. Internally, the ESP-TLS component operates using either MbedTLS or WolfSSL, which are SSL/TLS libraries. APIs specific to MbedTLS are present in :component_file:`esp-tls/private_include/esp_tls_mbedtls.h` and APIs specific to WolfSSL are present in :component_file:`esp-tls/private_include/esp_tls_wolfssl.h`.
+The ESP-TLS component has a file :component_file:`esp-tls/esp_tls.h` which contains the public API headers for the component. Internally, the ESP-TLS component operates using MbedTLS as the default SSL/TLS library, or a custom TLS stack registered via the :cpp:func:`esp_tls_register_stack` API. APIs specific to MbedTLS are present in :component_file:`esp-tls/private_include/esp_tls_mbedtls.h` and APIs for custom stack registration are present in :component_file:`esp-tls/esp_tls_custom_stack.h`.
 
 .. _esp_tls_server_verification:
 
@@ -99,72 +99,110 @@ The certificate selection callback can be configured in the :cpp:type:`esp_tls_c
         cert_select_cb = cert_section_callback,
     };
 
-.. _esp_tls_wolfssl:
+.. _esp_tls_custom_stack:
 
-Underlying SSL/TLS Library Options
-----------------------------------
+Custom TLS Stack Support
+------------------------
 
-The ESP-TLS component offers the option to use MbedTLS or WolfSSL as its underlying SSL/TLS library. By default, only MbedTLS is available and used, WolfSSL SSL/TLS library is also available publicly at https://github.com/espressif/esp-wolfssl. The repository provides the WolfSSL component in binary format, and it also provides a few examples that are useful for understanding the API. Please refer to the repository ``README.md`` for information on licensing and other options. Please see the below section for instructions on how to use WolfSSL in your project.
-
-.. note::
-
-    As the library options are internal to ESP-TLS, switching the libraries will not change ESP-TLS specific code for a project.
-
-How to Use WolfSSL with ESP-IDF
--------------------------------
-
-There are two ways to use WolfSSL in your project:
-
-- Add WolfSSL as a component directly to your project. For this, go to your project directory and run:
-
-  .. code-block:: none
-
-      mkdir components
-      cd components
-      git clone --recursive https://github.com/espressif/esp-wolfssl.git
-
-- Add WolfSSL as an extra component in your project.
-
-    1. Download WolfSSL with:
-
-       .. code-block:: none
-
-           git clone --recursive https://github.com/espressif/esp-wolfssl.git
-
-    2. Include ESP-WolfSSL in ESP-IDF with setting ``EXTRA_COMPONENT_DIRS`` in ``CMakeLists.txt`` of your project as done in `wolfssl/examples <https://github.com/espressif/esp-wolfssl/tree/master/examples>`_. For reference see :ref:`optional_project_variable` in :doc:`build-system </api-guides/build-system>`.
-
-After the above steps, you will have the option to choose WolfSSL as the underlying SSL/TLS library in the configuration menu of your project as follow:
-
-.. code-block:: none
-
-    idf.py menuconfig > ESP-TLS > SSL/TLS Library > Mbedtls/Wolfssl
-
-Comparison Between MbedTLS and WolfSSL
---------------------------------------
-
-The following table shows a typical comparison between WolfSSL and MbedTLS when the :example:`protocols/https_request` example (which includes server authentication) is running with both SSL/TLS libraries and with all respective configurations set to default. For MbedTLS, the IN_CONTENT length and OUT_CONTENT length are set to 16384 bytes and 4096 bytes respectively.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 40 30 30
-    :align: center
-
-    * - Property
-      - WolfSSL
-      - MbedTLS
-    * - Total Heap Consumed
-      - ~ 19 KB
-      - ~ 37 KB
-    * - Task Stack Used
-      - ~ 2.2 KB
-      - ~ 3.6 KB
-    * - Bin size
-      - ~ 858 KB
-      - ~ 736 KB
+The ESP-TLS component supports registering custom TLS stack implementations via the :cpp:func:`esp_tls_register_stack` API. This allows external components to provide their own TLS stack implementation by implementing the :cpp:type:`esp_tls_stack_ops_t` interface. Once registered, all TLS connections created after the registration will use the custom stack.
 
 .. note::
 
-    These values can vary based on configuration options and version of respective libraries.
+    As the custom stack implementation is internal to ESP-TLS, switching to a custom stack will not change ESP-TLS specific code for a project.
+
+How to Use Custom TLS Stack with ESP-IDF
+----------------------------------------
+
+To use a custom TLS stack in your project, follow these steps:
+
+1. Enable the custom stack option ``CONFIG_ESP_TLS_CUSTOM_STACK`` (Component config > ESP-TLS > SSL/TLS Library > Custom TLS stack) in menuconfig.
+
+2. Implement all required functions defined in the :cpp:type:`esp_tls_stack_ops_t` structure. The required functions are:
+
+   * ``create_ssl_handle`` - Initialize TLS/SSL context for a new connection
+   * ``handshake`` - Perform TLS handshake
+   * ``read`` - Read decrypted data from TLS connection
+   * ``write`` - Write and encrypt data to TLS connection
+   * ``conn_delete`` - Clean up TLS connection and free resources
+   * ``net_init`` - Initialize network context
+   * ``get_ssl_context`` - Get stack-specific SSL context
+   * ``get_bytes_avail`` - Get bytes available for reading
+   * ``init_global_ca_store`` - Initialize global CA store
+   * ``set_global_ca_store`` - Load CA certificates into global store
+   * ``get_global_ca_store`` - Get global CA store
+   * ``free_global_ca_store`` - Free global CA store
+   * ``get_ciphersuites_list`` - Get list of supported ciphersuites
+
+   Optional functions (can be NULL if not supported):
+
+   * ``get_client_session`` - Get client session ticket (if CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS enabled)
+   * ``free_client_session`` - Free client session (if CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS enabled)
+   * ``server_session_ticket_ctx_init`` - Initialize server session ticket context (if CONFIG_ESP_TLS_SERVER_SESSION_TICKETS enabled)
+   * ``server_session_ticket_ctx_free`` - Free server session ticket context (if CONFIG_ESP_TLS_SERVER_SESSION_TICKETS enabled)
+   * ``server_session_create`` - Create server session (server-side, can be NULL if server_session_init is provided)
+   * ``server_session_init`` - Initialize server session (server-side, can be NULL if server_session_create is provided)
+   * ``server_session_continue_async`` - Continue async server handshake (server-side, can be NULL if server_session_create is provided)
+   * ``server_session_delete`` - Delete server session (server-side, can be NULL, conn_delete will be used)
+
+3. Create a static/global structure containing your function implementations:
+
+   .. code-block:: c
+
+       #include "esp_tls_custom_stack.h"
+
+       static const esp_tls_stack_ops_t my_tls_ops = {
+           .version = ESP_TLS_STACK_OPS_VERSION,
+           .create_ssl_handle = my_create_ssl_handle,
+           .handshake = my_handshake,
+           .read = my_read,
+           .write = my_write,
+           .conn_delete = my_conn_delete,
+           .net_init = my_net_init,
+           .get_ssl_context = my_get_ssl_context,
+           .get_bytes_avail = my_get_bytes_avail,
+           .init_global_ca_store = my_init_global_ca_store,
+           .set_global_ca_store = my_set_global_ca_store,
+           .get_global_ca_store = my_get_global_ca_store,
+           .free_global_ca_store = my_free_global_ca_store,
+           .get_ciphersuites_list = my_get_ciphersuites_list,
+           // Optional functions can be NULL if not supported
+           .get_client_session = NULL,
+           .free_client_session = NULL,
+           .server_session_ticket_ctx_init = NULL,
+           .server_session_ticket_ctx_free = NULL,
+           .server_session_create = NULL,
+           .server_session_init = NULL,
+           .server_session_continue_async = NULL,
+           .server_session_delete = NULL,
+       };
+
+4. Register your custom stack before creating any TLS connections:
+
+   .. code-block:: c
+
+       void app_main(void) {
+           // The second parameter is user context passed to global callbacks
+           // (init_global_ca_store, set_global_ca_store, etc.)
+           // Use NULL if not needed, or pass a pointer for C++ implementations
+           esp_err_t ret = esp_tls_register_stack(&my_tls_ops, NULL);
+           if (ret != ESP_OK) {
+               ESP_LOGE("APP", "Failed to register TLS stack: %s", esp_err_to_name(ret));
+               return;
+           }
+
+           // Now all TLS connections will use your custom stack
+           // ... create TLS connections as usual using esp_tls_conn_new(), etc. ...
+       }
+
+.. important::
+
+    * The custom stack must be registered **before** creating any TLS connections. Calling :cpp:func:`esp_tls_register_stack` after TLS connections have been created will not affect existing connections.
+    * The :cpp:type:`esp_tls_stack_ops_t` structure must point to a static/global structure (not on the stack) as it's stored by reference.
+    * Your implementation should store stack-specific context data in the ``priv_ctx`` and ``priv_ssl`` fields of the :cpp:type:`esp_tls_t` structure.
+    * All required function pointers must be non-NULL. Optional functions can be NULL if not supported.
+    * The registration function can only be called once. Subsequent calls will return ``ESP_ERR_INVALID_STATE``.
+    * For detailed function signatures and requirements, see :component_file:`esp-tls/esp_tls_custom_stack.h`.
+
 
 ATECC608A (Secure Element) with ESP-TLS
 --------------------------------------------------
@@ -380,3 +418,4 @@ API Reference
 
 .. include-build-file:: inc/esp_tls.inc
 .. include-build-file:: inc/esp_tls_errors.inc
+.. include-build-file:: inc/esp_tls_custom_stack.inc

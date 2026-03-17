@@ -24,9 +24,14 @@ elseif(NOT BOOTLOADER_BUILD)
 
 endif()
 
+set(requires soc hal esp_hal_gpspi)
+if(NOT ${target} STREQUAL "linux")
+    list(APPEND requires esp_hal_clock) # TODO: IDF-15106 remove esp_hal_clock dependency
+endif()
+
 idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS ${includes}
-    REQUIRES soc hal esp_hal_gpspi
+    REQUIRES ${requires}
     PRIV_REQUIRES esp_hal_gpio
 )

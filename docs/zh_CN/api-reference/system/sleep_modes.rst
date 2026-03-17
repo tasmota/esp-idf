@@ -308,13 +308,13 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
 
        .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，为了继续使用 :cpp:func:`gpio_wakeup_enable` 用于 GPIO 唤醒， 需要先调用 :cpp:func:`rtc_gpio_init` 和 :cpp:func:`rtc_gpio_set_direction`，用于设置 RTC IO 为输入模式。
 
-                或者， 可以使用直接调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 用于 GPIO 唤醒，因为此时 digital IO 的电源域已经被关闭，这个情况类似于进入 Deep-sleep。
+                或者， 可以使用直接调用 :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` 用于 GPIO 唤醒，因为此时 digital IO 的电源域已经被关闭。
 
-            .. only::  not SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  not SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，为了继续使用 :cpp:func:`gpio_wakeup_enable` 用于 GPIO 唤醒， 需要先调用 :cpp:func:`rtc_gpio_init` 和 :cpp:func:`rtc_gpio_set_direction`，用于设置 RTC IO 为输入模式。
 
@@ -323,17 +323,24 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
     GPIO 唤醒
     ^^^^^^^^^^^
 
-    任何一个 IO 都可以用作外部输入管脚，将芯片从 Light-sleep 状态唤醒。调用 :cpp:func:`gpio_wakeup_enable` 函数可以将任意管脚单独配置为在高电平或低电平触发唤醒。此后，应调用 :cpp:func:`esp_sleep_enable_gpio_wakeup` 函数来启用此唤醒源。
+    有两种 GPIO 唤醒 API 可供使用，分别适用于不同的睡眠场景：
 
-    此外，可将由 VDD3P3_RTC 电源域供电的 IO 用于芯片的 Deep-sleep 唤醒。调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 函数可以配置相应的唤醒管脚和唤醒触发电平，该函数用于启用相应管脚的 Deep-sleep 唤醒功能。
+    **1. :cpp:func:`esp_sleep_enable_gpio_wakeup` - 适用于 Light-sleep（GPIO 模块保持上电）**
 
-    .. only:: SOC_PM_SUPPORT_TOP_PD
+        当 GPIO 模块在睡眠期间保持上电时，任何 IO 都可以用作外部输入管脚，将芯片从 Light-sleep 状态唤醒。调用 :cpp:func:`gpio_wakeup_enable` 函数可以将任意管脚单独配置为在高电平或低电平触发唤醒。此后，应调用 :cpp:func:`esp_sleep_enable_gpio_wakeup` 函数来启用此唤醒源。
 
         .. note::
+            当启用 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP` 时，此 API **不可用**，因为 GPIO 模块在睡眠期间会被断电。请使用 :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` 替代。
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    **2. :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` - 适用于 Deep-sleep 和外设掉电的 Light-sleep**
 
-                在 Light-sleep 模式下，如果设置 Kconfig 选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，可以使用直接调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 用于 GPIO 唤醒，因为此时 digital IO 的电源域会被断电，行为与进入 Deep-sleep 模式时相同。
+        可将由 VDD3P3_RTC 电源域供电的 IO 用于芯片的 Deep-sleep 唤醒，或在外设电源域掉电时的 Light-sleep 唤醒。调用 :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` 函数可以配置相应的唤醒管脚和唤醒触发电平。此函数适用于：
+
+        - Deep-sleep 模式（始终可用）
+        - 启用 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP` 时的 Light-sleep 模式
+
+        .. note::
+            只有由 VDD3P3_RTC 电源域供电的 GPIO（RTC IO）可以与此 API 一起使用。具体支持的管脚请参考 `datasheet <{IDF_TARGET_DATASHEET_CN_URL}>`__ > IO 管脚。
 
 .. only:: esp32h2
 

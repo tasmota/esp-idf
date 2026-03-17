@@ -74,22 +74,12 @@ if(CONFIG_SOC_I3C_MASTER_SUPPORTED)
     list(APPEND srcs "${target_folder}/i3c_master_periph.c")
 endif()
 
-if(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
-    list(APPEND srcs "${target_folder}/temperature_sensor_periph.c")
-endif()
-
 if(CONFIG_SOC_MPI_SUPPORTED)
     list(APPEND srcs "${target_folder}/mpi_periph.c")
 endif()
 
 if(CONFIG_SOC_SDMMC_HOST_SUPPORTED)
     list(APPEND srcs "${target_folder}/sdmmc_periph.c")
-endif()
-
-if(CONFIG_SOC_IEEE802154_SUPPORTED)
-    if(NOT target STREQUAL "esp32h4")
-        list(APPEND srcs "${target_folder}/ieee802154_periph.c")
-    endif()
 endif()
 
 if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)

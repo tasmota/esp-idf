@@ -58,7 +58,44 @@ ESP-IDF 已移除内置的 ``json`` 组件。用户应迁移至使用 `IDF 组�
 ESP-TLS
 -------
 
-**已移除的废弃 API**
+移除 wolfSSL 支持
+~~~~~~~~~~~~~~~~~
+
+ESP-TLS 已移除内置的 wolfSSL TLS 协议栈支持。使用 wolfSSL 的用户应迁移至以下两个方案之一：
+
+1. **mbedTLS（推荐）**：默认 TLS 协议栈，完全集成并在 ESP-IDF 中维护。
+2. **自定义 TLS 协议栈**：使用自定义协议栈 API（见下文方案 B）注册自己的 TLS 实现。
+
+**已移除的 Kconfig 选项**
+
+以下 Kconfig 选项已被移除：
+
+- ``CONFIG_ESP_TLS_USING_WOLFSSL`` - 请改用 ``CONFIG_ESP_TLS_USING_MBEDTLS`` 或 ``CONFIG_ESP_TLS_CUSTOM_STACK``
+- ``CONFIG_ESP_DEBUG_WOLFSSL`` - 进行 mbedTLS 调试，请使用 ``CONFIG_MBEDTLS_DEBUG``
+- ``CONFIG_ESP_TLS_OCSP_CHECKALL`` - OCSP 功能应由所选 TLS 协议栈处理
+
+**wolfSSL 用户迁移步骤**
+
+如果你的项目通过 ESP-TLS 使用 wolfSSL：
+
+1. **方案 A - 切换到 mbedTLS**
+
+   - 从 sdkconfig 中移除 ``CONFIG_ESP_TLS_USING_WOLFSSL=y``
+   - 将自动使用默认的 ``CONFIG_ESP_TLS_USING_MBEDTLS``
+   - 使用标准 TLS 操作，无需更改代码
+
+2. **方案 B - 使用自定义协议栈 API**
+
+   如需要继续使用 wolfSSL 或其他 TLS 库，可以将其注册为自定义协议栈：
+
+   - 在 menuconfig 中启用 ``CONFIG_ESP_TLS_CUSTOM_STACK``
+   - 为你的 TLS 库实现 :cpp:type:`esp_tls_stack_ops_t` 接口
+   - 在创建任何 TLS 连接之前调用 :cpp:func:`esp_tls_register_stack`
+
+   有关实现自定义 TLS 协议栈的详细文档，请参阅 :ref:`esp_tls_custom_stack`。
+
+已移除的废弃 API
+~~~~~~~~~~~~~~~~
 
 已移除废弃函数 :cpp:func:`esp_tls_conn_http_new`。请使用以下替代函数：
 

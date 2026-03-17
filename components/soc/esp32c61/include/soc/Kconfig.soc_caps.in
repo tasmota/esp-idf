@@ -119,7 +119,11 @@ config SOC_PMU_SUPPORTED
     bool
     default y
 
-config SOC_LP_TIMER_SUPPORTED
+config SOC_RTC_TIMER_V2_SUPPORTED
+    bool
+    default y
+
+config SOC_PMU_PVT_SUPPORTED
     bool
     default y
 
@@ -443,15 +447,15 @@ config SOC_GPIO_OUT_RANGE_MAX
     int
     default 29
 
-config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+config SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
     bool
     default y
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK
     int
     default 0
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT
     int
     default 7
 
@@ -515,22 +519,6 @@ config SOC_HP_I2C_NUM
     int
     default 1
 
-config SOC_I2C_FIFO_LEN
-    int
-    default 32
-
-config SOC_I2C_CMD_REG_NUM
-    int
-    default 8
-
-config SOC_I2C_SUPPORT_SLAVE
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_FSM_RST
-    bool
-    default y
-
 config SOC_I2C_SUPPORT_XTAL
     bool
     default y
@@ -543,19 +531,15 @@ config SOC_I2C_SUPPORT_10BIT_ADDR
     bool
     default y
 
+config SOC_I2C_SUPPORT_SLAVE
+    bool
+    default y
+
 config SOC_I2C_SLAVE_SUPPORT_BROADCAST
     bool
     default y
 
 config SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE
-    bool
-    default y
-
-config SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS
-    bool
-    default y
-
-config SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH
     bool
     default y
 
@@ -812,10 +796,6 @@ config SOC_SPI_MEM_SUPPORT_TIMING_TUNING
     default y
 
 config SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR
-    bool
-    default y
-
-config SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED
     bool
     default y
 

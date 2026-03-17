@@ -124,6 +124,48 @@ GPIO
 
 - Added the :cpp:type:`esp_err_t` return type to :func:`gpio_uninstall_isr_service`.
 
+GPIO Deep Sleep Wakeup APIs Removed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following GPIO driver APIs have been removed:
+
+- :func:`gpio_deep_sleep_wakeup_enable` - Use :func:`gpio_wakeup_enable_on_hp_periph_powerdown_sleep` instead
+- :func:`gpio_deep_sleep_wakeup_disable` - Use :func:`gpio_wakeup_disable_on_hp_periph_powerdown_sleep` instead
+
+The deprecated macro ``GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO()`` has been removed. Use ``GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO()`` instead.
+
+**Migration Example:**
+
+Old code:
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // Enable GPIO wakeup
+    gpio_deep_sleep_wakeup_enable(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // Check validity
+    if (GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(GPIO_NUM_0)) {
+        // ...
+    }
+
+New code:
+
+.. code-block:: c
+
+    #include "driver/gpio.h"
+
+    // Enable GPIO wakeup (works for both deep sleep and light sleep with peripheral powerdown)
+    gpio_wakeup_enable_on_hp_periph_powerdown_sleep(GPIO_NUM_0, GPIO_INTR_LOW_LEVEL);
+
+    // Check validity
+    if (GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO(GPIO_NUM_0)) {
+        // ...
+    }
+
+For more details, see the :ref:`GPIO Wakeup API Changes <gpio_wakeup_api_changes>` section in the System migration guide.
+
 LEDC
 ----
 
@@ -224,9 +266,10 @@ The legacy timer group driver ``driver/timer.h`` is deprecated since version 5.0
 
     The legacy RMT driver ``driver/rmt.h`` is deprecated since version 5.0 (see :ref:`deprecate_rmt_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_rmt`, and the header file path is ``driver/rmt_tx.h``, ``driver/rmt_rx.h`` and ``driver/rmt_encoder.h``.
 
-GDMA
-----
+DMA Driver
+----------
 
+- The DMA core driver has been moved out of the original ``esp_hw_support`` component and is now provided as a separate ``esp_driver_dma`` component. If you are using the ``esp_async_memcpy.h`` and ``esp_dma_utils.h`` drivers, please ensure that you add a dependency on the ``esp_driver_dma`` component in your project.
 - The ``GDMA_ISR_IRAM_SAFE`` Kconfig option has been removed due to potential risks. Now, the interrupt behavior of different DMA channels during Cache disabled periods are independent of each other.
 - ``gdma_new_channel`` is removed. When requesting a GDMA channel, use either ``gdma_new_ahb_channel`` or ``gdma_new_axi_channel`` according to the bus type.
 - The ``sram_trans_align`` and ``psram_trans_align`` members have been removed from :cpp:type:`async_memcpy_config_t`. Use :cpp:member:`async_memcpy_config_t::dma_burst_size` to set the DMA burst transfer size.
@@ -258,6 +301,8 @@ SDMMC
 
     The legacy Sigma-Delta Modulator driver ``driver/sigmadelta.h`` is deprecated since version 5.0 (see :ref:`deprecate_sdm_legacy_driver`). Starting from version 6.0, the legacy driver is completely removed. The new driver is placed in the :component:`esp_driver_sdm`, and the header file path is ``driver/sdm.h``.
 
+    - :func:`sdm_channel_set_duty` has been removed. Use :func:`sdm_channel_set_pulse_density` instead.
+
 LCD
 ---
 
@@ -274,6 +319,27 @@ LCD
 - :cpp:func:`esp_lcd_rgb_panel_set_yuv_conversion` function has a different signature. The ``esp_lcd_yuv_conv_config_t`` configuration type is now replaced by :cpp:type:`esp_lcd_color_conv_yuv_config_t`.
 - The NT35510 LCD device driver has been moved out of ESP-IDF and is now hosted in the `ESP Component Registry <https://components.espressif.com/components/espressif/esp_lcd_nt35510/versions/1.0.0/readme>`__. If your project uses the NT35510 driver, you can add it to your project by running ``idf.py add-dependency "espressif/esp_lcd_nt35510"``.
 - The ``use_dma2d`` member in the :cpp:type:`esp_lcd_dpi_panel_config_t` has been removed. Please use the :func:`esp_lcd_dpi_panel_enable_dma2d` function to enable DMA2D for the DPI panel. When not using DMA2D, the binary file size can be reduced by around 10KB.
+
+Color Types
+-----------
+
+The following types in the ``components/hal/include/hal/color_types.h`` header file have been removed. Please use FourCC format (:cpp:type:`esp_color_fourcc_t`) instead:
+
+- :cpp:type:`color_space_t` - The color space enumeration type has been removed. Please use FourCC format to specify color space and pixel format.
+- :cpp:type:`color_space_pixel_format_t` - The color space pixel format union has been removed. Please use :cpp:type:`esp_color_fourcc_t` type and corresponding FourCC macro definitions to specify pixel format.
+
+Migration example:
+
+.. code-block:: c
+
+    /* Old */
+    color_space_pixel_format_t format = {
+        .color_space = COLOR_SPACE_RGB,
+        .pixel_format = COLOR_PIXEL_RGB565
+    };
+
+    /* New */
+    esp_color_fourcc_t format = ESP_COLOR_FOURCC_RGB565;
 
 SPI
 ---
@@ -308,9 +374,28 @@ SPI Flash Driver
 - New argument ``flags`` is added to ``esp_flash_os_functions_t::start``. Caller and implementer should handle this argument properly.
 - Kconfig option ``CONFIG_SPI_FLASH_ROM_DRIVER_PATCH`` has been removed. Considering that this option is unlikely to be widely used by users and may cause serious issues if misused, it has been decided to remove it.
 
-.. note::
+Header File Reorganization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Note that enabling :ref:`CONFIG_FREERTOS_IN_IRAM` will increase IRAM usage. Consider this trade-off when optimizing for SPI performance.
+Several internal header files have been reorganized to better reflect their visibility and intended usage:
+
+- **Flash chip driver related headers** have been moved to ``esp_flash_chips/`` directory:
+  - ``spi_flash_chip_driver.h``
+  - ``spi_flash_chip_*.h``
+  - ``spi_flash_defs.h``
+  - ``spi_flash_override.h``
+  - ``esp_flash_types.h``
+  - The ``esp_flash_t`` structure definition has been moved from ``esp_flash.h`` to ``esp_flash_chips/esp_flash_types.h``. Applications should not access structure members directly; use the public APIs instead (e.g., use :cpp:func:`esp_flash_get_size` instead of accessing ``chip->size`` directly).
+  - The ``esp_flash_os_functions_t`` structure definition has been moved from ``esp_flash.h`` to ``esp_flash_chips/esp_flash_types.h``.
+  - The ``spi_flash_chip_t`` type forward declaration has been removed from ``esp_flash.h`` and all ROM headers (``components/esp_rom/esp32xx/include/esp32xx/rom/esp_flash.h``). The type is now only defined in ``esp_flash_chips/esp_flash_types.h``. Applications should not use this type directly; it is only intended for custom chip driver implementations.
+
+  .. note::
+
+      The headers in ``esp_flash_chips/`` are **semi-public** - they are intended for expert users who need to implement custom chip drivers for unsupported flash chips, but they are **not considered stable API** and may change without notice. For most use cases, you should use the public APIs in ``esp_flash.h`` instead. See :doc:`Override Driver for SPI Flash <../../../api-reference/peripherals/spi_flash/spi_flash_override_driver>` for more details.
+
+- **Internal headers** have been moved to ``esp_private/`` directory and not included in the public (stable) header files:
+  - ``esp_flash_internal.h``
+  - ``memspi_host_driver.h``
 
 Touch Element
 -------------

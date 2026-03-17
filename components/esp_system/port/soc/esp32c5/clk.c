@@ -27,7 +27,6 @@
 #if SOC_MODEM_CLOCK_SUPPORTED
 #include "hal/modem_lpcon_ll.h"
 #endif
-#include "hal/apm_ll.h"
 #include "hal/clk_gate_ll.h"
 #include "hal/clk_tree_ll.h"
 #include "esp_private/esp_sleep_internal.h"
@@ -256,6 +255,9 @@ __attribute__((weak)) void esp_perip_clk_init(void)
 #endif
 #if !CONFIG_USJ_ENABLE_USB_SERIAL_JTAG && !CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED
     clk_gate_config.disable_usb_serial_jtag = true;
+#endif
+#if !CONFIG_ESP_ENABLE_PVT
+    clk_gate_config.disable_pvt_clk = true;
 #endif
 
     periph_ll_clk_gate_set_default(rst_reason, &clk_gate_config);

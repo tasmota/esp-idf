@@ -30,12 +30,12 @@ ESP-TLS 组件的树形结构
     ├── esp_tls.c
     ├── esp_tls.h
     ├── esp_tls_mbedtls.c
-    ├── esp_tls_wolfssl.c
+    ├── esp_tls_custom_stack.c
     └── private_include
         ├── esp_tls_mbedtls.h
-        └── esp_tls_wolfssl.h
+        └── esp_tls_custom_stack.h
 
-ESP-TLS 组件文件 :component_file:`esp-tls/esp_tls.h` 包含该组件的公共 API 头文件。在 ESP-TLS 组件内部，为了实现安全会话功能，会使用 MbedTLS 和 WolfSSL 两个 SSL/TLS 库中的其中一个进行安全会话的建立，与 MbedTLS 相关的 API 存放在 :component_file:`esp-tls/private_include/esp_tls_mbedtls.h`，而与 WolfSSL 相关的 API 存放在 :component_file:`esp-tls/private_include/esp_tls_wolfssl.h`。
+ESP-TLS 组件文件 :component_file:`esp-tls/esp_tls.h` 包含该组件的公共 API 头文件。在 ESP-TLS 组件内部，默认使用 MbedTLS 作为底层 SSL/TLS 库，也可以通过 :cpp:func:`esp_tls_register_stack` API 注册自定义 TLS 协议栈。与 MbedTLS 相关的 API 存放在 :component_file:`esp-tls/private_include/esp_tls_mbedtls.h`，自定义协议栈注册相关的 API 存放在 :component_file:`esp-tls/esp_tls_custom_stack.h`。
 
 .. _esp_tls_server_verification:
 
@@ -99,72 +99,110 @@ ESP-TLS 服务器证书选择回调
         cert_select_cb = cert_section_callback,
     };
 
-.. _esp_tls_wolfssl:
+.. _esp_tls_custom_stack:
 
-底层 SSL/TLS 库选择
--------------------------
+自定义 TLS 协议栈支持
+------------------------
 
-ESP-TLS 组件支持以 MbedTLS 或 WolfSSL 作为其底层 SSL/TLS 库，默认仅使用 MbedTLS，WolfSSL 的 SSL/TLS 库可在 https://github.com/espressif/esp-wolfssl 上公开获取，该仓库提供二进制格式的 WolfSSL 组件，并提供了一些示例帮助用户了解相关 API。有关许可证和其他选项，请参阅仓库的 ``README.md`` 文件。下文介绍了在工程中使用 WolfSSL 的具体流程。
+ESP-TLS 组件支持通过 :cpp:func:`esp_tls_register_stack` API 注册自定义 TLS 协议栈实现。这允许外部组件通过实现 :cpp:type:`esp_tls_stack_ops_t` 接口来提供自己的 TLS 协议栈实现。注册后，所有在此之后创建的 TLS 连接都将使用自定义协议栈。
 
 .. note::
 
-    库选项位于 ESP-TLS 内部，因此切换库不会更改工程的 ESP-TLS 特定代码。
+    由于自定义协议栈的实现封装在 ESP-TLS 内部，因此切换为自定义协议栈并不会影响项目中与 ESP-TLS 相关的代码。
 
-在 ESP-IDF 使用 WolfSSL
+在 ESP-IDF 中使用自定义 TLS 协议栈
 ----------------------------------------
 
-要在工程中使用 WolfSSL，可采取以下两种方式：
+要在工程中使用自定义 TLS 协议栈，请遵循以下步骤：
 
-- 将 WolfSSL 作为组件直接添加到工程中。用 cd 命令进入工程目录后，使用以下命令：
+1. 在 menuconfig 中启用自定义协议栈选项 ``CONFIG_ESP_TLS_CUSTOM_STACK`` (Component config > ESP-TLS > SSL/TLS Library > Custom TLS stack)。
 
-  .. code-block:: none
+2. 实现 :cpp:type:`esp_tls_stack_ops_t` 结构中定义的所有必需函数。必需函数包括：
 
-      mkdir components
-      cd components
-      git clone --recursive https://github.com/espressif/esp-wolfssl.git
+   * ``create_ssl_handle`` - 为新连接初始化 TLS/SSL 上下文
+   * ``handshake`` - 执行 TLS 握手
+   * ``read`` - 从 TLS 连接读取已解密的数据
+   * ``write`` - 向 TLS 连接写入数据，并在发送前完成加密
+   * ``conn_delete`` - 清理 TLS 连接并释放相关资源
+   * ``net_init`` - 初始化网络上下文
+   * ``get_ssl_context`` - 获取协议栈特定的 SSL 上下文
+   * ``get_bytes_avail`` - 获取可用于读取的字节数
+   * ``init_global_ca_store`` - 初始化全局 CA 证书存储
+   * ``set_global_ca_store`` - 将 CA 证书加载到全局存储
+   * ``get_global_ca_store`` - 获取全局 CA 证书存储
+   * ``free_global_ca_store`` - 释放全局 CA 证书存储
+   * ``get_ciphersuites_list`` - 获取支持的密码套件列表
 
-- 将 WolfSSL 作为额外组件添加到工程中。
+   可选函数（如果不支持，可以为 NULL）：
 
-    1. 使用以下命令下载 WolfSSL：
+   * ``get_client_session`` - 获取客户端会话票据（须启用 :ref:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`）
+   * ``free_client_session`` - 释放客户端会话（须启用 :ref:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`）
+   * ``server_session_ticket_ctx_init`` - 初始化服务器会话票据上下文（须启用 :ref:`CONFIG_ESP_TLS_SERVER_SESSION_TICKETS`）
+   * ``server_session_ticket_ctx_free`` - 释放服务器会话票据上下文（须启用 :ref:`CONFIG_ESP_TLS_SERVER_SESSION_TICKETS`）
+   * ``server_session_create`` - 创建服务器会话（服务器端，如果提供了 server_session_init，该接口可以为 NULL）
+   * ``server_session_init`` - 初始化服务器会话（服务器端，如果提供了 server_session_create，该接口可以为 NULL）
+   * ``server_session_continue_async`` - 继续服务器端的异步握手（服务器端，如果提供了 server_session_create，该接口可以为 NULL）
+   * ``server_session_delete`` - 删除服务器会话（服务器端，该接口可以为 NULL，此时将使用 ``conn_delete`` 进行清理）
 
-       .. code-block:: none
+3. 创建一个包含函数实现的静态/全局结构体：
 
-           git clone https://github.com/espressif/esp-wolfssl.git
+   .. code-block:: c
 
-    2. 参照 `wolfssl/examples <https://github.com/espressif/esp-wolfssl/tree/master/examples>`_ 示例，在工程的 ``CMakeLists.txt`` 文件中设置 ``EXTRA_COMPONENT_DIRS``，从而在 ESP-IDF 中包含 ESP-WolfSSL，详情请参阅 :doc:`构建系统 </api-guides/build-system>` 中的 :ref:`optional_project_variable` 小节。
+       #include "esp_tls_custom_stack.h"
 
-完成上述步骤后，可以在工程配置菜单中将 WolfSSL 作为底层 SSL/TLS 库，具体步骤如下：
+       static const esp_tls_stack_ops_t my_tls_ops = {
+           .version = ESP_TLS_STACK_OPS_VERSION,
+           .create_ssl_handle = my_create_ssl_handle,
+           .handshake = my_handshake,
+           .read = my_read,
+           .write = my_write,
+           .conn_delete = my_conn_delete,
+           .net_init = my_net_init,
+           .get_ssl_context = my_get_ssl_context,
+           .get_bytes_avail = my_get_bytes_avail,
+           .init_global_ca_store = my_init_global_ca_store,
+           .set_global_ca_store = my_set_global_ca_store,
+           .get_global_ca_store = my_get_global_ca_store,
+           .free_global_ca_store = my_free_global_ca_store,
+           .get_ciphersuites_list = my_get_ciphersuites_list,
+           // 可选函数如果不支持可以为 NULL
+           .get_client_session = NULL,
+           .free_client_session = NULL,
+           .server_session_ticket_ctx_init = NULL,
+           .server_session_ticket_ctx_free = NULL,
+           .server_session_create = NULL,
+           .server_session_init = NULL,
+           .server_session_continue_async = NULL,
+           .server_session_delete = NULL,
+       };
 
-.. code-block:: none
+4. 在创建任何 TLS 连接之前注册自定义协议栈：
 
-    idf.py menuconfig > ESP-TLS > SSL/TLS Library > Mbedtls/Wolfssl
+   .. code-block:: c
 
-MbedTLS 与 WolfSSL 对比
---------------------------------------
+       void app_main(void) {
+           // 第二个参数是传递给全局回调函数的用户上下文
+           //（如 init_global_ca_store，set_global_ca_store 等）。
+           // 如果不需要可以传 NULL，对于 C++ 实现则传递相应的指针
+           esp_err_t ret = esp_tls_register_stack(&my_tls_ops, NULL);
+           if (ret != ESP_OK) {
+               ESP_LOGE("APP", "Failed to register TLS stack: %s", esp_err_to_name(ret));
+               return;
+           }
 
-下表是在使用 WolfSSL 和 MbedTLS 两种 SSL/TLS 库，并将所有相关配置设置为默认值时，运行具有服务器身份验证的 :example:`protocols/https_request` 示例的比较结果。对于 MbedTLS，IN_CONTENT 长度和 OUT_CONTENT 长度分别设置为 16384 字节和 4096 字节。
+           // 现在所有 TLS 连接都将使用你的自定义协议栈
+           // ... 像往常一样使用 esp_tls_conn_new() 等创建 TLS 连接 ...
+       }
 
-.. list-table::
-    :header-rows: 1
-    :widths: 40 30 30
-    :align: center
+.. important::
 
-    * - 属性
-      - WolfSSL
-      - MbedTLS
-    * - 总消耗堆空间
-      - ~ 19 KB
-      - ~ 37 KB
-    * - 任务栈使用
-      - ~ 2.2 KB
-      - ~ 3.6 KB
-    * - 二进制文件大小
-      - ~ 858 KB
-      - ~ 736 KB
+    * 必须在创建任何 TLS 连接 **之前** 注册自定义协议栈。在创建 TLS 连接后调用 :cpp:func:`esp_tls_register_stack` 不会影响现有连接。
+    * :cpp:type:`esp_tls_stack_ops_t` 结构必须指向静态或全局结构体（不在栈上），因为系统会以引用方式存储该结构体。
+    * 你的实现应将协议栈特定的上下文数据存储在 :cpp:type:`esp_tls_t` 结构的 ``priv_ctx`` 和 ``priv_ssl`` 字段中。
+    * 所有必需函数的指针必须为非 NULL。可选函数如果不支持可以为 NULL。
+    * 注册函数只能调用一次。后续调用将返回 ``ESP_ERR_INVALID_STATE``。
+    * 更多函数签名和要求，请参阅 :component_file:`esp-tls/esp_tls_custom_stack.h`。
 
-.. note::
-
-    若配置选项不同或相应库的版本不同，得到的值可能与上表不同。
 
 ESP-TLS 中的 ATECC608A（安全元件）
 -----------------------------------------
@@ -380,3 +418,4 @@ API 参考
 
 .. include-build-file:: inc/esp_tls.inc
 .. include-build-file:: inc/esp_tls_errors.inc
+.. include-build-file:: inc/esp_tls_custom_stack.inc

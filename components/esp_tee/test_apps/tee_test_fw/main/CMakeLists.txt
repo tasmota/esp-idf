@@ -4,7 +4,7 @@ set(priv_requires bootloader_support esp_driver_gptimer esp_tee esp_timer mbedtl
 # Test FW related
 list(APPEND priv_requires nvs_flash test_utils unity)
 # TEE related
-list(APPEND priv_requires tee_sec_storage tee_attestation tee_ota_ops test_sec_srv)
+list(APPEND priv_requires tee_sec_storage tee_ota_ops test_sec_srv)
 
 set(srcs "app_main.c")
 
@@ -25,7 +25,7 @@ set(mbedtls_test_srcs_dir "${idf_path}/components/mbedtls/test_apps/main")
 if(CONFIG_SOC_AES_SUPPORTED)
     list(APPEND srcs "${mbedtls_test_srcs_dir}/test_psa_aes.c"
                      "${mbedtls_test_srcs_dir}/test_psa_aes_gcm.c"
-                     "${mbedtls_test_srcs_dir}/test_aes_perf.c"
+                     "${mbedtls_test_srcs_dir}/test_psa_aes_perf.c"
     )
 endif()
 
@@ -37,7 +37,7 @@ endif()
 
 # Mixed
 if(CONFIG_SOC_AES_SUPPORTED AND CONFIG_SOC_SHA_SUPPORTED)
-    list(APPEND srcs "${mbedtls_test_srcs_dir}/test_aes_sha_parallel.c")
+    list(APPEND srcs "${mbedtls_test_srcs_dir}/test_psa_aes_sha_parallel.c")
 endif()
 
 #ECC

@@ -28,6 +28,9 @@
 
 //TODO: [ESP32H4] IDF-12390 inherited from verification branch, need check
 
+// PSRAM frequency should be constrained by AXI frequency to avoid FIFO underflow.
+#define MSPI_TIMING_LL_PSRAM_FREQ_AXI_CONSTRAINED     1
+
 #ifdef __cplusplus
 extern "C" {
 #endif

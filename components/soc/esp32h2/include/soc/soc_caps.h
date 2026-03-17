@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -88,7 +88,7 @@
 #define SOC_VBAT_SUPPORTED              1
 #define SOC_APM_SUPPORTED               1 /*!< Support for APM peripheral */
 #define SOC_PMU_SUPPORTED               1
-#define SOC_LP_TIMER_SUPPORTED          1
+#define SOC_RTC_TIMER_V2_SUPPORTED      1
 #define SOC_LP_AON_SUPPORTED            1
 #define SOC_PAU_SUPPORTED               1
 #define SOC_CLK_TREE_SUPPORTED          1
@@ -224,7 +224,7 @@
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
 
-// GPIO7~14 on ESP32H2 can support chip deep sleep wakeup through EXT1 wake up
+// GPIO7~14 on ESP32H2 can support chip HP peripheral powerdown-ed sleep wakeup through EXT1 wake up
 
 #define SOC_GPIO_VALID_GPIO_MASK        ((1U << SOC_GPIO_PIN_COUNT) - 1)
 #define SOC_GPIO_VALID_OUTPUT_GPIO_MASK SOC_GPIO_VALID_GPIO_MASK
@@ -262,25 +262,18 @@
 #define SOC_ANA_CMPR_INTR_SHARE_WITH_GPIO   (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-H2 has 2 I2C
-#define SOC_I2C_NUM                 (2U)
-#define SOC_HP_I2C_NUM              (2U)
+#define SOC_I2C_NUM                             (2U)
+#define SOC_HP_I2C_NUM                          (2U)
 
-#define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE       (1)
+#define SOC_I2C_SUPPORT_XTAL                    (1)
+#define SOC_I2C_SUPPORT_RTC                     (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR              (1)
 
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
-#define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
+#define SOC_I2C_SLAVE_SUPPORT_BROADCAST         (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
 
-#define SOC_I2C_SUPPORT_XTAL        (1)
-#define SOC_I2C_SUPPORT_RTC         (1)
-#define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
-#define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
-#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
-#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
-#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
-#define SOC_I2C_SUPPORT_SLEEP_RETENTION           (1)
+#define SOC_I2C_SUPPORT_SLEEP_RETENTION         (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_HW_VERSION_2        (1)
@@ -426,6 +419,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V2_SUPPORTED
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 #define SOC_TIMER_SUPPORT_ETM             (1)

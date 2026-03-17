@@ -3,7 +3,7 @@
  * Focus on testing functionality where we use ESP32 hardware
  * accelerated crypto features.
  *
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -308,9 +308,7 @@ static void test_ecp_mul(mbedtls_ecp_group_id id, const uint8_t *x_coord, const 
     TEST_ASSERT_EQUAL(0, memcmp(x, result_x_coord, mbedtls_mpi_size(&R.MBEDTLS_PRIVATE(X))));
     TEST_ASSERT_EQUAL(0, memcmp(y, result_y_coord, mbedtls_mpi_size(&R.MBEDTLS_PRIVATE(Y))));
 
-    if (id == MBEDTLS_ECP_DP_SECP192R1) {
-        TEST_PERFORMANCE_CCOMP_LESS_THAN(ECP_P192_POINT_MULTIPLY_OP, "%" NEWLIB_NANO_COMPAT_FORMAT" us", NEWLIB_NANO_COMPAT_CAST(elapsed_time));
-    } else if (id == MBEDTLS_ECP_DP_SECP256R1) {
+    if (id == MBEDTLS_ECP_DP_SECP256R1) {
         TEST_PERFORMANCE_CCOMP_LESS_THAN(ECP_P256_POINT_MULTIPLY_OP, "%" NEWLIB_NANO_COMPAT_FORMAT" us", NEWLIB_NANO_COMPAT_CAST(elapsed_time));
 #if SOC_ECC_SUPPORT_CURVE_P384
     } else if (id == MBEDTLS_ECP_DP_SECP384R1) {
@@ -324,15 +322,6 @@ static void test_ecp_mul(mbedtls_ecp_group_id id, const uint8_t *x_coord, const 
     mbedtls_ecp_point_free(&P);
     mbedtls_mpi_free(&m);
     mbedtls_ecp_group_free(&grp);
-}
-
-TEST_CASE("mbedtls ECP point multiply with SECP192R1", "[mbedtls]")
-{
-    test_ecp_mul(MBEDTLS_ECP_DP_SECP192R1, ecc_p192_point_x, ecc_p192_point_y, ecc_p192_scalar,
-                 ecc_p192_mul_res_x, ecc_p192_mul_res_y);
-
-    test_ecp_mul(MBEDTLS_ECP_DP_SECP192R1, ecc_p192_point_x, ecc_p192_point_y, NULL,
-                 ecc_p192_small_mul_res_x, ecc_p192_small_mul_res_y);
 }
 
 TEST_CASE("mbedtls ECP point multiply with SECP256R1", "[mbedtls]")
@@ -383,9 +372,7 @@ static void test_ecp_verify(mbedtls_ecp_group_id id, const uint8_t *x_coord, con
 
     TEST_ASSERT_EQUAL(0, ret);
 
-    if (id == MBEDTLS_ECP_DP_SECP192R1) {
-        TEST_PERFORMANCE_CCOMP_LESS_THAN(ECP_P192_POINT_VERIFY_OP, "%" NEWLIB_NANO_COMPAT_FORMAT" us", NEWLIB_NANO_COMPAT_CAST(elapsed_time));
-    } else if (id == MBEDTLS_ECP_DP_SECP256R1) {
+    if (id == MBEDTLS_ECP_DP_SECP256R1) {
         TEST_PERFORMANCE_CCOMP_LESS_THAN(ECP_P256_POINT_VERIFY_OP, "%" NEWLIB_NANO_COMPAT_FORMAT" us", NEWLIB_NANO_COMPAT_CAST(elapsed_time));
 #if SOC_ECC_SUPPORT_CURVE_P384
     } else if (id == MBEDTLS_ECP_DP_SECP384R1) {
@@ -397,11 +384,6 @@ static void test_ecp_verify(mbedtls_ecp_group_id id, const uint8_t *x_coord, con
 
     mbedtls_ecp_point_free(&P);
     mbedtls_ecp_group_free(&grp);
-}
-
-TEST_CASE("mbedtls ECP point verify with SECP192R1", "[mbedtls]")
-{
-    test_ecp_verify(MBEDTLS_ECP_DP_SECP192R1, ecc_p192_mul_res_x, ecc_p192_mul_res_y);
 }
 
 TEST_CASE("mbedtls ECP point verify with SECP256R1", "[mbedtls]")

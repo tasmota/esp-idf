@@ -251,7 +251,7 @@ menu "Example Configuration"
     config EXAMPLE_GPIO_WAKEUP
         bool "Enable wakeup from GPIO"
         default y
-        depends on SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        depends on SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
         help
             This option enables wake up from GPIO. Be aware that if you use low level to trigger wakeup, we strongly
             recommend you to connect external pull-up resistance.

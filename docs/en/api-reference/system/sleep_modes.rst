@@ -308,13 +308,13 @@ RTC peripherals or RTC memories do not need to be powered on during sleep in thi
 
        .. note::
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， to continue using :cpp:func:`gpio_wakeup_enable` for GPIO wakeup, you need to first call :cpp:func:`rtc_gpio_init` and :cpp:func:`rtc_gpio_set_direction`, setting the RTCIO to input mode.
 
-                Alternatively，you can use :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` directly in that condition for GPIO wakeup, because the digital IO power domain is being powered off, where the situation is the same as entering Deep-sleep.
+                Alternatively，you can use :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` directly in that condition for GPIO wakeup, because the digital IO power domain is being powered off.
 
-            .. only::  not SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+            .. only::  not SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 
                 In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， to continue using :cpp:func:`gpio_wakeup_enable` for GPIO wakeup, you need to first call :cpp:func:`rtc_gpio_init` and :cpp:func:`rtc_gpio_set_direction`, setting the RTCIO to input mode.
 
@@ -323,17 +323,24 @@ RTC peripherals or RTC memories do not need to be powered on during sleep in thi
     GPIO Wakeup
     ^^^^^^^^^^^
 
-    Any IO can be used as the external input to wake up the chip from Light-sleep. Each pin can be individually configured to trigger wakeup on high or low level using the :cpp:func:`gpio_wakeup_enable` function. Then the :cpp:func:`esp_sleep_enable_gpio_wakeup` function should be called to enable this wakeup source.
+    There are two GPIO wakeup APIs available, each designed for different sleep scenarios:
 
-    Additionally, IOs that are powered by the VDD3P3_RTC power domain can be used to wake up the chip from Deep-sleep. The wakeup pin and wakeup trigger level can be configured by calling :cpp:func:`esp_deep_sleep_enable_gpio_wakeup`. The function will enable the Deep-sleep wakeup for the selected pin.
+    **1. :cpp:func:`esp_sleep_enable_gpio_wakeup` - For Light-sleep (GPIO module powered on)**
 
-    .. only:: SOC_PM_SUPPORT_TOP_PD
+        Any IO can be used as the external input to wake up the chip from Light-sleep when the GPIO module remains powered on. Each pin can be individually configured to trigger wakeup on high or low level using the :cpp:func:`gpio_wakeup_enable` function. Then the :cpp:func:`esp_sleep_enable_gpio_wakeup` function should be called to enable this wakeup source.
 
         .. note::
+            This API is **not available** when :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP` is enabled, because the GPIO module is powered down during sleep in this case. Use :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` instead.
 
-            .. only::  SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    **2. :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown` - For Deep-sleep and Light-sleep (peripheral powerdown)**
 
-                In Light-sleep mode, if you set Kconfig option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`， you can use :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` directly for GPIO wakeup, because the digital IO power domain is being powered off, where the situation is the same as entering Deep-sleep.
+        IOs that are powered by the VDD3P3_RTC power domain can be used to wake up the chip from Deep-sleep or Light-sleep when the peripheral power domain is powered down. The wakeup pin and wakeup trigger level can be configured by calling :cpp:func:`esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown`. This function works for:
+
+        - Deep-sleep mode (always)
+        - Light-sleep mode when :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP` is enabled
+
+        .. note::
+            Only GPIOs powered by the VDD3P3_RTC power domain (RTC IOs) can be used with this API. The exact set of supported pins can be checked in the `datasheet <{IDF_TARGET_DATASHEET_EN_URL}>`__ > Section IO Pins.
 
 .. only:: esp32h2
 

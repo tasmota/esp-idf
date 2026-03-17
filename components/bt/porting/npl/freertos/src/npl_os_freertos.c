@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -164,6 +164,13 @@ void
 npl_freertos_eventq_deinit(struct ble_npl_eventq *evq)
 {
     struct ble_npl_eventq_freertos *eventq = (struct ble_npl_eventq_freertos *)evq->eventq;
+
+#if CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC
+    /* Deinit can be invoked twice without init . Handle this case */
+    if (eventq == NULL) {
+        return;
+    }
+#endif
 
     BLE_LL_ASSERT(eventq);
     vQueueDelete(eventq->q);

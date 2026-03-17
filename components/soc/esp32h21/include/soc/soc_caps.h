@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -61,7 +61,7 @@
 // #define SOC_BOD_SUPPORTED               1    //TODO: [ESP32H21] IDF-11530
 // #define SOC_APM_SUPPORTED               1    //TODO: [ESP32H21] IDF-11494
 #define SOC_PMU_SUPPORTED               1
-#define SOC_LP_TIMER_SUPPORTED          1
+#define SOC_RTC_TIMER_V2_SUPPORTED      1
 #define SOC_LP_AON_SUPPORTED            1
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1
 #define SOC_CLK_TREE_SUPPORTED          1
@@ -242,25 +242,18 @@
 #define SOC_ANA_CMPR_INTR_SHARE_WITH_GPIO   (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-H21 has 2 I2C
 #define SOC_I2C_NUM                             (2U)
 #define SOC_HP_I2C_NUM                          (2U)
-
-#define SOC_I2C_FIFO_LEN                        (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM                     (8)  /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE                   (1)
-
-#define SOC_I2C_SUPPORT_HW_FSM_RST              (1)
-#define SOC_I2C_SUPPORT_HW_CLR_BUS              (1)
 
 #define SOC_I2C_SUPPORT_XTAL                    (1)
 #define SOC_I2C_SUPPORT_RTC                     (1)
 #define SOC_I2C_SUPPORT_10BIT_ADDR              (1)
+
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
 #define SOC_I2C_SLAVE_SUPPORT_BROADCAST         (1)
 #define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
-#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS     (1)
-#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH     (1)
-// #define SOC_I2C_SUPPORT_SLEEP_RETENTION           (1)
+
+// #define SOC_I2C_SUPPORT_SLEEP_RETENTION         (1) // TODO: [ESP32H21] IDF-11579
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 // #define SOC_I2S_HW_VERSION_2        (1)
@@ -408,6 +401,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V2_SUPPORTED
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 // #define SOC_TIMER_SUPPORT_ETM             (1)    //TODO: [ESP32H21] IDF-11576

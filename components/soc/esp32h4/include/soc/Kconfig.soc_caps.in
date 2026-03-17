@@ -43,6 +43,14 @@ config SOC_ETM_SUPPORTED
     bool
     default y
 
+config SOC_PARLIO_SUPPORTED
+    bool
+    default y
+
+config SOC_PARLIO_LCD_SUPPORTED
+    bool
+    default y
+
 config SOC_ASYNC_MEMCPY_SUPPORTED
     bool
     default y
@@ -103,7 +111,7 @@ config SOC_PAU_SUPPORTED
     bool
     default y
 
-config SOC_LP_TIMER_SUPPORTED
+config SOC_RTC_TIMER_V2_SUPPORTED
     bool
     default y
 
@@ -339,15 +347,15 @@ config SOC_LP_IO_CLOCK_IS_INDEPENDENT
     bool
     default y
 
-config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+config SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
     bool
     default y
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK
     int
     default 0
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT
     int
     default 6
 
@@ -391,26 +399,6 @@ config SOC_HP_I2C_NUM
     int
     default 2
 
-config SOC_I2C_FIFO_LEN
-    int
-    default 32
-
-config SOC_I2C_CMD_REG_NUM
-    int
-    default 8
-
-config SOC_I2C_SUPPORT_SLAVE
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_FSM_RST
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_CLR_BUS
-    bool
-    default y
-
 config SOC_I2C_SUPPORT_XTAL
     bool
     default y
@@ -423,19 +411,15 @@ config SOC_I2C_SUPPORT_10BIT_ADDR
     bool
     default y
 
+config SOC_I2C_SUPPORT_SLAVE
+    bool
+    default y
+
 config SOC_I2C_SLAVE_SUPPORT_BROADCAST
     bool
     default y
 
 config SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE
-    bool
-    default y
-
-config SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS
-    bool
-    default y
-
-config SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH
     bool
     default y
 
@@ -599,6 +583,34 @@ config SOC_MCPWM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
+config SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH
+    int
+    default 8
+
+config SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH
+    int
+    default 8
+
+config SOC_PARLIO_TX_CLK_SUPPORT_GATING
+    bool
+    default y
+
+config SOC_PARLIO_RX_CLK_SUPPORT_GATING
+    bool
+    default y
+
+config SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION
+    bool
+    default y
+
+config SOC_PARLIO_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_PARLIO_SUPPORT_I80_LCD
+    bool
+    default y
+
 config SOC_SPI_PERIPH_NUM
     int
     default 3
@@ -672,10 +684,6 @@ config SOC_SPI_MEM_SUPPORT_CHECK_SUS
     default y
 
 config SOC_SPI_MEM_SUPPORT_WRAP
-    bool
-    default y
-
-config SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED
     bool
     default y
 

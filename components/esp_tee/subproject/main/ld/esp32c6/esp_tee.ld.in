@@ -101,7 +101,7 @@ SECTIONS
     /* HAL */
     *libhal.a:mmu_hal.c*(.literal .text .literal.* .text.*)
     *libhal.a:cache_hal.c*(.literal .text .literal.* .text.*)
-    *libhal.a:apm_hal.c*(.literal .text .literal.* .text.*)
+    *libesp_hal_security.a:apm_hal.c*(.literal .text .literal.* .text.*)
     *libesp_hal_mspi.a:*(.literal .text .literal.* .text.*)
     *libesp_hal_wdt.a:*(.literal .text .literal.* .text.*)
     /* IDF components */
@@ -136,6 +136,28 @@ SECTIONS
     *(.sbss .sbss.*)
     ALIGNED_SYMBOL(8, _tee_bss_end)
   } > sram_tee_seg
+
+  .dram.tee.tdata :
+  {
+    /* tdata sections */
+    _tee_tdata_start = ABSOLUTE(.);
+#if CONFIG_LIBC_PICOLIBC
+    KEEP(*(.tdata.errno))
+#endif // CONFIG_LIBC_PICOLIBC
+    *(.tdata .tdata.* .gnu.linkonce.td.*)
+    _tee_tdata_end = ABSOLUTE(.);
+
+    /* tbss sections */
+    _tee_tbss_start = ABSOLUTE(.);
+    *(.tbss .tbss.* .gnu.linkonce.tb.*)
+    *(.tcommon .tcommon.*)
+    _tee_tbss_end = ABSOLUTE(.);
+
+    . = ALIGN(ALIGNOF(.dram.tee.rodata));
+  } > sram_tee_seg
+  ASSERT_SECTIONS_GAP(.dram.tee.tdata, .dram.tee.rodata)
+  ASSERT(_tee_tdata_end == _tee_tbss_start,
+         "tdata and tbss must be contiguous.")
 
   .dram.tee.rodata :
   {

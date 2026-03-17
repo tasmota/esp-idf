@@ -297,7 +297,7 @@ SECTIONS
      */
     mapping[dram0_bss]
 
-    ALIGNED_SYMBOL(8, _bss_end)
+    ALIGNED_SYMBOL(16, _bss_end)
   } > dram0_0_seg
 
   .flash.appdesc : ALIGN(0x10)

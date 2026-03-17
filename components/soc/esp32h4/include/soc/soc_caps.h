@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -43,7 +43,8 @@
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_TWAI_FD_SUPPORTED           1
 #define SOC_ETM_SUPPORTED               1
-// #define SOC_PARLIO_SUPPORTED            1    // TODO: [ESP32H4] IDF-12345 IDF-12347
+#define SOC_PARLIO_SUPPORTED            1
+#define SOC_PARLIO_LCD_SUPPORTED        1
 // #define SOC_BT_SUPPORTED                1
 // #define SOC_IEEE802154_SUPPORTED        1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
@@ -75,7 +76,7 @@
 // #define SOC_APM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12256
 #define SOC_PMU_SUPPORTED               1    // TODO: [ESP32H4] IDF-12286
 #define SOC_PAU_SUPPORTED               1
-#define SOC_LP_TIMER_SUPPORTED          1
+#define SOC_RTC_TIMER_V2_SUPPORTED      1
 #define SOC_LP_AON_SUPPORTED            1
 // #define SOC_LP_PERIPHERALS_SUPPORTED    1
 // #define SOC_LP_I2C_SUPPORTED            1    // TODO: [ESP32H4] IDF-12449
@@ -220,9 +221,10 @@
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
 
-#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   1
-#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
-#define SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT      (6)
+#define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP      (1)
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP               SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK       (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT    (6)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_6~GPIO_NUM_39)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK  (SOC_GPIO_VALID_GPIO_MASK & ~((1ULL<<6) - 1))
@@ -250,25 +252,18 @@
 #define SOC_ETM_SUPPORT_SLEEP_RETENTION 1
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-H4 has 2 I2C
-#define SOC_I2C_NUM                 (2U)
-#define SOC_HP_I2C_NUM              (2U)
+#define SOC_I2C_NUM                             (2U)
+#define SOC_HP_I2C_NUM                          (2U)
 
-#define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE       (1)
+#define SOC_I2C_SUPPORT_XTAL                    (1)
+#define SOC_I2C_SUPPORT_RTC                     (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR              (1)
 
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
-#define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
+#define SOC_I2C_SLAVE_SUPPORT_BROADCAST         (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
 
-#define SOC_I2C_SUPPORT_XTAL        (1)
-#define SOC_I2C_SUPPORT_RTC         (1)
-#define SOC_I2C_SUPPORT_10BIT_ADDR   (1)
-#define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
-#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
-#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
-#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
-#define SOC_I2C_SUPPORT_SLEEP_RETENTION (1)
+#define SOC_I2C_SUPPORT_SLEEP_RETENTION         (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_HW_VERSION_2        (1)
@@ -332,8 +327,13 @@
 // #define SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP     (1)     /*!< Support to maintain minimum usb communication during light sleep */ // TODO: IDF-6395
 
 /*-------------------------- PARLIO CAPS --------------------------------------*/
-// #define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    8   /*!< Number of data lines of the TX unit */
-// #define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    8   /*!< Number of data lines of the RX unit */
+#define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH    8  /*!< Number of data lines of the TX unit */
+#define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH    8  /*!< Number of data lines of the RX unit */
+#define SOC_PARLIO_TX_CLK_SUPPORT_GATING     1  /*!< Support gating TX clock */
+#define SOC_PARLIO_RX_CLK_SUPPORT_GATING     1  /*!< Support gating RX clock */
+#define SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION 1  /*!< Support loop transmission */
+#define SOC_PARLIO_SUPPORT_SLEEP_RETENTION   1   /*!< Support back up registers before sleep */
+#define SOC_PARLIO_SUPPORT_I80_LCD           1   /*!< Support to drive I80 interfaced LCD */
 
 /*--------------------------- SHA CAPS ---------------------------------------*/
 
@@ -384,7 +384,6 @@
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
-#define SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED               (1)
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -400,6 +399,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V2_SUPPORTED
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 // #define SOC_TIMER_SUPPORT_ETM             (1)     // TODO: [ESP32H4] IDF-12355

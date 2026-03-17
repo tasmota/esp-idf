@@ -590,7 +590,8 @@ MSPI_INIT_ATTR void sys_rtc_init(const soc_reset_reason_t *rst_reas)
     esp_rtc_init();
 }
 
-NOINLINE_ATTR IRAM_ATTR void flash_init_state(void)
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
+static NOINLINE_ATTR IRAM_ATTR void flash_init_state(void)
 {
     /**
      * This function initialise the Flash chip to the user-defined settings.
@@ -607,7 +608,6 @@ NOINLINE_ATTR IRAM_ATTR void flash_init_state(void)
 #endif
 }
 
-#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 MSPI_INIT_ATTR void mspi_init(void)
 {
 #if CONFIG_ESPTOOLPY_OCT_FLASH && !CONFIG_ESPTOOLPY_FLASH_MODE_AUTO_DETECT
@@ -655,6 +655,20 @@ MSPI_INIT_ATTR void mspi_init(void)
 }
 #endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 
+#if CONFIG_IDF_TARGET_ESP32 && !CONFIG_APP_BUILD_TYPE_RAM && !CONFIG_SPIRAM_BOOT_HW_INIT
+/*
+ * Adjust flash configuration. This must be placed in IRAM because running from flash,
+ * while it is being reconfigured, will result in corrupt data being read.
+ */
+NOINLINE_ATTR IRAM_ATTR static void configure_flash(esp_image_header_t *fhdr)
+{
+    bootloader_flash_gpio_config(fhdr);
+    bootloader_flash_dummy_config(fhdr);
+    bootloader_flash_clock_config(fhdr);
+    bootloader_flash_cs_timing_config();
+}
+#endif // CONFIG_IDF_TARGET_ESP32 && !CONFIG_APP_BUILD_TYPE_RAM && !CONFIG_SPIRAM_BOOT_HW_INIT
+
 /*
  * Initialize other parts of the system, including other CPUs.
  * As CPU0 needs to disable the cache in system_early_init function, the other cores are not allowed to run with the
@@ -686,7 +700,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
 
 #if SOC_CPU_CORES_NUM > 1 // there is no 'single-core mode' for natively single-core processors
 #if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
-#if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_ESP32P4_REV_MIN_FULL >= 300
+#if CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_ESP32P4_SELECTS_REV_LESS_V3
     // Ensure autoclock gating mode for core1 is enabled, it gets disabled in single-core mode.
     REG_SET_BIT(HP_SYS_CLKRST_CPU_WAITI_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_WAITI_ICG_EN);
 #endif
@@ -704,7 +718,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
     REG_CLR_BIT(SYSTEM_CORE_1_CONTROL_0_REG, SYSTEM_CONTROL_CORE_1_RESETING);
 #endif
 #elif CONFIG_IDF_TARGET_ESP32P4
-#if CONFIG_ESP32P4_REV_MIN_FULL >= 300
+#if !CONFIG_ESP32P4_SELECTS_REV_LESS_V3
     // In single core mode, the CPU system should ignore the WFI state of core1 when entering WFI autoclock gating mode.
     REG_CLR_BIT(HP_SYS_CLKRST_CPU_WAITI_CTRL0_REG, HP_SYS_CLKRST_REG_CORE1_WAITI_ICG_EN);
 #endif
@@ -897,10 +911,7 @@ NOINLINE_ATTR static void system_early_init(const soc_reset_reason_t *rst_reas)
 #if CONFIG_IDF_TARGET_ESP32
 #if !CONFIG_SPIRAM_BOOT_HW_INIT
     // If psram is uninitialized, we need to improve some flash configuration.
-    bootloader_flash_clock_config(&fhdr);
-    bootloader_flash_gpio_config(&fhdr);
-    bootloader_flash_dummy_config(&fhdr);
-    bootloader_flash_cs_timing_config();
+    configure_flash(&fhdr);
 #endif //!CONFIG_SPIRAM_BOOT_HW_INIT
 #endif //CONFIG_IDF_TARGET_ESP32
 

@@ -3,6 +3,10 @@
 examples/storage/custom_flash_driver:
   depends_components:
     - spi_flash
+  disable:
+    - if: 1 == 1
+      temporary: true
+      reason: breaking change needs external component to fix first (IDF-15134)
 
 examples/storage/emmc:
   depends_components:
@@ -65,6 +69,7 @@ examples/storage/perf_benchmark:
 
 examples/storage/sd_card/sdmmc:
   depends_components:
+    - fatfs
     - vfs
     - sdmmc
     - esp_driver_sdmmc
@@ -77,6 +82,7 @@ examples/storage/sd_card/sdmmc:
 
 examples/storage/sd_card/sdspi:
   depends_components:
+    - fatfs
     - vfs
     - sdmmc
     - esp_driver_sdspi

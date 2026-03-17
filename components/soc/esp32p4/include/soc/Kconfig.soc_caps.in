@@ -213,7 +213,7 @@ config SOC_ECC_EXTENDED_MODES_SUPPORTED
 
 config SOC_ECDSA_SUPPORTED
     bool
-    default n
+    default y
 
 config SOC_KEY_MANAGER_SUPPORTED
     bool
@@ -267,7 +267,7 @@ config SOC_PAU_SUPPORTED
     bool
     default y
 
-config SOC_LP_TIMER_SUPPORTED
+config SOC_RTC_TIMER_V2_SUPPORTED
     bool
     default y
 
@@ -679,7 +679,7 @@ config SOC_GPIO_SUPPORT_ETM
     bool
     default y
 
-config SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+config SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
     bool
     default y
 
@@ -703,11 +703,11 @@ config SOC_GPIO_OUT_RANGE_MAX
     int
     default 54
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK
     int
     default 0
 
-config SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT
+config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT
     int
     default 16
 
@@ -787,25 +787,9 @@ config SOC_HP_I2C_NUM
     int
     default 2
 
-config SOC_I2C_FIFO_LEN
+config SOC_LP_I2C_NUM
     int
-    default 32
-
-config SOC_I2C_CMD_REG_NUM
-    int
-    default 8
-
-config SOC_I2C_SUPPORT_SLAVE
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_FSM_RST
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_CLR_BUS
-    bool
-    default y
+    default 1
 
 config SOC_I2C_SUPPORT_XTAL
     bool
@@ -819,6 +803,10 @@ config SOC_I2C_SUPPORT_10BIT_ADDR
     bool
     default y
 
+config SOC_I2C_SUPPORT_SLAVE
+    bool
+    default y
+
 config SOC_I2C_SLAVE_SUPPORT_BROADCAST
     bool
     default y
@@ -827,25 +815,9 @@ config SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE
     bool
     default y
 
-config SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS
-    bool
-    default y
-
-config SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH
-    bool
-    default y
-
 config SOC_I2C_SUPPORT_SLEEP_RETENTION
     bool
     default y
-
-config SOC_LP_I2C_NUM
-    int
-    default 1
-
-config SOC_LP_I2C_FIFO_LEN
-    int
-    default 16
 
 config SOC_I2S_HW_VERSION_2
     bool
@@ -1335,7 +1307,19 @@ config SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE
     bool
     default y
 
+config SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP
+    bool
+    default y
+
 config SOC_ECDSA_USES_MPI
+    bool
+    default y
+
+config SOC_ECDSA_SUPPORT_CURVE_P384
+    bool
+    default y
+
+config SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES
     bool
     default y
 
@@ -1440,10 +1424,6 @@ config SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY
     default y
 
 config SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP
-    bool
-    default y
-
-config SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED
     bool
     default y
 
@@ -1611,13 +1591,21 @@ config SOC_EFUSE_XTS_AES_KEY_256
     bool
     default y
 
+config SOC_EFUSE_ECDSA_KEY_P192
+    bool
+    default y
+
+config SOC_EFUSE_ECDSA_KEY_P384
+    bool
+    default y
+
 config SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT
     bool
     default y
 
 config SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
     bool
-    default n
+    default y
 
 config SOC_KEY_MANAGER_FE_KEY_DEPLOY
     bool
@@ -1676,6 +1664,10 @@ config SOC_FLASH_ENCRYPTION_XTS_AES_128
     default y
 
 config SOC_FLASH_ENCRYPTION_XTS_AES_256
+    bool
+    default y
+
+config SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND
     bool
     default y
 
@@ -1868,10 +1860,6 @@ config SOC_CLK_APLL_SUPPORTED
     default y
 
 config SOC_CLK_MPLL_SUPPORTED
-    bool
-    default y
-
-config SOC_CLK_SDIO_PLL_SUPPORTED
     bool
     default y
 

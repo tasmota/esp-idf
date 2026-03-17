@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -75,7 +75,7 @@
 #define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
-#define SOC_ECDSA_SUPPORTED             0   // TODO: IDF-13523
+#define SOC_ECDSA_SUPPORTED             1
 #define SOC_KEY_MANAGER_SUPPORTED       1
 #define SOC_HUK_SUPPORTED               1
 #define SOC_FLASH_ENC_SUPPORTED         1
@@ -89,7 +89,7 @@
 #define SOC_PVT_RETENTION_BY_REGDMA     1
 #define SOC_DCDC_SUPPORTED              1
 #define SOC_PAU_SUPPORTED               1     //TODO: IDF-7531
-#define SOC_LP_TIMER_SUPPORTED          1
+#define SOC_RTC_TIMER_V2_SUPPORTED      1
 #define SOC_ULP_LP_UART_SUPPORTED       1
 #define SOC_LP_GPIO_MATRIX_SUPPORTED    1
 #define SOC_LP_PERIPHERALS_SUPPORTED    1
@@ -254,8 +254,9 @@
 // Target has the full LP IO subsystem
 
 // GPIO0~15 on ESP32P4 can support chip deep sleep wakeup
-#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP   (1)
-#define SOC_LP_IO_HAS_INDEPENDENT_WAKEUP_SOURCE   (1)
+#define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP  (1)
+#define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP           SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+#define SOC_LP_IO_HAS_INDEPENDENT_WAKEUP_SOURCE     (1)
 
 // LP IO peripherals have independent clock gating to manage
 #define SOC_LP_IO_CLOCK_IS_INDEPENDENT      (1)
@@ -266,8 +267,8 @@
 #define SOC_GPIO_IN_RANGE_MAX           54
 #define SOC_GPIO_OUT_RANGE_MAX          54
 
-#define SOC_GPIO_DEEP_SLEEP_WAKE_VALID_GPIO_MASK        (0ULL | 0xFFFF)
-#define SOC_GPIO_DEEP_SLEEP_WAKE_SUPPORTED_PIN_CNT      (16)
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK      (0ULL | 0xFFFF)
+#define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_PIN_CNT   (16)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_16~GPIO_NUM_54)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x007FFFFFFFFF0000ULL
@@ -306,32 +307,19 @@
 #define SOC_ANA_CMPR_SUPPORT_ETM               (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
-// ESP32-P4 has 2 I2Cs
-#define SOC_I2C_NUM                 (3U) // I2C_NUM = HP_I2C + LP_I2C
-#define SOC_HP_I2C_NUM              (2U)
+#define SOC_I2C_NUM                             (3U)
+#define SOC_HP_I2C_NUM                          (2U)
+#define SOC_LP_I2C_NUM                          (1U)
 
-#define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
-#define SOC_I2C_CMD_REG_NUM         (8)  /*!< Number of I2C command registers */
-#define SOC_I2C_SUPPORT_SLAVE       (1)
+#define SOC_I2C_SUPPORT_XTAL                    (1)
+#define SOC_I2C_SUPPORT_RTC                     (1)
+#define SOC_I2C_SUPPORT_10BIT_ADDR              (1)
 
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
-#define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
+#define SOC_I2C_SUPPORT_SLAVE                   (1)
+#define SOC_I2C_SLAVE_SUPPORT_BROADCAST         (1)
+#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE     (1)
 
-#define SOC_I2C_SUPPORT_XTAL        (1)
-#define SOC_I2C_SUPPORT_RTC         (1)
-#define SOC_I2C_SUPPORT_10BIT_ADDR  (1)
-#define SOC_I2C_SLAVE_SUPPORT_BROADCAST    (1)
-#define SOC_I2C_SLAVE_CAN_GET_STRETCH_CAUSE    (1)
-#define SOC_I2C_SLAVE_SUPPORT_I2CRAM_ACCESS   (1)
-#define SOC_I2C_SLAVE_SUPPORT_SLAVE_UNMATCH    (1)
-
-#define SOC_I2C_SUPPORT_SLEEP_RETENTION (1)
-
-/*-------------------------- LP_I2C CAPS -------------------------------------*/
-// ESP32-P4 has 1 LP_I2C
-#define SOC_LP_I2C_NUM              (1U)
-
-#define SOC_LP_I2C_FIFO_LEN         (16) /*!< LP_I2C hardware FIFO depth */
+#define SOC_I2C_SUPPORT_SLEEP_RETENTION         (1)
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_HW_VERSION_2        (1)
@@ -513,7 +501,10 @@
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
+#define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_SUPPORT_CURVE_P384 (1)
+#define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
 
 /*-------------------------- SPI CAPS ----------------------------------------*/
 #define SOC_SPI_PERIPH_NUM              3
@@ -556,7 +547,6 @@
 #define SOC_MEMSPI_TIMING_TUNING_BY_DQS                   (1)
 #define SOC_MEMSPI_TIMING_TUNING_BY_FLASH_DELAY           (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
-#define SOC_SPI_MEM_PSRAM_FREQ_AXI_CONSTRAINED            (1)
 #define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
 
 #define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
@@ -580,6 +570,7 @@
 /*-------------------------- LP_TIMER CAPS ----------------------------------*/
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
+#define SOC_RTC_TIMER_SUPPORTED             SOC_RTC_TIMER_V2_SUPPORTED
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 #define SOC_TIMER_SUPPORT_ETM             1
@@ -614,13 +605,16 @@
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
 /* Capability to disable the MSPI access in download mode */
 #define SOC_EFUSE_DIS_DOWNLOAD_MSPI 1
+// ECDSA_P256_KEY
 #define SOC_EFUSE_ECDSA_KEY 1
 #define SOC_EFUSE_XTS_AES_KEY_128 1
 #define SOC_EFUSE_XTS_AES_KEY_256 1
+#define SOC_EFUSE_ECDSA_KEY_P192 1
+#define SOC_EFUSE_ECDSA_KEY_P384 1
 
 /*-------------------------- Key Manager CAPS----------------------------*/
 #define SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT  1 /*!< Key manager supports key deployment */
-#define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY        0 /*!< Key manager responsible to deploy ECDSA key */ // TODO: IDF-13523
+#define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY        1 /*!< Key manager responsible to deploy ECDSA key */
 #define SOC_KEY_MANAGER_FE_KEY_DEPLOY           1 /*!< Key manager responsible to deploy Flash Encryption key */
 #define SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128   1 /*!< Key manager responsible to deploy the XTS-AES-128 key */
 #define SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256   1 /*!< Key manager responsible to deploy the XTS-AES-256 key */
@@ -640,7 +634,7 @@
 #define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS 1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1  /* SOC_EFUSE_XTS_AES_KEY_128 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128 (1) */
 #define SOC_FLASH_ENCRYPTION_XTS_AES_256    1  /* SOC_EFUSE_XTS_AES_KEY_256 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256 (1) */
-
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1 /*!< Only available in chip version above 3.0 */
 /*-------------------------- MEMPROT CAPS ------------------------------------*/
 
 /*-------------------------- UART CAPS ---------------------------------------*/
@@ -717,7 +711,6 @@
 
 #define SOC_CLK_APLL_SUPPORTED                    (1)     /*!< Support Audio PLL */
 #define SOC_CLK_MPLL_SUPPORTED                    (1)     /*!< Support MSPI PLL */
-#define SOC_CLK_SDIO_PLL_SUPPORTED                (1)     /*!< Support SDIO PLL */
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
 

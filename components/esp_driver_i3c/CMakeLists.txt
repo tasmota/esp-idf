@@ -12,7 +12,7 @@ endif()
 if(${target} STREQUAL "linux")
     set(priv_requires "")
 else()
-    set(priv_requires esp_driver_gpio esp_pm esp_mm)
+    set(priv_requires esp_driver_gpio esp_pm esp_mm esp_driver_dma)
 endif()
 
 idf_component_register(SRCS ${srcs}

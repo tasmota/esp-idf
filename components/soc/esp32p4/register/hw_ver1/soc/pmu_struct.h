@@ -6,6 +6,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 #include "pmu_reg.h"
 #ifdef __cplusplus
 extern "C" {

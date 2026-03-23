@@ -635,6 +635,10 @@ config SOC_RTC_CNTL_TAGMEM_PD_DMA_BUS_WIDTH
     int
     default 128
 
+config SOC_RTC_CNTL_NEEDS_ATOMIC_ACCESS
+    bool
+    default y
+
 config SOC_RTCIO_PIN_COUNT
     int
     default 22
@@ -726,22 +730,6 @@ config SOC_SPI_SCT_BUFFER_NUM_MAX
 config SOC_SPI_SCT_CONF_BITLEN_MAX
     hex
     default 0x3FFFA
-
-config SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
-    bool
-    default y
 
 config SOC_SPIRAM_SUPPORTED
     bool
@@ -1187,6 +1175,10 @@ config SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP
     bool
     default y
 
+config SOC_SPI_MEM_FLASH_SUPPORT_HPM
+    bool
+    default y
+
 config SOC_COEX_HW_PTI
     bool
     default y
@@ -1210,10 +1202,6 @@ config SOC_SDMMC_NUM_SLOTS
 config SOC_SDMMC_DATA_WIDTH_MAX
     int
     default 8
-
-config SOC_SDMMC_SUPPORT_XTAL_CLOCK
-    bool
-    default y
 
 config SOC_SDMMC_DELAY_PHASE_NUM
     int

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -124,10 +124,10 @@ We have two bits to control the interrupt:
 #include "esp_ipc.h"
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "soc/soc_memory_layout.h"
 #include "driver/gpio.h"
 #include "hal/spi_hal.h"
 #include "hal/spi_ll.h"
@@ -337,7 +337,7 @@ static esp_err_t spi_master_init_driver(spi_host_device_t host_id)
     }
 
     spi_hal_init(&host->hal, host_id);
-    spi_hal_config_io_default_level(&host->hal, bus_attr->bus_cfg.data_io_default_level);
+    spi_hal_set_data_pin_idle_level(&host->hal, bus_attr->bus_cfg.data_io_default_level);
 
     if (host_id != SPI1_HOST) {
         //SPI1 attributes are already initialized at start up.
@@ -1002,6 +1002,7 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
             //This workaround is only for esp32, where tx_dma_chan and rx_dma_chan are always same
             spicommon_dmaworkaround_idle(dma_ctx->tx_dma_chan.chan_id);
 #endif  //#if CONFIG_IDF_TARGET_ESP32
+            spicommon_dma_rx_mb(host->id, host->cur_trans_buf.buffer_to_rcv);
             spi_trans_dma_error_check(host);
         }
 
@@ -1107,6 +1108,8 @@ static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handl
     const spi_bus_attr_t* bus_attr = host->bus_attr;
     bool tx_enabled = (trans_desc->flags & SPI_TRANS_USE_TXDATA) || (trans_desc->tx_buffer);
     bool rx_enabled = (trans_desc->flags & SPI_TRANS_USE_RXDATA) || (trans_desc->rx_buffer);
+    uint8_t txlen_extra = trans_desc->length % 8;
+    uint8_t rxlen_extra = trans_desc->rxlength % 8;
     spi_transaction_ext_t *t_ext = (spi_transaction_ext_t *)trans_desc;
     bool dummy_enabled = (((trans_desc->flags & SPI_TRANS_VARIABLE_DUMMY) ? t_ext->dummy_bits : handle->cfg.dummy_bits) != 0);
     bool extra_dummy_enabled = handle->hal_dev.timing_conf.timing_dummy;
@@ -1128,6 +1131,7 @@ static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handl
     SPI_CHECK(!((trans_desc->flags & (SPI_TRANS_MODE_DIO | SPI_TRANS_MODE_QIO)) && !is_half_duplex), "Incompatible when setting to both multi-line mode and half duplex mode", ESP_ERR_INVALID_ARG);
 #ifdef CONFIG_IDF_TARGET_ESP32
     SPI_CHECK(!is_half_duplex || !bus_attr->dma_enabled || !rx_enabled || !tx_enabled, "SPI half duplex mode does not support using DMA with both MOSI and MISO phases.", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(!bus_attr->dma_enabled || !rxlen_extra, "rx unaligned byte with DMA is not supported", ESP_ERR_NOT_SUPPORTED);
 #endif
 #if !SOC_SPI_HD_BOTH_INOUT_SUPPORTED
     //On these chips, HW doesn't support using both TX and RX phases when in halfduplex mode
@@ -1147,6 +1151,8 @@ static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handl
     //Dummy phase is not available when both data out and in are enabled, regardless of FD or HD mode.
     SPI_CHECK(!tx_enabled || !rx_enabled || !dummy_enabled || !extra_dummy_enabled, "Dummy phase is not available when both data out and in are enabled", ESP_ERR_INVALID_ARG);
 
+    SPI_CHECK(!txlen_extra || (txlen_extra >= SPI_LL_TX_MINI_EXTRA_BITS), "tx %d-bit is not supported on this(or this version) chip", ESP_ERR_NOT_SUPPORTED, trans_desc->length);
+    SPI_CHECK(!rxlen_extra || (rxlen_extra >= SPI_LL_RX_MINI_EXTRA_BITS), "rx %d-bit is not supported on this chip", ESP_ERR_NOT_SUPPORTED, trans_desc->rxlength);
     if (bus_attr->dma_enabled) {
         SPI_CHECK(trans_desc->length <= SPI_LL_DMA_MAX_BIT_LEN, "txdata transfer > hardware max supported len", ESP_ERR_INVALID_ARG);
         SPI_CHECK(trans_desc->rxlength <= SPI_LL_DMA_MAX_BIT_LEN, "rxdata transfer > hardware max supported len", ESP_ERR_INVALID_ARG);
@@ -1175,47 +1181,6 @@ static SPI_MASTER_ISR_ATTR void uninstall_priv_desc(spi_trans_priv_t* trans_buf)
     }
 }
 
-static SPI_MASTER_ISR_ATTR esp_err_t setup_dma_priv_buffer(spi_host_t *host, uint32_t *buffer, uint32_t len, bool is_tx, uint32_t flags, uint32_t **ret_buffer)
-{
-#if CONFIG_IDF_TARGET_ESP32S2
-    ESP_RETURN_ON_FALSE_ISR((host->id != SPI3_HOST) || !(flags & SPI_TRANS_DMA_USE_PSRAM), ESP_ERR_NOT_SUPPORTED, SPI_TAG, "SPI3 does not support external memory");
-#endif
-    bool is_ptr_ext = esp_ptr_external_ram(buffer);
-    bool use_psram = is_ptr_ext && (flags & SPI_TRANS_DMA_USE_PSRAM);
-    bool need_malloc = is_ptr_ext ? (!use_psram || !esp_ptr_dma_ext_capable(buffer)) : !esp_ptr_dma_capable(buffer);
-    uint16_t alignment = 0;
-    // If psram is wanted, re-malloc also from psram.
-    uint32_t mem_cap = MALLOC_CAP_DMA | (use_psram ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL);
-    if (is_tx) {
-        alignment = use_psram ? host->dma_ctx->dma_align_tx_ext : host->dma_ctx->dma_align_tx_int;
-    } else {
-        // RX cache sync still need consider the cache alignment requirement
-        if (use_psram) {
-            alignment = MAX(host->dma_ctx->dma_align_rx_ext, host->bus_attr->cache_align_ext);
-        } else {
-            alignment = MAX(host->dma_ctx->dma_align_rx_int, host->bus_attr->cache_align_int);
-        }
-    }
-    need_malloc |= (((uint32_t)buffer | len) & (alignment - 1));
-    ESP_EARLY_LOGV(SPI_TAG, "%s %p, len %d, is_ptr_ext %d, use_psram: %d, alignment: %d, need_malloc: %d from %s", is_tx ? "TX" : "RX", buffer, len, is_ptr_ext, use_psram, alignment, need_malloc, (mem_cap & MALLOC_CAP_SPIRAM) ? "psram" : "internal");
-    if (need_malloc) {
-        ESP_RETURN_ON_FALSE_ISR(!(flags & SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL), ESP_ERR_INVALID_ARG, SPI_TAG, "Set flag SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL but %s addr&len not align to %d, or not dma_capable", is_tx ? "TX" : "RX", alignment);
-        len = (len + alignment - 1) & (~(alignment - 1));   // up align alignment
-        uint32_t *temp = heap_caps_aligned_alloc(alignment, len, mem_cap);
-        ESP_RETURN_ON_FALSE_ISR(temp != NULL, ESP_ERR_NO_MEM, SPI_TAG, "Failed to allocate priv %s buffer", is_tx ? "TX" : "RX");
-
-        if (is_tx) {
-            memcpy(temp, buffer, len);
-        }
-        buffer = temp;
-    }
-    esp_err_t ret = esp_cache_msync((void *)buffer, len, is_tx ? (ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED) : ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-    // ESP_ERR_NOT_SUPPORTED stands for not cache sync required, it's allowed here
-    ESP_RETURN_ON_FALSE_ISR((ret == ESP_OK) || (ret == ESP_ERR_NOT_SUPPORTED), ESP_ERR_INVALID_ARG, SPI_TAG, "sync failed for %s buffer", is_tx ? "TX" : "RX");
-    *ret_buffer = buffer;
-    return ESP_OK;
-}
-
 static SPI_MASTER_ISR_ATTR esp_err_t setup_priv_desc(spi_host_t *host, spi_trans_priv_t* priv_desc)
 {
     spi_transaction_t *trans_desc = priv_desc->trans;
@@ -1225,25 +1190,23 @@ static SPI_MASTER_ISR_ATTR esp_err_t setup_priv_desc(spi_host_t *host, spi_trans
     uint32_t* rcv_ptr = (trans_desc->flags & SPI_TRANS_USE_RXDATA) ? (uint32_t *)trans_desc->rx_data : (uint32_t *)trans_desc->rx_buffer;
     // tx memory assign
     uint32_t *send_ptr = (trans_desc->flags & SPI_TRANS_USE_TXDATA) ? (uint32_t *)trans_desc->tx_data : (uint32_t *)trans_desc->tx_buffer;
-
-    esp_err_t ret = ESP_OK;
-    if (send_ptr && bus_attr->dma_enabled) {
-        ret = setup_dma_priv_buffer(host, send_ptr, (trans_desc->length + 7) / 8, true, trans_desc->flags, &send_ptr);
-        if (ret != ESP_OK) {
-            goto clean_up;
-        }
+    if (!bus_attr->dma_enabled) {
+        priv_desc->buffer_to_send = send_ptr;
+        priv_desc->buffer_to_rcv = rcv_ptr;
+        return ESP_OK;
     }
 
-    if (rcv_ptr && bus_attr->dma_enabled) {
-        ret = setup_dma_priv_buffer(host, rcv_ptr, (trans_desc->rxlength + 7) / 8, false, trans_desc->flags, &rcv_ptr);
-        if (ret != ESP_OK) {
-            goto clean_up;
-        }
+    bool use_psram = trans_desc->flags & SPI_TRANS_DMA_USE_PSRAM;
+    bool auto_malloc = !(trans_desc->flags & SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL);
+    esp_err_t ret = spicommon_dma_setup_priv_buffer(host->id, send_ptr, (trans_desc->length + 7) / 8, true, use_psram, auto_malloc, (void *)&priv_desc->buffer_to_send);
+    if (ret != ESP_OK) {
+        goto clean_up;
     }
-
-    priv_desc->buffer_to_send = send_ptr;
-    priv_desc->buffer_to_rcv = rcv_ptr;
-    return ESP_OK;
+    ret = spicommon_dma_setup_priv_buffer(host->id, rcv_ptr, (trans_desc->rxlength + 7) / 8, false, use_psram, auto_malloc, &priv_desc->buffer_to_rcv);
+    if (ret != ESP_OK) {
+        goto clean_up;
+    }
+    return ret;
 
 clean_up:
     uninstall_priv_desc(priv_desc);
@@ -1472,6 +1435,7 @@ esp_err_t SPI_MASTER_ISR_ATTR spi_device_polling_end(spi_device_handle_t handle,
             return ESP_ERR_TIMEOUT;
         }
     }
+    spicommon_dma_rx_mb(host->id, host->cur_trans_buf.buffer_to_rcv);
     spi_trans_dma_error_check(host);
     uint32_t trans_flags = host->cur_trans_buf.trans->flags;  // save the flags before bus_lock release
 

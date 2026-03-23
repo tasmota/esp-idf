@@ -423,6 +423,10 @@ config SOC_GPIO_CLOCKOUT_CHANNEL_NUM
     int
     default 3
 
+config SOC_RTC_CNTL_NEEDS_ATOMIC_ACCESS
+    bool
+    default y
+
 config SOC_DEDIC_GPIO_HAS_INTERRUPT
     bool
     default y
@@ -620,22 +624,6 @@ config SOC_SPI_SCT_CONF_BITLEN_MAX
     default 0x7FFFFD
 
 config SOC_MEMSPI_IS_INDEPENDENT
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_26M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
     bool
     default y
 

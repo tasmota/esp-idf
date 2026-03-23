@@ -36,6 +36,12 @@ Typically, an I2C slave device has a 7-bit address or 10-bit address. {IDF_TARGE
 
     Keep in mind that the higher the frequency, the smaller the pull-up resistor should be (but not less than 1 kΩ). Indeed, large resistors will decline the current, which will increase the clock switching time and reduce the frequency. A range of 2 kΩ to 5 kΩ is recommended, but adjustments may also be necessary depending on their current draw requirements.
 
+.. only:: esp32
+
+    .. note::
+
+        The ESP32 I2C controller does not support clock stretching when operating as a slave. Therefore, in addition to driver configuration, the application layer should pay attention to speed matching and synchronization between master and slave devices: if the master processes too fast while the slave responds slowly, communication errors or data loss may occur. It is recommended to use application-layer data verification, GPIO signal synchronization, or other methods to achieve data synchronization between master and slave. Please confirm whether the ESP32 slave mode meets your project requirements according to your use case before use.
+
 I2C Clock Configuration
 -----------------------
 
@@ -47,38 +53,14 @@ I2C Clock Configuration
     :SOC_I2C_SUPPORT_APB: - :cpp:enumerator:`i2c_clock_source_t::I2C_CLK_SRC_APB`: APB clock as I2C clock source.
     :SOC_I2C_SUPPORT_REF_TICK: - :cpp:enumerator:`i2c_clock_source_t::I2C_CLK_SRC_REF_TICK`: 1 MHZ clock.
 
-I2C File Structure
-------------------
-
-.. figure:: ../../../_static/diagrams/i2c/i2c_code_structure.png
-    :align: center
-    :alt: I2C file structure
-
-    I2C file structure
-
-**Public headers that need to be included in the I2C application**
-
-- ``i2c.h``: The header file of legacy I2C APIs (for apps using legacy driver).
-- ``i2c_master.h``: The header file that provides standard communication mode specific APIs (for apps using new driver with master mode).
-- ``i2c_slave.h``: The header file that provides standard communication mode specific APIs (for apps using new driver with slave mode).
-
-.. note::
-
-    The legacy driver can't coexist with the new driver. Include ``i2c.h`` to use the legacy driver or the other two headers to use the new driver. Please keep in mind that the legacy driver is now deprecated and will be removed in future.
-
-**Public headers that have been included in the headers above**
-
-- ``i2c_types_legacy.h``: The legacy public types that are only used in the legacy driver.
-- ``i2c_types.h``: The header file that provides public types.
-
 Functional Overview
 -------------------
 
 The I2C driver offers following services:
 
 - `Resource Allocation <#resource-allocation>`__ - covers how to allocate I2C bus with properly set of configurations. It also covers how to recycle the resources when they finished working.
-- `I2C Master Controller <#i2c_master_controller>`__ - covers behavior of I2C master controller. Introduce data transmit, data receive, and data transmit and receive.
-- `I2C Slave Controller <#i2c_slave_controller>`__ - covers behavior of I2C slave controller. Involve data transmit and data receive.
+- `I2C Master Controller <#i2c-master-controller>`__ - covers behavior of I2C master controller. Introduce data transmit, data receive, and data transmit and receive.
+- `I2C Slave Controller <#i2c-slave-controller>`__ - covers behavior of I2C slave controller. Involve data transmit and data receive.
 - `Power Management <#power-management>`__ - describes how different source clock will affect power consumption.
 - `IRAM Safe <#iram-safe>`__ - describes tips on how to make the I2C interrupt work better along with a disabled cache.
 - `Thread Safety <#thread-safety>`__ - lists which APIs are guaranteed to be thread safe by the driver.

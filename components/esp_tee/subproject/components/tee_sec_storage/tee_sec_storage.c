@@ -156,8 +156,10 @@ static esp_err_t compute_nvs_keys_with_hmac(esp_efuse_block_t key_blk, nvs_sec_c
 
     // Create opaque key reference
     esp_hmac_opaque_key_t opaque_key = {
-        .use_km_key = false,
-        .efuse_block = (uint8_t)key_blk,
+#if SOC_KEY_MANAGER_SUPPORTED
+        .key_recovery_info = NULL,
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+        .efuse_key_id = hmac_key_id,
     };
 
     // Import the opaque key

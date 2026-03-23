@@ -551,10 +551,7 @@
 
 #define SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT (1)
 
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED        1
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -694,6 +691,7 @@
 #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 
 #define SOC_PM_CPU_RETENTION_BY_SW      (1)
+#define SOC_PM_FPU_RETENTION_BY_SW      (1)
 #define SOC_PM_CACHE_RETENTION_BY_PAU   (1)
 
 #define SOC_PM_PAU_LINK_NUM             (4)
@@ -727,7 +725,7 @@
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION       (1)
 
 /*-------------------------- Memory CAPS --------------------------*/
-#define SOC_MEM_TCM_SUPPORTED                      (1)
+#define SOC_MEM_SPM_SUPPORTED                      (1)
 #define SOC_ASYNCHRONOUS_BUS_ERROR_MODE            (1)
 /*--------------------------- EMAC --------------------------------*/
 #define SOC_EMAC_IEEE1588V2_SUPPORTED              (1)      /*!< EMAC Supports IEEE1588v2 time stamping */
@@ -742,6 +740,9 @@
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
+
+/*--------------------------- LCD ---------------------------------*/
+#define SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION      (1)   /*!< Support back up registers before sleep */
 
 /*--------------------------- I3C ---------------------------------*/
 #define SOC_I3C_MASTER_PERIPH_NUM                   (1)

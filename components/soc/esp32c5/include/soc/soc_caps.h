@@ -434,12 +434,8 @@
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                     (1) /*!< Support High Performance Mode */
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
-
-#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED        1
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 // TODO: [ESP32C5] IDF-8707
@@ -467,9 +463,10 @@
 #define SOC_MWDT_SUPPORT_SLEEP_RETENTION   (1)
 
 /*-------------------------- TWAI CAPS ---------------------------------------*/
-#define SOC_TWAI_CONTROLLER_NUM         2
-#define SOC_TWAI_MASK_FILTER_NUM        3
-#define SOC_TWAI_RANGE_FILTER_NUM       1U
+#define SOC_TWAI_CONTROLLER_NUM             2
+#define SOC_TWAI_MASK_FILTER_NUM            3
+#define SOC_TWAI_RANGE_FILTER_NUM           1U
+#define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_PAD_JTAG 1
@@ -647,7 +644,7 @@
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */
-// #define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
+#define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
 #define SOC_ESP_NIMBLE_CONTROLLER           (1)    /*!< Support BLE EMBEDDED controller V1 */
 #define SOC_BLE_50_SUPPORTED                (1)    /*!< Support Bluetooth 5.0 */
 #define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)    /*!< Support BLE device privacy mode */

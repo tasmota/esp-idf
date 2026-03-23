@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -287,6 +287,42 @@ static inline void i2s_ll_rx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
     default:
         HAL_ASSERT(false && "unsupported clock source");
         break;
+    }
+}
+
+/**
+ * @brief Get TX source clock
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @return Current TX clock source (i2s_clock_src_t).
+ */
+static inline i2s_clock_src_t i2s_ll_tx_clk_get_src(i2s_dev_t *hw)
+{
+    (void)hw;
+    switch (PCR.i2s_tx_clkm_conf.i2s_tx_clkm_sel) {
+    case 0: return (i2s_clock_src_t)I2S_CLK_SRC_XTAL;
+    case 1: return (i2s_clock_src_t)I2S_CLK_SRC_PLL_120M;
+    case 2: return (i2s_clock_src_t)I2S_CLK_SRC_PLL_160M;
+    case 3: return (i2s_clock_src_t)I2S_CLK_SRC_EXTERNAL;
+    default: return (i2s_clock_src_t)I2S_CLK_SRC_DEFAULT;
+    }
+}
+
+/**
+ * @brief Get RX source clock
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @return Current RX clock source (i2s_clock_src_t).
+ */
+static inline i2s_clock_src_t i2s_ll_rx_clk_get_src(i2s_dev_t *hw)
+{
+    (void)hw;
+    switch (PCR.i2s_rx_clkm_conf.i2s_rx_clkm_sel) {
+    case 0: return (i2s_clock_src_t)I2S_CLK_SRC_XTAL;
+    case 1: return (i2s_clock_src_t)I2S_CLK_SRC_PLL_120M;
+    case 2: return (i2s_clock_src_t)I2S_CLK_SRC_PLL_160M;
+    case 3: return (i2s_clock_src_t)I2S_CLK_SRC_EXTERNAL;
+    default: return (i2s_clock_src_t)I2S_CLK_SRC_DEFAULT;
     }
 }
 
@@ -794,6 +830,19 @@ static inline void i2s_ll_tx_enable_pdm(i2s_dev_t *hw, bool pcm2pdm_en)
 }
 
 /**
+ * @brief Enable I2S RX PDM mode
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param pdm2pcm_en Set true to enable RX PDM to PCM filter
+ */
+static inline void i2s_ll_rx_enable_pdm(i2s_dev_t *hw, bool pdm2pcm_en)
+{
+    (void)pdm2pcm_en;
+    hw->rx_conf.rx_pdm_en = true;
+    hw->rx_conf.rx_tdm_en = false;
+}
+
+/**
  * @brief Set I2S TX PDM prescale
  *
  * @param hw Peripheral I2S hardware instance address.
@@ -950,19 +999,6 @@ static inline uint32_t i2s_ll_tx_get_pdm_fp(i2s_dev_t *hw)
 static inline uint32_t i2s_ll_tx_get_pdm_fs(i2s_dev_t *hw)
 {
     return hw->tx_pcm2pdm_conf1.tx_pdm_fs;
-}
-
-/**
- * @brief Enable RX PDM mode.
- *
- * @param hw Peripheral I2S hardware instance address.
- * @param pdm2pcm Set true to RX enable PDM mode (ignored)
- */
-static inline void i2s_ll_rx_enable_pdm(i2s_dev_t *hw, bool pdm2pcm)
-{
-    (void)pdm2pcm;
-    hw->rx_conf.rx_pdm_en = 0;
-    hw->rx_conf.rx_tdm_en = 1;
 }
 
 /**

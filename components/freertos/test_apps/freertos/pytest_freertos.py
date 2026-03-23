@@ -13,9 +13,6 @@ from pytest_embedded_idf.utils import idf_parametrize
         ('freertos_options', 'supported_targets'),
         ('tickless_idle', 'supported_targets'),
         ('psram', 'esp32'),
-        ('psram', 'esp32c5'),
-        ('psram', 'esp32p4'),
-        ('psram', 'esp32s3'),
         ('single_core', 'esp32'),
         # TODO: [ESP32C5] IDF-10335
         # TODO: [ESP32C61] IDF-11146

@@ -26,7 +26,13 @@ However, the HMAC itself is not bound to this use case. It can also be used for 
 HMAC on {IDF_TARGET_NAME}
 -----------------------------
 
-On {IDF_TARGET_NAME}, the HMAC module works with a secret key burnt into the eFuses. This eFuse key can be made completely inaccessible for any resources outside the cryptographic modules, thus avoiding key leakage.
+On {IDF_TARGET_NAME}, the HMAC module works with a secret key burnt into the eFuses.
+
+.. only:: SOC_KEY_MANAGER_SUPPORTED
+
+    On {IDF_TARGET_NAME}, the HMAC module also supports storing a secret key in the Key Manager. Refer to :ref:`key-manager` for more details.
+
+This key can be made completely inaccessible for any resources outside the cryptographic modules, thus avoiding key leakage.
 
 Furthermore, {IDF_TARGET_NAME} has three different application scenarios for its HMAC module:
 
@@ -142,6 +148,8 @@ Application Outline
 
 The following code is an outline of how to set an eFuse key and then use it to calculate an HMAC for software usage.
 
+Using eFuses to store the HMAC key:
+
 We use ``esp_efuse_write_key`` to set physical key block 4 in the eFuse for the HMAC module together with its purpose. ``ESP_EFUSE_KEY_PURPOSE_HMAC_UP`` (8) means that this key can only be used for HMAC generation for software usage:
 
 .. code-block:: c
@@ -162,6 +170,8 @@ We use ``esp_efuse_write_key`` to set physical key block 4 in the eFuse for the 
 
 Now we can calculate an HMAC for software usage with the saved key through the PSA Crypto API.
 
+Using an eFuse-based HMAC key:
+
 .. code-block:: c
 
     #include "psa/crypto.h"
@@ -181,10 +191,9 @@ Now we can calculate an HMAC for software usage with the saved key through the P
     psa_set_key_bits(&attributes, 256);
     psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_ESP_HMAC_VOLATILE);
 
-    // Create opaque key reference
+    // Create opaque key reference for eFuse-based key
     esp_hmac_opaque_key_t opaque_key = {
-        .use_km_key = false,
-        .efuse_block = EFUSE_BLK_KEY4,
+        .efuse_key_id = HMAC_KEY4,
     };
 
     // Import the opaque key

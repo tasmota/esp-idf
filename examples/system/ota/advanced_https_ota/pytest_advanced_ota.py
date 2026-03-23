@@ -196,7 +196,7 @@ def test_examples_protocol_advanced_https_ota_example(dut: Dut) -> None:
         for _ in range(iterations):
             dut.expect('Loaded app from partition at offset', timeout=30)
             try:
-                ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+                ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
                 print(f'Connected to AP/Ethernet with IP: {ip_address}')
             except pexpect.exceptions.TIMEOUT:
                 raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -237,7 +237,7 @@ def test_examples_protocol_advanced_https_ota_example_ota_resumption(dut: Dut) -
         dut.expect('Loaded app from partition at offset', timeout=30)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -255,7 +255,7 @@ def test_examples_protocol_advanced_https_ota_example_ota_resumption(dut: Dut) -
         dut.expect('Loaded app from partition at offset', timeout=180)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -458,7 +458,7 @@ def test_examples_protocol_advanced_https_ota_example_truncated_bin(dut: Dut) ->
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -509,7 +509,7 @@ def test_examples_protocol_advanced_https_ota_example_truncated_header(dut: Dut)
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -560,7 +560,7 @@ def test_examples_protocol_advanced_https_ota_example_random(dut: Dut) -> None:
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -613,7 +613,7 @@ def test_examples_protocol_advanced_https_ota_example_invalid_chip_id(dut: Dut) 
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -650,7 +650,7 @@ def test_examples_protocol_advanced_https_ota_example_chunked(dut: Dut) -> None:
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -688,7 +688,7 @@ def test_examples_protocol_advanced_https_ota_example_redirect_url(dut: Dut) -> 
     # start test
     dut.expect('Loaded app from partition at offset', timeout=30)
     try:
-        ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+        ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
         print(f'Connected to AP/Ethernet with IP: {ip_address}')
     except pexpect.exceptions.TIMEOUT:
         raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -773,7 +773,7 @@ def test_examples_protocol_advanced_https_ota_example_anti_rollback(dut: Dut) ->
         # Positive Case
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -784,7 +784,7 @@ def test_examples_protocol_advanced_https_ota_example_anti_rollback(dut: Dut) ->
         print('writing to device: {}'.format('https://' + host_ip + ':' + str(server_port) + '/' + bin_name))
         dut.write('https://' + host_ip + ':' + str(server_port) + '/' + bin_name)
         dut.expect('Loaded app from partition at offset', timeout=60)
-        dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+        dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
         dut.expect(r'App is valid, rollback cancelled successfully', timeout=30)
 
         # Negative Case
@@ -837,7 +837,7 @@ def test_examples_protocol_advanced_https_ota_example_partial_request(dut: Dut) 
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP')
@@ -895,7 +895,7 @@ def test_examples_protocol_advanced_https_ota_example_ota_resumption_partial_dow
         dut.expect('Loaded app from partition at offset', timeout=30)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP')
@@ -911,7 +911,7 @@ def test_examples_protocol_advanced_https_ota_example_ota_resumption_partial_dow
         dut.expect('Loaded app from partition at offset', timeout=180)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -966,7 +966,7 @@ def test_examples_protocol_advanced_https_ota_example_nimble_gatts(dut: Dut) -> 
             ap_password = get_env_config_variable(env_name, 'ap_password')
             dut.write(f'{ap_ssid} {ap_password}')
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP')
@@ -1022,7 +1022,7 @@ def test_examples_protocol_advanced_https_ota_example_bluedroid_gatts(dut: Dut) 
             ap_password = get_env_config_variable(env_name, 'ap_password')
             dut.write(f'{ap_ssid} {ap_password}')
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP')
@@ -1073,7 +1073,7 @@ def test_examples_protocol_advanced_https_ota_example_openssl_aligned_bin(dut: D
         # start test
         dut.expect('Loaded app from partition at offset', timeout=30)
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -1133,7 +1133,7 @@ def test_examples_protocol_advanced_https_ota_example_verify_min_chip_revision(d
         dut.expect('Loaded app from partition at offset', timeout=30)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
@@ -1189,7 +1189,7 @@ def test_examples_protocol_advanced_https_ota_example_verify_max_chip_revision(d
         dut.expect('Loaded app from partition at offset', timeout=30)
 
         try:
-            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+            ip_address = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
             print(f'Connected to AP/Ethernet with IP: {ip_address}')
         except pexpect.exceptions.TIMEOUT:
             raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')

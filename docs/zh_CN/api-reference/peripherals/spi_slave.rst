@@ -79,6 +79,14 @@ SPI 传输事务
 
     主机应在从机设备准备好接收数据之后再进行传输事务。建议使用另外一个 GPIO 管脚作为握手信号来同步设备。更多细节，请参阅 :ref:`transaction_interval`。
 
+.. only:: SOC_PSRAM_DMA_CAPABLE
+
+    使用 PSRAM 的传输
+    ^^^^^^^^^^^^^^^^^^
+
+    SPI Slave 驱动程序支持使用 PSRAM 进行传输。直接传入 PSRAM 地址作为 :cpp:member:`spi_slave_transaction_t::tx_buffer` 或 :cpp:member:`spi_slave_transaction_t::rx_buffer` 即可。对于 rx_buffer ，其地址和传输长度有对齐要求，使用 :cpp:func:`heap_caps_malloc` 分配内存可以自动处理对齐要求。对于不能控制的内存，也可以使用 :c:macro:`SPI_SLAVE_TRANS_DMA_BUFFER_ALIGN_AUTO` 标志位，驱动会自动从 PSRAM 重新分配满足要求的内存。
+
+    请注意该功能共享 MSPI 总线带宽（总线频率 * 总线位宽），因此主机对该设备的传输带宽应小于 PSRAM 带宽，否则 **可能会丢失传输数据**，此时 ``spi_slave_transmit`` 函数将会返回 :c:macro:`ESP_ERR_INVALID_STATE` 错误。
 
 使用驱动程序
 ------------

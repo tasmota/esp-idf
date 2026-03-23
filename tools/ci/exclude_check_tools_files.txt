@@ -51,3 +51,4 @@ tools/templates/sample_component/main.c
 tools/templates/sample_project/CMakeLists.txt
 tools/templates/sample_project/main/CMakeLists.txt
 tools/templates/sample_project/main/main.c
+tools/test_build_system/buildv2_test_app/main/KConfig.projbuild

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -47,6 +47,8 @@ extern "C" {
 
 #define SPI_LL_DMA_MAX_BIT_LEN    (1 << 23)    //reg len: 23 bits
 #define SPI_LL_CPU_MAX_BIT_LEN    (18 * 32)    //Fifo len: 18 words
+#define SPI_LL_TX_MINI_EXTRA_BITS 1            //Minimum length of TX non byte aligned data in bits
+#define SPI_LL_RX_MINI_EXTRA_BITS 8            //Minimum length of RX non byte aligned data in bits
 #define SPI_LL_MOSI_FREE_LEVEL    1            //Default level after bus initialized
 #define SPI_LL_DMA_SHARED         1            //spi_dma shared with adc and dac on S2
 
@@ -268,13 +270,14 @@ static inline void spi_ll_slave_hd_init(spi_dev_t *hw)
 }
 
 /**
- * Determine and unify the default level of mosi line when bus free
+ * Determine and unify the default level of data line when bus idle
  *
  * @param hw Beginning address of the peripheral registers.
  */
-static inline void spi_ll_set_mosi_free_level(spi_dev_t *hw, bool level)
+static inline void spi_ll_set_data_pin_idle_level(spi_dev_t *hw, bool level)
 {
-    hw->ctrl.d_pol = level;     //set default level for MOSI only on IDLE state
+    hw->ctrl.d_pol = level;
+    hw->ctrl.q_pol = level;
 }
 
 /**

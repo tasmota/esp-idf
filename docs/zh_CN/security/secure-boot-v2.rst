@@ -408,6 +408,16 @@
     3. 使用公钥，采用 RSA-PSS（RFC8017 的第 8.1.2 节）算法或 ECDSA（RFC6090 的第 5.3.3 节）算法，验证引导加载程序镜像的签名，并与步骤 (2) 中计算的镜像摘要比较。
 
 
+验证数据分区
+------------
+
+Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像。启用 :ref:`CONFIG_SECURE_SIGNED_DATA_PARTITION` 以验证子类型为 ``ESP_PARTITION_SUBTYPE_DATA_UNDEFINED`` 的数据分区。
+
+数据分区镜像必须使用相同的签名密钥，通过 ``idf.py secure-sign-data`` 进行签名，并采用与应用镜像相同的格式。验证使用存储在 eFuse 中的一个或多个公钥摘要，并遵循 :ref:`verify_image` 中所述的流程。
+
+关于包括 OTA 流程和分区配置在内的详细信息，请参见 :ref:`secure-signed-data-partition`。
+
+
 引导加载程序的大小
 ------------------
 

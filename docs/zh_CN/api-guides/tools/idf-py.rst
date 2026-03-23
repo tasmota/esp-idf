@@ -161,7 +161,7 @@ uf2 二进制文件也可以通过 :ref:`idf.py uf2 <generate-uf2-binary>` 生�
 错误处理提示
 ==============================
 
-``idf.py`` 使用存储在 :idf_file:`tools/idf_py_actions/hints.yml` 中的提示数据库，当找到与给定错误相匹配的提示时，``idf.py`` 会打印该提示以尝试提供解决方案。目前，错误处理提示不支持 menuconfig 对象。
+``idf.py`` 会尝试提示如何解决错误。它会使用存储在 :idf_file:`tools/idf_py_actions/hints.yml` 中的提示数据库。此外，它还会从任意 ESP-IDF 组件或项目组件根目录下的 ``hints.yml`` 文件中加载组件特定的提示。如果发现与给定错误匹配的内容，系统将会打印出相应的提示。目前，menuconfig 目标尚不支持该自动错误解决提示。
 
 若无需该功能，可以通过 ``idf.py`` 的 ``--no-hints`` 参数关闭提示。
 

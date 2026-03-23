@@ -9,6 +9,7 @@
     :SOC_ADC_SUPPORTED: adc/index
     :SOC_ANA_CMPR_SUPPORTED: ana_cmpr
     :SOC_BITSCRAMBLER_SUPPORTED: bitscrambler
+    :SOC_MIPI_CSI_SUPPORTED: camera_driver
     :SOC_CLK_TREE_SUPPORTED: clk_tree
     :SOC_DAC_SUPPORTED: dac
     :SOC_ECDSA_SUPPORTED: ecdsa
@@ -21,10 +22,11 @@
     :SOC_I2C_SUPPORTED: i2c
     :SOC_I2S_SUPPORTED: i2s
     :SOC_ISP_SUPPORTED: isp
+    :SOC_JPEG_CODEC_SUPPORTED: jpeg
+    :SOC_KEY_MANAGER_SUPPORTED: key_manager
     lcd/index
     :SOC_GP_LDO_SUPPORTED: ldo_regulator
     ledc
-    :SOC_MIPI_CSI_SUPPORTED: camera_driver
     :SOC_MCPWM_SUPPORTED: mcpwm
     :SOC_PARLIO_SUPPORTED: parlio/index
     :SOC_PCNT_SUPPORTED: pcnt
@@ -41,7 +43,6 @@
     :SOC_SPI_SUPPORT_SLAVE_HD_VER2: spi_slave_hd
     :SOC_LP_I2S_SUPPORTED: lp_i2s
     :SOC_LP_VAD_SUPPORTED: vad
-    :SOC_JPEG_CODEC_SUPPORTED: jpeg
     :SOC_TEMP_SENSOR_SUPPORTED: temp_sensor
     :SOC_TOUCH_SENSOR_SUPPORTED: cap_touch_sens
     :SOC_TWAI_SUPPORTED: twai

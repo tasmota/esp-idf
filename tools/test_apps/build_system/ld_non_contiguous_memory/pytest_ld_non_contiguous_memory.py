@@ -6,7 +6,6 @@ from pytest_embedded_idf.utils import idf_parametrize
 
 
 @pytest.mark.generic
-@idf_parametrize('config', ['app_in_flash'], indirect=['config'])
 @idf_parametrize('target', ['esp32p4'], indirect=['target'])
 def test_ld_non_contiguous_memory(dut: Dut) -> None:
     dut.expect_exact('buf2 placed in low sram')

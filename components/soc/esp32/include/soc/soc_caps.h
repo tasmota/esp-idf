@@ -250,6 +250,10 @@
 #define SOC_RTCIO_HOLD_SUPPORTED 1
 #define SOC_RTCIO_WAKE_SUPPORTED 1
 
+/* RTC_CNTL registers on this SoC are not atomic and require software protection
+ * (e.g., spinlocks) when accessed from multiple cores or threads. */
+#define SOC_RTC_CNTL_NEEDS_ATOMIC_ACCESS 1
+
 /*-------------------------- SPI CAPS ----------------------------------------*/
 #define SOC_SPI_HD_BOTH_INOUT_SUPPORTED 1  //Support enabling MOSI and MISO phases together under Halfduplex mode
 #define SOC_SPI_AS_CS_SUPPORTED         1  //Support to toggle the CS while the clock toggles
@@ -263,12 +267,6 @@
 
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
 #define SOC_SPI_MAX_PRE_DIVIDER         8192
-
-// Although ESP32 doesn't has memspi, but keep consistent with following chips.(This means SPI0/1)
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_26M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
 
 // Peripheral supports DIO, DOUT, QIO, or QOUT
 #define SOC_SPI_PERIPH_SUPPORT_MULTILINE_MODE(spi_host)         ({(void)spi_host; 1;})

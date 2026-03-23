@@ -960,9 +960,9 @@ MCPWM 捕获通道支持在信号上检测到有效边沿时发送通知。须�
     ETM 事件与任务
     ^^^^^^^^^^^^^^^^^^
 
-    MCPWM 比较器可以产生事件，这些事件可以连接到 :doc:`ETM </api-reference/peripherals/etm>` 模块。:cpp:type:`mcpwm_comparator_etm_event_type_t` 中列出了 MCPWM 比较器能够产生的事件类型。用户可以通过调用 :cpp:func:`mcpwm_comparator_new_etm_event` 来获得相应事件的 ETM event 句柄。
+    MCPWM 的定时器和比较器可以产生事件，这些事件可以连接到 :doc:`ETM </api-reference/peripherals/etm>` 模块。:cpp:type:`mcpwm_timer_etm_event_type_t` 和 :cpp:type:`mcpwm_comparator_etm_event_type_t` 中分别列出了 MCPWM 定时器和比较器能够产生的事件类型。用户可以通过调用 :cpp:func:`mcpwm_timer_new_etm_event` 或 :cpp:func:`mcpwm_comparator_new_etm_event` 来获得相应事件的 ETM event 句柄。
 
-    关于如何将 MCPWM 比较器事件连接到 ETM 通道中，请参阅 :doc:`ETM </api-reference/peripherals/etm>` 文档。
+    关于如何将 MCPWM 事件连接到 ETM 通道中，请参阅 :doc:`ETM </api-reference/peripherals/etm>` 文档。
 
     .. _mcpwm-power-management:
 

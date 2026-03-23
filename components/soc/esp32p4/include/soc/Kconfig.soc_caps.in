@@ -1435,19 +1435,7 @@ config SOC_SPI_PERIPH_SUPPORT_CONTROL_DUMMY_OUT
     bool
     default y
 
-config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
-    bool
-    default y
-
-config SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED
+config SOC_SPI_MEM_FLASH_SUPPORT_HPM
     bool
     default y
 
@@ -1819,6 +1807,10 @@ config SOC_PM_CPU_RETENTION_BY_SW
     bool
     default y
 
+config SOC_PM_FPU_RETENTION_BY_SW
+    bool
+    default y
+
 config SOC_PM_CACHE_RETENTION_BY_PAU
     bool
     default y
@@ -1899,7 +1891,7 @@ config SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
-config SOC_MEM_TCM_SUPPORTED
+config SOC_MEM_SPM_SUPPORTED
     bool
     default y
 
@@ -1936,6 +1928,10 @@ config SOC_JPEG_ENCODE_SUPPORTED
     default y
 
 config SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV
+    bool
+    default y
+
+config SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION
     bool
     default y
 

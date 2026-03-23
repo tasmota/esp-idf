@@ -264,6 +264,10 @@
 #define SOC_RTC_CNTL_TAGMEM_PD_DMA_BUS_WIDTH    (128)
 #define SOC_RTC_CNTL_TAGMEM_PD_DMA_ADDR_ALIGN   (SOC_RTC_CNTL_TAGMEM_PD_DMA_BUS_WIDTH >> 3)
 
+/* RTC_CNTL registers on this SoC are not atomic and require software protection
+ * (e.g., spinlocks) when accessed from multiple cores or threads. */
+#define SOC_RTC_CNTL_NEEDS_ATOMIC_ACCESS 1
+
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT   22
 #define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED 1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
@@ -302,11 +306,6 @@
 #define SOC_SPI_SCT_REG_NUM                       14
 #define SOC_SPI_SCT_BUFFER_NUM_MAX                (1 + SOC_SPI_SCT_REG_NUM)  //1-word-bitmap + 14-word-regs
 #define SOC_SPI_SCT_CONF_BITLEN_MAX               0x3FFFA       //18 bits wide reg
-
-#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED          1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED          1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED          1
 
 /*-------------------------- SPIRAM CAPS ----------------------------------------*/
 #define SOC_SPIRAM_SUPPORTED            1
@@ -483,6 +482,8 @@
 #define SOC_MEMSPI_CORE_CLK_SHARED_WITH_PSRAM             (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
+
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)
 
@@ -498,8 +499,6 @@
 #define SOC_SDMMC_USE_GPIO_MATRIX  1
 #define SOC_SDMMC_NUM_SLOTS        2
 #define SOC_SDMMC_DATA_WIDTH_MAX   8
-/* Indicates that there is an option to use XTAL clock instead of PLL for SDMMC */
-#define SOC_SDMMC_SUPPORT_XTAL_CLOCK    1
 /* Supported host clock delay phase number */
 #define SOC_SDMMC_DELAY_PHASE_NUM    4
 

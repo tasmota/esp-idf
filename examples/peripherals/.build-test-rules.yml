@@ -237,7 +237,7 @@ examples/peripherals/lcd/i80_controller:
 
 examples/peripherals/lcd/mipi_dsi:
   disable:
-    - if: SOC_LCD_MIPI_DSI_SUPPORTED != 1
+    - if: SOC_MIPI_DSI_SUPPORTED != 1
   depends_components:
     - esp_lcd
 
@@ -527,24 +527,36 @@ examples/peripherals/twai/cybergear:
     - if: SOC_TWAI_SUPPORTED != 1
   depends_components:
     - esp_driver_twai
+    - esp_hal_twai
+    - esp_hw_support
+    - soc
 
 examples/peripherals/twai/twai_error_recovery:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
   depends_components:
     - esp_driver_twai
+    - esp_hal_twai
+    - esp_hw_support
+    - soc
 
 examples/peripherals/twai/twai_network:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
   depends_components:
     - esp_driver_twai
+    - esp_hal_twai
+    - esp_hw_support
+    - soc
 
 examples/peripherals/twai/twai_utils:
   disable:
     - if: SOC_TWAI_SUPPORTED != 1
   depends_components:
     - esp_driver_twai
+    - esp_hal_twai
+    - esp_hw_support
+    - soc
 
 examples/peripherals/uart/uart_dma_ota:
   disable:

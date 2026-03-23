@@ -526,15 +526,6 @@ config BT_LE_LL_CFG_FEAT_LE_ENCRYPTION
     help
         Enable encryption connection
 
-config BT_LE_CRYPTO_STACK_MBEDTLS
-    bool "Override TinyCrypt with mbedTLS for crypto computations"
-    default y
-    depends on !BT_NIMBLE_ENABLED
-    select MBEDTLS_CMAC_C
-    help
-        Enable this option to choose mbedTLS instead of TinyCrypt for crypto
-        computations.
-
 config BT_LE_WHITELIST_SIZE
     int "BLE white list size"
     range 1 31
@@ -1004,3 +995,12 @@ config BT_LE_CTRL_DL_ITVL_PHY_SYNC_EN
         When this option is enabled, the Controller automatically initiates a data length update
         Using the appropriate data length parameters
         When a PHY update or a connection interval update occurs.
+
+config BT_LE_CTRL_ADV_FAST_TX_EN
+    bool "Reduce adv enable-to-air latency (READ DOCS FIRST) (EXPERIMENTAL)"
+    default n
+    help
+        Reduce the latency between issuing the advertising enable command
+        and the actual on-air transmission by executing the advertising TX
+        path from IRAM.
+        Note: Enabling this option increases IRAM usage.

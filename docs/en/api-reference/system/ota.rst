@@ -229,6 +229,23 @@ The verification of signed OTA updates can be performed even without enabling ha
 
   For more information, please refer to :ref:`signed-app-verify`.
 
+.. _secure-signed-data-partition:
+
+Signed Data Partition Updates
+------------------------------
+
+Data partition images can be verified using the same Secure Boot v2 signature mechanism as application images. Enable :ref:`CONFIG_SECURE_SIGNED_DATA_PARTITION` to verify data partitions with subtype ``ESP_PARTITION_SUBTYPE_DATA_UNDEFINED`` during OTA updates.
+
+Sign data partition images using:
+
+.. code-block:: bash
+
+    idf.py secure-sign-data --keyfile PRIVATE_SIGNING_KEY --output signed_data.bin data.bin
+
+The signing key must match the one used for application signing, with its public key digest programmed into eFuse. The signed image format is: data content (padded to 4 KB) + 4 KB signature block (see :ref:`signature-block-format` in :doc:`/security/secure-boot-v2`).
+
+For a complete example, see :example:`system/ota/partitions_ota`.
+
 Tuning OTA Performance
 ----------------------
 

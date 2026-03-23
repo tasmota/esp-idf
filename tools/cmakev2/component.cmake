@@ -885,12 +885,12 @@ function(idf_component_include name)
     # helps in detecting and reporting circular dependencies, such as
     # C1->C2->C1. In this scenario, C2 can still use the C1 interface target,
     # but C1 will only be fully evaluated after C2 has been evaluated.
-    if("${component_name}" IN_LIST __DEPENDENCY_CHAIN)
-        idf_dbg("Component '${name}' in circular dependency chain '${__DEPENDENCY_CHAIN}'")
+    if("${component_interface}" IN_LIST __DEPENDENCY_CHAIN)
+        idf_dbg("Component '${component_interface}' in circular dependency chain '${__DEPENDENCY_CHAIN}'")
         return()
     endif()
 
-    list(APPEND __DEPENDENCY_CHAIN "${name}")
+    list(APPEND __DEPENDENCY_CHAIN "${component_interface}")
     # Evaluate the CMakeLists.txt file of the component.
     idf_component_get_property(component_build_dir "${component_name}" COMPONENT_BUILD_DIR)
     add_subdirectory("${component_directory}" "${component_build_dir}")
@@ -1055,6 +1055,65 @@ function(idf_component_include name)
     idf_build_get_property(compile_definitions COMPILE_DEFINITIONS GENERATOR_EXPRESSION)
     target_compile_definitions("${component_real_target}" PRIVATE "${compile_definitions}")
 
-    __get_compile_options(OUTPUT compile_options)
+    idf_build_get_compile_options(compile_options)
     target_compile_options("${component_real_target}" BEFORE PRIVATE "${compile_options}")
+endfunction()
+
+#[[api
+.. cmakev2:function:: idf_component_register_build_event_callback
+
+    .. code-block:: cmake
+
+        idf_component_register_build_event_callback(EVENT <event> CALLBACK <function-name>)
+
+    *EVENT[in]*
+
+        Build lifecycle event at which the callback will be invoked. Currently
+        only ``POST_ELF`` is supported.
+
+    *CALLBACK[in]*
+
+        Name of a CMake function defined in the component's project_include.cmake file.
+        The build system calls this function with the primary CMake target as its argument
+        at the specified event point. For ``POST_ELF`` this is the executable target.
+
+    Example::
+
+        # project_include.cmake
+        function(my_component_post_elf_hook target)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND my_tool "$<TARGET_FILE:${target}>")
+        endfunction()
+
+        idf_component_register_build_event_callback(
+            EVENT    POST_ELF
+            CALLBACK my_component_post_elf_hook)
+
+#]]
+function(idf_component_register_build_event_callback)
+    set(options)
+    set(one_value EVENT CALLBACK)
+    set(multi_value)
+    cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
+
+    if(NOT DEFINED ARG_EVENT)
+        idf_die("idf_component_register_build_event_callback: EVENT option is required")
+    endif()
+
+    if(NOT DEFINED ARG_CALLBACK)
+        idf_die("idf_component_register_build_event_callback: CALLBACK option is required")
+    endif()
+
+    set(valid_events POST_ELF)
+    if(NOT "${ARG_EVENT}" IN_LIST valid_events)
+        idf_die("idf_component_register_build_event_callback: unknown event '${ARG_EVENT}'. "
+                "Valid events: ${valid_events}")
+    endif()
+
+    if(NOT COMMAND "${ARG_CALLBACK}")
+        idf_die("idf_component_register_build_event_callback: callback '${ARG_CALLBACK}' "
+                "is not a known CMake function. Define it before calling this function.")
+    endif()
+
+    idf_build_set_property("__BUILD_EVENT_CALLBACKS_${ARG_EVENT}" "${ARG_CALLBACK}" APPEND)
 endfunction()

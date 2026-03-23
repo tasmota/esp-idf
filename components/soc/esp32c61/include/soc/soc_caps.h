@@ -140,8 +140,8 @@
 #define SOC_INT_HW_NESTED_SUPPORTED     1       // Support for hardware interrupts nesting
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
 
-#define SOC_CPU_BREAKPOINTS_NUM             4
-#define SOC_CPU_WATCHPOINTS_NUM             4
+#define SOC_CPU_BREAKPOINTS_NUM             3
+#define SOC_CPU_WATCHPOINTS_NUM             3
 #define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE  0x80000000 // bytes
 
 #define SOC_CPU_HAS_PMA                 1
@@ -338,11 +338,8 @@
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
 #define SOC_SPI_MEM_SUPPORT_TIMING_TUNING                 (1)
 #define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                     (1) /*!< Support High Performance Mode */
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
-
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM            2  // Number of counter units
@@ -507,7 +504,7 @@
 
 // /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BLE_SUPPORTED                   (1)    /*!< Support Bluetooth Low Energy hardware */
-// #define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
+#define SOC_BLE_MESH_SUPPORTED              (1)    /*!< Support BLE MESH */
 #define SOC_ESP_NIMBLE_CONTROLLER           (1)    /*!< Support BLE EMBEDDED controller V1 */
 #define SOC_BLE_50_SUPPORTED                (1)    /*!< Support Bluetooth 5.0 */
 #define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)   /*!< Support BLE device privacy mode */

@@ -2,6 +2,8 @@ idf_build_get_property(target IDF_TARGET)
 
 set(target_folder "${target}")
 
+set(srcs)
+
 # On Linux the soc component is a simple wrapper, without much functionality
 if(NOT ${target} STREQUAL "linux")
     if(CONFIG_IDF_TARGET_ESP32H4 AND NOT CONFIG_ESP32H4_SELECTS_REV_MP) # TODO: ESP32H4 IDF-13835
@@ -76,14 +78,6 @@ endif()
 
 if(CONFIG_SOC_MPI_SUPPORTED)
     list(APPEND srcs "${target_folder}/mpi_periph.c")
-endif()
-
-if(CONFIG_SOC_SDMMC_HOST_SUPPORTED)
-    list(APPEND srcs "${target_folder}/sdmmc_periph.c")
-endif()
-
-if(CONFIG_SOC_SDIO_SLAVE_SUPPORTED)
-    list(APPEND srcs "${target_folder}/sdio_slave_periph.c")
 endif()
 
 if(CONFIG_SOC_PAU_SUPPORTED AND CONFIG_SOC_LIGHT_SLEEP_SUPPORTED AND CONFIG_SOC_PM_SUPPORT_TOP_PD)

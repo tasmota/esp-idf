@@ -367,7 +367,7 @@ TEST_CASE("lcd_panel_i80_io_test", "[lcd]")
 TEST_CASE("lcd_panel_with_i80_interface (st7789, 8bits)", "[lcd]")
 {
 #define TEST_IMG_SIZE (100 * 100 * sizeof(uint16_t))
-    uint8_t *img = heap_caps_malloc(TEST_IMG_SIZE, MALLOC_CAP_DMA);
+    uint8_t *img = heap_caps_malloc(TEST_IMG_SIZE, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
     TEST_ASSERT_NOT_NULL(img);
 
     gpio_config_t bk_gpio_config = {

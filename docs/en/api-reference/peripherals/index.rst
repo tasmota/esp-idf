@@ -23,6 +23,7 @@ Peripherals API
     :SOC_I2S_SUPPORTED: i2s
     :SOC_ISP_SUPPORTED: isp
     :SOC_JPEG_CODEC_SUPPORTED: jpeg
+    :SOC_KEY_MANAGER_SUPPORTED: key_manager
     lcd/index
     :SOC_GP_LDO_SUPPORTED: ldo_regulator
     ledc

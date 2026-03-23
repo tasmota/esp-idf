@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -39,6 +39,8 @@ extern "C" {
 
 #define SPI_LL_DMA_MAX_BIT_LEN    SPI_MS_DATA_BITLEN
 #define SPI_LL_CPU_MAX_BIT_LEN    (16 * 32)    //Fifo len: 16 words
+#define SPI_LL_TX_MINI_EXTRA_BITS 1            //Minimum length of TX non byte aligned data in bits
+#define SPI_LL_RX_MINI_EXTRA_BITS 1            //Minimum length of RX non byte aligned data in bits
 #define SPI_LL_MOSI_FREE_LEVEL    1            //Default level after bus initialized
 #define SPI_LL_SUPPORT_CLK_SRC_PRE_DIV      1  //clock source have divider before peripheral
 #define SPI_LL_SRC_PRE_DIV_MAX    (PCR_SPI2_CLKM_DIV_NUM + 1)   //source pre divider max
@@ -899,13 +901,16 @@ static inline void spi_ll_master_set_cs_setup(spi_dev_t *hw, uint8_t setup)
 }
 
 /**
- * Determine and unify the default level of mosi line when bus free
+ * Determine and unify the default level of data line when bus idle
  *
  * @param hw Beginning address of the peripheral registers.
  */
-static inline void spi_ll_set_mosi_free_level(spi_dev_t *hw, bool level)
+static inline void spi_ll_set_data_pin_idle_level(spi_dev_t *hw, bool level)
 {
-    hw->ctrl.d_pol = level;     //set default level for MOSI only on IDLE state
+    hw->ctrl.d_pol = level;
+    hw->ctrl.q_pol = level;
+    hw->ctrl.wp_pol = level;
+    hw->ctrl.hold_pol = level;
 }
 
 /*------------------------------------------------------------------------------

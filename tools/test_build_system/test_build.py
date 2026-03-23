@@ -208,11 +208,6 @@ def test_build_uf2(idf_py: IdfPyFunc) -> None:
     assert_built(BOOTLOADER_BINS + APP_BINS + PARTITION_BIN + ['build/uf2.bin'])
 
 
-# The bootloader_support component defines its requirements based on the
-# sdkconfig values, specifically the CONFIG_APP_BUILD_TYPE_RAM used in this
-# test. If CONFIG_APP_BUILD_TYPE_RAM is set, bootloader_support declares a
-# dependency on micro-ecc.
-@pytest.mark.buildv2_skip('bootloader_support component CMakeLists.txt is broken')
 def test_build_loadable_elf(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
     logging.info('Loadable ELF build works')
     (test_app_copy / 'sdkconfig').write_text(

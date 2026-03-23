@@ -462,9 +462,45 @@ It is also possible to enter sleep modes with no wakeup sources configured. In t
 UART Output Handling
 ^^^^^^^^^^^^^^^^^^^^
 
-Before entering sleep mode, :cpp:func:`esp_deep_sleep_start` will flush the contents of UART FIFOs.
+Before entering sleep, the sleep flow prepares the **console UART** (the UART used for debug output, selected by :ref:`CONFIG_ESP_CONSOLE_UART_NUM`) so that APB clock changes or power-down do not cause garbled output or undefined behavior. The strategy applied is configurable and affects data integrity, sleep entry time, and power consumption.
 
-When entering Light-sleep mode using :cpp:func:`esp_light_sleep_start`, UART FIFOs will not be flushed. Instead, UART output will be suspended, and remaining characters in the FIFO will be sent out after wakeup from Light-sleep.
+**Default behavior (auto mode)**
+
+If you do not call :cpp:func:`esp_sleep_set_console_uart_handling_mode`, the following default strategy is used:
+
+- **Deep-sleep**: Always wait until all data in the console UART FIFO has been transmitted before entering sleep, so that all debug output is sent and no data is lost.
+- **Light-sleep**: Behavior depends on whether the UART power domain is powered down:
+    - If the UART remains powered (e.g. HP peripheral domain not powered down): UART output is **suspended** after the current frame completes; after wakeup it is resumed and any remaining data in the UART TX FIFO before sleep continues to be sent.
+    - If the UART power domain is powered down: The sleep flow waits until all data in the console UART TX FIFO has been transmitted before entering sleep; data in other UARTs is discarded to enter sleep faster.
+
+**Configuring console UART handling**
+
+You can override the default by calling :cpp:func:`esp_sleep_set_console_uart_handling_mode` and choosing one of the following modes (see :cpp:enum:`esp_sleep_uart_handling_mode_t`):
+
+- :cpp:enumerator:`ESP_SLEEP_AUTO_FLUSH_SUSPEND_UART` (default): Automatically choose flush or suspend based on sleep type and power domain, as described above.
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART` : Always wait until all data in the console UART TX FIFO has been transmitted before entering sleep. Use when you must guarantee that all debug output is visible; sleep entry will take longer and the chip will stay in Active state longer, increasing power consumption.
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_SUSPEND_UART` : Wait for the current UART frame to complete, then suspend the UART. If the UART stays powered during Light-sleep, transmission continues after wake. If the UART power domain is powered down, unsent data will be lost.
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_DISCARD_UART` : Discard all unsent data in the console UART FIFO and enter sleep immediately. Use for the fastest sleep entry and lowest power when debug output can be discarded.
+- :cpp:enumerator:`ESP_SLEEP_NO_HANDLING` : Do not perform any handling on the console UART before sleep. Use only when the UART state is known to be safe (e.g. no pending output or the console UART is disabled).
+
+.. note::
+
+   The sleep flow runs in a critical section. When using a mode that flushes the console UART (e.g. :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART` , or the default behavior for Light-sleep/Deep-sleep when the HP peripheral domain is powered down), set :ref:`CONFIG_ESP_INT_WDT_TIMEOUT_MS` to be **greater than** ``SOC_UART_FIFO_LEN`` × (time to send one character at the current baud rate). Otherwise, if too much data is queued in the TX FIFO, the flush may take longer than the interrupt watchdog timeout and trigger a watchdog reset during sleep entry.
+
+Example: ensure all debug output is sent before every sleep::
+
+.. code-block:: C
+
+    fflush(stdout);
+    esp_sleep_set_console_uart_handling_mode(ESP_SLEEP_ALWAYS_FLUSH_UART);
+    esp_light_sleep_start();
+
+Example: minimize sleep entry time and allow discarding console output::
+
+.. code-block:: C
+
+    esp_sleep_set_console_uart_handling_mode(ESP_SLEEP_ALWAYS_DISCARD_UART);
+    esp_deep_sleep_start();
 
 .. _wakeup_cause:
 

@@ -69,6 +69,8 @@ static struct bt_mesh_conn_cb *bt_mesh_gatts_conn_cb;
 
 static uint8_t bt_mesh_gatts_addr[6];
 
+#define BT_MESH_GATTS_CONN_UNUSED 0xFF
+
 #if CONFIG_BLE_MESH_USE_BLE_50
 static bool g_gatts_svcs_add = false;
 #endif
@@ -87,9 +89,6 @@ static inline bool bt_mesh_is_ble_adv_running();
 static bool g_host_init = false;
 
 #if CONFIG_BLE_MESH_NODE && CONFIG_BLE_MESH_USE_BLE_50
-
-#define BT_MESH_GATTS_CONN_UNUSED 0xFF
-
 static void bt_mesh_gatts_conn_init(void)
 {
     int i;
@@ -363,6 +362,9 @@ static int chr_disced(uint16_t conn_handle, const struct ble_gatt_error *error,
                 if ((bt_mesh_gattc_info[j].conn.handle == conn_handle) && bt_mesh_gattc_info[j].data_out_handle) {
                     break;
                 }
+            }
+            if (j == ARRAY_SIZE(bt_mesh_gattc_info)) {
+                return 0;
             }
             ble_gattc_disc_all_dscs(conn_handle, bt_mesh_gattc_info[j].data_out_handle, bt_mesh_gattc_info[j].end_handle,
                                     dsc_disced, (void *)j);
@@ -762,6 +764,11 @@ report_to_user:
         }
 
         notif_len = OS_MBUF_PKTLEN(event->notify_rx.om);
+        if (notif_len > sizeof(notif_data)) {
+            BT_ERR("TooLongNtf[%u]", notif_len);
+            bt_mesh_gattc_disconnect(conn);
+            return 0;
+        }
         rc = os_mbuf_copydata(event->notify_rx.om, 0, notif_len, notif_data);
 
         if (bt_mesh_gattc_info[i].service_uuid == BLE_MESH_UUID_MESH_PROV_VAL) {
@@ -859,22 +866,6 @@ static int start_le_scan(uint8_t scan_type, uint16_t interval, uint16_t window, 
     return 0;
 }
 
-static int set_ad(const struct bt_mesh_adv_data *ad, size_t ad_len, uint8_t *buf, uint8_t *buf_len)
-{
-    int i;
-
-    for (i = 0; i < ad_len; i++) {
-        buf[(*buf_len)++] = ad[i].data_len + 1;
-        buf[(*buf_len)++] = ad[i].type;
-
-        memcpy(&buf[*buf_len], ad[i].data,
-               ad[i].data_len);
-        *buf_len += ad[i].data_len;
-    }
-
-    return 0;
-}
-
 #if CONFIG_BLE_MESH_NODE
 static struct bt_mesh_gatt_attr *bt_mesh_gatts_find_attr_by_handle(uint16_t handle);
 
@@ -965,7 +956,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                 (bt_mesh_gatts_conn_cb->disconnected)(&bt_mesh_gatts_conn[index], event->disconnect.reason);
             }
 #endif /* CONFIG_BLE_MESH_USE_BLE_50 */
-            bt_mesh_gatts_conn[index].handle = 0;
+            bt_mesh_gatts_conn[index].handle = BT_MESH_GATTS_CONN_UNUSED;
             memset(bt_mesh_gatts_addr, 0x0, BLE_MESH_ADDR_LEN);
         }
 
@@ -1052,6 +1043,10 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         }
 #else /* CONFIG_BLE_MESH_USE_BLE_50 */
         index = BLE_MESH_GATT_GET_CONN_ID(event->subscribe.conn_handle);
+        if (index >= BLE_MESH_MAX_CONN) {
+            BT_ERR("InvConnIdx[%d]", index);
+            return 0;
+        }
 #endif /* CONFIG_BLE_MESH_USE_BLE_50 */
 
         if (event->subscribe.prev_notify != event->subscribe.cur_notify) {
@@ -1151,6 +1146,31 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
 }
 #endif /* CONFIG_BLE_MESH_NODE */
 
+static size_t get_buf_len(const struct bt_mesh_adv_data *ad, size_t ad_len)
+{
+    size_t len = 0;
+
+    for (size_t i = 0; i < ad_len; i++) {
+        len += (2 + ad[i].data_len);
+    }
+
+    return len;
+}
+
+static int set_ad(const struct bt_mesh_adv_data *ad, size_t ad_len, uint8_t *buf, uint8_t *buf_len)
+{
+    for (size_t i = 0; i < ad_len; i++) {
+        buf[(*buf_len)++] = ad[i].data_len + 1;
+        buf[(*buf_len)++] = ad[i].type;
+
+        memcpy(&buf[*buf_len], ad[i].data,
+               ad[i].data_len);
+        *buf_len += ad[i].data_len;
+    }
+
+    return 0;
+}
+
 #if CONFIG_BLE_MESH_USE_BLE_50
 static struct {
     bool set;
@@ -1190,7 +1210,7 @@ int bt_le_ext_adv_start(const uint8_t inst_id,
     err = set_ad(ad, ad_len, buf, &buf_len);
     if (err) {
         bt_mesh_free(buf);
-        BT_ERR("set_ad failed: err %d", err);
+        BT_ERR("SetAdvDataFail[%d]", err);
         return err;
     }
 
@@ -1222,7 +1242,7 @@ int bt_le_ext_adv_start(const uint8_t inst_id,
         err = set_ad(sd, sd_len, buf, &buf_len);
         if (err) {
             bt_mesh_free(buf);
-            BT_ERR("set_ad failed: err %d", err);
+            BT_ERR("SetScanRspDataFail[%d]", err);
             return err;
         }
 
@@ -1360,8 +1380,8 @@ int bt_le_adv_start(const struct bt_mesh_adv_param *param,
                     const struct bt_mesh_adv_data *sd, size_t sd_len)
 {
     struct ble_gap_adv_params adv_params;
-    uint8_t buf[BLE_HS_ADV_MAX_SZ];
     uint16_t interval = 0;
+    uint8_t *buf = NULL;
     uint8_t buf_len = 0;
     int err;
 
@@ -1371,32 +1391,52 @@ int bt_le_adv_start(const struct bt_mesh_adv_param *param,
     }
 #endif
 
+    buf = bt_mesh_calloc(get_buf_len(ad, ad_len));
+    if (buf == NULL) {
+        BT_ERR("AllocAdvDataBufFail[%u]", get_buf_len(ad, ad_len));
+        return -ENOMEM;
+    }
+
     err = set_ad(ad, ad_len, buf, &buf_len);
     if (err) {
-        BT_ERR("set_ad failed: err %d", err);
+        BT_ERR("SetAdvDataFail[%d]", err);
+        bt_mesh_free(buf);
         return err;
     }
 
     err = ble_gap_adv_set_data(buf, buf_len);
     if (err != 0) {
         BT_ERR("Advertising set failed: err %d", err);
+        bt_mesh_free(buf);
         return err;
     }
+
+    bt_mesh_free(buf);
 
     if (sd && (param->options & BLE_MESH_ADV_OPT_CONNECTABLE)) {
         buf_len = 0;
 
+        buf = bt_mesh_calloc(get_buf_len(sd, sd_len));
+        if (buf == NULL) {
+            BT_ERR("AllocScanRspDataBufFail[%u]", get_buf_len(sd, sd_len));
+            return -ENOMEM;
+        }
+
         err = set_ad(sd, sd_len, buf, &buf_len);
         if (err) {
-            BT_ERR("set_ad failed: err %d", err);
+            BT_ERR("SetScanRspDataFail[%d]", err);
+            bt_mesh_free(buf);
             return err;
         }
 
         err = ble_gap_adv_rsp_set_data(buf, buf_len);
         if (err != 0) {
             BT_ERR("Scan rsp failed: err %d", err);
+            bt_mesh_free(buf);
             return err;
         }
+
+        bt_mesh_free(buf);
     }
 
     memset(&adv_params, 0, sizeof adv_params);
@@ -2230,8 +2270,13 @@ int bt_mesh_gattc_conn_create(const bt_mesh_addr_t *addr, uint16_t service_uuid)
     memcpy(peer_addr.val, addr->val, 6);
     peer_addr.type = addr->type;
 
-    return ble_gap_connect(BLE_OWN_ADDR_PUBLIC, &peer_addr, BLE_HS_FOREVER, &conn_params,
-                           disc_cb, NULL);
+    rc = ble_gap_connect(BLE_OWN_ADDR_PUBLIC, &peer_addr, BLE_HS_FOREVER, &conn_params,
+                         disc_cb, NULL);
+    if (rc) {
+        return -1;
+    }
+
+    return i;
 }
 
 static int mtu_cb(uint16_t conn_handle,

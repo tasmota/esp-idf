@@ -41,10 +41,6 @@ set(ble_mesh_include_dirs
     "esp_ble_mesh/api"
 )
 
-set(ble_mesh_tinycrypt_dirs
-    "esp_ble_mesh/common/tinycrypt/include"
-)
-
 set(ble_mesh_v11_include_dirs
     "esp_ble_mesh/lib/include"
     "esp_ble_mesh/v1.1/api/core/include"
@@ -526,6 +522,13 @@ if(CONFIG_BT_ENABLED)
     endif()
 
     if(CONFIG_BLE_MESH)
+
+        if(CONFIG_BLE_MESH_USE_UNIFIED_CRYPTO)
+            message(WARNING "This configuration path is deprecated and will be removed"
+                            "in a future version. Please use the corresponding Kconfig"
+                            "options under $IDF_PATH/components/bt/common/Kconfig.")
+        endif()
+
         list(APPEND include_dirs ${ble_mesh_include_dirs})
 
         list(APPEND srcs "esp_ble_mesh/api/core/esp_ble_mesh_ble_api.c"
@@ -559,8 +562,7 @@ if(CONFIG_BT_ENABLED)
                     "esp_ble_mesh/common/utils.c")
 
         # Select crypto implementation based on config
-        if(CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT OR
-           CONFIG_BT_SMP_CRYPTO_STACK_NATIVE)
+        if(CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT)
             list(APPEND srcs "esp_ble_mesh/common/crypto_tc.c")
         elseif(CONFIG_BT_SMP_CRYPTO_STACK_MBEDTLS)
             if(CONFIG_MBEDTLS_VER_4_X_SUPPORT)
@@ -611,26 +613,6 @@ if(CONFIG_BT_ENABLED)
                     "esp_ble_mesh/models/server/state_binding.c"
                     "esp_ble_mesh/models/server/state_transition.c"
                     "esp_ble_mesh/models/server/time_scene_server.c")
-
-        if(CONFIG_BT_SMP_CRYPTO_STACK_NATIVE)
-            list(APPEND include_dirs ${ble_mesh_tinycrypt_dirs})
-                list(APPEND srcs
-                    "esp_ble_mesh/common/tinycrypt/src/aes_decrypt.c"
-                    "esp_ble_mesh/common/tinycrypt/src/aes_encrypt.c"
-                    "esp_ble_mesh/common/tinycrypt/src/cbc_mode.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ccm_mode.c"
-                    "esp_ble_mesh/common/tinycrypt/src/cmac_mode.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ctr_mode.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ctr_prng.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ecc_dh.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ecc_dsa.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ecc_platform_specific.c"
-                    "esp_ble_mesh/common/tinycrypt/src/ecc.c"
-                    "esp_ble_mesh/common/tinycrypt/src/hmac_prng.c"
-                    "esp_ble_mesh/common/tinycrypt/src/hmac.c"
-                    "esp_ble_mesh/common/tinycrypt/src/sha256.c"
-                    "esp_ble_mesh/common/tinycrypt/src/utils.c")
-        endif()
 
         if(CONFIG_BLE_MESH_V11_SUPPORT)
             list(APPEND include_dirs ${ble_mesh_v11_include_dirs})
@@ -746,8 +728,7 @@ if(CONFIG_BT_ENABLED)
     # 1. Controller uses TinyCrypt (not mbedTLS), OR
     # 2. NimBLE uses TinyCrypt (not mbedTLS), OR
     # 3. Bluedroid Host SMP uses TinyCrypt
-    if(CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT OR
-       (NOT CONFIG_BT_LE_CRYPTO_STACK_MBEDTLS AND NOT CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS))
+    if(CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT OR NOT CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS)
         list(APPEND include_dirs
                 common/tinycrypt/include
                 common/tinycrypt/port
@@ -1017,6 +998,17 @@ if(CONFIG_BLE_COMPRESSED_LOG_ENABLE)
     if(LOG_COMPRESSION_TARGET)
         set(srcs ${LOG_COMPRESS_SRCS})
         set(include_dirs ${LOG_COMPRESS_INCLUDE_DIRS})
+        # LOG_COMPRESS_FILES_WITH_FLAGS format: "file_path|compile_flags"
+        if(LOG_COMPRESS_FILES_WITH_FLAGS)
+            foreach(file_entry ${LOG_COMPRESS_FILES_WITH_FLAGS})
+                # Split by '|' to get file path and flags
+                string(REPLACE "|" ";" file_parts "${file_entry}")
+                list(GET file_parts 0 file_path)
+                list(GET file_parts 1 compile_flags)
+                set_source_files_properties(${file_path}
+                    PROPERTIES COMPILE_FLAGS "${compile_flags}")
+            endforeach()
+        endif()
     else()
         list(APPEND include_dirs ${LOG_COMPRESS_INCLUDE_DIRS})
     endif()

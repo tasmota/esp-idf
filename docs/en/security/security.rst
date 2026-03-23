@@ -11,7 +11,7 @@ This guide provides an overview of the overall security features available in va
 
 .. note::
 
-    In this guide, most used commands are in the form of ``idf.py secure-<command>``, which is a wrapper around corresponding ``espsecure <command>``. The ``idf.py`` based commands provides more user-friendly experience, although may lack some of the advanced functionality of their ``espsecure`` based counterparts.
+    In this guide, most used commands are in the form of ``idf.py secure-<command>``, which is a wrapper around corresponding ``espsecure <command>``. The ``idf.py`` based commands provides a more user-friendly experience, although may lack some of the advanced functionality of their ``espsecure`` based counterparts.
 
 .. only:: TARGET_SUPPORT_QEMU
 
@@ -70,7 +70,7 @@ Please refer to :doc:`flash-encryption` for detailed information about this feat
 
 .. only:: SOC_SPIRAM_SUPPORTED and not esp32
 
-    If {IDF_TARGET_NAME} is connected to an external SPI RAM, the contents written to or read from the SPI RAM will also be encrypted and decrypted respectively (via the MMU's flash cache, provided that FLash Encryption is enabled). This provides an additional safety layer for the data stored in SPI RAM, hence configurations like ``CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`` can be safely enabled in this case.
+    If {IDF_TARGET_NAME} is connected to an external SPI RAM, the contents written to or read from the SPI RAM will also be encrypted and decrypted respectively (via the MMU's flash cache, provided that Flash Encryption is enabled). This provides an additional safety layer for the data stored in SPI RAM, hence configurations like ``CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`` can be safely enabled in this case.
 
 Flash Encryption Best Practices
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -101,6 +101,24 @@ Flash Encryption Best Practices
 
         Please refer to the :doc:`../api-reference/peripherals/ecdsa` and :doc:`../api-reference/peripherals/ds` guides for detailed documentation.
 
+.. only:: SOC_KEY_MANAGER_SUPPORTED
+
+    Key Manager
+    ~~~~~~~~~~~
+
+    The Key Manager peripheral in {IDF_TARGET_NAME} provides hardware-assisted **key deployment and recovery** for cryptographic keys. Keys are cryptographically bound to a Hardware Unique Key (HUK) that is unique to each chip, ensuring that key material is never exposed to software-accessible memory.
+
+    The Key Manager supports key management for the following cryptographic peripherals: :doc:`ECDSA <../api-reference/peripherals/ecdsa>`, :doc:`HMAC <../api-reference/peripherals/hmac>`, :doc:`Digital Signature (DS) <../api-reference/peripherals/ds>`, and Flash Encryption.
+
+    Please refer to :doc:`../api-reference/peripherals/key_manager` for detailed documentation.
+
+    Key Manager Best Practices
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * Protect the ``key_recovery_info`` of a Key Manager-deployed key against unauthorized modification or loss.
+    * Lock Key Manager's security-related eFuses after successful key deployment to prevent re-deployment of a key of the same type.
+    * Avoid deploying new XTS-AES keys when Flash Encryption is already enabled unless explicitly intended.
+
 .. only:: SOC_MEMPROT_SUPPORTED or SOC_CPU_IDRAM_SPLIT_USING_PMP
 
     Memory Protection
@@ -124,7 +142,7 @@ Flash Encryption Best Practices
         DPA (Differential Power Analysis) Protection
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-        {IDF_TARGET_NAME} has support for protection mechanisms against the Differential Power Analysis related security attacks. DPA protection dynamically adjusts the clock frequency of the crypto peripherals, thereby blurring the power consumption trajectory during its operation. Based on the configured DPA security level, the clock variation range changes. Please refer to the *{IDF_TARGET_NAME} Technical Reference Manual* [`PDF <{IDF_TARGET_TRM_EN_URL}>`__]. for more details on this topic.
+        {IDF_TARGET_NAME} has support for protection mechanisms against the Differential Power Analysis related security attacks. DPA protection dynamically adjusts the clock frequency of the crypto peripherals, thereby blurring the power consumption trajectory during its operation. Based on the configured DPA security level, the clock variation range changes. Please refer to the **{IDF_TARGET_NAME} Technical Reference Manual** [`PDF <{IDF_TARGET_TRM_EN_URL}>`__] for more details on this topic.
 
         :ref:`CONFIG_ESP_CRYPTO_DPA_PROTECTION_LEVEL` can help to select the DPA level. Higher level means better security, but it can also have an associated performance impact. By default, the lowest DPA level is kept enabled but it can be modified based on the security requirement.
 
@@ -140,7 +158,7 @@ Flash Encryption Best Practices
         {IDF_TARGET_NAME} incorporates a pseudo-round function in the AES peripheral, thus enabling the peripheral to randomly insert pseudo-rounds before and after the original operation rounds and also generate a pseudo key to perform these dummy operations.
         These operations do not alter the original result, but they increase the complexity to perform side channel analysis attacks by randomizing the power profile.
 
-        :ref:`CONFIG_MBEDTLS_AES_USE_PSEUDO_ROUND_FUNC_STRENGTH` can be used to select the strength of the pseudo-round function. Increasing the strength improves the security provided, but would slow down the encrryption/decryption operations.
+        :ref:`CONFIG_MBEDTLS_AES_USE_PSEUDO_ROUND_FUNC_STRENGTH` can be used to select the strength of the pseudo-round function. Increasing the strength improves the security provided, but would slow down the encryption/decryption operations.
 
 
         .. list-table:: Performance impact on AES operations per strength level

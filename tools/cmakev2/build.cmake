@@ -113,6 +113,32 @@ function(__dump_build_properties)
 endfunction()
 
 #[[
+    __idf_build_dispatch_build_event(<event> <target>)
+
+    *event[in]*
+
+        Build event name. Currently only ``POST_ELF`` is supported. Other build
+        events may be extended when required.
+
+    *target[in]*
+
+        Name of the primary CMake target at this event point. Passed as the
+        sole argument to every registered callback so that callbacks can
+        operate on the correct target without querying build properties.
+        For ``POST_ELF`` this is the executable target name.
+
+    Internal dispatcher called by the build system at well-defined lifecycle
+    points. Invokes every CMake function registered for
+    ``event`` via ``idf_component_register_build_event_callback``.
+#]]
+function(__idf_build_dispatch_build_event event target)
+    idf_build_get_property(callbacks "__BUILD_EVENT_CALLBACKS_${event}")
+    foreach(cb IN LISTS callbacks)
+        cmake_language(CALL "${cb}" "${target}")
+    endforeach()
+endfunction()
+
+#[[
     __get_library_interface_or_die(LIBRARY <library>
                                    OUTPUT <variable>)
 
@@ -335,6 +361,12 @@ function(idf_build_library library)
         idf_component_get_property(component_interface "${component_name}" COMPONENT_INTERFACE)
         target_link_libraries("${library}" INTERFACE "${component_interface}")
     endforeach()
+
+    # Process optional requirements in DEFERRED mode only (no-op in IMMEDIATE or when unset).
+    idf_build_get_property(opt_req_mode IDF_COMPONENT_OPTIONAL_REQUIRES_MODE)
+    if("${opt_req_mode}" STREQUAL "DEFERRED")
+        __idf_component_process_optional_requires()
+    endif()
 
     # Get all targets transitively linked to the library interface target.
     __get_target_dependencies(TARGET "${library}" OUTPUT dependencies)
@@ -597,6 +629,8 @@ function(idf_build_executable executable)
     if(ARG_MAPFILE_TARGET AND "${linker_type}" STREQUAL "GNU")
         set(mapfile "${CMAKE_BINARY_DIR}/${ARG_NAME}.map")
         target_link_options(${executable} PRIVATE "LINKER:--Map=${mapfile}")
+        # Add cross-reference table to the map file
+        target_link_options(${executable} PRIVATE "LINKER:--cref")
         add_custom_command(
             OUTPUT "${mapfile}"
             DEPENDS ${executable}
@@ -608,6 +642,9 @@ function(idf_build_executable executable)
     endif()
 
     set_target_properties(${executable} PROPERTIES LIBRARY_INTERFACE ${library})
+
+    # Dispatch POST_ELF event once the executable target exists
+    __idf_build_dispatch_build_event(POST_ELF "${executable}")
 endfunction()
 
 #[[
@@ -715,35 +752,55 @@ endfunction()
 
     .. code-block:: cmake
 
-        idf_build_generate_metadata(<binary>
+        idf_build_generate_metadata([BINARY <binary>]
+                                    [EXECUTABLE <executable>]
                                     [OUTPUT_FILE <file>])
 
-    *binary[in]*
+    *BINARY[in,opt]*
 
         Binary target for which to generate a metadata file.
+
+    *EXECUTABLE[in,opt]*
+
+        Executable target for which to generate a metadata file.
 
     *OUTPUT_FILE[in,opt]*
 
         Optional output file path for storing the metadata. If not provided,
         the default path ``<build>/project_description.json`` is used.
 
-    Generate metadata for the specified ``binary`` and store it in the
-    specified ``OUTPUT_FILE``. If no ``OUTPUT_FILE`` is provided, the default
-    location ``<build>/project_description.json`` will be used.
+    Generate metadata for the specified ``binary`` or ``executable`` target and
+    store it in the specified ``OUTPUT_FILE``. If no ``OUTPUT_FILE`` is
+    provided, the default location ``<build>/project_description.json`` will be
+    used.
 #]]
-function(idf_build_generate_metadata binary)
+function(idf_build_generate_metadata)
     set(options)
-    set(one_value OUTPUT_FILE)
+    set(one_value OUTPUT_FILE BINARY EXECUTABLE)
     set(multi_value)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
-    # The EXECUTABLE_TARGET property is set by the idf_build_binary or
-    # the idf_sign_binary function.
-    get_target_property(executable "${binary}" EXECUTABLE_TARGET)
-    if(NOT executable)
-        idf_die("Binary target '${binary}' is missing 'EXECUTABLE_TARGET' property.")
+    if(NOT DEFINED ARG_BINARY AND NOT DEFINED ARG_EXECUTABLE)
+        idf_die("BINARY or EXECUTABLE option is required")
     endif()
-    __get_executable_library_or_die(TARGET "${executable}" OUTPUT library)
+
+    if(DEFINED ARG_BINARY)
+        # The EXECUTABLE_TARGET property is set by the idf_build_binary or
+        # the idf_sign_binary function.
+        get_target_property(ARG_EXECUTABLE "${ARG_BINARY}" EXECUTABLE_TARGET)
+        if(NOT ARG_EXECUTABLE)
+            idf_die("Binary target '${ARG_BINARY}' is missing 'EXECUTABLE_TARGET' property.")
+        endif()
+
+        # The BINARY_PATH property is set by the idf_build_binary or
+        # the idf_sign_binary function.
+        get_target_property(binary_path ${ARG_BINARY} BINARY_PATH)
+        if(NOT binary_path)
+            idf_die("Binary target '${ARG_BINARY}' is missing 'BINARY_PATH' property.")
+        endif()
+        get_filename_component(PROJECT_BIN "${binary_path}" NAME)
+    endif()
+    __get_executable_library_or_die(TARGET "${ARG_EXECUTABLE}" OUTPUT library)
 
     idf_build_get_property(PROJECT_NAME PROJECT_NAME)
     idf_build_get_property(PROJECT_VER PROJECT_VER)
@@ -752,14 +809,7 @@ function(idf_build_generate_metadata binary)
     idf_build_get_property(BUILD_DIR BUILD_DIR)
     idf_build_get_property(SDKCONFIG SDKCONFIG)
     idf_build_get_property(SDKCONFIG_DEFAULTS SDKCONFIG_DEFAULTS)
-    set(PROJECT_EXECUTABLE "$<TARGET_FILE_NAME:${executable}>")
-    # The BINARY_PATH property is set by the idf_build_binary or
-    # the idf_sign_binary function.
-    get_target_property(binary_path ${binary} BINARY_PATH)
-    if(NOT binary_path)
-        idf_die("Binary target '${binary}' is missing 'BINARY_PATH' property.")
-    endif()
-    get_filename_component(PROJECT_BIN "${binary_path}" NAME)
+    set(PROJECT_EXECUTABLE "$<TARGET_FILE_NAME:${ARG_EXECUTABLE}>")
     if(NOT PROJECT_BIN)
         set(PROJECT_BIN "")
     endif()

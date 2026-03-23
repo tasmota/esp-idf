@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -50,12 +50,12 @@ static void esp_cpu_configure_invalid_regions(void)
     // 0. Gap at bottom of address space
     PMA_RESET_AND_ENTRY_SET_NAPOT(0, 0, SOC_CPU_SUBSYSTEM_LOW, PMA_NAPOT | PMA_NONE);
 
-    // 1. Gap between CPU subsystem region & HP TCM
+    // 1. Gap between CPU subsystem region & HP SPM
     PMA_RESET_AND_ENTRY_SET_TOR(1, SOC_CPU_SUBSYSTEM_HIGH, PMA_NONE);
-    PMA_RESET_AND_ENTRY_SET_TOR(2, SOC_TCM_LOW, PMA_TOR | PMA_NONE);
+    PMA_RESET_AND_ENTRY_SET_TOR(2, SOC_SPM_LOW, PMA_TOR | PMA_NONE);
 
-    // 2. Gap between HP TCM and CPU Peripherals
-    PMA_RESET_AND_ENTRY_SET_TOR(3, SOC_TCM_HIGH, PMA_NONE);
+    // 2. Gap between HP SPM and CPU Peripherals
+    PMA_RESET_AND_ENTRY_SET_TOR(3, SOC_SPM_HIGH, PMA_NONE);
     PMA_RESET_AND_ENTRY_SET_TOR(4, CPU_PERIPH_LOW, PMA_TOR | PMA_NONE);
 
     // 3. Gap between CPU Peripherals and I_Cache
@@ -106,8 +106,8 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
     PMP_RESET_AND_ENTRY_SET(0, pmpaddr0, PMP_NAPOT | RW);
     _Static_assert(SOC_CPU_SUBSYSTEM_LOW < SOC_CPU_SUBSYSTEM_HIGH, "Invalid CPU subsystem region");
 
-    // 2. HP-CPU TCM
-    // The default memory permissions are RWX and TCM should be RWX, so we can skip configuring it
+    // 2. HP-CPU SPM
+    // The default memory permissions are RWX and SPM should be RWX, so we can skip configuring it
 
     // 3. CPU Peripherals
     const uint32_t pmpaddr1 = PMPADDR_NAPOT(CPU_PERIPH_LOW, CPU_PERIPH_HIGH);
@@ -209,7 +209,7 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
     PMP_RESET_AND_ENTRY_SET(27, pmpaddr27, PMP_NAPOT | RW);
     _Static_assert(SOC_PERIPHERAL_LOW < SOC_PERIPHERAL_HIGH, "Invalid peripheral region");
 
-    // 9. LP memory
+    // 9. LP memory and LP peripherals
 #if CONFIG_ESP_SYSTEM_MEMPROT && CONFIG_ESP_SYSTEM_MEMPROT_PMP && !BOOTLOADER_BUILD
     extern int _rtc_text_start;
     extern int _rtc_text_end;
@@ -224,11 +224,15 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
     PMP_RESET_AND_ENTRY_SET(29, (int)&_rtc_text_start, PMP_TOR | RW);
 #endif
     PMP_RESET_AND_ENTRY_SET(30, (int)&_rtc_text_end, PMP_TOR | RX);
-    PMP_RESET_AND_ENTRY_SET(31, SOC_RTC_IRAM_HIGH, PMP_TOR | RW);
+    // LP peripherals are contiguous with LP memory; this entry covers both with R/W
+    PMP_RESET_AND_ENTRY_SET(31, SOC_LP_PERIPH_HIGH, PMP_TOR | RW);
 #else
     const uint32_t pmpaddr28 = PMPADDR_NAPOT(SOC_RTC_IRAM_LOW, SOC_RTC_IRAM_HIGH);
     PMP_RESET_AND_ENTRY_SET(28, pmpaddr28, PMP_NAPOT | CONDITIONAL_RWX);
     _Static_assert(SOC_RTC_IRAM_LOW < SOC_RTC_IRAM_HIGH, "Invalid RTC IRAM region");
+
+    PMP_ENTRY_SET(29, SOC_LP_PERIPH_LOW, NONE);
+    PMP_ENTRY_SET(30, SOC_LP_PERIPH_HIGH, PMP_TOR | CONDITIONAL_RW);
 #endif
 }
 #else

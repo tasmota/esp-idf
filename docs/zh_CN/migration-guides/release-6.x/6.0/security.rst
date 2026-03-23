@@ -69,6 +69,10 @@ ESP-IDF v6.0 已升级至 Mbed TLS v4.0，**PSA Crypto 成为主要加密接口*
 
   - ``MBEDTLS_ARIA_C`` 默认禁用。依赖 ARIA 的应用必须在 ``menuconfig`` (Component config -> mbedTLS) 中显式启用，或通过自定义 ``components/mbedtls/config/mbedtls_preset_default.conf`` 来启用。
   - 默认禁用 ``secp192r1``，这与证书和 TLS 中移除对 250 位以下椭圆曲线的支持策略保持一致。如果某个应用在 TLS／证书之外仍然需要旧版曲线支持，则必须显式启用该功能（例如通过定义 ``PSA_WANT_ECC_SECP_R1_192=1``），并验证其兼容性。注意：该旧版支持可能会在下一次 ESP-IDF 小版本更新中被禁用。
+- ``MBEDTLS_THREADING_C`` 默认启用。这为 PSA Crypto 密钥管理 API 和 ``psa_crypto_init()`` 提供了线程安全。当在多线程环境中使用 PSA Crypto 时（例如，并发的 TLS 连接、证书操作，或任何可能从不同线程调用密码运算的场景），建议保持此配置为启用状态。对于仅从单个线程调用 PSA 函数的应用程序，不受此更改影响，并且如果需要，可以选择禁用线程支持。
+- ``MBEDTLS_THREADING_PTHREAD`` 默认启用。这使得 Mbed TLS 能够使用 pthread 原语来实现线程支持。
+- ``MBEDTLS_THREADING_ALT`` 默认禁用。这会禁止 Mbed TLS 使用替代线程原语来实现线程支持。
+
 
 参考文档
 ^^^^^^^^^^
@@ -98,6 +102,27 @@ ESP-IDF 提供了基于 NVS 的 PSA 内部可信存储 (ITS) 实现，因此无�
 
 注意，新的 AES 函数返回错误代码以提供更好的错误处理，与返回 void 的旧函数不同。
 
+.. only:: SOC_DIG_SIGN_SUPPORTED
+
+    数字签名 (DS) 外设
+    ------------------
+
+    现已通过 **PSA Crypto RSA DS 驱动程序** 使用 DS 外设，而不是采用旧版 Mbed TLS RSA 签名/解密的替代实现。面向应用的流程（从安全证书／NVS 获取 DS 上下文，传递给 ESP-TLS，或用于签名／解密）保持不变，仅内部实现改为使用 PSA 驱动。
+
+    - **破坏性变更**：已移除旧版 DS 集成，并由 PSA RSA DS 驱动程序取代。
+
+    - **迁移**：
+
+      * **针对 TLS (ESP-TLS)：** 启用 ``CONFIG_ESP_TLS_USE_DS_PERIPHERAL``，并在 :cpp:type:`esp_tls_cfg_t` 中将 ``esp_ds_data_ctx_t`` 作为 ``ds_data`` 传入。详见 :doc:`ESP-TLS 文档 </api-reference/protocols/esp_tls>` 中的 :ref:`digital-signature-with-esp-tls` 章节。
+      * **用于直接使用（在应用代码中进行签名／解密）：** 启用 ``CONFIG_MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL``，使用 ``psa_import_key()`` 并指定 ``PSA_KEY_LIFETIME_ESP_RSA_DS_VOLATILE`` 导入 ``esp_rsa_ds_opaque_key_t``，然后使用 ``psa_sign_hash()`` 或 ``psa_asymmetric_decrypt()``。参见 :doc:`数字签名 (DS) </api-reference/peripherals/ds>` 文档中的章节 **通过 PSA Crypto 使用 DS 外设**。
+
+.. only:: SOC_HMAC_SUPPORTED
+
+    HMAC 外设
+    ---------
+
+    现已通过 **PSA Crypto HMAC 驱动程序** 使用 HMAC 外设，而不是使用旧版 :cpp:func:`esp_hmac_calculate` API。应用需要填写 :cpp:type:`esp_hmac_opaque_key_t` 结构体，并通过 :cpp:func:`psa_import_key` API 使用 ``PSA_KEY_LIFETIME_ESP_HMAC`` 生命周期属性将其导入。然后可以使用 :cpp:func:`psa_mac_compute` API 计算 HMAC。
+
 BluFi
 -----
 
@@ -114,6 +139,18 @@ BluFi（基于 BLE 的 Wi-Fi 配网）功能受到 ESP-IDF v6.0 中 Mbed TLS v4.
 
 引导加载程序支持
 ----------------
+
+**已弃用的 API**
+
+以下函数已被弃用：
+
+- :cpp:func:`esp_flash_encryption_enabled` 已被弃用。请使用 :cpp:func:`esp_efuse_is_flash_encryption_enabled` 代替。需要依赖的组件由 ``bootloader_support`` 替换为 ``efuse``。
+
+**安全启动中的 ECDSA 曲线选择**
+
+- 在 ESP-IDF v6.0 中，用于安全启动的 ECDSA 应为 NISTP256/NISTP384 曲线。
+- 对旧版 NISTP192 的支持已弃用，仅当通过 ``CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_192_BITS`` 显式启用时方可使用。
+- 对旧版 NISTP192 的支持可能会在下一个 ESP-IDF 版本中被移除，因此强烈建议迁移至 NISTP256/NISTP384。
 
 **已移除的废弃 API**
 

@@ -24,7 +24,14 @@ Supported Features
 ECDSA on {IDF_TARGET_NAME}
 --------------------------
 
-On {IDF_TARGET_NAME}, the ECDSA module works with a secret key burnt into an eFuse block. This eFuse key is made completely inaccessible (default mode) for any resources outside the cryptographic modules, thus avoiding key leakage.
+On {IDF_TARGET_NAME}, the ECDSA module works with a secret key burnt into an eFuse block.
+
+.. only:: SOC_KEY_MANAGER_SUPPORTED
+
+    On {IDF_TARGET_NAME}, the ECDSA module also supports storing a secret key in the Key Manager. Refer to :ref:`key-manager` for more details.
+
+This key is made completely inaccessible (default mode) for any resources outside the cryptographic modules, thus avoiding key leakage.
+
 
 ECDSA Key Storage
 ^^^^^^^^^^^^^^^^^
@@ -53,6 +60,8 @@ ECDSA Key Storage
 
 ECDSA key can be programmed externally through ``idf.py`` script. Here is an example of how to program the ECDSA key:
 
+Using eFuses to store the ECDSA key:
+
 .. code:: bash
 
    idf.py efuse-burn-key <BLOCK_NUM> </path/to/ecdsa_private_key.pem> ECDSA_KEY
@@ -69,8 +78,17 @@ ECDSA key can be programmed externally through ``idf.py`` script. Here is an exa
 
         Six physical eFuse blocks can be used as keys for the ECDSA module: block 4 ~ block 9. E.g., for block 4 (which is the first key block) , the argument should be ``BLOCK_KEY0``.
 
+.. only:: SOC_KEY_MANAGER_SUPPORTED
+
+    Using the Key Manager to store the ECDSA key:
+
+    ECDSA private keys can be stored in the Key Manager. Refer to :ref:`key-manager` for more details.
+
+    Deploy an ECDSA key into the Key Manager and store the generated Key Recovery info in the flash memory for persistent keys.
 
 Alternatively the ECDSA key can also be programmed through the application running on the target.
+
+Using eFuses to store the ECDSA key:
 
 Following code snippet uses :cpp:func:`esp_efuse_write_key` to set physical key block 0 in the eFuse with key purpose as :cpp:enumerator:`esp_efuse_purpose_t::ESP_EFUSE_KEY_PURPOSE_ECDSA_KEY`:
 

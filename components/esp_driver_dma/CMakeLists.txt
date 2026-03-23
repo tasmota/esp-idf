@@ -41,7 +41,7 @@ endif()
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${public_include}
                        REQUIRES ${requires}
-                       PRIV_REQUIRES esp_mm bootloader_support
+                       PRIV_REQUIRES esp_mm bootloader_support efuse
                        LDFRAGMENTS "linker.lf"
                       )
 

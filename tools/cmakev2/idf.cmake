@@ -266,16 +266,15 @@ endfunction()
 #[[
     __init_toolchain()
 
-    Determine the IDF_TOOLCHAIN value from the IDF_TOOLCHAIN environment
-    variable or the CMake cache variable. If none of these are set, use the
-    default gcc toolchain. Ensure there are no inconsistencies in the
-    IDF_TOOLCHAIN values set in different locations. Also ensure that the
+    Determine the toolchain file, set IDF_TOOLCHAIN_FILE build property and
+    global CMAKE_TOOLCHAIN_FILE CMake variable. Also ensure that the
     CMAKE_TOOLCHAIN_FILE is set to the correct file according to the current
     IDF_TARGET.
 
-    Set the IDF_TOOLCHAIN and IDF_TOOLCHAIN_FILE build properties. Also,
-    configure the IDF_TOOLCHAIN CMake cache variable and set the
-    CMAKE_TOOLCHAIN_FILE global variable.
+    Note: The IDF_TOOLCHAIN build property is set after the toolchain
+    configuration in ``idf_project_init``. The ``tools/cmake/toolchain.cmake``
+    is included in the toolchain file and it sets the IDF_TOOLCHAIN variable in
+    CMake's cache.
 #]]
 function(__init_toolchain)
     set(cache_toolchain $CACHE{IDF_TOOLCHAIN})
@@ -318,9 +317,7 @@ function(__init_toolchain)
         idf_die("Toolchain file ${toolchain_file} not found")
     endif()
 
-    set(IDF_TOOLCHAIN ${toolchain} CACHE STRING "IDF Build Toolchain Type")
     set(CMAKE_TOOLCHAIN_FILE "${toolchain_file}" PARENT_SCOPE)
-    idf_build_set_property(IDF_TOOLCHAIN "${toolchain}")
     idf_build_set_property(IDF_TOOLCHAIN_FILE "${toolchain_file}")
 endfunction()
 

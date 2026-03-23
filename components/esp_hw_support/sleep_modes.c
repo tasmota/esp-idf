@@ -135,6 +135,10 @@
 #include "hal/clk_gate_ll.h"
 #endif
 
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+#include "esp_private/eco3_livelock_workaround.h"
+#endif
+
 #if SOC_MSPI_HAS_INDEPENT_IOMUX
 #include "hal/mspi_ll.h"
 #endif
@@ -367,7 +371,7 @@ static void touch_wakeup_prepare(void);
 #if SOC_VBAT_SUPPORTED
 static void vbat_under_volt_wakeup_prepare(void);
 #endif
-#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
+#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 static void esp_sleep_gpio_wakeup_prepare_on_hp_periph_powerdown(void);
 #endif
 
@@ -555,6 +559,7 @@ static void s_do_deep_sleep_phy_callback(void)
 #endif
 
 static int s_cache_suspend_cnt = 0;
+static uint32_t s_cache_state = 0;
 
 // Must be called from critical sections.
 static void FORCE_IRAM_ATTR suspend_cache(void) {
@@ -566,7 +571,7 @@ static void FORCE_IRAM_ATTR suspend_cache(void) {
         // fully check the access to external memory, writeback & invalidate is needed here.
         Cache_WriteBack_Invalidate_All(CACHE_MAP_MASK);
 #endif
-        spi_flash_disable_cache(esp_cpu_get_core_id(), NULL);
+        spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
     }
 }
 
@@ -575,7 +580,7 @@ static void FORCE_IRAM_ATTR resume_cache(void) {
     s_cache_suspend_cnt--;
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
-        spi_flash_restore_cache(esp_cpu_get_core_id(), 0);
+        spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
     }
 }
 
@@ -987,8 +992,8 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     // for !(s_config.wakeup_triggers & RTC_EXT1_TRIG_EN), ext1 wakeup will be turned off in hardware in the real call to sleep
 #endif
 
-#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
-    if (deep_sleep && (s_config.wakeup_triggers & RTC_GPIO_TRIG_EN)) {
+#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+    if ((sleep_flags & RTC_SLEEP_PD_DIG) && (s_config.wakeup_triggers & RTC_GPIO_TRIG_EN)) {
         esp_sleep_gpio_wakeup_prepare_on_hp_periph_powerdown();
     }
 #endif
@@ -1174,6 +1179,11 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     esp_os_enter_critical(&spinlock_rtc_deep_sleep);
     esp_ipc_isr_stall_other_cpu();
     esp_ipc_isr_stall_pause();
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // The other core will be stalled by high-priority interrupt and spins on variables in internal RAM,
+    // which naturally avoids cache livelock, so the 20ms livelock workaround timeout is not needed.
+    esp_int_wdt_livelock_workaround(false);
+#endif
 
     // record current RTC time
     s_config.rtc_ticks_at_sleep_start = rtc_time_get();
@@ -1240,6 +1250,10 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         ESP_INFINITE_LOOP();
     }
     // Never returns here, except that the sleep is rejected.
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // Configure WDT to use livelock workaround timeout after releasing other CPU
+    esp_int_wdt_livelock_workaround(true);
+#endif
     esp_ipc_isr_stall_resume();
     esp_ipc_isr_release_other_cpu();
     esp_os_exit_critical(&spinlock_rtc_deep_sleep);
@@ -1380,6 +1394,11 @@ esp_err_t esp_light_sleep_start(void)
 #if CONFIG_PM_ESP_SLEEP_POWER_DOWN_CPU && SOC_PM_CPU_RETENTION_BY_SW
     sleep_smp_cpu_sleep_prepare();
 #else
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // The other core will be stalled by high-priority interrupt and spins on variables in internal RAM,
+    // which naturally avoids cache livelock, so the 20ms livelock workaround timeout is not needed.
+    esp_int_wdt_livelock_workaround(false);
+#endif
     esp_ipc_isr_stall_other_cpu();
 #endif
     esp_ipc_isr_stall_pause();
@@ -1568,6 +1587,10 @@ esp_err_t esp_light_sleep_start(void)
     sleep_smp_cpu_wakeup_prepare();
 #else
     esp_ipc_isr_release_other_cpu();
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // Configure WDT to use livelock workaround timeout after releasing other CPU
+    esp_int_wdt_livelock_workaround(true);
+#endif
 #endif
 #endif
 
@@ -1629,6 +1652,10 @@ esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source)
         s_config.wakeup_triggers &= ~RTC_TOUCH_TRIG_EN;
 #endif
     } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_GPIO, RTC_GPIO_TRIG_EN)) {
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        s_config.gpio_wakeup_mask = 0;
+        s_config.gpio_trigger_mode = 0;
+#endif
         s_config.wakeup_triggers &= ~RTC_GPIO_TRIG_EN;
 #if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
     } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART, (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN | RTC_UART2_TRIG_EN))) {
@@ -2076,7 +2103,7 @@ uint64_t esp_sleep_get_ext1_wakeup_status(void)
 
 #endif // SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
 
-#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP && SOC_DEEP_SLEEP_SUPPORTED
+#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 uint64_t esp_sleep_get_gpio_wakeup_status(void)
 {
     if (!(esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_GPIO))) {
@@ -2136,12 +2163,12 @@ esp_err_t esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(uint64_t gpio_pin_
             continue;
         }
         err = gpio_wakeup_enable_on_hp_periph_powerdown_sleep(gpio_idx, intr_type);
-
+        if (err != ESP_OK) return err;
         s_config.gpio_wakeup_mask |= BIT(gpio_idx);
         if (mode == ESP_GPIO_WAKEUP_GPIO_HIGH) {
-            s_config.gpio_trigger_mode |= (mode << gpio_idx);
+            s_config.gpio_trigger_mode |= BIT(gpio_idx);
         } else {
-            s_config.gpio_trigger_mode &= ~(mode << gpio_idx);
+            s_config.gpio_trigger_mode &= ~BIT(gpio_idx);
         }
     }
     s_config.wakeup_triggers |= RTC_GPIO_TRIG_EN;

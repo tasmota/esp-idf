@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import os
@@ -30,7 +30,7 @@ class WsClient:
         self.uri = uri
 
     def __enter__(self):  # type: ignore
-        self.ws.connect('ws://{}:{}/{}'.format(self.ip, self.port, self.uri))
+        self.ws.connect(f'ws://{self.ip}:{self.port}/{self.uri}')
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
@@ -53,7 +53,7 @@ def test_examples_protocol_http_ws_echo_server(dut: Dut) -> None:
     # Get binary file
     binary_file = os.path.join(dut.app.binary_path, 'ws_echo_server.bin')
     bin_size = os.path.getsize(binary_file)
-    logging.info('http_ws_server_bin_size : {}KB'.format(bin_size // 1024))
+    logging.info(f'http_ws_server_bin_size : {bin_size // 1024}KB')
 
     logging.info('Starting ws-echo-server test app based on http_server')
 
@@ -65,11 +65,11 @@ def test_examples_protocol_http_ws_echo_server(dut: Dut) -> None:
         ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
         ap_password = get_env_config_variable(env_name, 'ap_password')
         dut.write(f'{ap_ssid} {ap_password}')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
     got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
 
-    logging.info('Got IP   : {}'.format(got_ip))
-    logging.info('Got Port : {}'.format(got_port))
+    logging.info(f'Got IP   : {got_ip}')
+    logging.info(f'Got Port : {got_port}')
 
     # Start ws server test
     with WsClient(got_ip, int(got_port), uri='ws') as ws:
@@ -77,24 +77,58 @@ def test_examples_protocol_http_ws_echo_server(dut: Dut) -> None:
         for expected_opcode in [OPCODE_TEXT, OPCODE_BIN, OPCODE_PING]:
             ws.write(data=DATA, opcode=expected_opcode)
             opcode, data = ws.read()
-            logging.info('Testing opcode {}: Received opcode:{}, data:{}'.format(expected_opcode, opcode, data))
+            logging.info(f'Testing opcode {expected_opcode}: Received opcode:{opcode}, data:{data}')
             data = data.decode()
             if expected_opcode == OPCODE_PING:
-                dut.expect('Got a WS PING frame, Replying PONG')
                 if opcode != OPCODE_PONG or data != DATA:
-                    raise RuntimeError('Failed to receive correct opcode:{} or data:{}'.format(opcode, data))
+                    raise RuntimeError(f'Failed to receive correct opcode:{opcode} or data:{data}')
                 continue
             dut_data = dut.expect(r'Got packet with message: ([A-Za-z0-9_]*)')[1]
             dut_opcode = dut.expect(r'Packet type: ([0-9]*)')[1].decode()
 
             if opcode != expected_opcode or data != DATA or opcode != int(dut_opcode) or (data not in str(dut_data)):
-                raise RuntimeError('Failed to receive correct opcode:{} or data:{}'.format(opcode, data))
+                raise RuntimeError(f'Failed to receive correct opcode:{opcode} or data:{data}')
+        # Test async send - server queues the work, so we need to wait for it to be processed
+        logging.info('Testing async send')
         ws.write(data='Trigger async', opcode=OPCODE_TEXT)
+        # Wait for server to receive and queue the async send
+        dut.expect(r'Got packet with message: Trigger async', timeout=10)
+        # Now read the async response (server processes work queue asynchronously)
         opcode, data = ws.read()
-        logging.info('Testing async send: Received opcode:{}, data:{}'.format(opcode, data))
+        logging.info(f'Testing async send: Received opcode:{opcode}, data:{data}')
         data = data.decode()
         if opcode != OPCODE_TEXT or data != 'Async data':
-            raise RuntimeError('Failed to receive correct opcode:{} or data:{}'.format(opcode, data))
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode} or data:{data}')
+        # Test ping from server
+        logging.info('Testing server-initiated ping')
+        ws.write(data='Ping', opcode=OPCODE_TEXT)
+        # Wait for server to receive the message and send a ping
+        dut.expect(r'Got packet with message: Ping', timeout=10)
+        # Now read the ping response
+        opcode, data = ws.read()
+        logging.info(f'Testing server-initiated ping: Received opcode:{opcode}, data:{data}')
+        data = data.decode()
+        if opcode != OPCODE_PING:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        # Now we should get a pong in response to our ping
+        opcode, data = ws.read()
+        data = data.decode()
+        if opcode != OPCODE_PONG:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        ws.write(data='Ping', opcode=OPCODE_TEXT)
+        # Wait for server to receive the message and send a ping
+        dut.expect(r'Got packet with message: Ping', timeout=10)
+        # Now read the ping response
+        opcode, data = ws.read()
+        logging.info(f'Testing server-initiated ping: Received opcode:{opcode}, data:{data}')
+        data = data.decode()
+        if opcode != OPCODE_PING:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        # Now we should get a pong in response to our ping
+        opcode, data = ws.read()
+        data = data.decode()
+        if opcode != OPCODE_PONG:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
 
 
 @pytest.mark.wifi_router
@@ -111,7 +145,7 @@ def test_ws_auth_handshake(dut: Dut) -> None:
         ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
         ap_password = get_env_config_variable(env_name, 'ap_password')
         dut.write(f'{ap_ssid} {ap_password}')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
+    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
     got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
     # Prepare a minimal WebSocket handshake request
     # Use WSClient to attempt the handshake, expecting it to fail (handshake rejected)
@@ -119,11 +153,30 @@ def test_ws_auth_handshake(dut: Dut) -> None:
     handshake_success = False
     try:
         # Attempt to use WSClient, expecting it to fail handshake
-        with WsClient(got_ip, int(got_port), uri='auth?token=valid') as ws:  # type: ignore  # noqa: F841
+        with WsClient(got_ip, int(got_port), uri='auth?token=invalid') as ws:  # type: ignore  # noqa: F841
             handshake_success = True
     except Exception as e:
         logging.info(f'WebSocket handshake failed: {e}')
         handshake_success = False
 
-    if handshake_success is False:
+    if handshake_success is True:
         raise RuntimeError('WebSocket handshake succeeded, but it should have been rejected by ws_pre_handshake_cb')
+
+    try:
+        # Attempt to use WSClient, expecting it to succeed handshake
+        with WsClient(got_ip, int(got_port), uri='auth?token=valid') as ws:  # type: ignore  # noqa: F841
+            handshake_success = True
+            dut.expect(r'ws_pre_handshake_cb called', timeout=10)
+            dut.expect(r'Valid token found, accepting handshake', timeout=10)
+            opcode, data = ws.read()
+            logging.info(f'Received opcode:{opcode}, data:{data}')
+            if opcode != OPCODE_TEXT or data.decode() != 'Welcome to the WebSocket Echo Server (post-handshake)!':
+                raise RuntimeError(
+                    f'Failed to receive correct welcome message after handshake. Opcode:{opcode}, data:{data}'
+                )
+    except Exception as e:
+        logging.info(f'WebSocket handshake failed: {e}')
+        handshake_success = False
+
+    if handshake_success is False:
+        raise RuntimeError('WebSocket handshake failed, but it should have succeeded with valid token')

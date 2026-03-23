@@ -419,8 +419,6 @@ function(__init_project_configuration)
     if("${linker_type}" STREQUAL "GNU")
         set(target_upper "${idf_target}")
         string(TOUPPER ${target_upper} target_upper)
-        # Add cross-reference table to the map file
-        list(APPEND link_options "-Wl,--cref")
         # Add this symbol as a hint for esp_idf_size to guess the target name
         list(APPEND link_options "-Wl,--defsym=IDF_TARGET_${target_upper}=0")
         # Check if linker supports --no-warn-rwx-segments
@@ -560,6 +558,11 @@ macro(idf_project_init)
         # Ensure this function is executed only once throughout the entire
         # project.
 
+        # The IDF_TOOLCHAIN variable is established as a CMake cache variable
+        # during the toolchain initialization process in
+        # ``tools/cmake/toolchain.cmake``.
+        idf_build_set_property(IDF_TOOLCHAIN "${IDF_TOOLCHAIN}")
+
         # Warn about the use of deprecated variables.
         deprecate_variable(COMPONENTS)
         deprecate_variable(EXCLUDE_COMPONENTS)
@@ -575,6 +578,9 @@ macro(idf_project_init)
 
         # Discover and initialize components
         __init_components()
+
+        # Save original sdkconfig before kconfgen may drop unknown options
+        __create_sdkconfig_orig_copy()
 
         # Generate initial sdkconfig with discovered components
         __generate_sdkconfig()
@@ -597,6 +603,15 @@ macro(idf_project_init)
         # Initialize the target architecture based on the configuration
         # Ensure this is done after including the sdkconfig.
         __init_idf_target_arch()
+
+        # Make build properties available as CMake variables for backward
+        # compatibility with project_include.cmake files (e.g. ULP component
+        # references ${SDKCONFIG_HEADER} and ${SDKCONFIG_CMAKE} directly).
+        idf_build_get_property(build_properties BUILD_PROPERTIES)
+        foreach(build_property IN LISTS build_properties)
+            idf_build_get_property(val ${build_property})
+            set(${build_property} "${val}")
+        endforeach()
 
         # Include all project_include.cmake files for the components that have
         # been discovered.
@@ -707,7 +722,7 @@ function(__project_default)
                          COMPONENTS main
                          MAPFILE_TARGET "${executable}_mapfile")
 
-    if(CONFIG_APP_BUILD_GENERATE_BINARIES)
+    if(CONFIG_APP_BUILD_GENERATE_BINARIES AND TARGET idf::esptool_py)
         # Is it possible to have a configuration where
         # CONFIG_APP_BUILD_GENERATE_BINARIES is not set?
 
@@ -726,7 +741,7 @@ function(__project_default)
                              TARGET app-flash
                              NAME "app"
                              FLASH)
-            idf_build_generate_metadata("${executable}_binary_signed")
+            idf_build_generate_metadata(BINARY "${executable}_binary_signed")
         else()
             idf_build_binary("${executable}"
                              OUTPUT_FILE "${build_dir}/${executable}.bin"
@@ -743,10 +758,12 @@ function(__project_default)
 
             idf_create_dfu("${executable}_binary"
                            TARGET dfu)
-            idf_build_generate_metadata("${executable}_binary")
+            idf_build_generate_metadata(BINARY "${executable}_binary")
         endif()
 
         idf_build_generate_flasher_args()
+    else()
+        idf_build_generate_metadata(EXECUTABLE "${executable}")
     endif()
 
     idf_create_menuconfig("${executable}"
@@ -756,6 +773,9 @@ function(__project_default)
                           TARGET confserver)
 
     idf_create_save_defconfig()
+
+    idf_create_config_report("${executable}"
+                             TARGET config-report)
 
     idf_create_uf2("${executable}"
                    TARGET uf2)
@@ -788,6 +808,11 @@ endfunction()
 #]]
 macro(idf_project_default)
     idf_project_init()
+
+    # Use DEFERRED optional-requires resolution only when this will be the sole
+    # library being built.
+    idf_build_set_property(IDF_COMPONENT_OPTIONAL_REQUIRES_MODE DEFERRED)
+
     # Only the idf_project_init macro needs be called within the global scope,
     # as it includes the project_include.cmake files and the cmake version of
     # the configuration. The remaining functionality of the idf_project_default

@@ -460,8 +460,6 @@ static esp_err_t dpi_panel_init(esp_lcd_panel_t *panel)
 
     // enable the video mode
     mipi_dsi_host_ll_enable_video_mode(hal->host, true);
-    // switch the clock lane to high speed mode
-    mipi_dsi_host_ll_set_clock_lane_state(hal->host, MIPI_DSI_LL_CLOCK_LANE_STATE_AUTO);
 
     // enable the DPI output of the DSI bridge
     mipi_dsi_brg_ll_enable_dpi_output(hal->bridge, true);

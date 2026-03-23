@@ -267,44 +267,96 @@ Read Otadata Partition: ``read-otadata``
 
 This command prints the contents of the ``otadata`` partition which stores the information about the currently selected OTA app slot. Refer to :doc:`/api-reference/system/ota` for more about the ``otadata`` partition.
 
-Start MCP Server: ``mcp-server``
----------------------------------
+ESP-IDF MCP Server
+-------------------
+
+The ESP-IDF MCP (Model Context Protocol) server enables AI integration with ESP-IDF projects. The MCP server provides tools and resources that allow AI assistants to interact with your ESP-IDF project through a standardized protocol. Using natural language, you can tell the AI assistant commands like "set target to esp32" or "build this project".
+
+Starting the MCP Server
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+To use the MCP server with an AI assistant, configure your agent or IDE to start the server. You can do that in two ways:
+
+1. Using ``eim run`` (recommended): Use the ESP-IDF Installation Manager (EIM) to start a new process with an active ESP-IDF environment. This feature is available from EIM 0.8.1 and **ESP-IDF must be installed via the EIM installer**. This is the easiest option and does not require you to activate ESP-IDF in your shell first.
+
+.. code-block:: bash
+
+  eim run "idf.py mcp-server"
+
+2. Using ``idf.py`` directly: Run the MCP server with ``idf.py mcp-server`` from a shell where the ESP-IDF environment is already activated. The command must be executed from a valid ESP-IDF project directory, or use ``idf.py -C <project_dir> mcp-server`` to specify the project.
 
 .. code-block:: bash
 
   idf.py mcp-server
 
-This command starts an MCP (Model Context Protocol) server that enables AI integration with ESP-IDF projects. The MCP server provides tools and resources that allow AI assistants to interact with your ESP-IDF project through a standardized protocol.
+.. note::
 
-The MCP server provides the following tools:
+    The MCP server requires the ``mcp`` feature to be installed. Install it using the EIM installer. See `EIM documentation > CLI Configuration - Global features <https://docs.espressif.com/projects/idf-im-ui/en/latest/cli_configuration.html#global-features-all-versions>`_ for how to install specific features.
 
-- ``build_project``: Build the ESP-IDF project with specified target
-- ``set_target``: Set the ESP-IDF target (esp32, esp32s3, esp32c6, etc.)
-- ``flash_project``: Flash the built project to a connected device
-- ``monitor_serial``: Start serial monitor (runs in background)
-- ``clean_project``: Clean build artifacts
-- ``menuconfig``: Open menuconfig interface (terminal-based)
+Available Tools and Resources
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The MCP server provides the following commands you can use:
+
+- ``set target``: Set the ESP-IDF target (esp32, esp32s3, esp32c6, etc.)
+- ``build project``: Build the ESP-IDF project with the current target
+- ``flash project``: Flash the built project to a connected device. Specify it by port name.
+- ``clean project``: Clean build artifacts
 
 The MCP server also provides these resources:
 
 - ``project://config``: Get current project configuration
-- ``project://status``: Get current project build status
-- ``project://devices``: Get list of connected ESP devices
+- ``project://status``: Get current project build status and artifacts
+- ``project://devices``: Get list of connected devices
 
-.. note::
+Adding ESP-IDF MCP Server to IDEs and AI agents
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    The MCP server requires the ``mcp`` Python package to be installed. Install it with: ``./install.sh --enable-mcp``.
+Cursor IDE
+~~~~~~~~~~
 
-Adding ESP-IDF MCP Server to IDEs
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Add the ESP-IDF MCP server configuration to your Cursor ``mcp.json`` file:
 
-**Claude Desktop:**
+.. code-block:: json
 
-Use the Claude CLI to add the ESP-IDF MCP server:
+  {
+    "mcpServers": {
+      "esp-idf-eim": {
+        "command": "eim",
+        "args": [
+          "run",
+          "idf.py mcp-server"
+        ],
+        "env": {
+          "IDF_MCP_WORKSPACE_FOLDER": "${workspaceFolder}"
+        }
+      }
+    }
+  }
+
+To use the ESP-IDF MCP server with Cursor IDE, open your ESP-IDF project folder and use the AI chat window. The AI assistant will have access to ESP-IDF specific tools and can help you build, flash, and manage your project.
+
+The ``IDF_MCP_WORKSPACE_FOLDER`` environment variable tells the MCP server which directory contains your ESP-IDF project. This ensures the server operates in the correct project context, allowing it to access your project's configuration, build files, and perform operations like building and flashing in the right location.
+
+Claude Desktop
+~~~~~~~~~~~~~~
+
+Use the Claude CLI to add the ESP-IDF MCP server.
+
+With ``eim`` (no need to activate ESP-IDF first):
 
 .. code-block:: bash
 
-  claude mcp add esp-idf python /path/to/esp-idf/tools/idf.py mcp-server --env IDF_PATH=/path/to/esp-idf
+  claude mcp add --transport stdio esp-idf-eim -- eim run "idf.py mcp-server"
+
+With ``idf.py`` (must be executed from an activated ESP-IDF environment):
+
+.. code-block:: bash
+
+  claude mcp add --transport stdio esp-idf -- idf.py mcp-server
+
+Navigate to your ESP-IDF project directory and run the ``claude`` command to chat with the AI assistant.
+
 
 Configuration Presets: ``--preset``
 ====================================

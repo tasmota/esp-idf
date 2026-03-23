@@ -656,11 +656,17 @@ function(__generate_kconfig_outputs)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY
                 ADDITIONAL_CLEAN_FILES "${sdkconfig_header}" "${sdkconfig_cmake}")
 
-    # Store output paths in build properties
+    # Store output paths in build properties (internal)
     idf_build_set_property(__SDKCONFIG_HEADER "${sdkconfig_header}")
     idf_build_set_property(__SDKCONFIG_CMAKE "${sdkconfig_cmake}")
     idf_build_set_property(__SDKCONFIG_JSON "${sdkconfig_json}")
     idf_build_set_property(__SDKCONFIG_JSON_MENUS "${sdkconfig_json_menus}")
+
+    # Public aliases for backward compatibility with components (e.g. ULP)
+    idf_build_set_property(SDKCONFIG_HEADER "${sdkconfig_header}")
+    idf_build_set_property(SDKCONFIG_CMAKE "${sdkconfig_cmake}")
+    idf_build_set_property(SDKCONFIG_JSON "${sdkconfig_json}")
+    idf_build_set_property(SDKCONFIG_JSON_MENUS "${sdkconfig_json_menus}")
 
     idf_msg("Generated Kconfig outputs in ${config_dir}")
 endfunction()

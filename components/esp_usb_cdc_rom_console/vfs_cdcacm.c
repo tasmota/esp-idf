@@ -78,7 +78,7 @@ static esp_err_t cdcacm_end_select(void *end_select_args);
 
 #endif // CONFIG_VFS_SUPPORT_SELECT
 
-static ssize_t cdcacm_write(int fd, const void *data, size_t size)
+static ssize_t cdcacm_write(__attribute__((unused)) void *ctx, int fd, const void *data, size_t size)
 {
     assert(fd == 0);
     const char *cdata = (const char *)data;
@@ -101,7 +101,7 @@ static ssize_t cdcacm_write(int fd, const void *data, size_t size)
     return size;
 }
 
-static int cdcacm_fsync(int fd)
+static int cdcacm_fsync(__attribute__((unused)) void *ctx, int fd)
 {
     assert(fd == 0);
     _lock_acquire_recursive(&s_write_lock);
@@ -110,12 +110,12 @@ static int cdcacm_fsync(int fd)
     return (written < 0) ? -1 : 0;
 }
 
-static int cdcacm_open(const char *path, int flags, int mode)
+static int cdcacm_open(__attribute__((unused)) void *ctx, const char *path, int flags, int mode)
 {
     return USB_CDC_LOCAL_FD; // fd 0
 }
 
-static int cdcacm_fstat(int fd, struct stat *st)
+static int cdcacm_fstat(__attribute__((unused)) void *ctx, int fd, struct stat *st)
 {
     assert(fd == 0);
     memset(st, 0, sizeof(*st));
@@ -123,7 +123,7 @@ static int cdcacm_fstat(int fd, struct stat *st)
     return 0;
 }
 
-static int cdcacm_close(int fd)
+static int cdcacm_close(__attribute__((unused)) void *ctx, int fd)
 {
     assert(fd == 0);
     return 0;
@@ -174,7 +174,7 @@ static void cdcacm_return_char(int c)
     s_peek_char = c;
 }
 
-static ssize_t cdcacm_read(int fd, void *data, size_t size)
+static ssize_t cdcacm_read(__attribute__((unused)) void *ctx, int fd, void *data, size_t size)
 {
     assert(fd == USB_CDC_LOCAL_FD);
     char *data_c = (char *) data;
@@ -289,7 +289,7 @@ static int cdcacm_disable_blocking(void)
     return 0;
 }
 
-static int cdcacm_fcntl(int fd, int cmd, int arg)
+static int cdcacm_fcntl(__attribute__((unused)) void *ctx, int fd, int cmd, int arg)
 {
     assert(fd == 0);
     int result;
@@ -502,13 +502,13 @@ static const esp_vfs_select_ops_t s_cdcacm_vfs_select = {
 #endif // CONFIG_VFS_SUPPORT_SELECT
 
 static const esp_vfs_fs_ops_t s_cdcacm_vfs = {
-    .write = &cdcacm_write,
-    .open = &cdcacm_open,
-    .fstat = &cdcacm_fstat,
-    .close = &cdcacm_close,
-    .read = &cdcacm_read,
-    .fcntl = &cdcacm_fcntl,
-    .fsync = &cdcacm_fsync,
+    .write_p = &cdcacm_write,
+    .open_p = &cdcacm_open,
+    .fstat_p = &cdcacm_fstat,
+    .close_p = &cdcacm_close,
+    .read_p = &cdcacm_read,
+    .fcntl_p = &cdcacm_fcntl,
+    .fsync_p = &cdcacm_fsync,
 #ifdef CONFIG_VFS_SUPPORT_SELECT
     .select = &s_cdcacm_vfs_select,
 #endif // CONFIG_VFS_SUPPORT_SELECT
@@ -521,7 +521,7 @@ const esp_vfs_fs_ops_t *esp_vfs_cdcacm_get_vfs(void)
 
 esp_err_t esp_vfs_dev_cdcacm_register(void)
 {
-    return esp_vfs_register_fs("/dev/cdcacm", &s_cdcacm_vfs, ESP_VFS_FLAG_STATIC, NULL);
+    return esp_vfs_register_fs("/dev/cdcacm", &s_cdcacm_vfs, ESP_VFS_FLAG_STATIC | ESP_VFS_FLAG_CONTEXT_PTR, NULL);
 }
 #if CONFIG_ESP_CONSOLE_USB_CDC
 ESP_SYSTEM_INIT_FN(init_vfs_usb_cdc_rom_console, CORE, BIT(0), 113)

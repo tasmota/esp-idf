@@ -173,7 +173,7 @@ const pmu_sleep_config_t* pmu_sleep_config_default(
     if (dslp) {
         config->param.lp_sys.analog_wait_target_cycle  = rtc_time_us_to_slowclk(PMU_LP_ANALOG_WAIT_TARGET_TIME_DSLP_US, slowclk_period);
 
-        pmu_sleep_digital_config_t digital_default = PMU_SLEEP_DIGITAL_DSLP_CONFIG_DEFAULT(sleep_flags);
+        pmu_sleep_digital_config_t digital_default = PMU_SLEEP_DIGITAL_DSLP_CONFIG_DEFAULT(sleep_flags, clk_flags);
         config->digital = digital_default;
 
         pmu_sleep_analog_config_t analog_default = PMU_SLEEP_ANALOG_DSLP_CONFIG_DEFAULT(sleep_flags);
@@ -190,7 +190,7 @@ const pmu_sleep_config_t* pmu_sleep_config_default(
         }
     } else {
         // Get light sleep digital_default
-        pmu_sleep_digital_config_t digital_default = PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT(sleep_flags);
+        pmu_sleep_digital_config_t digital_default = PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT(sleep_flags, clk_flags);
         config->digital = digital_default;
 
         // Get light sleep analog default
@@ -266,6 +266,11 @@ static void pmu_sleep_power_init(pmu_context_t *ctx, const pmu_sleep_power_confi
 
 static void pmu_sleep_digital_init(pmu_context_t *ctx, const pmu_sleep_digital_config_t *dig)
 {
+    pmu_ll_hp_set_icg_sysclk_enable (ctx->hal->dev, HP(SLEEP), (dig->icg_func[0] != 0));
+    pmu_ll_hp_set_icg_func          (ctx->hal->dev, HP(SLEEP), dig->icg_func[0]); /* PMU FSM clock ICG config */
+#if SOC_PM_SLEEP_CLK_ICG_USE_REGDMA && !defined(CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
+    pmu_sleep_clock_icg_config      (ctx->priv, dig->icg_func[1]); /* PMU REGDMA clock ICG config */
+#endif
     pmu_ll_hp_set_dig_pad_slp_sel   (ctx->hal->dev, HP(SLEEP), dig->syscntl.dig_pad_slp_sel);
     pmu_ll_hp_set_hold_all_lp_pad   (ctx->hal->dev, HP(SLEEP), dig->syscntl.lp_pad_hold_all);
     pmu_ll_hp_set_pause_watchdog    (ctx->hal->dev, HP(SLEEP), dig->syscntl.dig_pause_wdt);
@@ -390,10 +395,10 @@ FORCE_INLINE_ATTR void pmu_sleep_cache_sync_items(uint32_t gid, uint32_t type, u
         ;
 }
 
-static TCM_DRAM_ATTR uint32_t s_mpll_freq_mhz_before_sleep = 0;
+static SPM_DRAM_ATTR uint32_t s_mpll_freq_mhz_before_sleep = 0;
 
 __attribute__((optimize("-O2")))
-TCM_IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uint32_t lslp_mem_inf_fpu, bool dslp)
+SPM_IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uint32_t lslp_mem_inf_fpu, bool dslp)
 {
     lp_aon_hal_inform_wakeup_type(dslp);
 
@@ -480,7 +485,7 @@ TCM_IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt,
     return pmu_sleep_finish(dslp);
 }
 
-TCM_IRAM_ATTR bool pmu_sleep_finish(bool dslp)
+SPM_IRAM_ATTR bool pmu_sleep_finish(bool dslp)
 {
     if (dslp) {
         pmu_ll_hp_set_dcm_vset(&PMU, PMU_MODE_HP_ACTIVE, HP_CALI_ACTIVE_DCM_VSET_DEFAULT);

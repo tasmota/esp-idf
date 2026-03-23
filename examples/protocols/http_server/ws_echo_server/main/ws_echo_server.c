@@ -52,6 +52,18 @@ static void ws_async_send(void *arg)
     free(resp_arg);
 }
 
+static void ws_ping_send(void *arg)
+{
+    struct async_resp_arg *resp_arg = arg;
+    httpd_handle_t hd = resp_arg->hd;
+    int fd = resp_arg->fd;
+    httpd_ws_frame_t ping_pkt;
+    memset(&ping_pkt, 0, sizeof(httpd_ws_frame_t));
+    ping_pkt.type = HTTPD_WS_TYPE_PING;
+    httpd_ws_send_frame_async(hd, fd, &ping_pkt);
+    free(resp_arg);
+}
+
 static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
 {
     struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
@@ -61,6 +73,22 @@ static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
     resp_arg->hd = req->handle;
     resp_arg->fd = httpd_req_to_sockfd(req);
     esp_err_t ret = httpd_queue_work(handle, ws_async_send, resp_arg);
+    if (ret != ESP_OK) {
+        free(resp_arg);
+    }
+    return ret;
+}
+
+
+static esp_err_t trigger_ping_send(httpd_handle_t handle, httpd_req_t *req)
+{
+    struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
+    if (resp_arg == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    resp_arg->hd = req->handle;
+    resp_arg->fd = httpd_req_to_sockfd(req);
+    esp_err_t ret = httpd_queue_work(handle, ws_ping_send, resp_arg);
     if (ret != ESP_OK) {
         free(resp_arg);
     }
@@ -147,10 +175,14 @@ static esp_err_t echo_handler(httpd_req_t *req)
     }
     ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
     if (ws_pkt.type == HTTPD_WS_TYPE_TEXT &&
-        ws_pkt.payload != NULL &&
-        strcmp((char*)ws_pkt.payload,"Trigger async") == 0) {
-        free(buf);
-        return trigger_async_send(req->handle, req);
+        ws_pkt.payload != NULL) {
+        if (strncmp((char *)ws_pkt.payload, "Trigger async", strlen("Trigger async")) == 0) {
+            free(buf);
+            return trigger_async_send(req->handle, req);
+        } else if (strncmp((char *)ws_pkt.payload, "Ping", strlen("Ping")) == 0) {
+            free(buf);
+            return trigger_ping_send(req->handle, req);
+        }
     }
 
     ret = httpd_ws_send_frame(req, &ws_pkt);
@@ -321,7 +353,6 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
         *server = start_webserver();
     }
 }
-
 
 void app_main(void)
 {

@@ -83,7 +83,7 @@ static bool httpd_ws_get_response_subprotocol(const char *supported_subprotocol,
     char *rest = NULL;
     char *s = strtok_r(subprotocol, ", ", &rest);
     do {
-        if (strncmp(s, supported_subprotocol, sizeof(subprotocol)) == 0) {
+        if (strncmp(s, supported_subprotocol, strlen(supported_subprotocol)) == 0) {
             ESP_LOGD(TAG, "Requested subprotocol supported: %s", s);
             return true;
         }

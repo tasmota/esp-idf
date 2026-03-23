@@ -53,38 +53,14 @@ I2C 时钟配置
     :SOC_I2C_SUPPORT_APB: - :cpp:enumerator:`i2c_clock_source_t::I2C_CLK_SRC_APB`：以 APB 时钟作为 I2C 时钟源。
     :SOC_I2C_SUPPORT_REF_TICK: - :cpp:enumerator:`i2c_clock_source_t::I2C_CLK_SRC_REF_TICK`：1 MHZ 时钟。
 
-I2C 文件结构
-------------
-
-.. figure:: ../../../_static/diagrams/i2c/i2c_code_structure.png
-    :align: center
-    :alt: I2C 文件结构
-
-    I2C 文件结构
-
-**需要包含在 I2C 应用程序中的公共头文件**
-
-- ``i2c.h``：遗留 I2C API 的头文件（用于使用旧驱动程序的应用）。
-- ``i2c_master.h``：提供标准通信模式下特定 API 的头文件（用于使用主机模式的新驱动程序的应用）。
-- ``i2c_slave.h``：提供标准通信模式下特定 API 的头文件（用于使从机模式的新驱动程序的应用）。
-
-.. note::
-
-    旧驱动程序与新驱动程序无法共存。包含 ``i2c.h`` 头文件可使用旧驱动程序，或包含 ``i2c_master.h`` 和 ``i2c_slave.h`` 来使用新驱动程序。请注意，现已弃用旧驱动程序，之后将移除。
-
-**上述头文件中包含的公共头文件**
-
-- ``i2c_types_legacy.h``：仅在旧驱动程序中使用的旧公共类型。
-- ``i2c_types.h``：提供公共类型的头文件。
-
 功能概述
 --------
 
 I2C 驱动程序提供以下服务：
 
 - `资源分配 <#resource-allocation>`__ - 包括如何使用正确的配置来分配 I2C 总线，以及如何在完成工作后回收资源。
-- `I2C 主机控制器 <#i2c_master_controller>`__ - 包括 I2C 主机控制器的行为，介绍了数据发送、数据接收和数据的双向传输。
-- `I2C 从机控制器 <#i2c_slave_controller>`__ - 包括 I2C 从机控制器的行为，涉及数据发送和数据接收。
+- `I2C 主机控制器 <#i2c-master-controller>`__ - 包括 I2C 主机控制器的行为，介绍了数据发送、数据接收和数据的双向传输。
+- `I2C 从机控制器 <#i2c-slave-controller>`__ - 包括 I2C 从机控制器的行为，涉及数据发送和数据接收。
 - `电源管理 <#power-management>`__ - 描述了不同时钟源对功耗的影响。
 - `IRAM 安全 <#iram-safe>`__ - 描述了如何在 cache 被禁用时正常运行 I2C 中断。
 - `线程安全 <#thread-safety>`__ - 列出了驱动程序中线程安全的 API。

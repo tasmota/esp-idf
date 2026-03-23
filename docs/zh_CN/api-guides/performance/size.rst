@@ -158,11 +158,9 @@ lwIP IPv4
 使用 Picolibc 替代 Newlib
 @@@@@@@@@@@@@@@@@@@@@@@@@
 
-默认情况下，ESP-IDF 使用 Newlib C 库，同时也对 Picolibc C 库提供实验性支持。
+默认情况下，ESP-IDF 使用 Picolibc C 库。也支持 Newlib，可通过 :ref:`CONFIG_LIBC_NEWLIB<CONFIG_LIBC_NEWLIB>` 选项选择使用。
 
 Picolibc C 库提供了更精简的 ``printf`` 系列函数，并且根据应用程序，可以将二进制文件大小减少最多 30 KB。
-
-如需切换链接到 Picolibc C 库，请启用配置选项 :ref:`CONFIG_IDF_EXPERIMENTAL_FEATURES` 和 :ref:`CONFIG_LIBC_PICOLIBC<CONFIG_LIBC_PICOLIBC>`。
 
 .. _newlib-nano-formatting:
 

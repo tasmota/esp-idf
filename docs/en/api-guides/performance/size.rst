@@ -158,11 +158,9 @@ lwIP IPv4
 Picolibc instead of Newlib
 @@@@@@@@@@@@@@@@@@@@@@@@@@
 
-By default, ESP-IDF uses the Newlib C library, and it also has experimental support for the Picolibc C library.
+By default, ESP-IDF uses the Picolibc C library. Newlib is also supported and can be selected with :ref:`CONFIG_LIBC_NEWLIB<CONFIG_LIBC_NEWLIB>`.
 
 Picolibc C library provides smaller ``printf`` family functions and can reduce the binary size by up to 30 KB, depending on your application.
-
-To switch to linking against the Picolibc C library, please enable the configuration options :ref:`CONFIG_IDF_EXPERIMENTAL_FEATURES` and :ref:`CONFIG_LIBC_PICOLIBC<CONFIG_LIBC_PICOLIBC>`.
 
 .. _newlib-nano-formatting:
 

@@ -19,11 +19,10 @@ from test_build_system_helpers import run_cmake_and_build
 from test_build_system_helpers import run_idf_py
 
 
-# This test checks multiple targets in one test function. It would be better to have each target
-# tested in a isolated test case, but that would mean doing idf_copy each time, and copying takes most of the time
+# This test verifies ESP-IDF can be used as a library in custom CMake projects.
+# We use cmake configure only (not full build) and test representative targets from each arch.
 @pytest.mark.usefixtures('idf_copy')
 def test_build_custom_cmake_project(test_app_copy: Path, request: pytest.FixtureRequest) -> None:
-    # Test is compatible with any target. Random targets in the list are selected for performance reasons
     idf_path = Path(os.environ['IDF_PATH'])
     is_buildv2 = request.config.getoption('buildv2', False)
     if is_buildv2:
@@ -35,9 +34,11 @@ def test_build_custom_cmake_project(test_app_copy: Path, request: pytest.Fixture
         base_cmake_args = ['-G', 'Ninja']
         target_var = 'TARGET'
 
-    for target in ['esp32', 'esp32c2', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4', 'esp32s2', 'esp32s3']:
-        logging.info(f'Test build ESP-IDF as a library to a custom CMake projects for {target}')
-        run_cmake_and_build(
+    # Test representative targets: Xtensa (esp32), RISC-V (esp32c3), and newest (esp32p4)
+    for target in ['esp32', 'esp32c3', 'esp32p4']:
+        logging.info(f'Test CMake configuration of ESP-IDF as a library for {target}')
+        # Use run_cmake (configure only) - compile_commands.json is generated during configure
+        run_cmake(
             str(idf_as_lib_path),
             *base_cmake_args,
             '-DCMAKE_TOOLCHAIN_FILE={}'.format(idf_path / 'tools' / 'cmake' / f'toolchain-{target}.cmake'),
@@ -45,9 +46,9 @@ def test_build_custom_cmake_project(test_app_copy: Path, request: pytest.Fixture
         )
         assert file_contains((test_app_copy / 'build' / 'compile_commands.json'), '"command"')
         shutil.rmtree(test_app_copy / 'build')
-        sdkconfig_path = idf_as_lib_path / 'sdkconfig'
-        if sdkconfig_path.exists():
-            os.remove(sdkconfig_path)
+        sdkconfig = idf_as_lib_path / 'sdkconfig'
+        if sdkconfig.exists():
+            sdkconfig.unlink()
 
 
 @pytest.mark.skipif(

@@ -83,6 +83,9 @@ def test_esp_tee_aes_perf(dut: IdfDut) -> None:
 def run_exception_case(
     dut: IdfDut, menu_prefix: str, test_name: str, expected: str, check_origin: bool = False
 ) -> None:
+    # Panics are expected during these tests
+    dut.skip_decode_panic = True
+
     dut.expect_exact('Press ENTER to see the list of tests')
     dut.write(f'"{menu_prefix}: {test_name}"')
 
@@ -136,6 +139,9 @@ def test_esp_tee_apm_violation(dut: IdfDut) -> None:
     indirect=['config', 'target'],
 )
 def test_esp_tee_stack_smashing(dut: IdfDut) -> None:
+    # Panics are expected during this test
+    dut.skip_decode_panic = True
+
     for env in ('REE', 'TEE'):
         for case in ('overflow', 'underflow'):
             dut.expect_exact('Press ENTER to see the list of tests')
@@ -228,6 +234,9 @@ def run_multiple_stages(dut: IdfDut, test_case_num: int, stages: int, api: TeeFl
 
 
 def run_flash_access_test(dut: IdfDut, api: TeeFlashAccessApi, test_name: str) -> None:
+    # Panics are expected during these tests
+    dut.skip_decode_panic = True
+
     dut.serial.custom_flash()
 
     extra_data = dut._parse_test_menu()
@@ -395,6 +404,9 @@ def test_esp_tee_ota_valid_img(dut: IdfDut) -> None:
     indirect=['config', 'target', 'skip_autoflash'],
 )
 def test_esp_tee_ota_rollback(dut: IdfDut) -> None:
+    # Panics are expected during these tests
+    dut.skip_decode_panic = True
+
     # Flashing the TEE app to the non-secure app's passive partition
     dut.serial.custom_flash_w_test_tee_img_rb()
 

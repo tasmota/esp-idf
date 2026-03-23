@@ -65,7 +65,6 @@
 #include "hal/rtc_hal.h"
 
 #include "soc/rtc.h"
-#include "regi2c_ctrl.h"    //For `REGI2C_LL_ANA_CALI_PD_WORKAROUND`, temp
 
 #include "hal/cache_ll.h"
 #include "hal/clk_tree_ll.h"
@@ -74,6 +73,11 @@
 #if SOC_TOUCH_SENSOR_SUPPORTED
 #include "hal/touch_sens_hal.h"
 #endif
+#if SOC_ADC_SUPPORTED
+#include "hal/adc_ll.h" // For `ADC_LL_ANA_CALI_REG_PD_WORKAROUND`, temp
+#include "hal/adc_hal_common.h"
+#endif
+#include "hal/temperature_sensor_hal.h"
 #include "hal/mspi_ll.h"
 
 #include "sdkconfig.h"
@@ -134,6 +138,10 @@
 #include "esp32p4/rom/rtc.h"
 #include "hal/gpio_ll.h"
 #include "hal/clk_gate_ll.h"
+#endif
+
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+#include "esp_private/eco3_livelock_workaround.h"
 #endif
 
 #if SOC_MSPI_HAS_INDEPENT_IOMUX
@@ -564,6 +572,7 @@ static void s_do_deep_sleep_phy_callback(void)
 #endif
 
 static int s_cache_suspend_cnt = 0;
+static uint32_t s_cache_state = 0;
 
 // Must be called from critical sections.
 static void FORCE_IRAM_ATTR suspend_cache(void) {
@@ -575,7 +584,7 @@ static void FORCE_IRAM_ATTR suspend_cache(void) {
         // fully check the access to external memory, writeback & invalidate is needed here.
         Cache_WriteBack_Invalidate_All(CACHE_MAP_MASK);
 #endif
-        spi_flash_disable_cache(esp_cpu_get_core_id(), NULL);
+        spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
     }
 }
 
@@ -584,7 +593,7 @@ static void FORCE_IRAM_ATTR resume_cache(void) {
     s_cache_suspend_cnt--;
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
-        spi_flash_restore_cache(esp_cpu_get_core_id(), 0);
+        spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
     }
 }
 
@@ -701,11 +710,11 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
         Cache_WriteBack_All();
     }
 #endif
-#if REGI2C_LL_ANA_CALI_PD_WORKAROUND
-        regi2c_analog_cali_reg_read();
+#if ADC_LL_ANA_CALI_REG_PD_WORKAROUND
+        adc_hal_i2c_saradc_reg_backup();
 #endif
 #if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
-        regi2c_tsens_reg_read();
+        temperature_sensor_hal_i2c_saradc_reg_backup();
 #endif
     }
 #if CONFIG_ESP_ENABLE_PVT && SOC_PVT_EN_WITH_SLEEP
@@ -718,6 +727,7 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
         sar_periph_ctrl_power_disable();
     }
 #endif
+    suspend_timers(sleep_flags);
 }
 
 /**
@@ -725,6 +735,7 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
  */
 static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
 {
+    resume_timers(sleep_flags);
 #if CONFIG_ESP_ENABLE_PVT && SOC_PVT_EN_WITH_SLEEP
     pvt_func_enable(true);
 #endif
@@ -765,11 +776,11 @@ static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
     clk_ll_soc_root_clk_auto_gating_bypass(true);
 # endif
 #endif
-#if REGI2C_LL_ANA_CALI_PD_WORKAROUND
-    regi2c_analog_cali_reg_write();
+#if ADC_LL_ANA_CALI_REG_PD_WORKAROUND
+    adc_hal_i2c_saradc_reg_restore();
 #endif
 #if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
-    regi2c_tsens_reg_write();
+    temperature_sensor_hal_i2c_saradc_reg_restore();
 #endif
 #if RNG_LL_DEPENDS_ON_LP_PERIPH
     if (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) {
@@ -901,7 +912,6 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
         result = rtc_deep_sleep_start(s_config.wakeup_triggers, reject_triggers);
 #endif
     } else {
-        suspend_timers(sleep_flags);
         /* Cache Suspend 1: will wait cache idle in cache suspend */
         suspend_cache();
         if (!(sleep_flags & RTC_SLEEP_PD_VDDSDIO)) {
@@ -987,7 +997,12 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
 #endif
         /* Cache Resume 1: Resume cache for continue running*/
         resume_cache();
-        resume_timers(sleep_flags);
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && CONFIG_SPIRAM_XIP_FROM_PSRAM
+        // Code outside of esp_sleep_start_safe may be linked to FLASH, and if CONFIG_SPIRAM_XIP_FROM_PSRAM
+        // is enabled, code in Flash will be copied to PSRAM for execution. We need to wait here until
+        // PSRAM exits half-sleep before returning.
+        esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
+#endif
     }
     return result;
 }
@@ -1053,19 +1068,23 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     // Enable ULP wakeup
 #if CONFIG_ULP_COPROC_TYPE_FSM
     if (s_config.wakeup_triggers & RTC_ULP_TRIG_EN) {
-#elif CONFIG_ULP_COPROC_TYPE_RISCV
-    if (s_config.wakeup_triggers & (RTC_COCPU_TRIG_EN | RTC_COCPU_TRAP_TRIG_EN)) {
-#elif CONFIG_ULP_COPROC_TYPE_LP_CORE
-    if (s_config.wakeup_triggers & (RTC_LP_CORE_TRIG_EN | RTC_LP_CORE_TRAP_TRIG_EN)) {
-#endif
 #ifdef CONFIG_IDF_TARGET_ESP32
         rtc_hal_ulp_wakeup_enable();
-#elif CONFIG_ULP_COPROC_TYPE_LP_CORE
-        pmu_ll_hp_clear_sw_intr_status(&PMU);
 #else
         rtc_hal_ulp_int_clear();
 #endif
     }
+#endif
+#if CONFIG_ULP_COPROC_TYPE_RISCV
+    if (s_config.wakeup_triggers & (RTC_COCPU_TRIG_EN | RTC_COCPU_TRAP_TRIG_EN)) {
+        rtc_hal_ulp_int_clear();
+    }
+#endif
+#if CONFIG_ULP_COPROC_TYPE_LP_CORE
+    if (s_config.wakeup_triggers & (RTC_LP_CORE_TRIG_EN | RTC_LP_CORE_TRAP_TRIG_EN)) {
+        pmu_ll_hp_clear_sw_intr_status(&PMU);
+    }
+#endif
 #endif // CONFIG_ULP_COPROC_ENABLED
 
     misc_modules_sleep_prepare(sleep_flags, deep_sleep);
@@ -1237,6 +1256,11 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     esp_os_enter_critical(&spinlock_rtc_deep_sleep);
     esp_ipc_isr_stall_other_cpu();
     esp_ipc_isr_stall_pause();
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // The other core will be stalled by high-priority interrupt and spins on variables in internal RAM,
+    // which naturally avoids cache livelock, so the 20ms livelock workaround timeout is not needed.
+    esp_int_wdt_livelock_workaround(false);
+#endif
 
     // record current RTC time
     s_config.rtc_ticks_at_sleep_start = rtc_time_get();
@@ -1316,6 +1340,10 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         sleep_rtc_wdt_prepare(false);
     }
 
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // Configure WDT to use livelock workaround timeout after releasing other CPU
+    esp_int_wdt_livelock_workaround(true);
+#endif
     esp_ipc_isr_stall_resume();
     esp_ipc_isr_release_other_cpu();
     esp_os_exit_critical(&spinlock_rtc_deep_sleep);
@@ -1385,10 +1413,6 @@ static SLEEP_FN_ATTR esp_err_t esp_light_sleep_inner(uint32_t sleep_flags, uint3
         }
 #endif
     }
-
-#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED
-    esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
-#endif
 
 #if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION
     if (sleep_flags & RTC_SLEEP_PD_VDDSDIO) {
@@ -1467,6 +1491,11 @@ esp_err_t esp_light_sleep_start(void)
 #if CONFIG_PM_ESP_SLEEP_POWER_DOWN_CPU && SOC_PM_CPU_RETENTION_BY_SW
     sleep_smp_cpu_sleep_prepare();
 #else
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // The other core will be stalled by high-priority interrupt and spins on variables in internal RAM,
+    // which naturally avoids cache livelock, so the 20ms livelock workaround timeout is not needed.
+    esp_int_wdt_livelock_workaround(false);
+#endif
     esp_ipc_isr_stall_other_cpu();
 #endif
     esp_ipc_isr_stall_pause();
@@ -1674,12 +1703,24 @@ esp_err_t esp_light_sleep_start(void)
     }
 #endif
 
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && !CONFIG_SPIRAM_XIP_FROM_PSRAM
+    // If CONFIG_SPIRAM_XIP_FROM_PSRAM is not enabled, the sleep-wake process
+    // prior to this point does not access the PSRAM, so we can postpone waiting
+    // for the PSRAM to resume until here, in order to reuse the time overhead
+    // of the wake-up process as much as possible.
+    esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
+#endif
+
 #if !CONFIG_FREERTOS_UNICORE
     esp_ipc_isr_stall_resume();
 #if CONFIG_PM_ESP_SLEEP_POWER_DOWN_CPU && SOC_PM_CPU_RETENTION_BY_SW
     sleep_smp_cpu_wakeup_prepare();
 #else
     esp_ipc_isr_release_other_cpu();
+#if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
+    // Configure WDT to use livelock workaround timeout after releasing other CPU
+    esp_int_wdt_livelock_workaround(true);
+#endif
 #endif
 #endif
 
@@ -1744,31 +1785,35 @@ esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source)
         s_config.gpio_trigger_mode = 0;
 #endif
         s_config.wakeup_triggers &= ~RTC_GPIO_TRIG_EN;
-#if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
-    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART, (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN | RTC_UART2_TRIG_EN))) {
-        s_config.wakeup_triggers &= ~(RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN | RTC_UART2_TRIG_EN);
-    }
-#else
-    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART, (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN))) {
-        s_config.wakeup_triggers &= ~(RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN);
-    }
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART0, RTC_UART0_TRIG_EN)) {
+        s_config.wakeup_triggers &= ~RTC_UART0_TRIG_EN;
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART1, RTC_UART1_TRIG_EN)) {
+        s_config.wakeup_triggers &= ~RTC_UART1_TRIG_EN;
+#if (SOC_UART_HP_NUM > 2) && !SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART2, RTC_UART2_TRIG_EN)) {
+        s_config.wakeup_triggers &= ~RTC_UART2_TRIG_EN;
+#endif
+#if (SOC_UART_HP_NUM > 3)
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART3, RTC_UART3_TRIG_EN)) {
+        s_config.wakeup_triggers &= ~RTC_UART3_TRIG_EN;
+#endif
+#if (SOC_UART_HP_NUM > 4)
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_UART4, RTC_UART4_TRIG_EN)) {
+        s_config.wakeup_triggers &= ~RTC_UART4_TRIG_EN;
 #endif
 #if CONFIG_ULP_COPROC_TYPE_FSM
-    else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_ULP, RTC_ULP_TRIG_EN)) {
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_ULP, RTC_ULP_TRIG_EN)) {
         s_config.wakeup_triggers &= ~RTC_ULP_TRIG_EN;
-    }
 #endif
 #if SOC_LP_VAD_SUPPORTED
-    else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_VAD, RTC_LP_VAD_TRIG_EN)) {
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_VAD, RTC_LP_VAD_TRIG_EN)) {
         s_config.wakeup_triggers &= ~RTC_LP_VAD_TRIG_EN;
-    }
 #endif
 #if SOC_VBAT_SUPPORTED
-    else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_VBAT_UNDER_VOLT, RTC_VBAT_UNDER_VOLT_TRIG_EN)) {
+    } else if (CHECK_SOURCE(source, ESP_SLEEP_WAKEUP_VBAT_UNDER_VOLT, RTC_VBAT_UNDER_VOLT_TRIG_EN)) {
         s_config.wakeup_triggers &= ~RTC_VBAT_UNDER_VOLT_TRIG_EN;
-    }
 #endif
-    else {
+    } else {
         ESP_LOGE(TAG, "Incorrect wakeup source (%d) to disable.", (int) source);
         return ESP_ERR_INVALID_STATE;
     }
@@ -1791,7 +1836,10 @@ esp_err_t esp_sleep_enable_ulp_wakeup(void)
     }
 #endif //CONFIG_IDF_TARGET_ESP32
 
-#if CONFIG_ULP_COPROC_TYPE_FSM
+#if CONFIG_ULP_COPROC_TYPE_FSM && CONFIG_ULP_COPROC_TYPE_RISCV
+    s_config.wakeup_triggers |= (RTC_ULP_TRIG_EN | RTC_COCPU_TRIG_EN | RTC_COCPU_TRAP_TRIG_EN);
+    return ESP_OK;
+#elif CONFIG_ULP_COPROC_TYPE_FSM
     s_config.wakeup_triggers |= RTC_ULP_TRIG_EN;
     return ESP_OK;
 #elif CONFIG_ULP_COPROC_TYPE_RISCV
@@ -2154,8 +2202,10 @@ static void ext1_wakeup_prepare(void)
         rtcio_hal_function_select(rtc_pin, RTCIO_LL_FUNC_DIGITAL);
         // set input enable
         gpio_ll_input_enable(&GPIO, gpio);
+#if SOC_RTCIO_HOLD_SUPPORTED
         // hold rtc_pin to use it during sleep state
         rtcio_hal_hold_enable(rtc_pin);
+#endif
 #endif
         // Keep track of pins which are processed to bail out early
         rtc_gpio_mask &= ~BIT(rtc_pin);
@@ -2290,18 +2340,27 @@ esp_err_t esp_sleep_enable_uart_wakeup(int uart_num)
         s_config.wakeup_triggers |= RTC_UART0_TRIG_EN;
     } else if (uart_num == UART_NUM_1) {
         s_config.wakeup_triggers |= RTC_UART1_TRIG_EN;
-#if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
+#if (SOC_UART_HP_NUM > 2) && !SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP
     } else if (uart_num == UART_NUM_2) {
         s_config.wakeup_triggers |= RTC_UART2_TRIG_EN;
 #endif
-#if SOC_PM_SUPPORT_LP_UART_WAKEUP
-    } else if (uart_num == LP_UART_NUM_0) {
-        s_config.wakeup_triggers |= PMU_LP_UART_WAKEUP_EN;
+#if (SOC_UART_HP_NUM > 3)
+    } else if (uart_num == UART_NUM_3) {
+        s_config.wakeup_triggers |= RTC_UART3_TRIG_EN;
 #endif
-    } else {
+#if (SOC_UART_HP_NUM > 4)
+    } else if (uart_num == UART_NUM_4) {
+        s_config.wakeup_triggers |= RTC_UART4_TRIG_EN;
+#endif
+    } else
+#if SOC_PM_SUPPORT_LP_UART_WAKEUP
+    if (uart_num == LP_UART_NUM_0) {
+        s_config.wakeup_triggers |= PMU_LP_UART_WAKEUP_EN;
+    } else
+#endif
+    {
         return ESP_ERR_INVALID_ARG;
     }
-
     return ESP_OK;
 }
 
@@ -2377,15 +2436,22 @@ esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause(void)
     uint32_t wakeup_cause = rtc_cntl_ll_get_wakeup_cause();
 #endif
 
+    uint32_t uart_wakeup_mask = RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN;
+#if (SOC_UART_HP_NUM > 2) && !SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP
+    uart_wakeup_mask |= RTC_UART2_TRIG_EN;
+#endif
+#if (SOC_UART_HP_NUM > 3)
+    uart_wakeup_mask |= RTC_UART3_TRIG_EN;
+#endif
+#if (SOC_UART_HP_NUM > 4)
+    uart_wakeup_mask |= RTC_UART4_TRIG_EN;
+#endif
+
     if (wakeup_cause & RTC_TIMER_TRIG_EN) {
         return ESP_SLEEP_WAKEUP_TIMER;
     } else if (wakeup_cause & RTC_GPIO_TRIG_EN) {
         return ESP_SLEEP_WAKEUP_GPIO;
-#if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
-    } else if (wakeup_cause & (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN | RTC_UART2_TRIG_EN)) {
-#else
-    } else if (wakeup_cause & (RTC_UART0_TRIG_EN | RTC_UART1_TRIG_EN)) {
-#endif
+    } else if (wakeup_cause & uart_wakeup_mask) {
         return ESP_SLEEP_WAKEUP_UART;
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
     } else if (wakeup_cause & RTC_EXT0_TRIG_EN) {
@@ -2458,14 +2524,24 @@ uint32_t esp_sleep_get_wakeup_causes(void)
         wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_GPIO);
     }
     if (wakeup_cause_raw & RTC_UART0_TRIG_EN) {
-        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART);
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART0);
     }
     if (wakeup_cause_raw & RTC_UART1_TRIG_EN) {
         wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART1);
     }
-#if SOC_PMU_SUPPORTED && (SOC_UART_HP_NUM > 2)
+#if (SOC_UART_HP_NUM > 2) && !SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP
     if (wakeup_cause_raw & RTC_UART2_TRIG_EN) {
         wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART2);
+    }
+#endif
+#if (SOC_UART_HP_NUM > 3)
+    if (wakeup_cause_raw & RTC_UART3_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART3);
+    }
+#endif
+#if (SOC_UART_HP_NUM > 4)
+    if (wakeup_cause_raw & RTC_UART4_TRIG_EN) {
+        wakeup_cause |= BIT(ESP_SLEEP_WAKEUP_UART4);
     }
 #endif
 #if SOC_PM_SUPPORT_EXT0_WAKEUP

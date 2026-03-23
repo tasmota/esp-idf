@@ -22,27 +22,6 @@ The DAC peripheral supports outputting analog signal in the following ways:
 
 For other analog output options, see :doc:`Sigma-Delta Modulation <sdm>` and :doc:`LED Control <ledc>`. Both modules produce high-frequency PWM/PDM output, which can be hardware low-pass filtered in order to generate a lower frequency analog output.
 
-DAC File Structure
-------------------
-
-.. figure:: ../../../_static/diagrams/dac/dac_file_structure.png
-    :align: center
-    :alt: DAC file structure
-
-    DAC File Structure
-
-
-**Public headers that need to be included in the DAC application are listed as follows:**
-
-- ``dac.h``: The top header file of the legacy DAC driver, which should be only included in the apps which use the legacy driver API.
-- ``dac_oneshot.h``: The top header file of the new DAC driver, which should be included in the apps which use the new driver API with one-shot mode.
-- ``dac_cosine.h``: The top header file of the new DAC driver, which should be included in the apps which use the new driver API with cosine mode.
-- ``dac_continuous.h``: The top header file of the new DAC driver, which should be included in the apps which use the new driver API with continuous mode.
-
-.. note::
-
-    The legacy driver cannot coexist with the new driver. Include ``dac.h`` to use the legacy driver or ``dac_oneshot.h``, ``dac_cosine.h``, and ``dac_continuous.h`` to use the new driver. The legacy driver might be removed in the future.
-
 Functional Overview
 -------------------
 

@@ -26,7 +26,13 @@
 {IDF_TARGET_NAME} 上的 HMAC
 -----------------------------
 
-在 {IDF_TARGET_NAME} HMAC 模块的 eFuse 中会烧录一个密钥，可将该 eFuse 密钥设置为禁止所有外部资源访问，避免密钥泄露。
+在 {IDF_TARGET_NAME} 上，HMAC 模块会使用烧录到 eFuse 中的密钥。
+
+.. only:: SOC_KEY_MANAGER_SUPPORTED
+
+    在 {IDF_TARGET_NAME} 上，HMAC 模块也支持将密钥存储在密钥管理器中，详情请参阅 :ref:`key-manager`。
+
+可将该密钥设置为禁止所有外部资源访问，避免密钥泄露。
 
 此外，在 {IDF_TARGET_NAME} 上的 HMAC 有以下三种应用场景：
 
@@ -142,6 +148,8 @@ HMAC 的第三种应用场景是将其作为密钥，启用软禁用的 JTAG 接
 
 以下为针对特定应用场景的实例代码，可用于设置 eFuse 密钥，并将其用于计算支持软件使用的 HMAC。
 
+使用 eFuse 存储 HMAC 密钥：
+
 ``esp_efuse_write_key`` 可以设置 eFuse 中的物理密钥块 4，并设置其功能。``ESP_EFUSE_KEY_PURPOSE_HMAC_UP`` (8) 表明，该密钥仅适用于生成支持软件使用的 HMAC。
 
 .. code-block:: c
@@ -162,6 +170,8 @@ HMAC 的第三种应用场景是将其作为密钥，启用软禁用的 JTAG 接
 
 接下来可以通过 PSA Crypto API，使用已存储的密钥来计算供软件使用的 HMAC。
 
+使用基于 eFuse 的 HMAC 密钥：
+
 .. code-block:: c
 
     #include "psa/crypto.h"
@@ -181,10 +191,9 @@ HMAC 的第三种应用场景是将其作为密钥，启用软禁用的 JTAG 接
     psa_set_key_bits(&attributes, 256);
     psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_ESP_HMAC_VOLATILE);
 
-    // 创建不透明密钥引用
+    // 为基于 eFuse 的密钥创建不透明密钥引用
     esp_hmac_opaque_key_t opaque_key = {
-        .use_km_key = false,
-        .efuse_block = EFUSE_BLK_KEY4,
+        .efuse_key_id = HMAC_KEY4,
     };
 
     // 导入不透明密钥

@@ -39,7 +39,7 @@
 // #define SOC_LCDCAM_CAM_SUPPORTED        1      // TODO: [ESP32S31] IDF-14722
 // #define SOC_LCDCAM_I80_LCD_SUPPORTED    1      // TODO: [ESP32S31] IDF-14722
 // #define SOC_LCDCAM_RGB_LCD_SUPPORTED    1      // TODO: [ESP32S31] IDF-14722
-// #define SOC_MCPWM_SUPPORTED             1      // TODO: [ESP32S31] IDF-14756
+#define SOC_MCPWM_SUPPORTED             1
 // #define SOC_TWAI_SUPPORTED              1      // TODO: [ESP32S31] IDF-14719
 // #define SOC_ETM_SUPPORTED               1      // TODO: [ESP32S31] IDF-14724
 // #define SOC_PARLIO_SUPPORTED            1      // TODO: [ESP32S31] IDF-14711
@@ -72,7 +72,7 @@
 // #define SOC_SECURE_BOOT_SUPPORTED       1      // TODO: [ESP32S31] IDF-14629
 // #define SOC_BOD_SUPPORTED               1      // TODO: [ESP32S31] IDF-14658
 // #define SOC_APM_SUPPORTED               1      // TODO: [ESP32S31] IDF-14620
-// #define SOC_PAU_SUPPORTED               1      // TODO: [ESP32S31] IDF-14582
+#define SOC_PAU_SUPPORTED                  1
 #define SOC_PMU_SUPPORTED                  1
 #define SOC_RTC_TIMER_SUPPORTED            1
 // #define SOC_ULP_LP_UART_SUPPORTED       1      // TODO: [ESP32S31] IDF-14634
@@ -86,7 +86,7 @@
 // #define SOC_CLK_TREE_SUPPORTED          1      // TODO: [ESP32S31] IDF-14733
 // #define SOC_ASSIST_DEBUG_SUPPORTED      1      // TODO: [ESP32S31] IDF-14675
 // #define SOC_DEBUG_PROBE_SUPPORTED       1      // TODO: [ESP32S31] IDF-14798
-// #define SOC_WDT_SUPPORTED               1      // TODO: [ESP32S31] IDF-14656
+#define SOC_WDT_SUPPORTED               1
 #define SOC_SPI_FLASH_SUPPORTED         1         // TODO: [ESP32S31] IDF-14777
 // #define SOC_TOUCH_SENSOR_SUPPORTED      1      // TODO: [ESP32S31] IDF-14796
 // #define SOC_RNG_SUPPORTED               1      // TODO: [ESP32S31] IDF-14632
@@ -96,6 +96,7 @@
 // #define SOC_PM_SUPPORTED                1      // TODO: [ESP32S31] IDF-14648
 // #define SOC_BITSCRAMBLER_SUPPORTED      1      // TODO: [ESP32S31] IDF-14714
 // #define SOC_SIMD_INSTRUCTION_SUPPORTED  1      // TODO: [ESP32S31] IDF-14661
+#define SOC_CORDIC_SUPPORTED             1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -146,7 +147,7 @@
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION                2
 #define SOC_GDMA_SUPPORT_ETM                1
-#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
+// #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1 // TODO: [ESP32S31] IDF-14760
 #define SOC_GDMA_EXT_MEM_ENC_ALIGNMENT   (16)
 
 /*-------------------------- APM CAPS ----------------------------------------*/
@@ -228,12 +229,11 @@
 
 /*--------------------------- TIMER GROUP CAPS ---------------------------------------*/
 #define SOC_TIMER_SUPPORT_ETM             (1)
-#define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1)
+// #define SOC_TIMER_SUPPORT_SLEEP_RETENTION (1) // TODO: [ESP32S31] IDF-14746
 
 /*--------------------------- WATCHDOG CAPS ---------------------------------------*/
-// TODO: [ESP32S31] IDF-14656
 #define SOC_MWDT_SUPPORT_XTAL              (1)
-#define SOC_MWDT_SUPPORT_SLEEP_RETENTION   (1)
+// #define SOC_MWDT_SUPPORT_SLEEP_RETENTION   (1)
 
 /*-------------------------- eFuse CAPS----------------------------*/
 // TODO: [ESP32S31] IDF-14688
@@ -300,7 +300,7 @@
 #define SOC_PM_SUPPORT_RC32K_PD         (1)
 #define SOC_PM_SUPPORT_RC_FAST_PD       (1)
 #define SOC_PM_SUPPORT_VDDSDIO_PD       (1)
-#define SOC_PM_SUPPORT_TOP_PD           (1)
+// #define SOC_PM_SUPPORT_TOP_PD           (1)  // TODO: [ESP32S31] IDF-14647
 #define SOC_PM_SUPPORT_HP_AON_PD        (1)
 #define SOC_PM_SUPPORT_CNNT_PD          (1)
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
@@ -326,3 +326,10 @@
 #define SOC_LP_TIMER_BIT_WIDTH_LO           32 // Bit width of lp_timer low part
 #define SOC_LP_TIMER_BIT_WIDTH_HI           16 // Bit width of lp_timer high part
 #define SOC_RTC_TIMER_V3                    1
+
+/*-------------------------- MCPWM CAPS --------------------------------------*/
+#define SOC_MCPWM_SWSYNC_CAN_PROPAGATE       (1)    ///< Software sync event can be routed to its output
+#define SOC_MCPWM_SUPPORT_ETM                (1)    ///< Support ETM (Event Task Matrix)
+#define SOC_MCPWM_SUPPORT_EVENT_COMPARATOR   (1)    ///< Support event comparator (based on ETM)
+#define SOC_MCPWM_CAPTURE_CLK_FROM_GROUP     (1)    ///< Capture timer shares clock with other PWM timers
+// #define SOC_MCPWM_SUPPORT_SLEEP_RETENTION    (1)    ///< Support back up registers before sleep

@@ -117,6 +117,36 @@ def test_examples_protocol_http_ws_echo_server(dut: Dut) -> None:
         data = data.decode()
         if opcode != OPCODE_TEXT or data != 'Async data':
             raise RuntimeError(f'Failed to receive correct opcode:{opcode} or data:{data}')
+        # Test ping from server
+        logging.info('Testing server-initiated ping')
+        ws.write(data='Ping', opcode=OPCODE_TEXT)
+        # Wait for server to receive the message and send a ping
+        dut.expect(r'Got packet with message: Ping', timeout=10)
+        # Now read the ping response
+        opcode, data = ws.read()
+        logging.info(f'Testing server-initiated ping: Received opcode:{opcode}, data:{data}')
+        data = data.decode()
+        if opcode != OPCODE_PING:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        # Now we should get a pong in response to our ping
+        opcode, data = ws.read()
+        data = data.decode()
+        if opcode != OPCODE_PONG:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        ws.write(data='Ping', opcode=OPCODE_TEXT)
+        # Wait for server to receive the message and send a ping
+        dut.expect(r'Got packet with message: Ping', timeout=10)
+        # Now read the ping response
+        opcode, data = ws.read()
+        logging.info(f'Testing server-initiated ping: Received opcode:{opcode}, data:{data}')
+        data = data.decode()
+        if opcode != OPCODE_PING:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
+        # Now we should get a pong in response to our ping
+        opcode, data = ws.read()
+        data = data.decode()
+        if opcode != OPCODE_PONG:
+            raise RuntimeError(f'Failed to receive correct opcode:{opcode}')
 
 
 @pytest.mark.wifi_router

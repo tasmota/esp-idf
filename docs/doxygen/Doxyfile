@@ -92,6 +92,8 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_driver_ana_cmpr/include/driver/ana_cmpr.h \
     $(PROJECT_PATH)/components/esp_driver_ana_cmpr/include/driver/ana_cmpr_etm.h \
     $(PROJECT_PATH)/components/esp_driver_ana_cmpr/include/driver/ana_cmpr_types.h \
+    $(PROJECT_PATH)/components/esp_driver_cordic/include/driver/cordic.h \
+    $(PROJECT_PATH)/components/esp_driver_cordic/include/driver/cordic_types.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_continuous.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_cosine.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_oneshot.h \
@@ -172,6 +174,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/adc_types.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/dac_types.h \
     $(PROJECT_PATH)/components/esp_hal_ana_conv/include/hal/temperature_sensor_types.h \
+    $(PROJECT_PATH)/components/esp_hal_cordic/include/hal/cordic_types.h \
     $(PROJECT_PATH)/components/esp_hal_emac/include/hal/eth_types.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/$(IDF_TARGET)/include/soc/gpio_num.h \
     $(PROJECT_PATH)/components/esp_hal_gpio/include/hal/gpio_types.h \
@@ -236,6 +239,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_ringbuf/include/freertos/ringbuf.h \
     $(PROJECT_PATH)/components/esp_rom/include/esp_rom_sys.h \
     $(PROJECT_PATH)/components/esp_security/include/esp_ds.h \
+    $(PROJECT_PATH)/components/esp_system/include/esp_debug_helpers.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_expression_with_stack.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_freertos_hooks.h \
     $(PROJECT_PATH)/components/esp_system/include/esp_ipc_isr.h \
@@ -379,6 +383,8 @@ PREDEFINED             = \
     configTASKLIST_INCLUDE_COREID=1 \
     configUSE_SB_COMPLETED_CALLBACK=1 \
     PRIVILEGED_FUNCTION= \
+    PACKED_ATTR= \
+    WORD_ALIGNED_ATTR= \
     "ESP_EVENT_DECLARE_BASE(x)=extern esp_event_base_t x"
 
 ## Do not complain about not having dot

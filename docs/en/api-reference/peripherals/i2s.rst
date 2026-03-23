@@ -47,34 +47,6 @@ Each I2S controller has the following features that can be configured by the I2S
 
     Each controller has separate RX and TX channels. That means they are able to work under different clocks and slot configurations with separate GPIO pins. Note that although the internal MCLKs of TX channel and RX channel are separate on a controller, the output MCLK signal can only be attached to one channel. If independent MCLK output is required for each channel, they must be allocated on different I2S controllers.
 
-I2S File Structure
-------------------
-
-.. figure:: ../../../_static/diagrams/i2s/i2s_file_structure.png
-    :align: center
-    :alt: I2S file structure
-
-    I2S File Structure
-
-**Public headers that need to be included in the I2S application are as follows:**
-
-.. list::
-
-    - ``i2s.h``: The header file that provides legacy I2S APIs (for apps using legacy driver).
-    - ``i2s_std.h``: The header file that provides standard communication mode specific APIs (for apps using new driver with standard mode).
-    :SOC_I2S_SUPPORTS_PDM: - ``i2s_pdm.h``: The header file that provides PDM communication mode specific APIs (for apps using new driver with PDM mode).
-    :SOC_I2S_SUPPORTS_TDM: - ``i2s_tdm.h``: The header file that provides TDM communication mode specific APIs (for apps using new driver with TDM mode).
-
-.. note::
-
-    The legacy driver cannot coexist with the new driver. Include ``i2s.h`` to use the legacy driver, or include the other three headers to use the new driver. The legacy driver might be removed in future.
-
-**Public headers that have been included in the headers above are as follows:**
-
-- ``i2s_types_legacy.h``: The header file that provides legacy public types that are only used in the legacy driver.
-- ``i2s_types.h``: The header file that provides public types.
-- ``i2s_common.h``: The header file that provides common APIs for all communication modes.
-
 I2S Clock
 ---------
 

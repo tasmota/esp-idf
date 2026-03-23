@@ -412,9 +412,22 @@ esp_err_t gdma_config_transfer(gdma_channel_handle_t dma_chan, const gdma_transf
     }
     uint32_t max_data_burst_size = config->max_data_burst_size;
     if (max_data_burst_size) {
+#if defined(GDMA_LL_SUPPORTED_BURST_SIZES_ARRAY)
+        uint32_t supported_burst_sizes[] = GDMA_LL_SUPPORTED_BURST_SIZES_ARRAY;
+        bool valid = false;
+        for (size_t i = 0; i < sizeof(supported_burst_sizes) / sizeof(supported_burst_sizes[0]); i++) {
+            if (supported_burst_sizes[i] == max_data_burst_size) {
+                valid = true;
+                break;
+            }
+        }
+        ESP_RETURN_ON_FALSE(valid, ESP_ERR_INVALID_ARG, TAG,
+                            "invalid max_data_burst_size (%" PRIu32 "), supported: %s", max_data_burst_size, GDMA_LL_SUPPORTED_BURST_SIZES_STR);
+#else
         // burst size must be power of 2
         ESP_RETURN_ON_FALSE((max_data_burst_size & (max_data_burst_size - 1)) == 0, ESP_ERR_INVALID_ARG,
-                            TAG, "invalid max_data_burst_size: %"PRIu32, max_data_burst_size);
+                            TAG, "invalid max_data_burst_size: %" PRIu32, max_data_burst_size);
+#endif
 #if GDMA_LL_GET(AHB_PSRAM_CAPABLE) || GDMA_LL_GET(AXI_PSRAM_CAPABLE) || GDMA_LL_GET(LP_AHB_PSRAM_CAPABLE)
         if (config->access_ext_mem) {
             ESP_RETURN_ON_FALSE(max_data_burst_size <= GDMA_LL_MAX_BURST_SIZE_PSRAM, ESP_ERR_INVALID_ARG,
@@ -595,6 +608,10 @@ esp_err_t gdma_register_rx_event_callbacks(gdma_channel_handle_t dma_chan, gdma_
             ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_recv_done), ESP_ERR_INVALID_ARG,
                                 TAG, "on_recv_done not in IRAM");
         }
+        if (cbs->on_descr_empty) {
+            ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_descr_empty), ESP_ERR_INVALID_ARG,
+                                TAG, "on_descr_empty not in IRAM");
+        }
         if (user_data) {
             ESP_RETURN_ON_FALSE(esp_ptr_internal(user_data), ESP_ERR_INVALID_ARG,
                                 TAG, "user context not in internal RAM");
@@ -609,6 +626,7 @@ esp_err_t gdma_register_rx_event_callbacks(gdma_channel_handle_t dma_chan, gdma_
     gdma_hal_enable_intr(hal, pair->pair_id, GDMA_CHANNEL_DIRECTION_RX, GDMA_LL_EVENT_RX_SUC_EOF | GDMA_LL_EVENT_RX_ERR_EOF, cbs->on_recv_eof != NULL);
     gdma_hal_enable_intr(hal, pair->pair_id, GDMA_CHANNEL_DIRECTION_RX, GDMA_LL_EVENT_RX_DESC_ERROR, cbs->on_descr_err != NULL);
     gdma_hal_enable_intr(hal, pair->pair_id, GDMA_CHANNEL_DIRECTION_RX, GDMA_LL_EVENT_RX_DONE, cbs->on_recv_done != NULL);
+    gdma_hal_enable_intr(hal, pair->pair_id, GDMA_CHANNEL_DIRECTION_RX, GDMA_LL_EVENT_RX_DESC_EMPTY, cbs->on_descr_empty != NULL);
     esp_os_exit_critical(&pair->spinlock);
 
     memcpy(&rx_chan->cbs, cbs, sizeof(gdma_rx_event_callbacks_t));
@@ -942,6 +960,12 @@ void gdma_default_rx_isr(void *args)
         // in the future, we may add more information about the error descriptor into the event data,
         // but for now, we just pass NULL
         need_yield |= rx_chan->cbs.on_descr_err(&rx_chan->base, NULL, rx_chan->user_data);
+    }
+
+    // RX desc empty is treated as an abnormal and terminal path for this transfer.
+    // We currently pass NULL event data, same as other abnormal callback style.
+    if ((intr_status & GDMA_LL_EVENT_RX_DESC_EMPTY) && rx_chan->cbs.on_descr_empty) {
+        need_yield |= rx_chan->cbs.on_descr_empty(&rx_chan->base, NULL, rx_chan->user_data);
     }
 
     // we expect the caller will do data process in the recv_done callback first, and handle the EOF event later

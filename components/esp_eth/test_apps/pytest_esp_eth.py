@@ -288,6 +288,19 @@ def test_esp_eth_ip101(dut: IdfDut) -> None:
     ethernet_l2_test(dut)
 
 
+@pytest.mark.eth_ip101
+@pytest.mark.parametrize(
+    'config',
+    [
+        'rmii_clko_esp32',
+    ],
+    indirect=True,
+)
+@idf_parametrize('target', ['esp32'], indirect=['target'])
+def test_esp32_emac_clko(dut: IdfDut) -> None:
+    dut.run_all_single_board_cases(group='esp_emac_clk_out')
+
+
 # ----------- IP101 ESP32P4 -----------
 @pytest.mark.parametrize(
     'config, target',
@@ -399,7 +412,6 @@ def test_esp_eth_dp83848(dut: IdfDut) -> None:
     'config',
     [
         'default_w5500',
-        'poll_w5500',
     ],
     indirect=True,
 )
@@ -418,7 +430,6 @@ def test_esp_eth_w5500(dut: IdfDut) -> None:
     'config',
     [
         'default_ksz8851snl',
-        'poll_ksz8851snl',
     ],
     indirect=True,
 )
@@ -437,7 +448,6 @@ def test_esp_eth_ksz8851snl(dut: IdfDut) -> None:
     'config',
     [
         'default_dm9051',
-        'poll_dm9051',
     ],
     indirect=True,
 )

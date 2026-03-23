@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,15 +18,24 @@
 #include "bootloader_flash_priv.h"
 #include "bootloader_soc.h"
 #include "esp_private/bootloader_flash_internal.h"
+#include "soc/rtc_wdt_reg.h"
+#include "hal/rwdt_ll.h"
 
 ESP_LOG_ATTR_TAG(TAG, "boot.esp32s31");
+
+static void bootloader_super_wdt_auto_feed(void)
+{
+    REG_WRITE(RTC_WDT_SWD_WPROTECT_REG, RTC_WDT_SWD_WKEY_VALUE);
+    REG_SET_BIT(RTC_WDT_SWD_CONFIG_REG, RTC_WDT_SWD_AUTO_FEED_EN);
+    REG_WRITE(RTC_WDT_SWD_WPROTECT_REG, 0);
+}
 
 esp_err_t bootloader_init(void)
 {
     esp_err_t ret = ESP_OK;
 
     // bootloader_hardware_init();       // TODO: IDF-14696
-    // bootloader_super_wdt_auto_feed();   // TODO: IDF-14656
+    bootloader_super_wdt_auto_feed();
 
 // In RAM_APP, memory will be initialized in `call_start_cpu0`
 #if !CONFIG_APP_BUILD_TYPE_RAM
@@ -81,7 +90,7 @@ esp_err_t bootloader_init(void)
 #endif // !CONFIG_APP_BUILD_TYPE_RAM
 
     // check whether a WDT reset happened
-    // bootloader_check_wdt_reset();     // TODO: IDF-14656
+    // bootloader_check_wdt_reset();     // TODO: IDF-14678
     // config WDT
     bootloader_config_wdt();
     // enable RNG early entropy source

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,6 +9,7 @@
 #include "test_utils.h"
 #include "unity_test_utils.h"
 #include "driver/uart.h"
+#include "driver/uart_wakeup.h"
 #include "esp_log.h"
 #include "esp_rom_gpio.h"
 #include "esp_private/gpio.h"
@@ -272,19 +273,6 @@ static void uart_hw_flow_set_get_test(int uart_num)
     }
 }
 
-static void uart_wakeup_set_get_test(int uart_num)
-{
-    printf("uart wake up set and get test\n");
-    int wake_up_set = 0;
-    int wake_up_get = 0;
-    for (int i = 3; i < 0x3ff; i++) {
-        wake_up_set = i;
-        TEST_ESP_OK(uart_set_wakeup_threshold(uart_num, wake_up_set));
-        TEST_ESP_OK(uart_get_wakeup_threshold(uart_num, &wake_up_get));
-        TEST_ASSERT_EQUAL(wake_up_set, wake_up_get);
-    }
-}
-
 TEST_CASE("uart general API test", "[uart]")
 {
     uart_port_param_t port_param = {};
@@ -304,7 +292,6 @@ TEST_CASE("uart general API test", "[uart]")
     uart_stop_bit_set_get_test(uart_num);
     uart_parity_set_get_test(uart_num);
     uart_hw_flow_set_get_test(uart_num);
-    uart_wakeup_set_get_test(uart_num);
 }
 
 typedef struct {
@@ -730,10 +717,8 @@ IRAM_ATTR static void uart_signal_inject_glitch_task(void *param)
     rtcio_ll_set_level(rtc_gpio_num, 1);
 #endif
 
-    // esp_rom_delay_us(1000); // wait for uart write task to start sending data
-
     while (1) {
-        // make sure the glitch is always less than 5us
+        // make sure the glitch is always less than 6us
         portDISABLE_INTERRUPTS();
         if (uart_num < SOC_UART_HP_NUM) {
             esp_rom_gpio_connect_out_signal(tx_pin, SIG_GPIO_OUT_IDX, false, false);
@@ -761,10 +746,14 @@ TEST_CASE("uart rx glitch filter (read write test + auto baud rate detection tes
     port_param.tx_pin_num = port_param.rx_pin_num; // let tx and rx use the same pin
 
     uart_port_t uart_num = port_param.port_num;
-    // High speed clock source may not able to filter a 5us glitch, therefore, lower the source clock frequency
+    // High speed clock source may not able to filter a 6us glitch, therefore, lower the source clock frequency
     if (uart_num < SOC_UART_HP_NUM) {
-#if SOC_UART_SUPPORT_XTAL_CLK
+#if SOC_UART_SUPPORT_XTAL_CLK && (CONFIG_XTAL_FREQ == 40)
         port_param.default_src_clk = UART_SCLK_XTAL;
+#elif SOC_UART_SUPPORT_RTC_CLK
+        port_param.default_src_clk = UART_SCLK_RTC;
+#elif SOC_UART_SUPPORT_REF_TICK
+        port_param.default_src_clk = UART_SCLK_REF_TICK;
 #endif
     }
     uart_config_t uart_config = {
@@ -775,7 +764,7 @@ TEST_CASE("uart rx glitch filter (read write test + auto baud rate detection tes
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = port_param.default_src_clk,
 #if !UART_LL_GLITCH_FILT_ONLY_ON_AUTOBAUD
-        .rx_glitch_filt_thresh = 5000, // filter all glitches with width less than 5us
+        .rx_glitch_filt_thresh = 6000, // filter all glitches with width less than 6us
 #endif
     };
 

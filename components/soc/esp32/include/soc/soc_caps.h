@@ -353,6 +353,9 @@
 
 #define SOC_CONFIGURABLE_VDDSDIO_SUPPORTED        (1)
 #define SOC_PM_MODEM_PD_BY_SW                     (1)
+
+#define SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP       (1)
+
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_APLL_SUPPORTED                    (1)
 
@@ -397,3 +400,4 @@
 
 /*--------------------------- EMAC --------------------------------*/
 #define SOC_EMAC_RMII_CLK_OUT_INTERNAL_LOOPBACK     (1) /*!< REF RMII CLK output is looped back internally */
+#define SOC_EMAC_REF_CLK_FROM_APLL                 (1)      /*!< RMII REF CLK can use APLL as internal clock source */

@@ -952,15 +952,9 @@ static IRAM_ATTR bool lcd_rgb_panel_fill_bounce_buffer(esp_rgb_panel_t *panel, u
 
     // Preload the next bit of buffer to the cache memory, this can improve the performance
     if (panel->num_fbs > 0 && panel->flags.fb_behind_cache) {
-#if CONFIG_IDF_TARGET_ESP32S3
-        Cache_Start_DCache_Preload((uint32_t)&panel->fbs[panel->bb_fb_index][panel->bounce_pos_px * bytes_per_pixel],
-                                   panel->bb_size, 0);
-#elif CONFIG_IDF_TARGET_ESP32P4
-        Cache_Start_L2_Cache_Preload((uint32_t)&panel->fbs[panel->bb_fb_index][panel->bounce_pos_px * bytes_per_pixel],
-                                     panel->bb_size, 0);
-#else
-#error "Unsupported target"
-#endif
+        cache_hal_preload(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_DATA,
+                          (uint32_t)&panel->fbs[panel->bb_fb_index][panel->bounce_pos_px * bytes_per_pixel],
+                          panel->bb_size, false);
     }
     return need_yield;
 }

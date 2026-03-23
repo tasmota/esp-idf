@@ -707,6 +707,10 @@ config SOC_PM_MODEM_PD_BY_SW
     bool
     default y
 
+config SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP
+    bool
+    default y
+
 config SOC_CLK_APLL_SUPPORTED
     bool
     default y
@@ -800,5 +804,9 @@ config SOC_PHY_COMBO_MODULE
     default y
 
 config SOC_EMAC_RMII_CLK_OUT_INTERNAL_LOOPBACK
+    bool
+    default y
+
+config SOC_EMAC_REF_CLK_FROM_APLL
     bool
     default y

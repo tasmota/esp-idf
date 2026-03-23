@@ -48,7 +48,7 @@ Description of the MCPWM functionality is divided into the following sections:
     - :ref:`mcpwm-generator-force-actions` - describes how to control the generator output level asynchronously in a forceful way.
     - :ref:`mcpwm-synchronization` - describes how to synchronize the MCPWM timers and get a fixed phase difference between the generated PWM signals.
     - :ref:`mcpwm-capture` - describes how to use the MCPWM capture module to measure the pulse width of a signal.
-    :SOC_MCPWM_SUPPORT_ETM: - :ref:`mcpwm-etm-event-and-task` - describes what the events and tasks can be connected to the ETM channel.
+    :SOC_MCPWM_SUPPORT_ETM and SOC_ETM_SUPPORTED: - :ref:`mcpwm-etm-event-and-task` - describes what the events and tasks can be connected to the ETM channel.
     - :ref:`mcpwm-power-management` - describes how different source clocks affects power consumption.
     - :ref:`mcpwm-resolution-config` - describes the resolution configuration rules for the MCPWM submodule.
     - :ref:`mcpwm-iram-safe` - describes tips on how to make the RMT interrupt work better along with a disabled cache.
@@ -121,7 +121,7 @@ The :cpp:func:`mcpwm_new_comparator` will return a pointer to the allocated comp
 
 On the contrary, calling the :cpp:func:`mcpwm_del_comparator` function will free the allocated comparator object.
 
-.. only:: SOC_MCPWM_SUPPORT_EVENT_COMPARATOR and SOC_MCPWM_SUPPORT_ETM
+.. only:: SOC_MCPWM_SUPPORT_EVENT_COMPARATOR and SOC_MCPWM_SUPPORT_ETM and SOC_ETM_SUPPORTED
 
     There's another kind of comparator called "Event Comparator", which **can not** control the final PWM directly but only generates the ETM events at a configurable time stamp. You can allocate an event comparator by calling the :cpp:func:`mcpwm_new_event_comparator` function. This function will return the same handle type as :cpp:func:`mcpwm_new_comparator`, but with a different configuration structure :cpp:type:`mcpwm_event_comparator_config_t`. For more information, please refer to :ref:`mcpwm-etm-event-and-task`.
 
@@ -953,7 +953,7 @@ Get the Last Captured Value
 
 If you don't want to process the captured value in the capture event callback function, but want to process it in other places, you can call :cpp:func:`mcpwm_capture_get_latched_value` to get the last captured value.
 
-.. only:: SOC_MCPWM_SUPPORT_ETM
+.. only:: SOC_MCPWM_SUPPORT_ETM and SOC_ETM_SUPPORTED
 
     .. _mcpwm-etm-event-and-task:
 
@@ -966,7 +966,7 @@ If you don't want to process the captured value in the capture event callback fu
 
     .. _mcpwm-power-management:
 
-.. only:: not SOC_MCPWM_SUPPORT_ETM
+.. only:: not (SOC_MCPWM_SUPPORT_ETM and SOC_ETM_SUPPORTED)
 
     .. _mcpwm-power-management:
 

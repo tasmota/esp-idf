@@ -6,6 +6,7 @@
 #ifndef _BLE_DUMMY_H_
 #define _BLE_DUMMY_H_
 
+#include "esp_attr.h"
 /* BLE LL ADV */
 #if !DEFAULT_BT_LE_ROLE_BROADCASTER
 int r_ble_ll_adv_env_init(void){return 0;}
@@ -96,22 +97,22 @@ void r_ble_lll_scan_req_backoff(void){}
 void r_ble_lll_scan_req_backoff_eco4(void){}
 void r_ble_lll_scan_common_init(void){}
 void r_ble_lll_scan_common_init_eco4(void){}
-void r_ble_lll_scan_restart(void){}
-void r_ble_lll_scan_restart_eco4(void){}
-void r_ble_lll_scan_rx_pkt_isr(void){}
-void r_ble_lll_scan_rx_pkt_isr_eco4(void){}
+IRAM_ATTR void r_ble_lll_scan_restart(void){}
+IRAM_ATTR void r_ble_lll_scan_restart_eco4(void){}
+IRAM_ATTR void r_ble_lll_scan_rx_pkt_isr(void){}
+IRAM_ATTR void r_ble_lll_scan_rx_pkt_isr_eco4(void){}
 void r_ble_lll_scan_start(void){}
 void r_ble_lll_scan_start_eco4(void){}
-void r_ble_lll_scan_start_rx(void){}
-void r_ble_lll_scan_start_rx_eco4(void){}
+IRAM_ATTR void r_ble_lll_scan_start_rx(void){}
+IRAM_ATTR void r_ble_lll_scan_start_rx_eco4(void){}
 void r_ble_lll_scan_stop(void){}
 void r_ble_lll_scan_stop_eco4(void){}
 void r_ble_lll_scan_event_proc(void){}
 void r_ble_lll_scan_event_proc_eco4(void){}
 void r_ble_ll_get_chan_to_scan(void){}
 void r_ble_ll_get_chan_to_scan_eco4(void){}
-void r_ble_phy_set_scan_mode(void){}
-void r_ble_phy_set_scan_mode_eco4(void){}
+IRAM_ATTR void r_ble_phy_set_scan_mode(void){}
+IRAM_ATTR void r_ble_phy_set_scan_mode_eco4(void){}
 /* Module cut */
 
 void r_ble_ll_scan_init(void){}
@@ -130,8 +131,8 @@ void r_ble_ll_scan_rxed(void){}
 void r_ble_ll_scan_rxed_eco4(void){}
 void r_ble_ll_scan_set_perfer_addr(void){}
 void r_ble_ll_scan_set_perfer_addr_eco4(void){}
-void r_ble_lll_scan_chk_resume(void){}
-void r_ble_lll_scan_chk_resume_eco4(void){}
+IRAM_ATTR void r_ble_lll_scan_chk_resume(void){}
+IRAM_ATTR void r_ble_lll_scan_chk_resume_eco4(void){}
 int r_ble_ll_scan_status_check(void){return 0;}
 int r_ble_ll_scan_status_check_eco4(void){return 0;}
 #endif // !DEFAULT_BT_LE_ROLE_OBSERVER
@@ -139,8 +140,8 @@ int r_ble_ll_scan_status_check_eco4(void){return 0;}
 #if !DEFAULT_BT_LE_EXT_SCAN
 void r_ble_ll_scan_rx_pkt_in_on_aux(void){}
 void r_ble_ll_scan_rx_pkt_in_on_aux_eco4(void){}
-void r_ble_lll_aux_scan_cb(void){}
-void r_ble_lll_aux_scan_cb_eco4(void){}
+IRAM_ATTR void r_ble_lll_aux_scan_cb(void){}
+IRAM_ATTR void r_ble_lll_aux_scan_cb_eco4(void){}
 #endif  //!DEFAULT_BT_LE_EXT_SCAN
 
 #if !DEFAULT_BT_LE_ROLE_CENTROL
@@ -148,8 +149,8 @@ void r_ble_ll_conn_ext_master_init(void){}
 void r_ble_ll_conn_ext_master_init_eco4(void){}
 void r_ble_ll_conn_master_init(void){}
 void r_ble_ll_conn_master_init_eco4(void){}
-void r_ble_lll_init_rx_pkt_isr(void){}
-void r_ble_lll_init_rx_pkt_isr_eco4(void){}
+IRAM_ATTR void r_ble_lll_init_rx_pkt_isr(void){}
+IRAM_ATTR void r_ble_lll_init_rx_pkt_isr_eco4(void){}
 void r_ble_ll_ctrl_rx_conn_param_rsp(void){}
 void r_ble_ll_ctrl_rx_conn_param_rsp_eco4(void){}
 #endif // !DEFAULT_BT_LE_ROLE_CENTROL
@@ -204,10 +205,10 @@ void r_ble_lll_conn_pre_process(void){}
 void r_ble_lll_conn_pre_process_eco4(void){}
 void r_ble_lll_conn_create_scheduled(void){}
 void r_ble_lll_conn_create_scheduled_eco4(void){}
-void r_ble_phy_set_conn_mode(void){}
-void r_ble_phy_set_conn_mode_eco4(void){}
-void r_ble_phy_sequence_update_conn_ind_params(void){}
-void r_ble_phy_sequence_update_conn_ind_params_eco4(void){}
+IRAM_ATTR void r_ble_phy_set_conn_mode(void){}
+IRAM_ATTR void r_ble_phy_set_conn_mode_eco4(void){}
+IRAM_ATTR void r_ble_phy_sequence_update_conn_ind_params(void){}
+IRAM_ATTR void r_ble_phy_sequence_update_conn_ind_params_eco4(void){}
 void r_ble_phy_update_conn_sequence(void){}
 void r_ble_phy_update_conn_sequence_eco4(void){}
 void r_ble_lll_conn_event_end_timer_cb(void){}
@@ -220,10 +221,10 @@ void r_ble_lll_conn_rx_pkt_isr_eco4(void){}
 // int_eco4 r_ble_ll_conn_env_init(void){return 0;}
 #endif // !DEFAULT_BT_LE_ROLE_CENTROL && !DEFAULT_BT_LE_ROLE_PERIPHERAL
 
-#if !DEFAULT_BT_LE_2M_PHY && !DEFAULT_BT_LE_CODED_PHY
-void r_ble_ll_ctrl_rx_phy_update_ind(void){}
-uint8_t r_ble_ll_ctrl_rx_phy_update_ind_eco4(void){return 0x07;}
-#endif // !DEFAULT_BT_LE_2M_PHY && !DEFAULT_BT_LE_CODED_PHY
+// #if !DEFAULT_BT_LE_2M_PHY && !DEFAULT_BT_LE_CODED_PHY
+// void r_ble_ll_ctrl_rx_phy_update_ind(void){}
+// uint8_t r_ble_ll_ctrl_rx_phy_update_ind_eco4(void){return 0x07;}
+// #endif // !DEFAULT_BT_LE_2M_PHY && !DEFAULT_BT_LE_CODED_PHY
 
 #if !DEFAULT_BT_LE_50_FEATURE_SUPPORT
 #endif // !DEFAULT_BT_LE_50_FEATURE_SUPPORT
@@ -240,10 +241,10 @@ void r_ble_lll_rfmgmt_set_sleep_cb(void *s_cb, void *w_cb, void *s_arg, void *w_
 void r_ble_lll_rfmgmt_set_sleep_cb_eco4(void *s_cb, void *w_cb, void *s_arg, void *w_arg, uint32_t us_to_enabled){}
 void r_ble_lll_rfmgmt_disable(void){}
 void r_ble_lll_rfmgmt_disable_eco4(void){}
-void r_ble_lll_rfmgmt_timer_exp(void){}
-void r_ble_lll_rfmgmt_timer_exp_eco4(void){}
-void r_ble_lll_rfmgmt_timer_reschedule(void){}
-void r_ble_lll_rfmgmt_timer_reschedule_eco4(void){}
+IRAM_ATTR void r_ble_lll_rfmgmt_timer_exp(void){}
+IRAM_ATTR void r_ble_lll_rfmgmt_timer_exp_eco4(void){}
+IRAM_ATTR void r_ble_lll_rfmgmt_timer_reschedule(void){}
+IRAM_ATTR void r_ble_lll_rfmgmt_timer_reschedule_eco4(void){}
 void r_ble_lll_rfmgmt_enable(void){}
 void r_ble_lll_rfmgmt_enable_eco4(void){}
 void r_ble_lll_rfmgmt_enable_now(void){}

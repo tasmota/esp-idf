@@ -58,9 +58,6 @@ static inline __attribute__((always_inline)) void mspi_timing_ll_set_core_clock(
         case 120:
             divider = 4;
             break;
-        case 240:
-            divider = 2;
-            break;
         default:
             HAL_ASSERT(false);
     }
@@ -228,6 +225,18 @@ static inline void mspi_timing_ll_set_flash_extra_dummy(uint8_t mspi_id, uint8_t
         SET_PERI_REG_BITS(SPI_MEM_TIMING_CALI_REG(mspi_id), SPI_MEM_EXTRA_DUMMY_CYCLELEN_V, 0, SPI_MEM_EXTRA_DUMMY_CYCLELEN_S);
     }
     REG_SET_BIT(SPI_MEM_TIMING_CALI_REG(MSPI_TIMING_LL_MSPI_ID_0), SPI_MEM_TIMING_CALI_UPDATE);
+}
+
+/**
+ * Set MSPI Flash user dummy
+ *
+ * @param mspi_id      SPI0 / SPI1
+ * @param user_dummy   user dummy
+ */
+__attribute__((always_inline))
+static inline void mspi_timing_ll_set_flash_user_dummy(uint8_t mspi_id, uint8_t user_dummy)
+{
+    REG_SET_FIELD(SPI_MEM_USER1_REG(mspi_id), SPI_MEM_USR_DUMMY_CYCLELEN, user_dummy);
 }
 
 /**

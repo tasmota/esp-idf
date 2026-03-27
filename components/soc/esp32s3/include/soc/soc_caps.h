@@ -369,11 +369,6 @@
 #define SOC_SPI_SCT_BUFFER_NUM_MAX                (1 + SOC_SPI_SCT_REG_NUM)  //1-word-bitmap + 14-word-regs
 #define SOC_SPI_SCT_CONF_BITLEN_MAX               0x3FFFA       //18 bits wide reg
 
-#define SOC_MEMSPI_SRC_FREQ_120M_SUPPORTED         1
-#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED          1
-#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED          1
-#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED          1
-
 /*-------------------------- SPIRAM CAPS ----------------------------------------*/
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_SPIRAM_XIP_SUPPORTED        1
@@ -561,6 +556,8 @@
 #define SOC_MEMSPI_TIMING_TUNING_BY_MSPI_DELAY            (1)
 #define SOC_MEMSPI_CORE_CLK_SHARED_WITH_PSRAM             (1)
 #define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
+
+#define SOC_SPI_MEM_FLASH_SUPPORT_HPM                         (1) /*!< Support High Performance Mode */
 
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)

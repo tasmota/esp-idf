@@ -122,6 +122,7 @@ void IRAM_ATTR pvt_func_enable(bool enable)
             CLEAR_PERI_REG_MASK(PMU_HP_ACTIVE_HP_REGULATOR0_REG, PMU_DIG_REGULATOR0_DBIAS_SEL); // hand over control of dbias to pvt
             CLEAR_PERI_REG_MASK(PMU_HP_ACTIVE_HP_REGULATOR0_REG, PMU_DIG_DBIAS_INIT);     // must clear @HP_CALI_DBIAS_DEFAULT
             SET_PERI_REG_MASK(PVT_DBIAS_TIMER_REG, PVT_TIMER_EN);   // enable auto dbias
+            esp_rom_delay_us(50);
         } else {
             uint32_t pvt_hp_dbias = get_pvt_hp_dbias();
             uint32_t pvt_lp_dbias = get_pvt_lp_dbias(); // update pvt_cali_dbias

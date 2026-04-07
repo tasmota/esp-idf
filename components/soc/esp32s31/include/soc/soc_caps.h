@@ -76,11 +76,11 @@
 #define SOC_PMU_SUPPORTED                  1
 #define SOC_RTC_TIMER_SUPPORTED            1
 // #define SOC_ULP_LP_UART_SUPPORTED       1      // TODO: [ESP32S31] IDF-14634
-// #define SOC_LP_GPIO_MATRIX_SUPPORTED    1      // TODO: [ESP32S31] IDF-14785
-// #define SOC_LP_PERIPHERALS_SUPPORTED    1      // TODO: [ESP32S31] IDF-14785
+#define SOC_LP_GPIO_MATRIX_SUPPORTED    1
+#define SOC_LP_PERIPHERALS_SUPPORTED    1
 // #define SOC_LP_I2C_SUPPORTED            1      // TODO: [ESP32S31] IDF-14635
 // #define SOC_LP_SPI_SUPPORTED            1      // TODO: [ESP32S31] IDF-14639
-// #define SOC_SPIRAM_SUPPORTED            1      // TODO: [ESP32S31] IDF-14718
+#define SOC_SPIRAM_SUPPORTED            1      // TODO: [ESP32S31] IDF-14718
 #define SOC_PSRAM_DMA_CAPABLE           1
 // #define SOC_SDMMC_HOST_SUPPORTED        1      // TODO: [ESP32S31] IDF-14705
 // #define SOC_CLK_TREE_SUPPORTED          1      // TODO: [ESP32S31] IDF-14733
@@ -94,10 +94,12 @@
 // #define SOC_PPA_SUPPORTED               1      // TODO: [ESP32S31] IDF-14769
 // #define SOC_LIGHT_SLEEP_SUPPORTED       1      // TODO: [ESP32S31] IDF-14645
 // #define SOC_DEEP_SLEEP_SUPPORTED        1      // TODO: [ESP32S31] IDF-14643
+#define SOC_MODEM_CLOCK_SUPPORTED       1
 // #define SOC_PM_SUPPORTED                1      // TODO: [ESP32S31] IDF-14648
 // #define SOC_BITSCRAMBLER_SUPPORTED      1      // TODO: [ESP32S31] IDF-14714
 // #define SOC_SIMD_INSTRUCTION_SUPPORTED  1      // TODO: [ESP32S31] IDF-14661
-#define SOC_CORDIC_SUPPORTED             1
+#define SOC_CORDIC_SUPPORTED            1
+#define SOC_REGI2C_SUPPORTED            1
 
 /*-------------------------- XTAL CAPS ---------------------------------------*/
 #define SOC_XTAL_SUPPORT_40M            1
@@ -194,6 +196,11 @@
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT                 8
+#define SOC_RTCIO_INPUT_OUTPUT_SUPPORTED    1  /* This macro indicates that the target has separate RTC IOMUX hardware feature,
+                                                * so the RTC GPIOs can be used as general purpose RTC GPIOs.
+                                                */
+#define SOC_RTCIO_HOLD_SUPPORTED            1
+#define SOC_RTCIO_WAKE_SUPPORTED            1
 
 /*-------------------------- Sigma Delta Modulator CAPS -----------------*/
 #define SOC_SDM_SUPPORT_SLEEP_RETENTION     1
@@ -216,12 +223,16 @@
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
 #define SOC_SPI_MAX_BITWIDTH(host_id)   ((host_id == 2) ? 4 : 8) // Supported line mode: SPI3: 1, 2, 4, SPI1/2: 1, 2, 4, 8
 
+/*-------------------------- SPIRAM CAPS ----------------------------------------*/
+#define SOC_SPIRAM_XIP_SUPPORTED        1
+
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
+#define SOC_SPI_MEM_SUPPORT_TIMING_TUNING         (1)
+#define SOC_MEMSPI_TIMING_TUNING_BY_DQS           (1)
+
 #define SOC_MSPI_HAS_INDEPENT_IOMUX               1
 #define SOC_MEMSPI_IS_INDEPENDENT                 1
 #define SOC_MEMSPI_SUPPORT_CONTROL_DUMMY_OUT      1
-
-#define SOC_MEMSPI_FLASH_PSRAM_INDEPENDENT        1
 
 #define SOC_MEMSPI_ENCRYPTION_ALIGNMENT           16    /*!< 16-byte alignment restriction to mem addr and size if encryption is enabled */
 
@@ -280,6 +291,7 @@
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
 
 #define SOC_CLK_APLL_SUPPORTED                    (1)     /*!< Support Audio PLL */
+#define SOC_CLK_MPLL_SUPPORTED                    (1)     /*!< Support MSPI PLL */
 #define SOC_CLK_RC32K_SUPPORTED                   (1)     /*!< Support an internal 32kHz RC oscillator */
 
 #define SOC_CLK_LP_FAST_SUPPORT_LP_PLL            (1)      /*!< Support LP_PLL clock as the LP_FAST clock source */
@@ -307,6 +319,8 @@
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
 #define SOC_PM_SUPPORT_MODEM_PD         (1) /*!<modem includes BLE and 15.4 and wifi*/
 #define SOC_PM_SUPPORT_MAC_BB_PD        (1)
+
+#define SOC_PM_SUPPORT_MODEM_CLOCK_DOMAIN_ICG      (1)
 
 #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 

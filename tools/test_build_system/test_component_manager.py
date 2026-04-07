@@ -204,6 +204,8 @@ class TestOptionalDependencyWithKconfig:
         assert ['espressif__mdns'] == data['build_component_info']['foo']['reqs']
 
 
+# TODO: IDF-14259 - Add root components support to cmakev2
+@pytest.mark.buildv2_skip('Root components (idf_extra_components.yml) not yet supported in cmakev2')
 @pytest.mark.revert_later(['tools/idf_extra_components.yml'])
 class TestIdfRootDependency:
     def test_basic_build(self, idf_py: IdfPyFunc, test_app_copy: Path) -> None:

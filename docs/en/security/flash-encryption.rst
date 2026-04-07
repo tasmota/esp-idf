@@ -718,7 +718,9 @@ Release Mode
 
 In release mode, UART bootloader cannot perform flash encryption operations. New plaintext images can ONLY be downloaded using the over-the-air (OTA) scheme which will encrypt the plaintext image before writing to flash.
 
-To use this mode, take the following steps:
+If you already enabled flash encryption in Development mode and want to switch to Release mode, see :ref:`flash-enc-transition-dev-to-release`.
+
+To use this mode (first-time enable with Release selected), take the following steps:
 
 1. Ensure that you have an {IDF_TARGET_NAME} device with default flash encryption eFuse settings as shown in :ref:`flash-encryption-efuse`.
 
@@ -759,6 +761,24 @@ For subsequent plaintext field updates, use :ref:`OTA scheme <updating-encrypted
 .. note::
 
     If you have pre-generated the flash encryption key and stored a copy, and the UART download mode is not permanently disabled via :ref:`CONFIG_SECURE_UART_ROM_DL_MODE` {IDF_TARGET_ESP32_V3_ONLY}, then it is possible to update the flash locally by pre-encrypting the files and then flashing the ciphertext. See :ref:`manual-encryption`.
+
+.. _flash-enc-transition-dev-to-release:
+
+Transitioning from Development to Release Mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If flash encryption was enabled in :ref:`flash-enc-development-mode`, the device remains in Development mode until the corresponding release eFuses are burned. Selecting **Release mode** in menuconfig (:ref:`CONFIG_SECURE_FLASH_ENCRYPTION_MODE`) only updates the build configuration; it does **not** burn the eFuses.
+To permanently transition the device to Release mode, you must explicitly call :cpp:func:`esp_flash_encryption_set_release_mode` once in your application code to burn the relevant eFuses.
+
+.. code-block:: c
+
+    #include "esp_flash_encrypt.h"
+
+    if (!esp_flash_encryption_cfg_verify_release_mode()) {
+        esp_flash_encryption_set_release_mode();
+    }
+
+Alternatively, refer the :example:`security/security_features_app` example, which implements this logic.
 
 .. _flash-encrypt-best-practices:
 

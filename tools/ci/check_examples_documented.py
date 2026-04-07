@@ -25,8 +25,6 @@ KNOWN_MISSING = {
     'zigbee/esp_zigbee_gateway',
     'zigbee/light_sample/HA_on_off_light',
     'zigbee/light_sample/HA_on_off_switch',
-    # TODO IDF-15376: add :example: reference for security_features_app
-    'security/security_features_app',
     # TODO IDF-15380: add :example: references for bluetooth examples
     'bluetooth/bluedroid/ble/ble_acl_latency/cent',
     'bluetooth/bluedroid/ble/ble_acl_latency/periph',

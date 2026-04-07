@@ -296,6 +296,8 @@ To satisfy the high quality audio requirement, following advanced APIs are provi
 - :cpp:func:`i2s_channel_preload_data`: Preloading audio data into the I2S internal cache, enabling the TX channel to immediately send data upon activation, thereby reducing the initial audio output delay.
 - :cpp:func:`i2s_channel_tune_rate`: Dynamically fine-tuning the audio rate at runtime to match the speed of the audio data producer and consumer, thereby preventing the accumulation or shortage of intermediate buffered data that caused by rate mismatches.
 
+.. _i2s-iram-safe:
+
 IRAM Safe
 ^^^^^^^^^
 
@@ -317,7 +319,7 @@ All the public I2S APIs are guaranteed to be thread safe by the driver, which me
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2S_ISR_IRAM_SAFE` controls whether the default ISR handler can work when the cache is disabled. See `IRAM Safe <#iram-safe>`__ for more information.
+- :ref:`CONFIG_I2S_ISR_IRAM_SAFE` controls whether the default ISR handler can work when the cache is disabled. See :ref:`i2s-iram-safe` for more information.
 - :ref:`CONFIG_I2S_ENABLE_DEBUG_LOG` is used to enable the debug log output. Enable this option increases the firmware binary size.
 
 Application Example

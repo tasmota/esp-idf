@@ -90,6 +90,8 @@ IRAM 安全
 
 此时在 cache 被禁用时仍可以运行中断，但会增加 IRAM 内存消耗。
 
+.. _dac-iram-safe:
+
 线程安全
 ^^^^^^^^
 
@@ -98,7 +100,7 @@ IRAM 安全
 Kconfig 选项
 ^^^^^^^^^^^^^
 
-- :ref:`CONFIG_DAC_ISR_IRAM_SAFE` 控制默认 ISR 处理程序在 cache 被禁用时能否继续运行。更多信息可参考 `IRAM 安全 <#iram-safe>`__。
+- :ref:`CONFIG_DAC_ISR_IRAM_SAFE` 控制默认 ISR 处理程序在 cache 被禁用时能否继续运行。更多信息可参考 :ref:`dac-iram-safe`。
 - :ref:`CONFIG_DAC_ENABLE_DEBUG_LOG` 用于启用调试日志输出。启用该选项将增加固件的二进制文件大小。
 
 .. only:: esp32

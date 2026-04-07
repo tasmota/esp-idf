@@ -16,6 +16,7 @@
 #include <esp_err.h>
 #include <esp_event.h>
 #include <esp_event_base.h>
+#include <net/if.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,6 +79,7 @@ initializer that should be kept in sync
         .keep_alive_idle = 0,                           \
         .keep_alive_interval = 0,                       \
         .keep_alive_count = 0,                          \
+        .if_name = NULL,                                \
         .open_fn = NULL,                                \
         .close_fn = NULL,                               \
         .uri_match_fn = NULL                            \
@@ -239,6 +241,10 @@ typedef struct httpd_config {
     int keep_alive_idle;    /*!< Keep-alive idle time. Default is 5 (second) */
     int keep_alive_interval;/*!< Keep-alive interval time. Default is 5 (second) */
     int keep_alive_count;   /*!< Keep-alive packet retry send count. Default is 3 counts */
+    struct ifreq *if_name;  /*!< Bind server to a specific network interface.
+                               If NULL, server listens on all interfaces (INADDR_ANY).
+                               The pointer only needs to remain valid for the duration of
+                               httpd_start() -- it is not referenced after that call returns. */
     /**
      * Custom session opening callback.
      *

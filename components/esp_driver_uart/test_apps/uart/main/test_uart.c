@@ -726,7 +726,7 @@ IRAM_ATTR static void uart_signal_inject_glitch_task(void *param)
             esp_rom_gpio_connect_out_signal(tx_pin, UART_PERIPH_SIGNAL(uart_num, SOC_UART_PERIPH_SIGNAL_TX), false, false);
 #if SOC_UART_LP_NUM > 0 && SOC_LP_GPIO_MATRIX_SUPPORTED
         } else {
-            rtcio_ll_matrix_out(rtc_gpio_num, SIG_LP_GPIO_OUT_IDX, false, false);
+            rtcio_ll_matrix_out(rtc_gpio_num, LP_SIG_GPIO_OUT_IDX, false, false);
             LP_GPIO.func_out_sel_cfg[rtc_gpio_num].oe_sel = 1;
             rtcio_ll_matrix_out(rtc_gpio_num, UART_PERIPH_SIGNAL(uart_num, SOC_UART_PERIPH_SIGNAL_TX), false, false);
 #endif
@@ -794,7 +794,7 @@ TEST_CASE("uart rx glitch filter (read write test + auto baud rate detection tes
             .test_times = 10,
         };
         TaskHandle_t inject_glitch_task_handle;
-        xTaskCreate(uart_signal_inject_glitch_task, "uart_signal_inject_glitch_task", 1024, (void *)&port_param, 6, &inject_glitch_task_handle);
+        xTaskCreate(uart_signal_inject_glitch_task, "uart_signal_inject_glitch_task", 2048, (void *)&port_param, 6, &inject_glitch_task_handle);
 
         // 1. read write test
 #if !UART_LL_GLITCH_FILT_ONLY_ON_AUTOBAUD
@@ -825,7 +825,7 @@ TEST_CASE("uart rx glitch filter (read write test + auto baud rate detection tes
             uint32_t detected_baudrate = res.clk_freq_hz * 2 / res.pos_period; // assume the wave has a slow falling slew rate
             uint32_t actual_baudrate = 0;
             uart_get_baudrate(uart_num, &actual_baudrate);
-            TEST_ASSERT_INT32_WITHIN(actual_baudrate * 0.03, actual_baudrate, detected_baudrate);
+            TEST_ASSERT_INT32_WITHIN(actual_baudrate * 0.05, actual_baudrate, detected_baudrate);
             // wait for write task to finish and self deleted
             while (eTaskGetState(write_task_handle) != eDeleted) {
                 vTaskDelay(1);

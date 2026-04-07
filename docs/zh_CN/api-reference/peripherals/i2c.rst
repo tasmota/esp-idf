@@ -58,13 +58,15 @@ I2C 时钟配置
 
 I2C 驱动程序提供以下服务：
 
-- `资源分配 <#resource-allocation>`__ - 包括如何使用正确的配置来分配 I2C 总线，以及如何在完成工作后回收资源。
-- `I2C 主机控制器 <#i2c-master-controller>`__ - 包括 I2C 主机控制器的行为，介绍了数据发送、数据接收和数据的双向传输。
-- `I2C 从机控制器 <#i2c-slave-controller>`__ - 包括 I2C 从机控制器的行为，涉及数据发送和数据接收。
-- `电源管理 <#power-management>`__ - 描述了不同时钟源对功耗的影响。
-- `IRAM 安全 <#iram-safe>`__ - 描述了如何在 cache 被禁用时正常运行 I2C 中断。
-- `线程安全 <#thread-safety>`__ - 列出了驱动程序中线程安全的 API。
-- `Kconfig 选项 <#kconfig-options>`__ - 列出了支持的 Kconfig 选项，这些选项可以对驱动程序产生不同影响。
+- :ref:`i2c-resource-allocation` - 包括如何使用正确的配置来分配 I2C 总线，以及如何在完成工作后回收资源。
+- :ref:`i2c-master-controller` - 包括 I2C 主机控制器的行为，介绍了数据发送、数据接收和数据的双向传输。
+- :ref:`i2c-slave-controller` - 包括 I2C 从机控制器的行为，涉及数据发送和数据接收。
+- :ref:`i2c-power-management` - 描述了不同时钟源对功耗的影响。
+- :ref:`i2c-iram-safe` - 描述了如何在 cache 被禁用时正常运行 I2C 中断。
+- :ref:`i2c-thread-safety` - 列出了驱动程序中线程安全的 API。
+- :ref:`i2c-kconfig-options` - 列出了支持的 Kconfig 选项，这些选项可以对驱动程序产生不同影响。
+
+.. _i2c-resource-allocation:
 
 资源分配
 ^^^^^^^^
@@ -87,7 +89,7 @@ I2C 主机总线需要 :cpp:type:`i2c_master_bus_config_t` 指定的配置：
 - :cpp:member:`i2c_master_bus_config_t::i2c_port` 设置控制器使用的 I2C 端口。
 - :cpp:member:`i2c_master_bus_config_t::sda_io_num` 设置串行数据总线 (SDA) 的 GPIO 编号。
 - :cpp:member:`i2c_master_bus_config_t::scl_io_num` 设置串行时钟总线 (SCL) 的 GPIO 编号。
-- :cpp:member:`i2c_master_bus_config_t::clk_source` 选择 I2C 总线的时钟源。可用时钟列表见 :cpp:type:`i2c_clock_source_t`。有关不同时钟源对功耗的影响，请参阅 `电源管理 <#power-management>`__ 部分。
+- :cpp:member:`i2c_master_bus_config_t::clk_source` 选择 I2C 总线的时钟源。可用时钟列表见 :cpp:type:`i2c_clock_source_t`。有关不同时钟源对功耗的影响，请参阅 :ref:`i2c-power-management` 部分。
 - :cpp:member:`i2c_master_bus_config_t::glitch_ignore_cnt` 设置主机总线的毛刺周期。如果线上的毛刺周期小于设置的值（通常设为 7），则可以被滤除。
 - :cpp:member:`i2c_master_bus_config_t::intr_priority` 设置中断的优先级。如果设置为 ``0``，则驱动程序将使用低或中优先级的中断（优先级可设为 1、2 或 3 中的一个），若未设置，则将使用 :cpp:member:`i2c_master_bus_config_t::intr_priority` 指示的优先级。请使用数字形式（1、2、3），不要用位掩码形式（(1<<1)、(1<<2)、(1<<3)）。
 - :cpp:member:`i2c_master_bus_config_t::trans_queue_depth` 设置内部传输队列的深度，但仅在异步传输中有效。
@@ -200,7 +202,7 @@ I2C 从机设备需要 :cpp:type:`i2c_slave_config_t` 指定的配置：
     - :cpp:member:`i2c_slave_config_t::i2c_port` 设置控制器使用的 I2C 端口。
     - :cpp:member:`i2c_slave_config_t::sda_io_num` 设置串行数据总线 (SDA) 的 GPIO 编号。
     - :cpp:member:`i2c_slave_config_t::scl_io_num` 设置串行时钟总线 (SCL) 的 GPIO 编号。
-    - :cpp:member:`i2c_slave_config_t::clk_source` 选择 I2C 总线的时钟源。可用时钟列表见 :cpp:type:`i2c_clock_source_t`。有关不同时钟源对功耗的影响，请参阅 `电源管理 <#power-management>`__。
+    - :cpp:member:`i2c_slave_config_t::clk_source` 选择 I2C 总线的时钟源。可用时钟列表见 :cpp:type:`i2c_clock_source_t`。有关不同时钟源对功耗的影响，请参阅 :ref:`i2c-power-management`。
     - :cpp:member:`i2c_slave_config_t::send_buf_depth` 设置发送软件 buffer 的长度。
     - :cpp:member:`i2c_slave_config_t::slave_addr` 设置从机地址。
     - :cpp:member:`i2c_slave_config_t::intr_priority` 设置中断的优先级。如果设置为 ``0`` ，则驱动程序将使用低或中优先级的中断（优先级可设为 1、2 或 3 中的一个），若未设置，则将使用 :cpp:member:`i2c_slave_config_t::intr_priority` 指示的优先级。请使用数字形式（1、2、3），不要用位掩码形式（(1<<1)、(1<<2)、(1<<3)）。请注意，中断优先级一旦设置完成，在调用 :cpp:func:`i2c_del_slave_device` 之前都无法更改。
@@ -231,6 +233,7 @@ I2C 从机设备需要 :cpp:type:`i2c_slave_config_t` 指定的配置：
 
 如果不再需要之前安装的 I2C 总线，建议调用 :cpp:func:`i2c_del_slave_device` 来回收资源，以释放底层硬件。
 
+.. _i2c-master-controller:
 
 I2C 主机控制器
 ^^^^^^^^^^^^^^
@@ -484,6 +487,8 @@ I2C 主机执行自定义事务
 
     i2c_master_execute_defined_operations(dev_handle, i2c_ops, sizeof(i2c_ops) / sizeof(i2c_operation_job_t), -1);
 
+.. _i2c-slave-controller:
+
 I2C 从机控制器
 ^^^^^^^^^^^^^^
 
@@ -613,6 +618,8 @@ I2C 从机事件回调函数列表见 :cpp:type:`i2c_slave_event_callbacks_t`。
     - :cpp:member:`i2c_slave_event_callbacks_t::on_request` 为请求事件设置回调函数。
     - :cpp:member:`i2c_slave_event_callbacks_t::on_receive` 为 receive 事件设置回调函数。函数原型在 :cpp:type:`i2c_slave_received_callback_t` 中声明。
 
+.. _i2c-power-management:
+
 电源管理
 ^^^^^^^^
 
@@ -630,6 +637,8 @@ I2C 从机事件回调函数列表见 :cpp:type:`i2c_slave_event_callbacks_t`。
 
     如果控制器以 :cpp:enumerator:`I2C_CLK_SRC_XTAL` 为时钟源，则驱动程序不会为其安装电源管理锁，因为对于低功耗应用，只要时钟源能够提供足够的分辨率即可。
 
+.. _i2c-iram-safe:
+
 IRAM 安全
 ^^^^^^^^^
 
@@ -642,6 +651,8 @@ Kconfig 选项 :ref:`CONFIG_I2C_ISR_IRAM_SAFE` 能够做到以下几点：
 3. 将驱动程序对象放入 DRAM 中（以防它被意外映射到 PSRAM 中）。
 
 启用以上选项，即使 cache 被禁用，I2C 中断依旧正常运行，但会增加 IRAM 的消耗。
+
+.. _i2c-thread-safety:
 
 线程安全
 ^^^^^^^^
@@ -662,10 +673,12 @@ I2C 从机操作函数也通过总线操作信号保证线程安全。
 
 其他函数不保证线程安全。因此，应避免在没有互斥保护的不同任务中调用这些函数。
 
+.. _i2c-kconfig-options:
+
 Kconfig 选项
 ^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2C_ISR_IRAM_SAFE` 将在 cache 被禁用时控制默认的 ISR 处理程序正常工作，详情请参阅 `IRAM 安全 <#iram-safe>`__。
+- :ref:`CONFIG_I2C_ISR_IRAM_SAFE` 将在 cache 被禁用时控制默认的 ISR 处理程序正常工作，详情请参阅 :ref:`i2c-iram-safe`。
 - :ref:`CONFIG_I2C_ENABLE_DEBUG_LOG` 可启用调试日志，但会增加固件二进制文件大小。
 
 应用示例

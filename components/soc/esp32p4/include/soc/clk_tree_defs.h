@@ -573,7 +573,7 @@ typedef enum {
  * @brief Type of ISP clock source.
  */
 typedef enum {
-    ISP_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M,      /*!< Select SOC_MOD_CLK_PLL_F160M as ISP source clock */
+    ISP_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F240M,      /*!< Select SOC_MOD_CLK_PLL_F240M as ISP source clock */
     ISP_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,              /*!< Select SOC_MOD_CLK_XTAL as ISP source clock */
     ISP_CLK_SRC_PLL160 = SOC_MOD_CLK_PLL_F160M,       /*!< Select SOC_MOD_CLK_PLL_F160M as ISP source clock */
     ISP_CLK_SRC_PLL240 = SOC_MOD_CLK_PLL_F240M,       /*!< Select SOC_MOD_CLK_PLL_F240M as ISP source clock */
@@ -709,6 +709,7 @@ typedef enum {
  * @brief Array initializer for all supported clock sources of LEDC
  */
 #define SOC_LEDC_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_PLL_F80M, SOC_MOD_CLK_RC_FAST}
+#define SOC_LEDC_CLK_STRS {"LEDC_USE_XTAL_CLK", "LEDC_USE_PLL_DIV_CLK", "LEDC_USE_RC_FAST_CLK"}
 
 /**
  * @brief Type of LEDC clock source, reserved for the legacy LEDC driver

@@ -9,12 +9,16 @@
 #include <esp_system.h>
 #include <esp_http_server.h>
 #include <esp_heap_caps.h>
+#include <net/if.h>
+#include "esp_log.h"
 
 #include "unity.h"
 #include "test_utils.h"
 
 int pre_start_mem, post_stop_mem, post_stop_min_mem;
 bool basic_sanity = true;
+
+#define TAG "test_http_server"
 
 esp_err_t null_func(httpd_req_t *req)
 {
@@ -160,7 +164,7 @@ TEST_CASE("Leak Test", "[HTTP SERVER]")
     test_case_uses_tcpip();
 
     task_count = uxTaskGetNumberOfTasks();
-    printf("Initial task count: %d\n", task_count);
+    ESP_LOGI(TAG, "Initial task count: %d\n", task_count);
 
     pre_start_mem = esp_get_free_heap_size();
 
@@ -170,7 +174,7 @@ TEST_CASE("Leak Test", "[HTTP SERVER]")
         unsigned num_tasks = uxTaskGetNumberOfTasks();
         task_count++;
         if (num_tasks != task_count) {
-            printf("Incorrect task count (starting): %d expected %d\n",
+            ESP_LOGE(TAG, "Incorrect task count (starting): %d expected %d\n",
                    num_tasks, task_count);
             res = false;
         }
@@ -178,14 +182,14 @@ TEST_CASE("Leak Test", "[HTTP SERVER]")
 
     for (int i = 0; i < SERVER_INSTANCES; i++) {
         if (httpd_stop(hd[i]) != ESP_OK) {
-            printf("Failed to stop httpd task %d\n", i);
+            ESP_LOGE(TAG, "Failed to stop httpd task %d\n", i);
             res = false;
         }
         vTaskDelay(10);
         unsigned num_tasks = uxTaskGetNumberOfTasks();
         task_count--;
         if (num_tasks != task_count) {
-            printf("Incorrect task count (stopping): %d expected %d\n",
+            ESP_LOGE(TAG, "Incorrect task count (stopping): %d expected %d\n",
                    num_tasks, task_count);
             res = false;
         }
@@ -288,6 +292,79 @@ TEST_CASE("Max Allowed Sockets Test", "[HTTP SERVER]")
      * should fail */
     config.max_open_sockets += 1;
     TEST_ASSERT(httpd_start(&hd, &config) != ESP_OK);
+}
+
+TEST_CASE("Interface Binding Test", "[HTTP SERVER]")
+{
+    test_case_uses_tcpip();
+
+    httpd_handle_t hd;
+    struct ifreq ifr;
+
+    /* Test 1: Server starts successfully with NULL if_name (default behavior - INADDR_ANY) */
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.server_port = 8080;
+    TEST_ASSERT(config.if_name == NULL);
+    TEST_ASSERT(httpd_start(&hd, &config) == ESP_OK);
+    TEST_ASSERT(httpd_stop(hd) == ESP_OK);
+
+    /* Test 2: Server starts successfully with loopback interface binding */
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, "lo0");  // Loopback interface
+    config.server_port = 8081;
+    config.if_name = &ifr;
+
+    /* On embedded systems, loopback may not exist, so we test both success and expected failure */
+    esp_err_t ret = httpd_start(&hd, &config);
+    if (ret == ESP_OK) {
+        /* If loopback exists and binding succeeds, verify we can stop cleanly */
+        TEST_ASSERT(httpd_stop(hd) == ESP_OK);
+    } else {
+        /* If loopback doesn't exist or binding fails, that's also acceptable */
+        /* The important part is that the server doesn't crash */
+        ESP_LOGI(TAG, "Loopback binding failed as expected on this platform\n");
+    }
+
+    /* Test 3: Server handles empty interface name (should bind to all interfaces) */
+    memset(&ifr, 0, sizeof(ifr));
+    ifr.ifr_name[0] = '\0';  // Empty interface name
+    config.server_port = 8082;
+    config.if_name = &ifr;
+
+    /* Empty interface name should be ignored and server should start normally */
+    TEST_ASSERT(httpd_start(&hd, &config) == ESP_OK);
+    TEST_ASSERT(httpd_stop(hd) == ESP_OK);
+
+    /* Test 4: Server handles invalid interface name gracefully */
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, "nonex");  // Invalid interface
+    config.server_port = 8083;
+    config.if_name = &ifr;
+
+    /* Starting with invalid interface should fail gracefully */
+    ret = httpd_start(&hd, &config);
+    TEST_ASSERT(ret != ESP_OK);
+    if (ret != ESP_OK) {
+        /* Expected failure - invalid interface */
+        ESP_LOGI(TAG, "Invalid interface binding failed as expected\n");
+    } else {
+        /* On some platforms, the check might not happen until actual use */
+        httpd_stop(hd);
+    }
+
+    /* Test 5: Verify backward compatibility - multiple servers without interface binding */
+    httpd_handle_t hd1, hd2;
+    httpd_config_t config1 = HTTPD_DEFAULT_CONFIG();
+    httpd_config_t config2 = HTTPD_DEFAULT_CONFIG();
+    config1.server_port = 8084;
+    config1.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 1;
+    config2.server_port = 8085;
+    config2.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 2;
+
+    TEST_ASSERT(httpd_start(&hd1, &config1) == ESP_OK);
+    TEST_ASSERT(httpd_start(&hd2, &config2) == ESP_OK);
+    TEST_ASSERT(httpd_stop(hd1) == ESP_OK);
+    TEST_ASSERT(httpd_stop(hd2) == ESP_OK);
 }
 
 void app_main(void)

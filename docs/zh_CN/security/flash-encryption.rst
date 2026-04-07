@@ -718,7 +718,9 @@ flash 加密设置
 
 在量产模式下，UART 引导加载程序无法执行 flash 加密操作，**只能** 使用 OTA 方案下载新的明文镜像，该方案将在写入 flash 前加密明文镜像。
 
-使用该模式需要执行以下步骤：
+若此前已在开发模式下启用 flash 加密，现需切换至量产模式，请参阅 :ref:`flash-enc-transition-dev-to-release`。
+
+首次启用并选择量产模式时，请按以下步骤操作：
 
 1. 确保你的 {IDF_TARGET_NAME} 设备有 :ref:`flash-encryption-efuse` 中所示的 flash 加密 eFuse 的默认设置。
 
@@ -759,6 +761,24 @@ flash 加密设置
 .. note::
 
     如果用户已经预先生成了 flash 加密密钥并存储了一个副本，并且 UART 下载模式没有通过 :ref:`CONFIG_SECURE_UART_ROM_DL_MODE` {IDF_TARGET_ESP32_V3_ONLY} 永久禁用，那么可以通过使用 ``{IDF_TARGET_ENCRYPT_COMMAND}`` 预加密文件，从而在在本地更新 flash，然后烧录密文。请参考 :ref:`manual-encryption`。
+
+.. _flash-enc-transition-dev-to-release:
+
+从开发模式过渡到量产模式
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+若 flash 加密是在 :ref:`flash-enc-development-mode` 下启用的，设备会一直处于开发模式，直到烧录对应的量产模式 eFuse。在 menuconfig 中选择 **量产模式** （:ref:`CONFIG_SECURE_FLASH_ENCRYPTION_MODE`）仅更新构建配置，并 **不会** 烧录 eFuse。
+要将设备永久切换到量产模式，必须在应用程序代码中显式调用一次 :cpp:func:`esp_flash_encryption_set_release_mode` 来烧录相关 eFuse。
+
+.. code-block:: c
+
+    #include "esp_flash_encrypt.h"
+
+    if (!esp_flash_encryption_cfg_verify_release_mode()) {
+        esp_flash_encryption_set_release_mode();
+    }
+
+也可参考 :example:`security/security_features_app` 示例，其已包含上述逻辑。
 
 .. _flash-encrypt-best-practices:
 

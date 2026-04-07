@@ -519,6 +519,7 @@ How To Enable Secure Boot v2
 
 11. On subsequent boots, the Secure Boot hardware will verify that the second stage bootloader has not changed, and the second stage bootloader will verify the signed app image using the validated public key portion of its appended signature block.
 
+For a comprehensive example that enables Secure Boot v2 along with other security features such as flash encryption and NVS encryption, see :example:`security/security_features_app`.
 
 Restrictions After Secure Boot Is Enabled
 -----------------------------------------

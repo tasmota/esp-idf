@@ -59,7 +59,7 @@
 #define SOC_ECDSA_SUPPORTED             1
 #define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
-// #define SOC_BOD_SUPPORTED               1    //TODO: [ESP32H21] IDF-11530
+#define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1    //TODO: [ESP32H21] IDF-11494
 #define SOC_PMU_SUPPORTED               1
 #define SOC_RTC_TIMER_SUPPORTED         1
@@ -72,7 +72,7 @@
 #define SOC_SPI_FLASH_SUPPORTED         1       //TODO: [ESP32H21] IDF-11526
 // #define SOC_RNG_SUPPORTED               1    //TODO: [ESP32H21] IDF-11503
 #define SOC_MODEM_CLOCK_SUPPORTED       1
-#define SOC_REG_I2C_SUPPORTED           1
+#define SOC_REGI2C_SUPPORTED           1
 // #define SOC_PHY_SUPPORTED               1
 #define SOC_PCNT_SUPPORTED              1
 #define SOC_MCPWM_SUPPORTED             1

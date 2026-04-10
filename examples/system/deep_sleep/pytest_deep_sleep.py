@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: CC0-1.0
 import logging
 import time
@@ -12,6 +12,7 @@ from pytest_embedded_idf.utils import idf_parametrize
 @idf_parametrize(
     'config,target', [('esp32_singlecore', 'esp32'), ('basic', 'supported_targets')], indirect=['config', 'target']
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='s31 bringup on this module is not done')
 def test_deep_sleep(dut: Dut) -> None:
     dut.expect_exact('Enabling timer wakeup, 20s', timeout=10)
     dut.expect_exact('Not a deep sleep reset')
@@ -22,7 +23,7 @@ def test_deep_sleep(dut: Dut) -> None:
     dut.expect_exact('boot: ESP-IDF')  # first output that's the same on all chips
 
     sleep_time = time.time() - start_sleep
-    logging.info('Host measured sleep time at {:.2f}s'.format(sleep_time))
+    logging.info(f'Host measured sleep time at {sleep_time:.2f}s')
     assert 18 < sleep_time < 22  # note: high tolerance as measuring time on the host may have some timing skew
 
     dut.expect_exact('boot: Fast booting app from partition', timeout=2)

@@ -1163,6 +1163,10 @@ config SOC_USB_OTG_PERIPH_NUM
     int
     default 2
 
+config SOC_USB_FSLS_PHY_NUM
+    int
+    default 1
+
 config SOC_USB_UTMI_PHY_NUM
     int
     default 1
@@ -1888,6 +1892,10 @@ config SOC_JPEG_DECODE_SUPPORTED
     default y
 
 config SOC_JPEG_ENCODE_SUPPORTED
+    bool
+    default y
+
+config SOC_H264_ENCODER_SUPPORTED
     bool
     default y
 

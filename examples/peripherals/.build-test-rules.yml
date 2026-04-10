@@ -183,9 +183,9 @@ examples/peripherals/i2s/i2s_advance/i2s_usb:
     - if: SOC_I2S_SUPPORTED != 1
     - if: SOC_I2C_SUPPORTED != 1
     - if: SOC_USB_OTG_SUPPORTED != 1
-    - if: IDF_TARGET == "esp32h4"
+    - if: IDF_TARGET in ["esp32h4", "esp32s31"]
       temporary: true
-      reason: usb_device_uac does not support esp32h4
+      reason: usb_device_uac does not support esp32h4 or esp32s31
   depends_components:
     - esp_driver_i2s
     - esp_driver_dma
@@ -782,6 +782,9 @@ examples/peripherals/uart/uart_echo_rs485:
 examples/peripherals/usb/device:
   disable:
     - if: SOC_USB_OTG_SUPPORTED != 1
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: USB device examples do not support esp32s31 yet
   disable_test:
     - if: IDF_TARGET not in ["esp32s2", "esp32p4"]
       temporary: true
@@ -796,9 +799,9 @@ examples/peripherals/usb/device:
 
 examples/peripherals/usb/device/cherryusb_serial_device:
   disable:
-    - if: (IDF_TARGET == "esp32h4") or (SOC_USB_OTG_SUPPORTED != 1)
+    - if: (IDF_TARGET in ["esp32h4", "esp32s31"]) or (SOC_USB_OTG_SUPPORTED != 1)
       temporary: true
-      reason: CherryUSB does not support esp32h4
+      reason: CherryUSB does not support esp32h4 or esp32s31
 
 examples/peripherals/usb/device/tusb_ncm:
   disable:
@@ -816,6 +819,9 @@ examples/peripherals/usb/device/tusb_ncm:
 examples/peripherals/usb/host:
   disable:
     - if: SOC_USB_OTG_SUPPORTED != 1
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: USB host examples do not support esp32s31 yet
   disable_test:
     - if: IDF_TARGET not in ["esp32s3", "esp32p4"]
       temporary: true
@@ -832,9 +838,9 @@ examples/peripherals/usb/host:
 
 examples/peripherals/usb/host/cherryusb_host:
   disable:
-    - if: (IDF_TARGET == "esp32h4") or (SOC_USB_OTG_SUPPORTED != 1)
+    - if: (IDF_TARGET in ["esp32h4", "esp32s31"]) or (SOC_USB_OTG_SUPPORTED != 1)
       temporary: true
-      reason: CherryUSB does not support esp32h4
+      reason: CherryUSB does not support esp32h4 or esp32s31
 
 examples/peripherals/usb_serial_jtag/usb_serial_jtag_echo:
   disable:

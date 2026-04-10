@@ -1,4 +1,5 @@
 preserve_non_test_related_apps = false
+filter_non_test_related_apps_by_modified_files = true
 exclude_dirs = [
     'tools/test_mkdfu',
     'tools/test_idf_size',
@@ -7,6 +8,7 @@ exclude_dirs = [
     'tools/test_bsasm',
     'tools/ci/test_autocomplete',
     'tools/test_build_system',
+    'tools/bt/ble_log_console',
 ]
 
 [local_runtime_envs]

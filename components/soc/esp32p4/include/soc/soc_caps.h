@@ -430,6 +430,7 @@
 
 // USB OTG Caps
 #define SOC_USB_OTG_PERIPH_NUM          (2U)
+#define SOC_USB_FSLS_PHY_NUM            (1U)
 
 // USB PHY Caps
 #define SOC_USB_UTMI_PHY_NUM            (1U)
@@ -722,6 +723,9 @@
 #define SOC_JPEG_CODEC_SUPPORTED                  (1)
 #define SOC_JPEG_DECODE_SUPPORTED                 (1)
 #define SOC_JPEG_ENCODE_SUPPORTED                 (1)
+
+/*--------------------------- H264 --------------------------------*/
+#define SOC_H264_ENCODER_SUPPORTED                (1)
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)

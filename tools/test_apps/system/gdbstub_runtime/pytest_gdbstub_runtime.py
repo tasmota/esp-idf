@@ -63,7 +63,7 @@ def dut_get_threads(dut: PanicTestDut) -> Any:
 
 
 @pytest.mark.generic
-@idf_parametrize('target', ['esp32p4'], indirect=['target'])
+@idf_parametrize('target', ['esp32p4', 'esp32s31'], indirect=['target'])
 def test_hwloop_jump(dut: PanicTestDut) -> None:
     start_gdb(dut)
 
@@ -275,7 +275,7 @@ def coproc_registers_test(dut: PanicTestDut, regs_type: str, set_registers: Call
 
 
 @pytest.mark.generic
-@idf_parametrize('target', ['esp32', 'esp32s3', 'esp32p4'], indirect=['target'])
+@idf_parametrize('target', ['esp32', 'esp32s3', 'esp32p4', 'esp32s31'], indirect=['target'])
 def test_coproc_registers(dut: PanicTestDut) -> None:
     start_gdb(dut)
 

@@ -55,7 +55,25 @@ CONFIGS_UBSAN = list(
     )
 )
 
-CONFIG_PANIC = list(itertools.chain(itertools.product(['panic'], ['supported_targets'])))
+CONFIG_PANIC = list(
+    itertools.chain(
+        itertools.product(
+            ['panic'],
+            [
+                'esp32',
+                'esp32c2',
+                'esp32c3',
+                'esp32s2',
+                'esp32s3',
+                'esp32p4',
+                'esp32c5',
+                'esp32c6',
+                'esp32c61',
+                'esp32h2',
+            ],
+        )
+    )
+)
 CONFIG_PANIC_DUAL_CORE = list(itertools.chain(itertools.product(['panic'], TARGETS_DUAL_CORE)))
 CONFIG_PANIC_HALT = list(itertools.chain(itertools.product(['panic_halt'], TARGETS_ALL)))
 

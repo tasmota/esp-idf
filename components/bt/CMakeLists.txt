@@ -25,6 +25,7 @@ set(common_include_dirs
     common/btc/profile/esp/include
     common/hci_log/include
     common/ble_log/include
+    common/ble_log/deprecated/include
 )
 
 set(ble_mesh_include_dirs
@@ -92,7 +93,9 @@ if(CONFIG_BT_ENABLED)
             list(APPEND srcs "controller/esp32c2/dummy.c")
             set(ldscripts "linker_esp32c2.lf")
         else()
-            list(APPEND srcs "controller/${target_name}/ble.c")
+            if(NOT CONFIG_BT_DUAL_MODE_ARCH)
+                list(APPEND srcs "controller/${target_name}/ble.c")
+            endif()
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
         endif()
 
@@ -105,9 +108,15 @@ if(CONFIG_BT_ENABLED)
     list(APPEND priv_include_dirs
             common/btc/include
             common/include
+        )
+
+    if(NOT CONFIG_BT_DUAL_MODE_ARCH)
+        list(APPEND priv_include_dirs
             porting/mem/
             porting/include
         )
+    endif()
+
     list(APPEND include_dirs ${common_include_dirs})
 
     list(APPEND srcs "common/btc/core/btc_alarm.c"
@@ -133,8 +142,7 @@ if(CONFIG_BT_ENABLED)
          "common/osi/osi.c"
          "common/osi/semaphore.c"
          "porting/mem/bt_osi_mem.c"
-         "common/ble_log/ble_log_spi_out.c"
-         "common/ble_log/ble_log_uhci_out.c"
+         "common/ble_log/deprecated/ble_log_spi_out.c"
          )
 
     # BLE Log Module
@@ -672,7 +680,22 @@ if(CONFIG_BT_ENABLED)
         endif()
     endif()
 
-    if(CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT)
+    if(CONFIG_BT_DUAL_MODE_ARCH)
+        add_subdirectory(porting_btdm)
+        list(APPEND srcs
+            ${porting_btdm_srcs}
+        )
+
+        if(CONFIG_BT_NIMBLE_ENABLED)
+            list(APPEND srcs
+                "host/nimble/nimble/nimble/transport/esp_ipc_btdm/src/hci_esp_ipc.c"
+            )
+        endif()
+
+        list(APPEND include_dirs
+            ${porting_btdm_include_dirs}
+        )
+    elseif(CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT)
         list(APPEND srcs
                 "porting/npl/freertos/src/npl_os_freertos.c"
                 "porting/mem/os_msys_init.c"
@@ -867,9 +890,21 @@ if(CONFIG_BT_ENABLED)
 
             list(APPEND srcs
                 "host/nimble/nimble/porting/nimble/src/nimble_port.c"
-                "host/nimble/nimble/porting/npl/freertos/src/nimble_port_freertos.c"
                 "host/nimble/port/src/nvs_port.c"
+                "host/nimble/port/src/esp_nimble_mem.c"
             )
+            if(CONFIG_BT_DUAL_MODE_ARCH)
+                list(APPEND srcs
+                    "host/nimble/nimble/porting/npl/esp-idf/src/nimble_port_freertos.c"
+                )
+                list(APPEND include_dirs
+                    "host/nimble/nimble/porting/npl/esp-idf/include"
+                )
+            else()
+                list(APPEND srcs
+                    "host/nimble/nimble/porting/npl/freertos/src/nimble_port_freertos.c"
+                )
+            endif()
 
             list(APPEND include_dirs
                 host/nimble/nimble/porting/nimble/include
@@ -884,7 +919,7 @@ if(CONFIG_BT_ENABLED)
                 )
             endif()
 
-        if(NOT CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT)
+        if((NOT CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT) AND (NOT CONFIG_BT_DUAL_MODE_ARCH))
             list(APPEND srcs
                     "host/nimble/nimble/porting/nimble/src/endian.c"
                     "porting/mem/os_mempool.c"
@@ -1021,6 +1056,16 @@ idf_component_register(SRCS "${srcs}"
                        PRIV_REQUIRES "${bt_priv_requires}"
                        LDFRAGMENTS "${ldscripts}")
 
+# UART redir wrap flags — needed whenever BLE Log uses UART DMA on port 0,
+# regardless of whether BLE controller is enabled.
+if(DEFINED CONFIG_BLE_LOG_PRPH_UART_DMA_PORT)
+    if(CONFIG_BLE_LOG_PRPH_UART_DMA_PORT EQUAL 0)
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_tx_chars")
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes")
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes_with_break")
+    endif()
+endif()
+
 if(CONFIG_BLE_COMPRESSED_LOG_ENABLE)
     if(LOG_COMPRESSION_TARGET)
         add_dependencies(${COMPONENT_LIB} ${LOG_COMPRESSION_TARGET})
@@ -1055,18 +1100,6 @@ if(CONFIG_BT_ENABLED)
         if(CONFIG_BT_LE_CONTROLLER_LOG_WRAP_PANIC_HANDLER_ENABLE)
             target_link_options(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler")
         endif()
-        if(CONFIG_BT_BLE_LOG_UHCI_OUT_ENABLED)
-            target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_tx_chars")
-            target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes")
-            target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes_with_break")
-        endif()
-        if(DEFINED CONFIG_BLE_LOG_PRPH_UART_DMA_PORT)
-            if(CONFIG_BLE_LOG_PRPH_UART_DMA_PORT EQUAL 0)
-                target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_tx_chars")
-                target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes")
-                target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=uart_write_bytes_with_break")
-            endif()
-        endif()
         if(CONFIG_IDF_TARGET_ESP32C6)
             add_prebuilt_library(libble_app
                 "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c6/esp32c6-bt-lib/esp32c6/libble_app.a"
@@ -1087,6 +1120,12 @@ if(CONFIG_BT_ENABLED)
             endif()
         endif()
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
+
+        if(CONFIG_BT_DUAL_MODE_ARCH)
+            add_prebuilt_library(libbtdm_common
+                "controller/lib_${target_name}/${target_name}-bt-lib/libbtdm_common.a")
+            target_link_libraries(${COMPONENT_LIB} PRIVATE libbtdm_common)
+        endif()
     endif()
 
     set_source_files_properties(

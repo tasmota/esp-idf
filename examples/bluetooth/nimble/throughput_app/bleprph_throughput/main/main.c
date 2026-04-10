@@ -16,6 +16,7 @@
 #include "services/gap/ble_svc_gap.h"
 #include "gatts_sens.h"
 #include "../src/ble_hs_hci_priv.h"
+#include "esp_timer.h"
 
 #if CONFIG_EXAMPLE_EXTENDED_ADV
 static uint8_t ext_adv_pattern[] = {

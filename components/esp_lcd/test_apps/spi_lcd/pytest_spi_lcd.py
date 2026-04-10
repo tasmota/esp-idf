@@ -14,6 +14,7 @@ from pytest_embedded_idf.utils import idf_parametrize
     indirect=True,
 )
 @idf_parametrize('target', ['supported_targets'], indirect=['target'])
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='s31 bringup on this module is not done')
 def test_spi_lcd(dut: Dut) -> None:
     dut.run_all_single_board_cases()
 
@@ -27,6 +28,7 @@ def test_spi_lcd(dut: Dut) -> None:
     indirect=True,
 )
 @idf_parametrize('target', ['supported_targets'], indirect=['target'])
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='s31 bringup on this module is not done')
 def test_spi_lcd_with_virt_flash_enc(dut: Dut) -> None:
     print(' - Erase flash')
     dut.serial.erase_flash()

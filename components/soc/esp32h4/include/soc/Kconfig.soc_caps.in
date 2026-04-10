@@ -55,6 +55,10 @@ config SOC_PARLIO_LCD_SUPPORTED
     bool
     default y
 
+config SOC_BT_SUPPORTED
+    bool
+    default y
+
 config SOC_IEEE802154_BLE_ONLY
     bool
     default y
@@ -359,14 +363,6 @@ config SOC_GDMA_SUPPORT_SLEEP_RETENTION
     bool
     default y
 
-config SOC_ETM_GROUPS
-    int
-    default 1
-
-config SOC_ETM_CHANNELS_PER_GROUP
-    int
-    default 50
-
 config SOC_MODEM_SUPPORT_ETM
     bool
     default y
@@ -398,14 +394,6 @@ config SOC_GPIO_FLEX_GLITCH_FILTER_NUM
 config SOC_GPIO_SUPPORT_ETM
     bool
     default y
-
-config SOC_GPIO_ETM_EVENTS_PER_GROUP
-    int
-    default 8
-
-config SOC_GPIO_ETM_TASKS_PER_GROUP
-    int
-    default 8
 
 config SOC_LP_IO_CLOCK_IS_INDEPENDENT
     bool
@@ -1123,7 +1111,55 @@ config SOC_TOUCH_SAMPLE_CFG_NUM
     int
     default 3
 
+config SOC_BLE_SUPPORTED
+    bool
+    default y
+
+config SOC_ESP_NIMBLE_CONTROLLER
+    bool
+    default y
+
+config SOC_BLE_50_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_DEVICE_PRIVACY_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_POWER_CONTROL_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_MULTI_CONN_OPTIMIZATION
+    bool
+    default y
+
+config SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_CTE_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_SUBRATE_SUPPORTED
+    bool
+    default y
+
+config SOC_BLE_PERIODIC_ADV_WITH_RESPONSE
+    bool
+    default y
+
+config SOC_BLE_ISO_SUPPORTED
+    bool
+    default y
+
 config SOC_USB_OTG_PERIPH_NUM
+    int
+    default 1
+
+config SOC_USB_FSLS_PHY_NUM
     int
     default 1
 

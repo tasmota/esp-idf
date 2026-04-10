@@ -158,10 +158,11 @@ When calling :cpp:func:`esp_intr_alloc` or :cpp:func:`esp_intr_alloc_intrstatus`
 
 For private shared interrupts, the first allocation uses ``ESP_INTR_FLAG_SHARED_PRIVATE`` (with :cpp:func:`esp_intr_alloc` or :cpp:func:`esp_intr_alloc_intrstatus`), and subsequent sources are attached via the same functions, still with ``ESP_INTR_FLAG_SHARED_PRIVATE`` flag and the returned handle.
 
-Named groups
+Named Groups
 ^^^^^^^^^^^^
 
-Shared interrupts groups, public or private, can be defined by name. This is done via the ``bind_by.name`` field of the :cpp:type:`esp_intr_alloc_info_t` structure. If a shared interrupt group with the specified name already exists (created by an earlier call using the same name), the new source is attached to that group. Otherwise, a new shared interrupt group is allocated and tagged with that name. Only one of ``bind_by.handle`` or ``bind_by.name`` may be set. The usual flag rules (e.g., level, SHARED vs SHARED_PRIVATE) still apply. This does not affect the behavior of public shared interrupts: interrupt allocation functions can still attach new sources to existing public shared lines without specifying a name or handle.
+Shared interrupts groups, public or private, can be defined by name. This is done via the ``bind_by.name`` field of the :cpp:type:`esp_intr_alloc_info_t` structure. If a shared interrupt group with the specified name already exists (created by an earlier call using the same name), the new source is attached to that group. Otherwise, a new shared interrupt group is allocated and tagged with that name. Only one of ``bind_by.handle`` or ``bind_by.name`` may be set. The usual flag rules (e.g., interrupt level, SHARED vs SHARED_PRIVATE) still apply. This does not affect the behavior of public shared interrupts: interrupt allocation functions can still attach new sources to existing public shared lines without specifying a name or handle.
+
 
 Troubleshooting Interrupt Allocation
 ------------------------------------

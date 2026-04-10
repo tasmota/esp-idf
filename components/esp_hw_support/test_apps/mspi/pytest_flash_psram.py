@@ -74,6 +74,19 @@ def test_flash_psram_120sdr_120sdr(dut: IdfDut) -> None:
     dut.run_all_single_board_cases()
 
 
+@pytest.mark.generic
+@pytest.mark.parametrize(
+    'config',
+    [
+        'esp32s31_120sdr_200ddr',
+    ],
+    indirect=True,
+)
+@idf_parametrize('target', ['esp32s31'], indirect=['target'])
+def test_flash_psram_esp32s31(dut: IdfDut) -> None:
+    dut.run_all_single_board_cases()
+
+
 @pytest.mark.parametrize(
     'config',
     [

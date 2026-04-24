@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 |
-| ----------------- | ----- |
+| Supported Targets | ESP32 | ESP32-S31 |
+| ----------------- | ----- | --------- |
 
 ## ESP-IDF BT-SPP-ACCEPTOR demo
 
@@ -50,7 +50,7 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 
 ## Example Description
 
-After the program starts, the example will start an SPP acceptor. The example will calculate the data rate or just print the received data after the SPP connection is established. You can connect to the server and send data with another ESP32 development board, Andriod phone or computer which performs as the SPP initiator.
+After the program starts, the example will start an SPP acceptor. The example will calculate the data rate or just print the received data after the SPP connection is established. You can connect to the server and send data with another ESP32 development board, Android phone or computer which performs as the SPP initiator.
 
 ## Trouble shooting
 

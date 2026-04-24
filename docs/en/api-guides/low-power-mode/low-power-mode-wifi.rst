@@ -6,8 +6,9 @@ Introduction to Low Power Mode in Wi-Fi Scenarios
 After the previous introduction to low power mode from a systemic perspective, this section delves into low power mode in Wi-Fi scenarios. Due to the complexity of Wi-Fi scenarios, basic principles of Wi-Fi power saving will be introduced before specific low power mode. This section is focused on station mode.
 
 .. todo - add sleep-current/esp32c61_summary.inc
+.. todo - add sleep-current/esp32s31_summary.inc
 
-.. only:: not esp32c61
+.. only:: not esp32c61 and not esp32s31
 
   Choosing Low Power Mode in Wi-Fi Scenarios
   ---------------------------------------------
@@ -364,8 +365,9 @@ Modem-sleep Mode Configuration
           - false
 
     .. todo - add sleep-current/esp32c61_modem_sleep.inc
+    .. todo - add sleep-current/esp32s31_modem_sleep.inc
 
-    .. only:: not esp32c61
+    .. only:: not esp32c61 and not esp32s31
 
       - Configuration Performance
 
@@ -378,8 +380,9 @@ Auto Light-sleep Mode + Wi-Fi Scenario Configuration
 Auto Light-sleep mode in Wi-Fi scenarios does not require wake-up source configuration compared with a pure system. But the remaining part of configuration is basically the same in the two operation scenarios. Therefore, detailed introduction of configurable options, configuration steps, and recommended configurations can be found in the previous section :ref:`Deep-sleep Mode`, with the Wi-Fi-related configurations set to default.
 
 .. todo - add eep-current/esp32c61_light_sleep.inc
+.. todo - add sleep-current/esp32s31_light_sleep.inc
 
-.. only:: not esp32c61
+.. only:: not esp32c61 and not esp32s31
 
   - Configuration Performance
 

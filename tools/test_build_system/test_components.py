@@ -246,7 +246,9 @@ def test_extra_components_overrides_managed_components(idf_py: IdfPyFunc, test_a
 
 
 @pytest.mark.with_idf_components(['cmp'])
-def test_managed_components_overrides_idf_components(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
+def test_managed_components_overrides_idf_components(
+    idf_py: IdfPyFunc, test_app_copy: Path, clean_root_managed_components: None
+) -> None:
     logging.info('Managed components override components defined in IDF_PATH/components')
     # created idf component 'cmp' in marker
     idf_path = Path(os.environ['IDF_PATH'])

@@ -92,6 +92,7 @@ KNOWN_MISSING = {
     'bluetooth/nimble/ble_phy/phy_prph',
     'bluetooth/nimble/ble_proximity_sensor/proximity_sensor_cent',
     'bluetooth/nimble/ble_proximity_sensor/proximity_sensor_prph',
+    'bluetooth/nimble/ble_spi_slave',
     'bluetooth/nimble/ble_spp/spp_client',
     'bluetooth/nimble/ble_spp/spp_server',
     'bluetooth/nimble/blecent',

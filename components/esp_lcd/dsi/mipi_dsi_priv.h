@@ -9,7 +9,7 @@
 #include "sdkconfig.h"
 #if CONFIG_LCD_ENABLE_DEBUG_LOG
 // The local log level must be defined before including esp_log.h
-// Set the maximum log level for gptimer driver
+// Set the maximum log level for dsi lcd driver
 #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 #endif
 #include "hal/mipi_dsi_periph.h"

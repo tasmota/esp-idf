@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import json
 import os.path
@@ -208,6 +208,10 @@ class TestOptionalDependencyWithKconfig:
 @pytest.mark.buildv2_skip('Root components (idf_extra_components.yml) not yet supported in cmakev2')
 @pytest.mark.revert_later(['tools/idf_extra_components.yml'])
 class TestIdfRootDependency:
+    @pytest.fixture(autouse=True)
+    def _clean_root_managed(self, clean_root_managed_components: None) -> None:
+        pass
+
     def test_basic_build(self, idf_py: IdfPyFunc, test_app_copy: Path) -> None:
         with open(os.path.join(EXT_IDF_PATH, 'tools', 'idf_extra_components.yml'), 'w') as fw:
             fw.write(

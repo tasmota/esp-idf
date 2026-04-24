@@ -349,6 +349,24 @@ def pytest_report_header(config: Config) -> str:
         return 'Testing ESP-IDF CMake-based build system v1'
 
 
+@pytest.fixture
+def clean_root_managed_components(tmp_path: Path) -> typing.Generator[None, None, None]:
+    """
+    Temporarily clear root managed components and restore them after the test.
+    """
+    from idf_component_tools.config import root_managed_components_dir
+
+    root_managed = str(root_managed_components_dir())
+    backup = tmp_path / 'root_managed_backup'
+    if os.path.isdir(root_managed):
+        shutil.copytree(root_managed, backup)
+        shutil.rmtree(root_managed)
+    yield
+    shutil.rmtree(root_managed, ignore_errors=True)
+    if backup.is_dir():
+        shutil.copytree(str(backup), root_managed)
+
+
 @pytest.fixture(autouse=True)
 def revert_later(request: FixtureRequest) -> typing.Generator[None, None, None]:
     origin_content_d: dict[str, str] = {}

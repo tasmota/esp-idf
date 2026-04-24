@@ -57,6 +57,14 @@ if(CONFIG_IDF_DOC_BUILD)
                 ${ble_mesh_v11_include_dirs})
 endif()
 
+set(ble_iso_include_dirs
+    "esp_ble_audio/api/iso/include"
+)
+
+set(ble_audio_include_dirs
+    "esp_ble_audio/api/audio/include"
+)
+
 set(bluedroid_include_dirs host/bluedroid/api/include/api)
 
 if(CONFIG_BT_CONTROLLER_ENABLED OR CONFIG_IDF_DOC_BUILD)
@@ -68,6 +76,8 @@ if(CONFIG_IDF_DOC_BUILD)
          ${target_specific_include_dirs}
          ${common_include_dirs}
          ${ble_mesh_include_dirs}
+         ${ble_iso_include_dirs}
+         ${ble_audio_include_dirs}
          ${bluedroid_include_dirs}
          ${nimble_hci_include_dirs})
 endif()
@@ -92,10 +102,11 @@ if(CONFIG_BT_ENABLED)
             list(APPEND srcs "controller/${target_name}/ble.c")
             list(APPEND srcs "controller/esp32c2/dummy.c")
             set(ldscripts "linker_esp32c2.lf")
+        elseif(CONFIG_BT_DUAL_MODE_ARCH)
+            list(APPEND srcs "controller/${target_name}/bt.c")
+            list(APPEND ldscripts "linker_esp_btdm_controller.lf")
         else()
-            if(NOT CONFIG_BT_DUAL_MODE_ARCH)
-                list(APPEND srcs "controller/${target_name}/ble.c")
-            endif()
+            list(APPEND srcs "controller/${target_name}/ble.c")
             list(APPEND ldscripts "linker_esp_ble_controller.lf")
         endif()
 
@@ -680,6 +691,160 @@ if(CONFIG_BT_ENABLED)
         endif()
     endif()
 
+    if(CONFIG_BT_ISO)
+        list(APPEND include_dirs
+                    ${ble_iso_include_dirs}
+                    "esp_ble_audio/host"
+                    "esp_ble_audio/host/adapter"
+                    "esp_ble_audio/include/subsys/bluetooth"
+                    "esp_ble_audio/include/subsys/bluetooth/host"
+                    "esp_ble_audio/include")
+
+        list(APPEND srcs
+                    "esp_ble_audio/host/adapter/nimble/gatt/gatt.c"
+                    "esp_ble_audio/host/adapter/nimble/gatt/gatt.db.c"
+                    "esp_ble_audio/host/adapter/nimble/gatt/gatt.nrp.c"
+                    "esp_ble_audio/host/adapter/nimble/gap.c"
+                    "esp_ble_audio/host/adapter/nimble/iso.c"
+                    "esp_ble_audio/host/common/adv.c"
+                    "esp_ble_audio/host/common/conn.c"
+                    "esp_ble_audio/host/common/gatt.c"
+                    "esp_ble_audio/host/common/hci.c"
+                    "esp_ble_audio/host/common/host.c"
+                    "esp_ble_audio/host/common/iso.c"
+                    "esp_ble_audio/host/common/scan.c"
+                    "esp_ble_audio/host/common/task.c"
+                    "esp_ble_audio/host/common/app/gap.c"
+                    "esp_ble_audio/host/common/app/gatt.c"
+                    "esp_ble_audio/host/utils/crc/crc32_sw.c"
+                    "esp_ble_audio/host/utils/addr.c"
+                    "esp_ble_audio/host/utils/bt_str.c"
+                    "esp_ble_audio/host/utils/buf.c"
+                    "esp_ble_audio/host/utils/crypto.c"
+                    "esp_ble_audio/host/utils/timer.c"
+                    "esp_ble_audio/host/utils/utf8.c"
+                    "esp_ble_audio/host/utils/utils.c"
+                    "esp_ble_audio/host/utils/uuid.c"
+                    "esp_ble_audio/host/iso/iso.c"
+                    "esp_ble_audio/api/iso/esp_ble_iso_common_api.c")
+
+        if(CONFIG_BT_OTS OR CONFIG_BT_OTS_CLIENT)
+            list(APPEND srcs
+                        "esp_ble_audio/host/common/l2cap.c"
+                        "esp_ble_audio/host/adapter/nimble/l2cap.c")
+        endif()
+    endif()
+
+    if(CONFIG_BT_AUDIO)
+        list(APPEND include_dirs
+                    ${ble_audio_include_dirs}
+                    "esp_ble_audio/include/subsys/bluetooth/host")
+
+        list(APPEND srcs
+                    "esp_ble_audio/host/adapter/nimble/profiles/server.c"
+                    "esp_ble_audio/host/adapter/nimble/init.c"
+                    "esp_ble_audio/host/common/init.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_aics_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_bap_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_cap_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_ccp_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_codec_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_common_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_csip_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_gmap_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_has_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_mcc_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_media_proxy_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_micp_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_pacs_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_pbp_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_tbs_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_tmap_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_vcp_api.c"
+                    "esp_ble_audio/api/audio/esp_ble_audio_vocs_api.c")
+
+        if(CONFIG_BT_ASCS)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/ascs.c")
+        endif()
+
+        if(CONFIG_BT_PACS)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/pacs.c")
+        endif()
+
+        if(CONFIG_BT_BAP_SCAN_DELEGATOR)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/bass.c")
+        endif()
+
+        if(CONFIG_BT_CAP_ACCEPTOR)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/cas.c")
+        endif()
+
+        if(CONFIG_BT_CSIP_SET_MEMBER)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/csis.c")
+        endif()
+
+        if(CONFIG_BT_TBS)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/tbs.c")
+        endif()
+
+        if(CONFIG_BT_TMAP)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/tmas.c")
+        endif()
+
+        if(CONFIG_BT_VCP_VOL_REND)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/vcs.c")
+        endif()
+
+        if(CONFIG_BT_MICP_MIC_DEV)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/mics.c")
+        endif()
+
+        if(CONFIG_BT_MCS)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/mcs.c")
+        endif()
+
+        if(CONFIG_BT_HAS)
+            list(APPEND srcs
+                        "esp_ble_audio/host/adapter/nimble/profiles/has.c")
+        endif()
+
+        if(CONFIG_BT_OTS OR CONFIG_BT_OTS_CLIENT)
+            list(APPEND include_dirs
+                        "esp_ble_audio/host/services/ots")
+
+            list(APPEND srcs
+                        "esp_ble_audio/host/services/ots/ots_l2cap.c")
+
+            if(CONFIG_BT_OTS)
+                list(APPEND srcs
+                            "esp_ble_audio/host/services/ots/ots_oacp.c"
+                            "esp_ble_audio/host/services/ots/ots_obj_manager.c"
+                            "esp_ble_audio/host/services/ots/ots_olcp.c"
+                            "esp_ble_audio/host/services/ots/ots.c")
+
+                if(CONFIG_BT_OTS_DIR_LIST_OBJ)
+                    list(APPEND srcs
+                                "esp_ble_audio/host/services/ots/ots_dir_list.c")
+                endif()
+            endif()
+
+            if(CONFIG_BT_OTS_CLIENT)
+                list(APPEND srcs
+                            "esp_ble_audio/host/services/ots/ots_client.c")
+            endif()
+        endif()
+    endif()
+
     if(CONFIG_BT_DUAL_MODE_ARCH)
         add_subdirectory(porting_btdm)
         list(APPEND srcs
@@ -1016,8 +1181,6 @@ set(bt_priv_requires
     esp_driver_uart
     vfs
     esp_ringbuf
-    esp_driver_spi
-    esp_driver_gpio
     esp_gdbstub
     esp_security
 )
@@ -1052,7 +1215,7 @@ endif()
 idf_component_register(SRCS "${srcs}"
                        INCLUDE_DIRS "${include_dirs}"
                        PRIV_INCLUDE_DIRS "${priv_include_dirs}"
-                       REQUIRES esp_timer esp_wifi
+                       REQUIRES esp_timer esp_wifi esp_driver_spi esp_driver_gpio
                        PRIV_REQUIRES "${bt_priv_requires}"
                        LDFRAGMENTS "${ldscripts}")
 
@@ -1100,31 +1263,40 @@ if(CONFIG_BT_ENABLED)
         if(CONFIG_BT_LE_CONTROLLER_LOG_WRAP_PANIC_HANDLER_ENABLE)
             target_link_options(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler")
         endif()
-        if(CONFIG_IDF_TARGET_ESP32C6)
-            add_prebuilt_library(libble_app
-                "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c6/esp32c6-bt-lib/esp32c6/libble_app.a"
+        if(CONFIG_BT_DUAL_MODE_ARCH)
+            if(CONFIG_BT_CTRL_BLE_ENABLE)
+                add_prebuilt_library(libble_app "controller/lib_${target_name}/${target_name}-bt-lib/libble_app.a"
                 REQUIRES esp_phy)
-        elseif(CONFIG_IDF_TARGET_ESP32C61)
-            add_prebuilt_library(libble_app
-                "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c6/esp32c6-bt-lib/esp32c61/libble_app.a"
-                REQUIRES esp_phy)
+                target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
+            endif()
+            if(CONFIG_BT_CTRL_BREDR_ENABLE)
+                add_prebuilt_library(libbredr_app "controller/lib_${target_name}/${target_name}-bt-lib/libbredr_app.a")
+                target_link_libraries(${COMPONENT_LIB} PRIVATE libbredr_app)
+            endif()
+            add_prebuilt_library(libbtdm_common
+              "controller/lib_${target_name}/${target_name}-bt-lib/libbtdm_common.a")
+            target_link_libraries(${COMPONENT_LIB} PRIVATE libbtdm_common)
         else()
-            if(CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY AND CONFIG_IDF_TARGET_ESP32C2)
+            if(CONFIG_IDF_TARGET_ESP32C6)
                 add_prebuilt_library(libble_app
-                    "controller/lib_${target_name}/${target_name}-bt-lib/libble_app_flash.a"
+                    "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c6/esp32c6-bt-lib/esp32c6/libble_app.a"
+                    REQUIRES esp_phy)
+            elseif(CONFIG_IDF_TARGET_ESP32C61)
+                add_prebuilt_library(libble_app
+                    "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c6/esp32c6-bt-lib/esp32c61/libble_app.a"
                     REQUIRES esp_phy)
             else()
-                add_prebuilt_library(libble_app
-                    "controller/lib_${target_name}/${target_name}-bt-lib/libble_app.a"
-                    REQUIRES esp_phy)
+                if(CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY AND CONFIG_IDF_TARGET_ESP32C2)
+                    add_prebuilt_library(libble_app
+                        "controller/lib_${target_name}/${target_name}-bt-lib/libble_app_flash.a"
+                        REQUIRES esp_phy)
+                else()
+                    add_prebuilt_library(libble_app
+                        "controller/lib_${target_name}/${target_name}-bt-lib/libble_app.a"
+                        REQUIRES esp_phy)
+                endif()
             endif()
-        endif()
-        target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
-
-        if(CONFIG_BT_DUAL_MODE_ARCH)
-            add_prebuilt_library(libbtdm_common
-                "controller/lib_${target_name}/${target_name}-bt-lib/libbtdm_common.a")
-            target_link_libraries(${COMPONENT_LIB} PRIVATE libbtdm_common)
+            target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
         endif()
     endif()
 
@@ -1169,6 +1341,13 @@ endif()
 if(CONFIG_BT_NIMBLE_MESH)
     set_source_files_properties("host/nimble/nimble/nimble/host/mesh/src/net.c"
         PROPERTIES COMPILE_FLAGS -Wno-type-limits)
+endif()
+
+if(CONFIG_BT_AUDIO)
+    if(CONFIG_IDF_TARGET_ESP32H4)
+        add_prebuilt_library(ble_audio "esp_ble_audio/lib/lib/esp32h4/libble_audio.a")
+        target_link_libraries(${COMPONENT_LIB} PRIVATE ble_audio)
+    endif()
 endif()
 
 if(CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE AND CONFIG_BT_NIMBLE_ENABLED)

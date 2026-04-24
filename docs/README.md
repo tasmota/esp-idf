@@ -13,7 +13,7 @@ Use the actual documentation, which is generated within about 20 minutes of each
 * English: https://docs.espressif.com/projects/esp-idf/en/latest/
 * Chinese: https://docs.espressif.com/projects/esp-idf/zh_CN/latest/
 
-After clicking any link to [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/en/latest/index.html), go to the top of the sidebar, then make sure you have the correct Espressif chip (target) and ESP-IDF version selected in the dropdown menus. You can also find a link at the bottom right to download the HTML version.
+After clicking any link to [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/en/latest/index.html), go to the top of the sidebar, then make sure you have the correct Espressif chip (target) and ESP-IDF version selected in the dropdown menus. You can also find a link at the bottom right to download the HTML version as a zip for offline reading.
 
 # Building Documentation
 

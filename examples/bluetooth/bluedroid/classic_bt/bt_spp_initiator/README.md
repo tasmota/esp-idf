@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 |
-| ----------------- | ----- |
+| Supported Targets | ESP32 | ESP32-S31 |
+| ----------------- | ----- | --------- |
 
 # ESP-IDF BT-SPP-INITATOR demo
 
@@ -52,10 +52,10 @@ When you run this example and the IO capability is `ESP_IO_CAP_IO` or `ESP_IO_CA
 Supported commands are as follows, arguments are embraced with < and >
 spp h;                -- show command manual
 
-Use this cmmand table if the IO Capability of local device set as IO_CAP_IO.
+Use this command table if the IO Capability of local device set as IO_CAP_IO.
 spp ok;               -- manual Numeric Confirmation.
 
-Use this cmmand table if the IO Capability of local device set as IO_CAP_IN.
+Use this command table if the IO Capability of local device set as IO_CAP_IN.
 spp key <auth key>;   -- manual Passkey. (e.g. spp key 136245;)
 
 ########################################################################
@@ -127,7 +127,7 @@ Q: How to change the process of SSP?
 A: Users can set the IO Capability and Security Mask for their device (fixed Security Mode, Security Mode 4). In short, the Security Mask sets the security level for authentication stage and the IO Capability determines the way of user interaction during pairing. The default Security Mask of this demo is `ESP_SPP_SEC_AUTHENTICATE` which support MITM (Man In The Middle) protection. For more information about Security Simple Pair on ESP32, please refer to [ESP32_SSP](../bt_spp_acceptor/ESP32_SSP.md).
 
 Q: How can we reach the maximum throughput when using SPP?
-A: The default MTU size of classic Bluetooth SPP on ESP32 is 990 bytes, and higher throughput can be achieved in the case that data chunck size is close to the MTU size or multiple of MTU size. For example, sending 100 bytes data per second is much better than sending 10 bytes every 100 milliseconds.
+A: The default MTU size of classic Bluetooth SPP on ESP32 is 990 bytes, and higher throughput can be achieved in the case that data chunk size is close to the MTU size or multiple of MTU size. For example, sending 100 bytes data per second is much better than sending 10 bytes every 100 milliseconds.
 
 Q: What is the difference between the event `ESP_SPP_CONG_EVT` and the parameter `cong` of the event `ESP_SPP_WRITE_EVT`?
 A: The event `ESP_SPP_CONG_EVT` shows the changing status from `congest` to `uncongest`, or form `uncongest` to `congest`. Congestion can have many causes, such as using out of the credit which is sent by peer, reaching the high watermark of the Tx buffer, the congestion at Bluetooth L2CAP layer and so on. The parameter `cong` of the event `ESP_SPP_WRITE_EVT` shows a snapshot of the state of the flow control manager after the write operation is completed. The user needs to carefully consider retransmitting or continuing to write according to these two events. The ESP32 offers an VFS mode of SPP which hides the details of retransmitting, but it will block the caller and is not more efficient than the callback mode.

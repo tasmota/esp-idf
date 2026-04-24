@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -37,6 +37,8 @@ enum class ItemType : uint8_t {
     I32  = NVS_TYPE_I32,
     U64  = NVS_TYPE_U64,
     I64  = NVS_TYPE_I64,
+    FLOAT  = NVS_TYPE_FLOAT,
+    DOUBLE = NVS_TYPE_DOUBLE,
     SZ   = NVS_TYPE_STR,
     BLOB = 0x41,
     BLOB_DATA = NVS_TYPE_BLOB,
@@ -296,6 +298,15 @@ template<typename T, typename std::enable_if<std::is_enum<T>::value, int>::type 
 constexpr ItemType itemTypeOf()
 {
     return static_cast<ItemType>(((std::is_signed<T>::value)?0x10:0x00) | sizeof(T));
+}
+
+/**
+ * Help to translate IEEE 754 floating-point types into ItemType.
+ */
+template<typename T, typename std::enable_if<std::is_floating_point<T>::value, char>::type = 0>
+constexpr ItemType itemTypeOf()
+{
+    return static_cast<ItemType>(0x20 | sizeof(T));
 }
 
 template<typename T>

@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 |
-| ----------------- | ----- |
+| Supported Targets | ESP32 | ESP32-S31 |
+| ----------------- | ----- | --------- |
 
 ESP-IDF BT-L2CAP-SERVER EXAMPLE
 ===================================
@@ -48,7 +48,7 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 
 After the program is started, the example starts inquiry scan and page scan, awaiting being discovered and connected. Other bluetooth devices can discover a device named "ESP_BT_L2CAP_SERVER". ESP-IDF examples for other L2CAP client can be used to connect to the local device.
 
-When you run this example, the explain prints the following at the very begining:
+When you run this example, the explain prints the following at the very beginning:
 ```
 I (1398) L2CAP_TAG: ESP_BT_L2CAP_INIT_EVT: status:0
 

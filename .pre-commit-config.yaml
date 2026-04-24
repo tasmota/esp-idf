@@ -233,7 +233,7 @@ repos:
       - id: check-kconfig-files
       - id: check-deprecated-kconfig-options
   - repo: https://github.com/espressif/idf-ci
-    rev: v1.0.2
+    rev: v1.1.0
     hooks:
       - id: check-tests-missing-config
         files: 'pytest_.*\.py$|sdkconfig(\..*)?$|\.idf_build_apps\.toml$|\.idf_ci\.toml$'

@@ -194,6 +194,7 @@ IRAM 优化
     - 禁用 :ref:`CONFIG_LIBC_LOCKS_PLACE_IN_IRAM`。若在缓存禁用的情况下，运行中的中断服务程序（即 IRAM ISR）没有使用 libc 锁 API，那么禁用该配置可以节省 IRAM 空间。
     :CONFIG_ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY: - 禁用 :ref:`CONFIG_LIBC_OPTIMIZED_MISALIGNED_ACCESS` 可以节省大约 1000 字节的 IRAM，但会降低性能。
     :SOC_SPIRAM_SUPPORTED: - 启用 :ref:`CONFIG_ESP_EVENT_LOOP_IN_EXT_RAM`，强制 ``esp_event`` 将事件循环相关的内存分配放在外部 RAM 而不是内部 RAM 中。
+    :not CONFIG_ESP_ROM_HAS_VPRINTF_FUNC: - 在使用 **Log V2** 时，可禁用 :ref:`CONFIG_LOG_API_CONSTRAINED_ENV_SAFE`，以从IRAM 中移除 ``esp_rom_vprintf``，从而节省约 1.2 KB 空间。这样一来，``ESP_LOGx`` 在 ISR 中或在缓存被禁用时将无法安全回退到 ROM 打印功能；在受限环境下请显式使用 ``ESP_DRAM_LOGx`` 进行日志记录。详情请参阅 :doc:`/api-reference/system/log`。
 
 .. only:: esp32
 

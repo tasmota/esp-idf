@@ -1,6 +1,6 @@
 set(app_sources "test_app_main.c" "test_lp_core.c")
 
-if(CONFIG_SOC_LP_I2C_SUPPORTED)
+if(CONFIG_SOC_LP_CORE_SUPPORT_I2C)
     list(APPEND app_sources "test_lp_core_i2c.c")
 endif()
 
@@ -37,7 +37,7 @@ endif()
 
 set(lp_core_sources_gpio "lp_core/test_main_gpio.c")
 
-if(CONFIG_SOC_LP_I2C_SUPPORTED)
+if(CONFIG_SOC_LP_CORE_SUPPORT_I2C)
     set(lp_core_sources_i2c "lp_core/test_main_i2c.c")
 endif()
 
@@ -57,6 +57,10 @@ endif()
 
 if(CONFIG_SOC_LP_VAD_SUPPORTED)
     set(lp_core_sources_vad "lp_core/test_main_vad.c")
+endif()
+
+if(CONFIG_SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE)
+    set(lp_core_sources_halt "lp_core/test_main_halt.c")
 endif()
 
 idf_component_register(SRCS ${app_sources}
@@ -79,7 +83,7 @@ endif()
 
 ulp_embed_binary(lp_core_test_app_gpio "${lp_core_sources_gpio}" "${lp_core_exp_dep_srcs}")
 
-if(CONFIG_SOC_LP_I2C_SUPPORTED)
+if(CONFIG_SOC_LP_CORE_SUPPORT_I2C)
     ulp_embed_binary(lp_core_test_app_i2c "${lp_core_sources_i2c}" "${lp_core_exp_dep_srcs}")
 endif()
 
@@ -105,3 +109,7 @@ ulp_embed_binary(lp_core_test_app_prefix1 "lp_core/test_main_prefix1.c"  "${lp_c
 ulp_embed_binary(lp_core_test_app_prefix2 "lp_core/test_main_prefix2.c"  "${lp_core_exp_dep_srcs}" PREFIX "ulp2_")
 
 ulp_embed_binary(lp_core_test_app_exception "lp_core/test_main_exception.c" "${lp_core_exp_dep_srcs}")
+
+if(CONFIG_SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE)
+    ulp_embed_binary(lp_core_test_app_halt "lp_core/test_main_halt.c" "${lp_core_exp_dep_srcs}")
+endif()

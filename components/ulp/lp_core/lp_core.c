@@ -1,11 +1,12 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "sdkconfig.h"
 #include "esp_rom_caps.h"
+#include "soc/soc.h"
 #include "soc/soc_caps.h"
 #include "esp_log.h"
 #include "esp_assert.h"
@@ -26,14 +27,19 @@
 #endif
 
 #if ESP_ROM_HAS_LP_ROM
-extern uint32_t _rtc_ulp_memory_start;
+extern uint8_t _rtc_ulp_memory_start[];
 #endif //ESP_ROM_HAS_LP_ROM
+
+#if SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
+#include "hal/lp_aon_hal.h"
+#include "rom/rtc.h"
+#endif
 
 const static char* TAG = "ulp-lp-core";
 
 #define WAKEUP_SOURCE_MAX_NUMBER 6
 
-#define RESET_HANDLER_ADDR ((intptr_t)&_rtc_ulp_memory_start + 0x80) // Placed after the 0x80 byte long vector table
+#define RESET_HANDLER_ADDR ((intptr_t)_rtc_ulp_memory_start + 0x80) // Placed after the 0x80 byte long vector table
 
 /* Maps the flags defined in ulp_lp_core.h e.g. ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU to their actual HW values */
 static uint32_t wakeup_src_sw_to_hw_flag_lookup[WAKEUP_SOURCE_MAX_NUMBER] = {
@@ -85,6 +91,14 @@ esp_err_t ulp_lp_core_run(ulp_lp_core_cfg_t* cfg)
     lp_core_ll_set_app_boot_address(RESET_HANDLER_ADDR);
 
 #endif //ESP_ROM_HAS_LP_ROM
+
+#if SOC_LP_CORE_CONFIGURABLE_BOOT_ADDR
+    /* Chips without LP ROM but with a SW-configurable boot address register
+     * (e.g. ESP32-S31) must set the boot address explicitly.  The hardware
+     * default points to SOC_RTC_DRAM_LOW (the interrupt vector table base),
+     * not to reset_vector which is placed 0x80 bytes into LP RAM. */
+    lp_core_ll_set_boot_address((intptr_t)SOC_RTC_DRAM_LOW + 0x80);
+#endif // SOC_LP_CORE_CONFIGURABLE_BOOT_ADDR
 
     PERIPH_RCC_ATOMIC() {
 #if CONFIG_ULP_NORESET_UNDER_DEBUG
@@ -157,7 +171,7 @@ esp_err_t ulp_lp_core_load_binary(const uint8_t* program_binary, size_t program_
     /* Turn off LP CPU before loading binary */
     ulp_lp_core_stop();
 #if ESP_ROM_HAS_LP_ROM
-    uint32_t* base = (uint32_t*)&_rtc_ulp_memory_start;
+    uint32_t* base = (uint32_t*)_rtc_ulp_memory_start;
 #else
     uint32_t* base = RTC_SLOW_MEM;
 #endif
@@ -167,6 +181,19 @@ esp_err_t ulp_lp_core_load_binary(const uint8_t* program_binary, size_t program_
     hal_memcpy(base, program_binary, program_size_bytes);
 
     return ESP_OK;
+}
+
+void ulp_lp_core_sleep_start(void)
+{
+#if SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
+    /* LP store register to save wakeup cause for HP core to query.
+     * Using a hardware register avoids symbol linking issues between
+     * the independently compiled HP and LP core binaries.
+     * Save PMU wakeup cause to LP store register for HP core to query */
+    lp_aon_hal_store_wakeup_cause(pmu_ll_hp_get_wakeup_cause(&PMU));
+#endif
+
+    lp_core_ll_request_sleep();
 }
 
 void ulp_lp_core_stop(void)
@@ -182,7 +209,7 @@ void ulp_lp_core_stop(void)
     }
     /* Disable wake-up source and put lp core to sleep */
     lp_core_ll_set_wakeup_source(0);
-    lp_core_ll_request_sleep();
+    ulp_lp_core_sleep_start();
 }
 
 void ulp_lp_core_sw_intr_to_lp_trigger(void)

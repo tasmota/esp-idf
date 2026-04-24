@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -61,6 +61,13 @@ extern "C" {
 #define TEST_LCD_DATA5_GPIO    (35)
 #define TEST_LCD_DATA6_GPIO    (19)
 #define TEST_LCD_DATA7_GPIO    (34)
+#elif CONFIG_IDF_TARGET_ESP32H21
+#define TEST_LCD_BK_LIGHT_GPIO (6)
+#define TEST_LCD_RST_GPIO      (2)
+#define TEST_LCD_PCLK_GPIO     (4)
+#define TEST_LCD_CS_GPIO       (0)
+#define TEST_LCD_DC_GPIO       (1)
+#define TEST_LCD_DATA0_GPIO    (3)
 
 #endif
 

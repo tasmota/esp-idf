@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <math.h>
 
 #include <ctype.h>
 #include <errno.h>
@@ -761,6 +762,149 @@ TEST_CASE("test nvs apis for nvs partition generator utility with encryption ena
     nvs_close(handle);
     TEST_ESP_OK(nvs_flash_deinit());
 
+}
+
+TEST_CASE("nvs float set and get", "[nvs]")
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs_flash_init failed (0x%x), erasing partition and retrying", err);
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open("test_fp", NVS_READWRITE, &handle));
+
+    float val = 3.14159265f;
+    TEST_ESP_OK(nvs_set_float(handle, "pi", val));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    float read_val = 0.0f;
+    TEST_ESP_OK(nvs_get_float(handle, "pi", &read_val));
+    TEST_ASSERT_EQUAL_FLOAT(val, read_val);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit());
+}
+
+TEST_CASE("nvs double set and get", "[nvs]")
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs_flash_init failed (0x%x), erasing partition and retrying", err);
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open("test_fp", NVS_READWRITE, &handle));
+
+    double val = 2.718281828459045;
+    TEST_ESP_OK(nvs_set_double(handle, "euler", val));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    double read_val = 0.0;
+    TEST_ESP_OK(nvs_get_double(handle, "euler", &read_val));
+    TEST_ASSERT_EQUAL_DOUBLE(val, read_val);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit());
+}
+
+TEST_CASE("nvs float NaN rejected", "[nvs]")
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs_flash_init failed (0x%x), erasing partition and retrying", err);
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open("test_fp", NVS_READWRITE, &handle));
+
+    float nan_val = NAN;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, nvs_set_float(handle, "nan", nan_val));
+
+    double nan_dbl = NAN;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, nvs_set_double(handle, "nan", nan_dbl));
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit());
+}
+
+TEST_CASE("nvs float and double type mismatch", "[nvs]")
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs_flash_init failed (0x%x), erasing partition and retrying", err);
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open("test_fp", NVS_READWRITE, &handle));
+    TEST_ESP_OK(nvs_erase_all(handle));
+
+    TEST_ESP_OK(nvs_set_float(handle, "fval", 1.5f));
+    TEST_ESP_OK(nvs_set_double(handle, "dval", 2.5));
+    TEST_ESP_OK(nvs_set_i32(handle, "ival", 42));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    double read_dbl;
+    TEST_ASSERT_EQUAL(ESP_ERR_NVS_NOT_FOUND, nvs_get_double(handle, "fval", &read_dbl));
+
+    float read_flt;
+    TEST_ASSERT_EQUAL(ESP_ERR_NVS_NOT_FOUND, nvs_get_float(handle, "dval", &read_flt));
+
+    TEST_ASSERT_EQUAL(ESP_ERR_NVS_NOT_FOUND, nvs_get_float(handle, "ival", &read_flt));
+
+    int32_t read_int;
+    TEST_ASSERT_EQUAL(ESP_ERR_NVS_NOT_FOUND, nvs_get_i32(handle, "fval", &read_int));
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit());
+}
+
+TEST_CASE("nvs float and double special values", "[nvs]")
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs_flash_init failed (0x%x), erasing partition and retrying", err);
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open("test_fp", NVS_READWRITE, &handle));
+    TEST_ESP_OK(nvs_erase_all(handle));
+
+    float pos_inf = INFINITY;
+    float neg_inf = -INFINITY;
+    float neg_zero = -0.0f;
+
+    TEST_ESP_OK(nvs_set_float(handle, "pinf", pos_inf));
+    TEST_ESP_OK(nvs_set_float(handle, "ninf", neg_inf));
+    TEST_ESP_OK(nvs_set_float(handle, "nz", neg_zero));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    float read_pinf = 0.0f, read_ninf = 0.0f, read_nz = 1.0f;
+    TEST_ESP_OK(nvs_get_float(handle, "pinf", &read_pinf));
+    TEST_ESP_OK(nvs_get_float(handle, "ninf", &read_ninf));
+    TEST_ESP_OK(nvs_get_float(handle, "nz", &read_nz));
+
+    TEST_ASSERT_EQUAL_FLOAT(pos_inf, read_pinf);
+    TEST_ASSERT_EQUAL_FLOAT(neg_inf, read_ninf);
+    TEST_ASSERT_EQUAL_FLOAT(neg_zero, read_nz);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit());
 }
 
 #if CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC

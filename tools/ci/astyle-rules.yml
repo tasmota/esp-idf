@@ -15,6 +15,7 @@ submodules:
     - "/components/bt/controller/lib_esp32h2/esp32h2-bt-lib/"
     - "/components/bt/host/nimble/nimble/"
     - "/components/bt/esp_ble_mesh/lib/lib/"
+    - "/components/bt/esp_ble_audio/lib/lib/"
     - "/components/cmock/CMock/"
     - "/components/esp_coex/lib/"
     - "/components/esp_phy/lib/"

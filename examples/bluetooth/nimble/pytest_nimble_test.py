@@ -23,8 +23,11 @@ CUR_DIR = Path(__file__).parent.resolve()
     indirect=True,
 )
 @idf_parametrize(
-    'target', ['esp32c6', 'esp32h2', 'esp32c3', 'esp32s3', 'esp32c5', 'esp32c61', 'esp32'], indirect=['target']
+    'target',
+    ['esp32c6', 'esp32h2', 'esp32c3', 'esp32s3', 'esp32c5', 'esp32c61', 'esp32'],
+    indirect=['target'],
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='s31 light sleep not supported yet')
 def test_power_save_conn(app_path: str, dut: tuple[IdfDut, IdfDut]) -> None:
     peripheral = dut[0]
     central = dut[1]

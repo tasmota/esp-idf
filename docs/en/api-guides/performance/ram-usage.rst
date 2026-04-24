@@ -194,6 +194,7 @@ The following options will reduce IRAM usage of some ESP-IDF features:
     - Disable :ref:`CONFIG_LIBC_LOCKS_PLACE_IN_IRAM` if no ISRs that run while cache is disabled (i.e. IRAM ISRs) use libc lock APIs.
     :CONFIG_ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY: - Disable :ref:`CONFIG_LIBC_OPTIMIZED_MISALIGNED_ACCESS` to save approximately 1000 bytes of IRAM, at the cost of reduced performance.
     :SOC_SPIRAM_SUPPORTED: - Enable :ref:`CONFIG_ESP_EVENT_LOOP_IN_EXT_RAM` to force ``esp_event`` to place event loop related allocations in external RAM instead of internal RAM.
+    :not CONFIG_ESP_ROM_HAS_VPRINTF_FUNC: - When using **Log V2**, disable :ref:`CONFIG_LOG_API_CONSTRAINED_ENV_SAFE` to remove ``esp_rom_vprintf`` from IRAM, saving about 1.2 KB. This means ``ESP_LOGx`` will no longer safely fall back to ROM-based printing in ISRs or with cache disabled. Use ``ESP_DRAM_LOGx`` explicitly for constrained-environment logging. See :doc:`/api-reference/system/log` for details.
 
 .. only:: esp32
 

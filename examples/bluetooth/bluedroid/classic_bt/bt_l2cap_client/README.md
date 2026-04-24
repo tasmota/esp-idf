@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 |
-| ----------------- | ----- |
+| Supported Targets | ESP32 | ESP32-S31 |
+| ----------------- | ----- | --------- |
 
 ESP-IDF BT-L2CAP-CLIENT EXAMPLE
 ===================================
@@ -48,7 +48,7 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 
 For the first step, this example performs device discovery to search for a target device whose device name is "ESP_BT_L2CAP_SERVER". If a candidate target is found, the local device will initiate connection with it.
 
-When you run this example, the explain prints the following at the very begining:
+When you run this example, the explain prints the following at the very beginning:
 ```
 I (1383) L2CAP_TAG: ESP_BT_L2CAP_INIT_EVT: status:0
 

@@ -6,9 +6,7 @@
 
 #define MBEDTLS_ALLOW_PRIVATE_ACCESS
 
-#ifdef ESP_PLATFORM
 #include "esp_system.h"
-#endif
 #include "sdkconfig.h"
 #include <errno.h>
 #include "utils/includes.h"
@@ -32,6 +30,7 @@
 #include "aes_wrap.h"
 #include "crypto.h"
 #include "mbedtls/esp_config.h"
+#include "mbedtls/private/pkcs5.h"
 
 #include "psa/crypto.h"
 #include "mbedtls/psa_util.h"

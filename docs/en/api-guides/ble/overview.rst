@@ -58,23 +58,31 @@ The table below shows whether the Bluetooth LE modules are supported in a specif
       - ESP-Bluedroid
       - ESP-NimBLE
       - ESP-BLE-MESH
+      - ESP-BLE-ISO
+      - ESP-BLE-AUDIO
       - BluFi
     * - ESP32
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-S3
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C2
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - \–
       - Y
     * - ESP32-C3
@@ -82,26 +90,44 @@ The table below shows whether the Bluetooth LE modules are supported in a specif
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C5
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C6
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C61
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-H2
+      - Y
+      - Y
+      - Y
+      - Y
+      - \–
+      - \–
+      - \–
+    * - ESP32-H4
+      - Y
+      - Y
       - Y
       - Y
       - Y

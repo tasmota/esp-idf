@@ -58,6 +58,9 @@ examples/storage/perf_benchmark:
     - if: IDF_TARGET == "esp32p4" and CONFIG_NAME in ["sdmmc_1line", "sdmmc_4line", "sdspi_1line"]
       temporary: true
       reason: lack of runners, build only # TODO: IDF-8970
+    - if: IDF_TARGET == "esp32s31"
+      temporary: true
+      reason: lack of runners, but spi_flash not supported yet
 
 examples/storage/sd_card/sdmmc:
   depends_components:

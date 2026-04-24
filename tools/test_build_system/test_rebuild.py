@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 # These tests check whether the build system rebuilds some files or not
 # depending on the changes to the project.
@@ -141,6 +141,65 @@ def test_rebuild_linker(idf_py: IdfPyFunc) -> None:
     logging.info('Updating fragment file should only re-link the app')
     (idf_path / 'components/esp_common/common.lf').touch()
     rebuild_and_check(idf_py, APP_BINS, BOOTLOADER_BINS + PARTITION_BIN)
+
+
+def test_rebuild_ldgen_fingerprint(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
+    """Verify the ldgen fingerprint skip path: when section names and other
+    inputs are unchanged, ldgen exits early without regenerating sections.ld
+    and prints an informational message.
+    """
+    skip_msg = 'Skipping linker script generation, section names unchanged'
+    app_c = test_app_copy / 'main' / 'build_test_app.c'
+
+    # Seed app_main with a printf so the first build establishes the string
+    # literal and its .rodata section. Later we only change the arithmetic
+    # constant, which modifies .text.app_main contents but keeps section
+    # names unchanged — exactly the case the fingerprint should optimize.
+    replace_in_file(app_c, '// placeholder_inside_main', 'printf("value = %d\\n", 1 + 2);')
+
+    logging.info('initial build')
+    idf_py('build')
+
+    logging.info(
+        'changing the printed calculation modifies .text.app_main but keeps all section names - fingerprint should hit'
+    )
+    replace_in_file(app_c, '1 + 2', '3 + 4')
+    result = idf_py('build')
+    assert skip_msg in result.stdout, f'expected {skip_msg!r} in build output'
+
+    logging.info('touching a fragment file invalidates the fingerprint')
+    idf_path = Path(os.environ['IDF_PATH'])
+    (idf_path / 'components/esp_common/common.lf').touch()
+    result = idf_py('build')
+    assert skip_msg not in result.stdout, f'unexpected {skip_msg!r} in build output after fragment change'
+
+
+def test_rebuild_ldgen_lf_cache(idf_py: IdfPyFunc, test_app_copy: Path) -> None:
+    """Verify the ldgen lf cache: when section names change but fragment files
+    don't, parsed FragmentFile objects are loaded from cache rather than
+    re-parsed, and an informational message is printed.
+    """
+    cache_msg = 'Skipping linker fragment parsing, fragment files unchanged'
+
+    logging.info('initial build')
+    idf_py('build')
+
+    logging.info(
+        'adding a new function changes section names but leaves fragment files unchanged - lf cache should hit'
+    )
+    replace_in_file(
+        test_app_copy / 'main' / 'build_test_app.c',
+        '// placeholder_before_main',
+        'void test_ldgen_lf_cache_extra_func(void) {}',
+    )
+    result = idf_py('build')
+    assert cache_msg in result.stdout, f'expected {cache_msg!r} in build output'
+
+    logging.info('touching a fragment file invalidates the lf cache')
+    idf_path = Path(os.environ['IDF_PATH'])
+    (idf_path / 'components/esp_common/common.lf').touch()
+    result = idf_py('build')
+    assert cache_msg not in result.stdout, f'unexpected {cache_msg!r} in build output after fragment change'
 
 
 @pytest.mark.usefixtures('idf_copy')

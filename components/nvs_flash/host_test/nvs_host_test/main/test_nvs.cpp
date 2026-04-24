@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,6 +18,8 @@
 #include <string.h>
 #include <string>
 #include <random>
+#include <cmath>
+#include <cstring>
 #include "test_fixtures.hpp"
 #include "spi_flash_mmap.h"
 
@@ -5007,6 +5009,517 @@ TEST_CASE("nvs handle purge test", "[nvs]")
     TEST_ESP_OK(nvs_flash_erase_partition(part_name));
 }
 
+
+// ============================================================================
+// IEEE 754 float and double type tests
+// ============================================================================
+
+TEST_CASE("Page write and read float value", "[nvs]")
+{
+    NVSPartitionTestHelper h(TEST_DEFAULT_PARTITION_NAME);
+
+    nvs::Page page;
+    TEST_ESP_OK(page.load(&h, 0));
+    float val = 3.14159265f;
+    TEST_ESP_OK(page.writeItem(1, nvs::ItemType::FLOAT, "floatval", &val, sizeof(val)));
+
+    float readVal = 0.0f;
+    TEST_ESP_OK(page.readItem(1, nvs::ItemType::FLOAT, "floatval", &readVal, sizeof(readVal)));
+    CHECK(readVal == val);
+}
+
+TEST_CASE("Page write and read double value", "[nvs]")
+{
+    NVSPartitionTestHelper h(TEST_DEFAULT_PARTITION_NAME);
+
+    nvs::Page page;
+    TEST_ESP_OK(page.load(&h, 0));
+    double val = 2.718281828459045;
+    TEST_ESP_OK(page.writeItem(1, nvs::ItemType::DOUBLE, "dblval", &val, sizeof(val)));
+
+    double readVal = 0.0;
+    TEST_ESP_OK(page.readItem(1, nvs::ItemType::DOUBLE, "dblval", &readVal, sizeof(readVal)));
+    CHECK(readVal == val);
+}
+
+TEST_CASE("Page reading float with different type causes type mismatch error", "[nvs]")
+{
+    NVSPartitionTestHelper h(TEST_DEFAULT_PARTITION_NAME);
+
+    nvs::Page page;
+    TEST_ESP_OK(page.load(&h, 0));
+    float val = 1.5f;
+    TEST_ESP_OK(page.writeItem(1, nvs::ItemType::FLOAT, "fval", &val, sizeof(val)));
+
+    double readDouble = 0.0;
+    CHECK(page.readItem(1, nvs::ItemType::DOUBLE, "fval", &readDouble, sizeof(readDouble)) == ESP_ERR_NVS_TYPE_MISMATCH);
+
+    int32_t readInt = 0;
+    CHECK(page.readItem(1, nvs::ItemType::I32, "fval", &readInt, sizeof(readInt)) == ESP_ERR_NVS_TYPE_MISMATCH);
+
+    uint32_t readUint = 0;
+    CHECK(page.readItem(1, nvs::ItemType::U32, "fval", &readUint, sizeof(readUint)) == ESP_ERR_NVS_TYPE_MISMATCH);
+}
+
+TEST_CASE("Page reading i32 as float causes type mismatch error", "[nvs]")
+{
+    NVSPartitionTestHelper h(TEST_DEFAULT_PARTITION_NAME);
+
+    nvs::Page page;
+    TEST_ESP_OK(page.load(&h, 0));
+    int32_t val = 42;
+    TEST_ESP_OK(page.writeItem(1, nvs::ItemType::I32, "intval", &val, sizeof(val)));
+
+    float readFloat = 0.0f;
+    CHECK(page.readItem(1, nvs::ItemType::FLOAT, "intval", &readFloat, sizeof(readFloat)) == ESP_ERR_NVS_TYPE_MISMATCH);
+}
+
+TEST_CASE("Page reading double with different type causes type mismatch error", "[nvs]")
+{
+    NVSPartitionTestHelper h(TEST_DEFAULT_PARTITION_NAME);
+
+    nvs::Page page;
+    TEST_ESP_OK(page.load(&h, 0));
+    double val = 9.99;
+    TEST_ESP_OK(page.writeItem(1, nvs::ItemType::DOUBLE, "dval", &val, sizeof(val)));
+
+    float readFloat = 0.0f;
+    CHECK(page.readItem(1, nvs::ItemType::FLOAT, "dval", &readFloat, sizeof(readFloat)) == ESP_ERR_NVS_TYPE_MISMATCH);
+
+    int64_t readInt64 = 0;
+    CHECK(page.readItem(1, nvs::ItemType::I64, "dval", &readInt64, sizeof(readInt64)) == ESP_ERR_NVS_TYPE_MISMATCH);
+}
+
+TEST_CASE("nvs api float and double positive tests", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fp", NVS_READWRITE, &handle));
+
+    SECTION("set and get float") {
+        float val = 3.14159265f;
+        TEST_ESP_OK(nvs_set_float(handle, "pi", val));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val = 0.0f;
+        TEST_ESP_OK(nvs_get_float(handle, "pi", &read_val));
+        CHECK(read_val == val);
+    }
+
+    SECTION("set and get double") {
+        double val = 2.718281828459045;
+        TEST_ESP_OK(nvs_set_double(handle, "euler", val));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        double read_val = 0.0;
+        TEST_ESP_OK(nvs_get_double(handle, "euler", &read_val));
+        CHECK(read_val == val);
+    }
+
+    SECTION("overwrite float with new value") {
+        TEST_ESP_OK(nvs_set_float(handle, "val", 1.0f));
+        TEST_ESP_OK(nvs_set_float(handle, "val", 2.5f));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val = 0.0f;
+        TEST_ESP_OK(nvs_get_float(handle, "val", &read_val));
+        CHECK(read_val == 2.5f);
+    }
+
+    SECTION("overwrite double with new value") {
+        TEST_ESP_OK(nvs_set_double(handle, "val", 1.0));
+        TEST_ESP_OK(nvs_set_double(handle, "val", 99.99));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        double read_val = 0.0;
+        TEST_ESP_OK(nvs_get_double(handle, "val", &read_val));
+        CHECK(read_val == 99.99);
+    }
+
+    SECTION("float special values: positive and negative infinity") {
+        float pos_inf = INFINITY;
+        float neg_inf = -INFINITY;
+
+        TEST_ESP_OK(nvs_set_float(handle, "pinf", pos_inf));
+        TEST_ESP_OK(nvs_set_float(handle, "ninf", neg_inf));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_pinf = 0.0f, read_ninf = 0.0f;
+        TEST_ESP_OK(nvs_get_float(handle, "pinf", &read_pinf));
+        TEST_ESP_OK(nvs_get_float(handle, "ninf", &read_ninf));
+        CHECK(read_pinf == pos_inf);
+        CHECK(read_ninf == neg_inf);
+    }
+
+    SECTION("float special values: negative zero") {
+        float neg_zero = -0.0f;
+        TEST_ESP_OK(nvs_set_float(handle, "nz", neg_zero));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val = 1.0f;
+        TEST_ESP_OK(nvs_get_float(handle, "nz", &read_val));
+        CHECK(read_val == neg_zero);
+        uint32_t bits;
+        memcpy(&bits, &read_val, sizeof(bits));
+        CHECK(bits == 0x80000000);
+    }
+
+    SECTION("float special values: smallest subnormal") {
+        uint32_t subnormal_bits = 0x00000001;
+        float subnormal;
+        memcpy(&subnormal, &subnormal_bits, sizeof(subnormal));
+
+        TEST_ESP_OK(nvs_set_float(handle, "sub", subnormal));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val = 0.0f;
+        TEST_ESP_OK(nvs_get_float(handle, "sub", &read_val));
+        uint32_t read_bits;
+        memcpy(&read_bits, &read_val, sizeof(read_bits));
+        CHECK(read_bits == subnormal_bits);
+    }
+
+    SECTION("double special values: positive and negative infinity") {
+        double pos_inf = (double)INFINITY;
+        double neg_inf = (double)(-INFINITY);
+
+        TEST_ESP_OK(nvs_set_double(handle, "pinf", pos_inf));
+        TEST_ESP_OK(nvs_set_double(handle, "ninf", neg_inf));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        double read_pinf = 0.0, read_ninf = 0.0;
+        TEST_ESP_OK(nvs_get_double(handle, "pinf", &read_pinf));
+        TEST_ESP_OK(nvs_get_double(handle, "ninf", &read_ninf));
+        CHECK(read_pinf == pos_inf);
+        CHECK(read_ninf == neg_inf);
+    }
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs api float and double negative tests", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fp_neg", NVS_READWRITE, &handle));
+
+    SECTION("set float NaN returns ESP_ERR_INVALID_ARG") {
+        float nan_val = NAN;
+        TEST_ESP_ERR(nvs_set_float(handle, "nan", nan_val), ESP_ERR_INVALID_ARG);
+    }
+
+    SECTION("set double NaN returns ESP_ERR_INVALID_ARG") {
+        double nan_val = NAN;
+        TEST_ESP_ERR(nvs_set_double(handle, "nan", nan_val), ESP_ERR_INVALID_ARG);
+    }
+
+    SECTION("set float quiet NaN returns ESP_ERR_INVALID_ARG") {
+        uint32_t qnan_bits = 0x7FC00001;
+        float qnan;
+        memcpy(&qnan, &qnan_bits, sizeof(qnan));
+        TEST_ESP_ERR(nvs_set_float(handle, "qnan", qnan), ESP_ERR_INVALID_ARG);
+    }
+
+    SECTION("set float signaling NaN returns ESP_ERR_INVALID_ARG") {
+        uint32_t snan_bits = 0x7F800001;
+        float snan;
+        memcpy(&snan, &snan_bits, sizeof(snan));
+        TEST_ESP_ERR(nvs_set_float(handle, "snan", snan), ESP_ERR_INVALID_ARG);
+    }
+
+    SECTION("get float for nonexistent key returns ESP_ERR_NVS_NOT_FOUND") {
+        float val;
+        TEST_ESP_ERR(nvs_get_float(handle, "nokey", &val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("get double for nonexistent key returns ESP_ERR_NVS_NOT_FOUND") {
+        double val;
+        TEST_ESP_ERR(nvs_get_double(handle, "nokey", &val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set float, get double") {
+        TEST_ESP_OK(nvs_set_float(handle, "fval", 1.5f));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        double read_val;
+        TEST_ESP_ERR(nvs_get_double(handle, "fval", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set double, get float") {
+        TEST_ESP_OK(nvs_set_double(handle, "dval", 1.5));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val;
+        TEST_ESP_ERR(nvs_get_float(handle, "dval", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set i32, get float") {
+        TEST_ESP_OK(nvs_set_i32(handle, "ival", 42));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        float read_val;
+        TEST_ESP_ERR(nvs_get_float(handle, "ival", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set float, get i32") {
+        TEST_ESP_OK(nvs_set_float(handle, "fval2", 3.14f));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        int32_t read_val;
+        TEST_ESP_ERR(nvs_get_i32(handle, "fval2", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set u64, get double") {
+        TEST_ESP_OK(nvs_set_u64(handle, "u64v", 12345ULL));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        double read_val;
+        TEST_ESP_ERR(nvs_get_double(handle, "u64v", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    SECTION("type mismatch: set double, get i64") {
+        TEST_ESP_OK(nvs_set_double(handle, "dval2", 1.0));
+        TEST_ESP_OK(nvs_commit(handle));
+
+        int64_t read_val;
+        TEST_ESP_ERR(nvs_get_i64(handle, "dval2", &read_val), ESP_ERR_NVS_NOT_FOUND);
+    }
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs api float and double read-only handle test", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t rw_handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fp_ro", NVS_READWRITE, &rw_handle));
+    TEST_ESP_OK(nvs_set_float(rw_handle, "fval", 1.23f));
+    TEST_ESP_OK(nvs_set_double(rw_handle, "dval", 4.56));
+    TEST_ESP_OK(nvs_commit(rw_handle));
+    nvs_close(rw_handle);
+
+    nvs_handle_t ro_handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fp_ro", NVS_READONLY, &ro_handle));
+
+    float fval = 0.0f;
+    TEST_ESP_OK(nvs_get_float(ro_handle, "fval", &fval));
+    CHECK(fval == 1.23f);
+
+    double dval = 0.0;
+    TEST_ESP_OK(nvs_get_double(ro_handle, "dval", &dval));
+    CHECK(dval == 4.56);
+
+    TEST_ESP_ERR(nvs_set_float(ro_handle, "fval", 9.0f), ESP_ERR_NVS_READ_ONLY);
+    TEST_ESP_ERR(nvs_set_double(ro_handle, "dval", 9.0), ESP_ERR_NVS_READ_ONLY);
+
+    nvs_close(ro_handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs iterators find float and double entries", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_DEFAULT_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_DEFAULT_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_DEFAULT_PARTITION_NAME, "ns_iter_fp", NVS_READWRITE, &handle));
+
+    TEST_ESP_OK(nvs_set_float(handle, "fval1", 1.0f));
+    TEST_ESP_OK(nvs_set_float(handle, "fval2", 2.0f));
+    TEST_ESP_OK(nvs_set_double(handle, "dval1", 3.0));
+    TEST_ESP_OK(nvs_set_i32(handle, "ival1", 42));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    auto entry_count = [](nvs_handle_t h, nvs_type_t type) -> int {
+        int count = 0;
+        nvs_iterator_t it = nullptr;
+        esp_err_t res = nvs_entry_find_in_handle(h, type, &it);
+        for (count = 0; res == ESP_OK; count++) {
+            res = nvs_entry_next(&it);
+        }
+        nvs_release_iterator(it);
+        return count;
+    };
+
+    CHECK(entry_count(handle, NVS_TYPE_FLOAT) == 2);
+    CHECK(entry_count(handle, NVS_TYPE_DOUBLE) == 1);
+    CHECK(entry_count(handle, NVS_TYPE_I32) == 1);
+    CHECK(entry_count(handle, NVS_TYPE_ANY) == 4);
+
+    nvs_iterator_t it = nullptr;
+    nvs_entry_info_t info;
+    TEST_ESP_OK(nvs_entry_find_in_handle(handle, NVS_TYPE_FLOAT, &it));
+    TEST_ESP_OK(nvs_entry_info(it, &info));
+    CHECK(info.type == NVS_TYPE_FLOAT);
+    nvs_release_iterator(it);
+
+    it = nullptr;
+    TEST_ESP_OK(nvs_entry_find_in_handle(handle, NVS_TYPE_DOUBLE, &it));
+    TEST_ESP_OK(nvs_entry_info(it, &info));
+    CHECK(info.type == NVS_TYPE_DOUBLE);
+    nvs_release_iterator(it);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_DEFAULT_PARTITION_NAME));
+}
+
+TEST_CASE("nvs find_key reports correct type for float and double", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fk_fp", NVS_READWRITE, &handle));
+
+    TEST_ESP_OK(nvs_set_float(handle, "fval", 1.0f));
+    TEST_ESP_OK(nvs_set_double(handle, "dval", 2.0));
+    TEST_ESP_OK(nvs_commit(handle));
+
+    nvs_type_t out_type = NVS_TYPE_ANY;
+    TEST_ESP_OK(nvs_find_key(handle, "fval", &out_type));
+    CHECK(out_type == NVS_TYPE_FLOAT);
+
+    out_type = NVS_TYPE_ANY;
+    TEST_ESP_OK(nvs_find_key(handle, "dval", &out_type));
+    CHECK(out_type == NVS_TYPE_DOUBLE);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs multiple write with same key but different types involving float", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fp_dup", NVS_READWRITE, &handle));
+
+    int32_t v32;
+    float vf;
+
+    TEST_ESP_OK(nvs_set_i32(handle, "foo", (int32_t)12345678));
+    TEST_ESP_OK(nvs_set_float(handle, "foo", 3.14f));
+    TEST_ESP_OK(nvs_commit(handle));
+
+#ifdef CONFIG_NVS_LEGACY_DUP_KEYS_COMPATIBILITY
+    TEST_ESP_ERR(nvs_get_float(handle, "foo", &vf), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_get_i32(handle, "foo", &v32));
+    CHECK(v32 == (int32_t)12345678);
+    TEST_ESP_OK(nvs_erase_key(handle, "foo"));
+
+    TEST_ESP_OK(nvs_get_float(handle, "foo", &vf));
+    CHECK(vf == 3.14f);
+    TEST_ESP_ERR(nvs_get_i32(handle, "foo", &v32), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "foo"));
+
+    TEST_ESP_ERR(nvs_erase_key(handle, "foo"), ESP_ERR_NVS_NOT_FOUND);
+#else
+    TEST_ESP_OK(nvs_get_float(handle, "foo", &vf));
+    CHECK(vf == 3.14f);
+    TEST_ESP_ERR(nvs_get_i32(handle, "foo", &v32), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "foo"));
+
+    TEST_ESP_ERR(nvs_get_float(handle, "foo", &vf), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_get_i32(handle, "foo", &v32), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_erase_key(handle, "foo"), ESP_ERR_NVS_NOT_FOUND);
+#endif
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs multiple write with same key but different types involving double", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_dbl_dup", NVS_READWRITE, &handle));
+
+    int64_t v64;
+    double vd;
+
+    TEST_ESP_OK(nvs_set_i64(handle, "bar", (int64_t)123456789LL));
+    TEST_ESP_OK(nvs_set_double(handle, "bar", 2.71828));
+    TEST_ESP_OK(nvs_commit(handle));
+
+#ifdef CONFIG_NVS_LEGACY_DUP_KEYS_COMPATIBILITY
+    TEST_ESP_ERR(nvs_get_double(handle, "bar", &vd), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_get_i64(handle, "bar", &v64));
+    CHECK(v64 == (int64_t)123456789LL);
+    TEST_ESP_OK(nvs_erase_key(handle, "bar"));
+
+    TEST_ESP_OK(nvs_get_double(handle, "bar", &vd));
+    CHECK(vd == 2.71828);
+    TEST_ESP_ERR(nvs_get_i64(handle, "bar", &v64), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "bar"));
+
+    TEST_ESP_ERR(nvs_erase_key(handle, "bar"), ESP_ERR_NVS_NOT_FOUND);
+#else
+    TEST_ESP_OK(nvs_get_double(handle, "bar", &vd));
+    CHECK(vd == 2.71828);
+    TEST_ESP_ERR(nvs_get_i64(handle, "bar", &v64), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "bar"));
+
+    TEST_ESP_ERR(nvs_get_double(handle, "bar", &vd), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_get_i64(handle, "bar", &v64), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_erase_key(handle, "bar"), ESP_ERR_NVS_NOT_FOUND);
+#endif
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs multiple write with same key float then double", "[nvs]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_fd_dup", NVS_READWRITE, &handle));
+
+    float vf;
+    double vd;
+
+    TEST_ESP_OK(nvs_set_float(handle, "baz", 1.5f));
+    TEST_ESP_OK(nvs_set_double(handle, "baz", 9.99));
+    TEST_ESP_OK(nvs_commit(handle));
+
+#ifdef CONFIG_NVS_LEGACY_DUP_KEYS_COMPATIBILITY
+    TEST_ESP_ERR(nvs_get_double(handle, "baz", &vd), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_get_float(handle, "baz", &vf));
+    CHECK(vf == 1.5f);
+    TEST_ESP_OK(nvs_erase_key(handle, "baz"));
+
+    TEST_ESP_OK(nvs_get_double(handle, "baz", &vd));
+    CHECK(vd == 9.99);
+    TEST_ESP_ERR(nvs_get_float(handle, "baz", &vf), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "baz"));
+
+    TEST_ESP_ERR(nvs_erase_key(handle, "baz"), ESP_ERR_NVS_NOT_FOUND);
+#else
+    TEST_ESP_OK(nvs_get_double(handle, "baz", &vd));
+    CHECK(vd == 9.99);
+    TEST_ESP_ERR(nvs_get_float(handle, "baz", &vf), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_OK(nvs_erase_key(handle, "baz"));
+
+    TEST_ESP_ERR(nvs_get_double(handle, "baz", &vd), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_get_float(handle, "baz", &vf), ESP_ERR_NVS_NOT_FOUND);
+    TEST_ESP_ERR(nvs_erase_key(handle, "baz"), ESP_ERR_NVS_NOT_FOUND);
+#endif
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
 
 // Add new tests above
 // This test has to be the final one

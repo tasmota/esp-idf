@@ -527,6 +527,46 @@ static int base_get_socket(esp_transport_handle_t t)
     return INVALID_SOCKET;
 }
 
+int esp_transport_poll_connection_closed(esp_transport_handle_t t, int timeout_ms)
+{
+    int sock = base_get_socket(t);
+    if (sock < 0) {
+        return -1;
+    }
+
+    struct timeval timeout;
+    fd_set readset;
+    fd_set errset;
+    FD_ZERO(&readset);
+    FD_ZERO(&errset);
+    FD_SET(sock, &readset);
+    FD_SET(sock, &errset);
+
+    int ret = select(sock + 1, &readset, NULL, &errset, esp_transport_utils_ms_to_timeval(timeout_ms, &timeout));
+    if (ret > 0) {
+        if (FD_ISSET(sock, &readset)) {
+            uint8_t buffer;
+            if (recv(sock, &buffer, 1, MSG_PEEK) <= 0) {
+                // Socket readable but zero bytes available: clean closure by FIN
+                return 1;
+            }
+            ESP_LOGW(TAG, "poll_connection_closed: unexpected data readable on socket=%d", sock);
+        } else if (FD_ISSET(sock, &errset)) {
+            int sock_errno = 0;
+            uint32_t optlen = sizeof(sock_errno);
+            getsockopt(sock, SOL_SOCKET, SO_ERROR, &sock_errno, &optlen);
+            ESP_LOGD(TAG, "poll_connection_closed select error %d, errno = %s, fd = %d", sock_errno, strerror(sock_errno), sock);
+            if (sock_errno == ENOTCONN || sock_errno == ECONNRESET || sock_errno == ECONNABORTED) {
+                // RST-based closure: treat as expected connection termination
+                return 1;
+            }
+            ESP_LOGE(TAG, "poll_connection_closed: unexpected errno=%d on socket=%d", sock_errno, sock);
+        }
+        return -1;
+    }
+    return ret; // 0 on timeout, -1 on select error
+}
+
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
 void esp_transport_ssl_set_ds_data(esp_transport_handle_t t, void *ds_data)
 {

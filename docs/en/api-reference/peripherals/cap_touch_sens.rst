@@ -3,7 +3,7 @@ Capacitive Touch Sensor
 
 :link_to_translation:`zh_CN:[中文]`
 
-{IDF_TARGET_TOUCH_SENSOR_VERSION:default="NOT_UPDATED", esp32="v1", esp32s2="v2", esp32s3="v2", esp32p4="v3", esp32h4="v3"}
+{IDF_TARGET_TOUCH_SENSOR_VERSION:default="NOT_UPDATED", esp32="v1", esp32s2="v2", esp32s3="v2", esp32p4="v3", esp32h4="v3", esp32s31="v3"}
 
 Introduction
 ---------------
@@ -31,6 +31,7 @@ Overview of Capacitive Touch Sensor Versions
 +------------------+-----------+---------------------------------------------------------------------------------------+
 | V3               | ESP32-P4  | Version 3, support frequency hopping                                                  |
 |                  | ESP32-H4  |                                                                                       |
+|                  | ESP32-S31 |                                                                                       |
 +------------------+-----------+---------------------------------------------------------------------------------------+
 
 Measurement Principle

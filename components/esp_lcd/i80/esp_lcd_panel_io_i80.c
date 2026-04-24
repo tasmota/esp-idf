@@ -273,6 +273,9 @@ esp_err_t esp_lcd_del_i80_bus(esp_lcd_i80_bus_handle_t bus)
     ESP_GOTO_ON_FALSE(bus, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
     ESP_GOTO_ON_FALSE(LIST_EMPTY(&bus->device_list), ESP_ERR_INVALID_STATE, err, TAG, "device list not empty");
     int bus_id = bus->bus_id;
+    PERIPH_RCC_ATOMIC() {
+        lcd_ll_enable_clock(bus->hal.dev, false);
+    }
 #if I80_USE_RETENTION_LINK
     const periph_retention_module_t module_id = soc_i80_lcd_retention_info[bus_id].retention_module;
     if (sleep_retention_is_module_created(module_id)) {
@@ -737,7 +740,7 @@ static void lcd_periph_trigger_quick_trans_done_event(esp_lcd_i80_bus_handle_t b
         .length = 4,
         .flags = {
             .mark_eof = true,   // mark the "EOF" flag to trigger LCD EOF interrupt
-            .mark_final = true, // singly link list, mark final descriptor
+            .mark_final = GDMA_FINAL_LINK_TO_NULL, // singly link list, mark final descriptor
         }
     };
     gdma_link_mount_buffers(bus->dma_link, 0, &mount_config, 1, NULL);
@@ -759,6 +762,7 @@ static void lcd_start_transaction(esp_lcd_i80_bus_t *bus, lcd_i80_trans_descript
     lcd_ll_set_phase_cycles(bus->hal.dev, cmd_cycles, dummy_cycles, data_cycles);
     lcd_ll_set_blank_cycles(bus->hal.dev, 1, 1);
 
+    lcd_ll_reset(bus->hal.dev);
     // reset FIFO before starting a new transaction, in case there remains some dirty data in the FIFO because of the "fake trigger".
     lcd_ll_fifo_reset(bus->hal.dev);
 

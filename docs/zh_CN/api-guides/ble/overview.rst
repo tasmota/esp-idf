@@ -58,23 +58,31 @@ ESP-IDF 中的低功耗蓝牙协议栈是一个分层架构，可在 {IDF_TARGET
       - ESP-Bluedroid
       - ESP-NimBLE
       - ESP-BLE-MESH
+      - ESP-BLE-ISO
+      - ESP-BLE-AUDIO
       - BluFi
     * - ESP32
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-S3
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C2
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - \–
       - Y
     * - ESP32-C3
@@ -82,26 +90,44 @@ ESP-IDF 中的低功耗蓝牙协议栈是一个分层架构，可在 {IDF_TARGET
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C5
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C6
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-C61
       - Y
       - Y
       - Y
       - Y
+      - \–
+      - \–
       - Y
     * - ESP32-H2
+      - Y
+      - Y
+      - Y
+      - Y
+      - \–
+      - \–
+      - \–
+    * - ESP32-H4
+      - Y
+      - Y
       - Y
       - Y
       - Y

@@ -65,6 +65,28 @@ For additional details and API reference from the upstream documentation, refer 
 
         esp-ble-mesh
 
+.. only:: SOC_BLE_ISO_SUPPORTED
+
+    **ESP-BLE-ISO API**
+
+    Bluetooth LE Isochronous Channels (CIS/BIS) for LE Audio and time-synchronized streaming.
+
+    .. toctree::
+        :maxdepth: 1
+
+        esp-ble-iso
+
+.. only:: SOC_BLE_AUDIO_SUPPORTED
+
+    **ESP-BLE-AUDIO API**
+
+    Bluetooth LE Audio profiles and services (BAP, PACS, VCP, HAS, CSIP, etc.).
+
+    .. toctree::
+        :maxdepth: 1
+
+        esp-ble-audio
+
 ----
 
 Examples and Tutorials

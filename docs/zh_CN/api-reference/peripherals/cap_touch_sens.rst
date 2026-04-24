@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-{IDF_TARGET_TOUCH_SENSOR_VERSION:default="NOT_UPDATED", esp32="v1", esp32s2="v2", esp32s3="v2", esp32p4="v3", esp32h4="v3"}
+{IDF_TARGET_TOUCH_SENSOR_VERSION:default="NOT_UPDATED", esp32="v1", esp32s2="v2", esp32s3="v2", esp32p4="v3", esp32h4="v3", esp32s31="v3"}
 
 概述
 ------
@@ -31,6 +31,7 @@
 +-----------+--------------+------------------------------------------------------------------------+
 |     V3    |  ESP32-P4    | 第三代触摸传感器，新增跳频扫描                                         |
 |           |  ESP32-H4    |                                                                        |
+|           |  ESP32-S31   |                                                                        |
 +-----------+--------------+------------------------------------------------------------------------+
 
 测量原理

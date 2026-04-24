@@ -106,10 +106,8 @@ api-reference/peripherals/index.rst
 api-reference/peripherals/sdio_slave.rst
 api-reference/peripherals/temp_sensor.rst
 api-reference/peripherals/camera_driver.rst
-api-reference/peripherals/adc_oneshot.rst
 api-reference/peripherals/sdspi_share.rst
 api-reference/peripherals/ana_cmpr.rst
-api-reference/peripherals/adc_continuous.rst
 api-reference/peripherals/hmac.rst
 api-reference/peripherals/key_manager.rst
 api-reference/peripherals/sdspi_host.rst

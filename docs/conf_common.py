@@ -54,7 +54,6 @@ BLE_DOCS = [
     'migration-guides/release-5.x/5.0/bluetooth-low-energy.rst',
 ]
 
-
 BLE_MESH_DOCS = [
     'api-guides/esp-ble-mesh/ble-mesh-index.rst',
     'api-guides/esp-ble-mesh/ble-mesh-feature-list.rst',
@@ -62,6 +61,15 @@ BLE_MESH_DOCS = [
     'api-guides/esp-ble-mesh/ble-mesh-architecture.rst',
     'api-guides/esp-ble-mesh/ble-mesh-faq.rst',
     'api-reference/bluetooth/esp-ble-mesh.rst',
+]
+
+BLE_ISO_DOCS = [
+    'api-reference/bluetooth/esp-ble-iso.rst',
+]
+
+BLE_AUDIO_DOCS = [
+    'api-reference/bluetooth/esp-ble-audio.rst',
+    'api-guides/ble/ble-audio.rst',
 ]
 
 CLASSIC_BT_DOCS = [
@@ -330,6 +338,8 @@ ESP32H4_DOCS = [
 
 ESP32S31_DOCS = [
     'api-reference/system/ipc.rst',
+    'api-guides/RF_calibration.rst',
+    'api-guides/phy.rst',
 ]
 
 ESP32P4_DOCS = [
@@ -343,6 +353,8 @@ conditional_include_dict = {
     'SOC_BT_SUPPORTED': BT_DOCS,
     'SOC_BLE_SUPPORTED': BLE_DOCS,
     'SOC_BLE_MESH_SUPPORTED': BLE_MESH_DOCS,
+    'SOC_BLE_ISO_SUPPORTED': BLE_ISO_DOCS,
+    'SOC_BLE_AUDIO_SUPPORTED': BLE_AUDIO_DOCS,
     'SOC_BLUFI_SUPPORTED': BLUFI_DOCS,
     'SOC_WIFI_SUPPORTED': WIFI_DOCS,
     'SOC_BT_CLASSIC_SUPPORTED': CLASSIC_BT_DOCS,
@@ -449,12 +461,11 @@ github_repo = 'espressif/esp-idf'
 html_context['github_user'] = 'espressif'  # noqa: F405
 html_context['github_repo'] = 'esp-idf'  # noqa: F405
 
-
 # Extra options required by sphinx_idf_theme
 project_slug = 'esp-idf'
 versions_url = 'https://dl.espressif.com/dl/esp-idf/idf_versions.js'
 
-idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2', 'esp32c5', 'esp32c6', 'esp32p4']
+idf_targets = ['esp32', 'esp32s2', 'esp32s3', 'esp32s31', 'esp32c3', 'esp32c2', 'esp32c5', 'esp32c6', 'esp32p4']
 languages = ['en', 'zh_CN']
 
 google_analytics_id = os.environ.get('CI_GOOGLE_ANALYTICS_ID', None)

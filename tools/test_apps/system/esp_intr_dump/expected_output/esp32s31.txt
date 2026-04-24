@@ -27,7 +27,7 @@ CPU 0 interrupt status:
  24     *      *    Reserved
  25     *      *    Reserved
  26     *      *    Free
- 27     *      *    Free
+ 27     *      *    Reserved
  28     *      *    Reserved
  29     *      *    Free
  30     *      *    Free
@@ -61,10 +61,10 @@ CPU 1 interrupt status:
  24     *      *    Reserved
  25     *      *    Reserved
  26     *      *    Free
- 27     *      *    Free
+ 27     *      *    Reserved
  28     *      *    Reserved
  29     *      *    Free
  30     *      *    Free
  31     *      *    Free
-Interrupts available for general use: 48
+Interrupts available for general use: 46
 Shared interrupts: 0

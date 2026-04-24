@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import os
+import time
 
 import pytest
 from common_test_methods import get_env_config_variable
@@ -32,7 +33,16 @@ class WsClient:
         self.uri = uri
 
     def __enter__(self):  # type: ignore
-        self.ws.connect(f'ws://{self.ip}:{self.port}/{self.uri}')
+        url = f'ws://{self.ip}:{self.port}/{self.uri}'
+        for attempt in range(3):
+            try:
+                self.ws.connect(url)
+                return self
+            except (websocket.WebSocketBadStatusException, ConnectionRefusedError, TimeoutError, OSError) as e:
+                logging.warning('WS connect attempt %d/3 to %s failed: %s', attempt + 1, url, e)
+                if attempt == 2:
+                    raise
+                time.sleep(2)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
@@ -52,6 +62,29 @@ class WsClient:
         if opcode == OPCODE_PING:
             return self.ws.ping(data)
         return self.ws.send(data)
+
+
+def _wait_for_server_ready(dut: Dut) -> tuple:
+    """Wait for the WS server to be fully ready with all URI handlers registered."""
+    if dut.app.sdkconfig.get('EXAMPLE_WIFI_SSID_PWD_FROM_STDIN') is True:
+        dut.expect('Please input ssid password:')
+        env_name = 'wifi_router'
+        ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
+        ap_password = get_env_config_variable(env_name, 'ap_password')
+        dut.write(f'{ap_ssid} {ap_password}')
+    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
+    got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
+
+    # Wait for all URI handlers to be registered before connecting.
+    # URI handlers (/ws, /ws_partial, /auth) are registered asynchronously
+    # after the server starts, taking 40-660ms depending on config and load.
+    # Connecting before registration completes causes 404 Not Found errors.
+    dut.expect('Returned from app_main()', timeout=30)
+    time.sleep(1)
+
+    logging.info(f'Got IP   : {got_ip}')
+    logging.info(f'Got Port : {got_port}')
+    return got_ip, int(got_port)
 
 
 @pytest.mark.wifi_router
@@ -74,23 +107,12 @@ def test_examples_protocol_http_ws_echo_server(dut: Dut) -> None:
     logging.info(f'http_ws_server_bin_size : {bin_size // 1024}KB')
 
     logging.info('Starting ws-echo-server test app based on http_server')
-
-    # Parse IP address of STA
     logging.info('Waiting to connect with AP')
-    if dut.app.sdkconfig.get('EXAMPLE_WIFI_SSID_PWD_FROM_STDIN') is True:
-        dut.expect('Please input ssid password:')
-        env_name = 'wifi_router'
-        ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
-        ap_password = get_env_config_variable(env_name, 'ap_password')
-        dut.write(f'{ap_ssid} {ap_password}')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
-    got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
 
-    logging.info(f'Got IP   : {got_ip}')
-    logging.info(f'Got Port : {got_port}')
+    got_ip, got_port = _wait_for_server_ready(dut)
 
     # Start ws server test
-    with WsClient(got_ip, int(got_port), uri='ws') as ws:
+    with WsClient(got_ip, got_port, uri='ws') as ws:
         DATA = 'Espressif'
         for expected_opcode in [OPCODE_TEXT, OPCODE_BIN, OPCODE_PING]:
             ws.write(data=DATA, opcode=expected_opcode)
@@ -165,27 +187,28 @@ def test_examples_protocol_http_ws_echo_server_partial(dut: Dut) -> None:
     logging.info(f'http_ws_server_bin_size : {bin_size // 1024}KB')
 
     logging.info('Starting ws-echo-server partial read test')
-
-    # Parse IP address of STA
     logging.info('Waiting to connect with AP')
-    if dut.app.sdkconfig.get('EXAMPLE_WIFI_SSID_PWD_FROM_STDIN') is True:
-        dut.expect('Please input ssid password:')
-        env_name = 'wifi_router'
-        ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
-        ap_password = get_env_config_variable(env_name, 'ap_password')
-        dut.write(f'{ap_ssid} {ap_password}')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
-    got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
 
-    logging.info(f'Got IP   : {got_ip}')
-    logging.info(f'Got Port : {got_port}')
+    got_ip, got_port = _wait_for_server_ready(dut)
 
     # Start ws server test with partial read endpoint
-    # Create a new websocket connection to the partial endpoint
+    # Create a new websocket connection with retry for the partial endpoint
     ws_partial = websocket.WebSocket()
     ws_partial.settimeout(10)
     try:
-        ws_partial.connect(f'ws://{got_ip}:{int(got_port)}/ws_partial')
+        # Retry connection to handle the race where /ws_partial URI handler
+        # may not be registered yet when we connect
+        for attempt in range(3):
+            try:
+                ws_partial.connect(f'ws://{got_ip}:{got_port}/ws_partial')
+                break
+            except (websocket.WebSocketBadStatusException, ConnectionRefusedError, TimeoutError, OSError) as e:
+                logging.warning('WS partial connect attempt %d/3 failed: %s', attempt + 1, e)
+                if attempt == 2:
+                    raise
+                ws_partial = websocket.WebSocket()
+                ws_partial.settimeout(10)
+                time.sleep(2)
 
         # Create a large message (200 bytes) to force multiple partial reads
         # The server uses 64-byte chunks, so this will require at least 4 reads
@@ -244,21 +267,12 @@ def test_ws_auth_handshake(dut: Dut) -> None:
     Tests mbedTLS crypto backend.
     """
     # Wait for device to connect and start server
-    if dut.app.sdkconfig.get('EXAMPLE_WIFI_SSID_PWD_FROM_STDIN') is True:
-        dut.expect('Please input ssid password:')
-        env_name = 'wifi_router'
-        ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
-        ap_password = get_env_config_variable(env_name, 'ap_password')
-        dut.write(f'{ap_ssid} {ap_password}')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60)[1].decode()
-    got_port = dut.expect(r"Starting server on port: '(\d+)'", timeout=30)[1].decode()
-    # Prepare a minimal WebSocket handshake request
-    # Use WSClient to attempt the handshake, expecting it to fail (handshake rejected)
+    got_ip, got_port = _wait_for_server_ready(dut)
 
     handshake_success = False
     try:
         # Attempt to use WSClient, expecting it to fail handshake
-        with WsClient(got_ip, int(got_port), uri='auth?token=invalid') as ws:  # type: ignore  # noqa: F841
+        with WsClient(got_ip, got_port, uri='auth?token=invalid') as ws:  # type: ignore  # noqa: F841
             handshake_success = True
     except Exception as e:
         logging.info(f'WebSocket handshake failed: {e}')
@@ -269,7 +283,7 @@ def test_ws_auth_handshake(dut: Dut) -> None:
 
     try:
         # Attempt to use WSClient, expecting it to succeed handshake
-        with WsClient(got_ip, int(got_port), uri='auth?token=valid') as ws:  # type: ignore  # noqa: F841
+        with WsClient(got_ip, got_port, uri='auth?token=valid') as ws:  # type: ignore  # noqa: F841
             handshake_success = True
             dut.expect(r'ws_pre_handshake_cb called', timeout=10)
             dut.expect(r'Valid token found, accepting handshake', timeout=10)

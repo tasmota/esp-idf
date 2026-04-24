@@ -24,8 +24,11 @@ GATT_CI_CONFIGS = ['name', 'smp_off|smp_off', 'min_bin|min_bin', 'log_off|log_of
     indirect=True,
 )
 @idf_parametrize(
-    'target', ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'], indirect=['target']
+    'target',
+    ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'],
+    indirect=['target'],
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='lack of runner')
 def test_gatt_func(app_path: str, dut: tuple[IdfDut, IdfDut]) -> None:
     gatt_client = dut[1]
     gatt_server = dut[0]
@@ -119,8 +122,11 @@ GATT_SECURITY_CI_CONFIGS = ['name', 'min_bin|min_bin', 'log_off|log_off']
     indirect=True,
 )
 @idf_parametrize(
-    'target', ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'], indirect=['target']
+    'target',
+    ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'],
+    indirect=['target'],
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='lack of runner')
 def test_gatt_security_func(app_path: str, dut: tuple[IdfDut, IdfDut], target: tuple) -> None:
     gatt_security_client = dut[1]
     gatt_security_server = dut[0]
@@ -248,8 +254,11 @@ def test_c2_26mhz_xtal_gatt_security_func(app_path: str, dut: tuple[IdfDut, IdfD
     indirect=True,
 )
 @idf_parametrize(
-    'target', ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'], indirect=['target']
+    'target',
+    ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'],
+    indirect=['target'],
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='lack of runner')
 def test_ble_ibeacon_func(app_path: str, dut: tuple[IdfDut, IdfDut]) -> None:
     ibeacon_sender = dut[0]
     ibeacon_receiver = dut[1]
@@ -325,8 +334,11 @@ def test_c2_26mhz_ble_ibeacon_func(app_path: str, dut: tuple[IdfDut, IdfDut]) ->
     indirect=True,
 )
 @idf_parametrize(
-    'target', ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'], indirect=['target']
+    'target',
+    ['esp32', 'esp32c3', 'esp32c6', 'esp32c5', 'esp32h2', 'esp32s3', 'esp32c61'],
+    indirect=['target'],
 )
+@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='lack of runner')
 def test_gatt_config_func(app_path: str, dut: tuple[IdfDut, IdfDut]) -> None:
     gatt_client = dut[1]
     gatt_server = dut[0]

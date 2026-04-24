@@ -13,7 +13,13 @@
 #include "ble_log_rt.h"
 
 #if CONFIG_SOC_ESP_NIMBLE_CONTROLLER
+#if CONFIG_BT_DUAL_MODE_ARCH
+#include "ble_mbuf.h"
+#define BLE_MBUF_COPY(buf, off, len, dst) ble_mbuf_copydata((struct ble_mbuf *)(buf), off, len, dst)
+#else
 #include "os/os_mbuf.h"
+#define BLE_MBUF_COPY(buf, off, len, dst) os_mbuf_copydata((struct os_mbuf *)(buf), off, len, dst)
+#endif // CONFIG_BT_DUAL_MODE_ARCH
 #endif /* CONFIG_SOC_ESP_NIMBLE_CONTROLLER */
 
 /* VARIABLE */
@@ -133,8 +139,7 @@ void ble_log_lbm_write_trans(ble_log_prph_trans_t **trans, ble_log_src_t src_cod
     if (len_append) {
 #if CONFIG_SOC_ESP_NIMBLE_CONTROLLER
         if (omdata) {
-            os_mbuf_copydata((struct os_mbuf *)addr_append, 0,
-                             len_append, buf + BLE_LOG_FRAME_HEAD_LEN + len);
+            BLE_MBUF_COPY(addr_append, 0, len_append, buf + BLE_LOG_FRAME_HEAD_LEN + len);
         }
         else
 #endif /* CONFIG_SOC_ESP_NIMBLE_CONTROLLER */
@@ -195,11 +200,11 @@ void ble_log_stat_mgr_update(ble_log_src_t src_code, uint32_t len, bool lost)
     uint32_t bytes_cnt = len + BLE_LOG_FRAME_OVERHEAD;
     if (lost) {
         BLE_LOG_GET_FRAME_SN(&(stat_mgr->frame_sn));  /* consume SN for loss detection */
-        stat_mgr->lost_frame_cnt++;
-        stat_mgr->lost_bytes_cnt += bytes_cnt;
+        __atomic_fetch_add(&stat_mgr->lost_frame_cnt, 1, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&stat_mgr->lost_bytes_cnt, bytes_cnt, __ATOMIC_RELAXED);
     } else {
-        stat_mgr->written_frame_cnt++;
-        stat_mgr->written_bytes_cnt += bytes_cnt;
+        __atomic_fetch_add(&stat_mgr->written_frame_cnt, 1, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&stat_mgr->written_bytes_cnt, bytes_cnt, __ATOMIC_RELAXED);
     }
 }
 
@@ -290,7 +295,7 @@ void ble_log_lbm_deinit(void)
 
     /* Disable module and wait for all references to be released */
     uint32_t time_waited = 0;
-    while (lbm_ref_count > 0) {
+    while (__atomic_load_n(&lbm_ref_count, __ATOMIC_ACQUIRE) > 0) {
         vTaskDelay(pdMS_TO_TICKS(1));
         BLE_LOG_ASSERT(time_waited++ < 1000);
     }
@@ -515,6 +520,14 @@ bool ble_log_enable(bool enable)
 
 void ble_log_flush(void)
 {
+    /* Prevent concurrent flush — two concurrent callers would deadlock on
+     * the ref_count spin-wait (both hold a ref, both wait for ref_count <= 1).
+     * Second caller returns immediately instead of deadlocking. */
+    static volatile bool flush_in_progress = false;
+    if (__atomic_test_and_set(&flush_in_progress, __ATOMIC_ACQUIRE)) {
+        return;
+    }
+
     BLE_LOG_REF_COUNT_ACQUIRE(&lbm_ref_count);
     if (!lbm_inited) {
         goto deref;
@@ -535,7 +548,7 @@ void ble_log_flush(void)
     bool lbm_enabled_copy = lbm_enabled;
     lbm_enabled = false;
     uint32_t time_waited = 0;
-    while (lbm_ref_count > 1) {
+    while (__atomic_load_n(&lbm_ref_count, __ATOMIC_ACQUIRE) > 1) {
         vTaskDelay(pdMS_TO_TICKS(1));
         BLE_LOG_ASSERT(time_waited++ < 1000);
     }
@@ -593,6 +606,7 @@ void ble_log_flush(void)
 
 deref:
     BLE_LOG_REF_COUNT_RELEASE(&lbm_ref_count);
+    __atomic_clear(&flush_in_progress, __ATOMIC_RELEASE);
 }
 
 BLE_LOG_IRAM_ATTR

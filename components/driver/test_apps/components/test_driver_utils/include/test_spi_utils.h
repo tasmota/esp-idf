@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -68,13 +68,12 @@
 #define SLAVE_IOMUX_PIN_WP      SPI3_IOMUX_PIN_NUM_WP
 #define SLAVE_IOMUX_PIN_HD      SPI3_IOMUX_PIN_NUM_HD
 
-#define UNCONNECTED_PIN         27
 #define INPUT_ONLY_PIN          34
 #define GPIO_DELAY              (12.5*2)
 #define ESP_SPI_SLAVE_TV        (12.5*3.5)
 #define WIRE_DELAY              12.5
 
-#elif CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32H4
+#else   // CONFIG_IDF_TARGET_ESP32
 #define SLAVE_IOMUX_PIN_MISO    -1
 #define SLAVE_IOMUX_PIN_MOSI    -1
 #define SLAVE_IOMUX_PIN_SCLK    -1
@@ -82,24 +81,13 @@
 #define SLAVE_IOMUX_PIN_WP      -1
 #define SLAVE_IOMUX_PIN_HD      -1
 
-#if CONFIG_IDF_TARGET_ESP32H4
-#define UNCONNECTED_PIN         27
-#else
-#define UNCONNECTED_PIN         41
-#endif
 #define INPUT_ONLY_PIN          46
-#define GPIO_DELAY              0
-#define ESP_SPI_SLAVE_TV        0
-#define WIRE_DELAY              12.5
-
-#else
-#define UNCONNECTED_PIN         8
 #define GPIO_DELAY              0
 #define ESP_SPI_SLAVE_TV        0
 #define WIRE_DELAY              12.5
 #endif  //CONFIG_IDF_TARGET_ESP32
 
-#define FUNC_SPI    SPI2_FUNC_NUM
+#define FUNC_SPI    SPI2_FUNC_NUM_QUAD
 #define FUNC_GPIO   PIN_FUNC_GPIO
 
 //Delay information

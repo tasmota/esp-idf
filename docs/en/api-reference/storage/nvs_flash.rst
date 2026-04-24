@@ -35,6 +35,7 @@ NVS operates on key-value pairs. Keys are ASCII strings; the maximum key length 
 -  integer types: ``uint8_t``, ``int8_t``, ``uint16_t``, ``int16_t``, ``uint32_t``, ``int32_t``, ``uint64_t``, ``int64_t``
 -  zero-terminated string
 -  variable length binary data (blob)
+-  floating point types: ``float`` and ``double``
 
 .. note::
 
@@ -48,7 +49,9 @@ NVS operates on key-value pairs. Keys are ASCII strings; the maximum key length 
 
     Before setting new or updating existing key-value pair, free entries in nvs pages have to be available. For integer types, at least one free entry has to be available. For the string value, at least one page capable of keeping the whole string in a contiguous row of free entries has to be available. For the blob value, the size of new data has to be available in free entries.
 
-Additional data types, such as ``float`` and ``double`` might be added later.
+.. note::
+
+    The floating point types ``float`` and ``double`` are supported regardless of the FPU presence on a particular SoC.
 
 Keys are required to be unique. Assigning a new value to an existing key replaces the old value and data type with the value and data type specified by a write operation.
 

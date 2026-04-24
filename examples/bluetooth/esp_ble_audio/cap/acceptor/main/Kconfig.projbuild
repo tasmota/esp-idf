@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2022 Nordic Semiconductor ASA
+# SPDX-FileContributor: 2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Example: CAP Acceptor"
+
+    choice EXAMPLE_CAP_ACCEPTOR_MODE
+        prompt "CAP Acceptor mode"
+        default EXAMPLE_UNICAST
+        help
+            Select exactly one CAP acceptor mode.
+
+        config EXAMPLE_UNICAST
+            bool "Unicast"
+            help
+                If selected, the sample will start advertising connectable
+                for Broadcast Assistants.
+
+        config EXAMPLE_BROADCAST
+            bool "Broadcast"
+            help
+                If selected, the sample will start advertising syncable
+                audio streams.
+
+    endchoice
+
+    if EXAMPLE_BROADCAST
+        config EXAMPLE_SCAN_SELF
+            bool "Scan for Broadcast Sources without Broadcast Assistant"
+            help
+                If set to true, the sample will start scanning for Broadcast
+                Sources without waiting for a Broadcast Assistant to connect.
+    endif
+
+endmenu

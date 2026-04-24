@@ -1,7 +1,7 @@
 .pre_check_template:
   stage: pre_check
   image: $ESP_ENV_IMAGE
-  tags: [build, shiny]
+  tags: [fast_run, shiny]
   dependencies: # set dependencies to null to avoid missing artifacts issue
 
 check_version:
@@ -133,27 +133,6 @@ check_test_scripts_build_test_rules:
     # requires basic pytest dependencies
     - python tools/ci/check_build_test_rules.py check-test-scripts examples/ tools/test_apps components
 
-check_submodule_sync:
-  extends:
-    - .pre_check_template
-    - .rules:test:submodule
-  tags: [ brew, github_sync ]
-  retry: 2
-  variables:
-    GIT_STRATEGY: fetch  # use brew local mirror first
-    SUBMODULES_TO_FETCH: "none"
-    PUBLIC_IDF_URL: "https://github.com/espressif/esp-idf.git"
-  script:
-    - git submodule deinit --force .
-    - rm -rf .git/modules  # remove all the cached metadata
-    # setting the default remote URL to the public one, to resolve relative location URLs
-    - git config remote.origin.url ${PUBLIC_IDF_URL}
-    # check if all submodules are correctly synced to public repository
-    - git submodule init
-    - git config --get-regexp '^submodule\..*\.url$' || true
-    - git submodule update --recursive
-    - echo "IDF was cloned from ${PUBLIC_IDF_URL} completely"
-
 
 snapshot_known_failure_cases:
   extends:
@@ -173,7 +152,6 @@ baseline_manifest_sha:
   extends:
     - .pre_check_template
     - .rules:dev-push
-  tags: [fast_run, shiny]
   script:
     - |
       # merged results pipelines, by default
@@ -205,7 +183,6 @@ retry_failed_jobs:
   extends:
     - .pre_check_template
     - .rules:dev-push
-  tags: [shiny, fast_run]
   allow_failure: true
   script:
     - echo "Retrieving and retrying all failed jobs for the pipeline..."

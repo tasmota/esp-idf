@@ -137,12 +137,7 @@ tools/test_apps/system/no_embedded_paths:
 
 tools/test_apps/system/panic:
   enable:
-    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32p4"] # preview targets
-  disable:
-    - if: IDF_TARGET == "esp32p4" # TODO: IDF-14348
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: cannot pass build because flash encryption is not supported yet # TODO: [ESP32S31] IDF-14628
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32s31"]
 
 tools/test_apps/system/ram_loadable_app:
   disable:

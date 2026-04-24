@@ -24,10 +24,11 @@
 #include "bootloader_flash.h"
 #include "esp_check.h"
 #include "esp_private/esp_clk_tree_common.h"
-#include "clk_ctrl_os.h"
+#include "esp_clk_tree.h"
 #include "soc/soc_caps.h"
 #include "hal/spi_flash_hal.h"
 #include "hal/mspi_ll.h"
+#include "hal/spi_ll.h"
 
 #include "esp_flash.h"
 #include "esp_flash_spi_init.h"
@@ -240,7 +241,7 @@ static esp_err_t acquire_spi_device(const esp_flash_spi_device_config_t *config,
         }
     } else {
         const bool is_main_flash = (config->host_id == SPI1_HOST && config->cs_id == 0);
-        if (config->cs_id >= SOC_SPI_PERIPH_CS_NUM(config->host_id) || config->cs_id < 0 || is_main_flash) {
+        if (config->cs_id >= SPI_LL_PERIPH_CS_NUM(config->host_id) || config->cs_id < 0 || is_main_flash) {
             ESP_LOGE(TAG, "Not valid CS.");
             ret = ESP_ERR_INVALID_ARG;
         } else {
@@ -286,9 +287,6 @@ static uint32_t init_gpspi_clock(esp_flash_t *chip, const esp_flash_spi_device_c
     uint32_t clk_src_freq = 0;
     spi_clock_source_t clk_src = config->clock_source ? config->clock_source : SPI_CLK_SRC_DEFAULT;
 
-    if ((soc_module_clk_t)clk_src == SOC_MOD_CLK_RC_FAST) {
-        periph_rtc_dig_clk8m_enable();
-    }
     esp_clk_tree_enable_src(clk_src, true);
     esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clk_src_freq);
 
@@ -355,11 +353,6 @@ static void deinit_gpspi_clock(esp_flash_t *chip)
 
     // Disable the clock source
     esp_clk_tree_enable_src(chip->clock_source, false);
-
-    // Disable RC_FAST clock if it was used
-    if ((soc_module_clk_t)chip->clock_source == SOC_MOD_CLK_RC_FAST) {
-        periph_rtc_dig_clk8m_disable();
-    }
 #endif // !CONFIG_IDF_TARGET_ESP32
 }
 

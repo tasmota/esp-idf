@@ -167,7 +167,9 @@
   - "components/bt/controller/lib_esp32c6/esp32c6-bt-lib"
   - "components/bt/controller/lib_esp32c5/esp32c5-bt-lib"
   - "components/bt/controller/lib_esp32h4/esp32h4-bt-lib"
+  - "components/bt/controller/lib_esp32s31/esp32s31-bt-lib"
   - "components/bt/esp_ble_mesh/lib/lib"
+  - "components/bt/esp_ble_audio/lib/lib"
   - ".gitmodules"
 
 ##############

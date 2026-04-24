@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -108,6 +108,8 @@ typedef enum {
     NVS_TYPE_I32   = 0x14,  /*!< Type int32_t */
     NVS_TYPE_U64   = 0x08,  /*!< Type uint64_t */
     NVS_TYPE_I64   = 0x18,  /*!< Type int64_t */
+    NVS_TYPE_FLOAT = 0x24,  /*!< Type float (IEEE 754 single precision) */
+    NVS_TYPE_DOUBLE = 0x28, /*!< Type double (IEEE 754 double precision) */
     NVS_TYPE_STR   = 0x21,  /*!< Type string */
     NVS_TYPE_BLOB  = 0x42,  /*!< Type blob */
     NVS_TYPE_ANY   = 0xff   /*!< Must be last */
@@ -278,6 +280,30 @@ esp_err_t nvs_set_i64 (nvs_handle_t handle, const char* key, int64_t value);
 esp_err_t nvs_set_u64 (nvs_handle_t handle, const char* key, uint64_t value);
 
 /**
+ * @brief      set float value for given key
+ *
+ * This function is the same as \c nvs_set_i8 except for the data type.
+ * The value must be a valid IEEE 754 float (NaN is rejected).
+ *
+ * @return
+ *             - ESP_ERR_INVALID_ARG if value is NaN
+ *             - For other return values, see \c nvs_set_i8
+ */
+esp_err_t nvs_set_float (nvs_handle_t handle, const char* key, float value);
+
+/**
+ * @brief      set double value for given key
+ *
+ * This function is the same as \c nvs_set_i8 except for the data type.
+ * The value must be a valid IEEE 754 double (NaN is rejected).
+ *
+ * @return
+ *             - ESP_ERR_INVALID_ARG if value is NaN
+ *             - For other return values, see \c nvs_set_i8
+ */
+esp_err_t nvs_set_double (nvs_handle_t handle, const char* key, double value);
+
+/**
  * @brief      set string for given key
  *
  * Sets string value for the key. Function requires whole space for new data to be available
@@ -435,6 +461,20 @@ esp_err_t nvs_get_i64 (nvs_handle_t handle, const char* key, int64_t* out_value)
  * This function is the same as \c nvs_get_i8 except for the data type.
  */
 esp_err_t nvs_get_u64 (nvs_handle_t handle, const char* key, uint64_t* out_value);
+
+/**
+ * @brief      get float value for given key
+ *
+ * This function is the same as \c nvs_get_i8 except for the data type.
+ */
+esp_err_t nvs_get_float (nvs_handle_t handle, const char* key, float* out_value);
+
+/**
+ * @brief      get double value for given key
+ *
+ * This function is the same as \c nvs_get_i8 except for the data type.
+ */
+esp_err_t nvs_get_double (nvs_handle_t handle, const char* key, double* out_value);
 /**@}*/
 
 /**@{*/

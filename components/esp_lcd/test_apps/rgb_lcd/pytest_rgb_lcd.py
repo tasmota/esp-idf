@@ -3,6 +3,7 @@
 import pytest
 from pytest_embedded import Dut
 from pytest_embedded_idf.utils import idf_parametrize
+from pytest_embedded_idf.utils import soc_filtered_targets
 
 
 @pytest.mark.octal_psram
@@ -50,8 +51,8 @@ def test_rgb_lcd_esp32s3_with_virt_flash_enc(dut: Dut) -> None:
     ],
     indirect=True,
 )
-@idf_parametrize('target', ['esp32p4'], indirect=['target'])
-def test_rgb_lcd_esp32p4(dut: Dut) -> None:
+@idf_parametrize('target', ['esp32p4', 'esp32s31'], indirect=['target'])
+def test_rgb_lcd(dut: Dut) -> None:
     dut.run_all_single_board_cases()
 
 
@@ -63,8 +64,12 @@ def test_rgb_lcd_esp32p4(dut: Dut) -> None:
     ],
     indirect=True,
 )
-@idf_parametrize('target', ['esp32p4'], indirect=['target'])
-def test_rgb_lcd_esp32p4_with_virt_flash_enc(dut: Dut) -> None:
+@idf_parametrize(
+    'target',
+    soc_filtered_targets('IDF_TARGET in ["esp32p4", "esp32s31"] and SOC_FLASH_ENC_SUPPORTED == 1'),
+    indirect=['target'],
+)
+def test_rgb_lcd_with_virt_flash_enc(dut: Dut) -> None:
     print(' - Erase flash')
     dut.serial.erase_flash()
 

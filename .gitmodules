@@ -149,3 +149,13 @@
 	path = components/bt/esp_ble_mesh/lib/lib
 	url = ../../espressif/esp-ble-mesh-lib.git
 	shallow = true
+
+[submodule "components/bt/esp_ble_audio/lib/lib"]
+	path = components/bt/esp_ble_audio/lib/lib
+	url = ../../espressif/esp-ble-audio-lib.git
+	shallow = true
+
+[submodule "components/bt/controller/lib_esp32s31/esp32s31-bt-lib"]
+	path = components/bt/controller/lib_esp32s31/esp32s31-bt-lib
+	url = ../../espressif/esp32s31-bt-lib.git
+	shallow = true

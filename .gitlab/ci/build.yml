@@ -110,6 +110,18 @@ build_clang_test_apps_riscv:
 ####################
 # Dynamic Pipeline #
 ####################
+pre_check_complete:
+  stage: build
+  image: $ESP_ENV_IMAGE
+  tags: [fast_run, shiny]
+  variables:
+    GIT_STRATEGY: none
+  cache: []
+  before_script: []
+  dependencies: []
+  script:
+    - echo "pre_check stage completed"
+
 generate_build_child_pipeline:
   extends:
     - .build_template
@@ -117,6 +129,8 @@ generate_build_child_pipeline:
   dependencies: # set dependencies to null to avoid missing artifacts issue
   needs:
     - pipeline_variables
+    - job: pre_check_complete
+      artifacts: false
     - job: baseline_manifest_sha
       optional: true
   artifacts:

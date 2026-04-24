@@ -33,7 +33,8 @@ idf_check_binary_size(${CMAKE_PROJECT_NAME}_binary)
 # Create app target
 add_custom_target(app ALL DEPENDS ${CMAKE_PROJECT_NAME}_binary)
 
-# Generate metadata
+# Generate flasher_args.json and metadata
+idf_build_generate_flasher_args()
 idf_build_generate_metadata(BINARY ${CMAKE_PROJECT_NAME}_binary)
 
 # Create utility targets for configuration

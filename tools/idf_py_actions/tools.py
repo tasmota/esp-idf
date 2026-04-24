@@ -76,7 +76,7 @@ def executable_exists(args: list) -> bool:
         return False
 
 
-def _idf_version_from_cmake() -> str | None:
+def idf_version_from_cmake() -> str | None:
     """Acquires version of ESP-IDF from version.cmake"""
     version_path = os.path.join(os.environ['IDF_PATH'], 'tools/cmake/version.cmake')
     regex = re.compile(r'^\s*set\s*\(\s*IDF_VERSION_([A-Z]{5})\s+(\d+)')
@@ -124,7 +124,7 @@ def idf_version() -> str | None:
     except Exception:
         # if failed, then try to parse cmake.version file
         sys.stderr.write('WARNING: Git version unavailable, reading from source\n')
-        version = _idf_version_from_cmake()
+        version = idf_version_from_cmake()
 
     return version
 
@@ -592,7 +592,20 @@ def run_target(
     if env is None:
         env = {}
 
-    generator_cmd = GENERATORS[args.generator]['command']
+    generator_cmd = list(GENERATORS[args.generator]['command'])
+
+    if args.generator == 'Ninja':
+        parallel_level = os.environ.get('IDF_PY_BUILD_JOBS')
+        if parallel_level:
+            try:
+                jobs = int(parallel_level)
+            except ValueError as e:
+                raise FatalError('Environment variable IDF_PY_BUILD_JOBS must be a positive integer') from e
+
+            if jobs <= 0:
+                raise FatalError('Environment variable IDF_PY_BUILD_JOBS must be a positive integer')
+
+            generator_cmd += ['-j', str(jobs)]
 
     if args.verbose:
         generator_cmd += [GENERATORS[args.generator]['verbose_flag']]

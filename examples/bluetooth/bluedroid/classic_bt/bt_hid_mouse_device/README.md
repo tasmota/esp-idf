@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 |
-| ----------------- | ----- |
+| Supported Targets | ESP32 | ESP32-S31 |
+| ----------------- | ----- | --------- |
 
 # Bluetooth HID Device example
 
@@ -178,7 +178,7 @@ void app_main(void) {
 }
 ```
 
-Report Mode can be choosen by remote HID Host through the SET_PROTOCOL request:
+Report Mode can be chosen by remote HID Host through the SET_PROTOCOL request:
 
 ```
 void esp_bt_hidd_cb(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param)

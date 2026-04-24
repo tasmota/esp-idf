@@ -22,6 +22,7 @@
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
 #include "soc/io_mux_reg.h"
+#include "hal/spi_ll.h"
 #include "sdkconfig.h"
 
 #include "esp_spi_flash_counters.h"
@@ -614,7 +615,7 @@ void test_permutations_part(const flashtest_config_t* config, esp_partition_t* p
             //the io mode will switch frequently.
             esp_flash_io_mode_t io_mode = SPI_FLASH_READ_MODE_MIN;
             while (io_mode != SPI_FLASH_QIO + 1) {
-                if (io_mode > SPI_FLASH_FASTRD && (SOC_SPI_MAX_BITWIDTH(config->host_id) < 2)) {
+                if (io_mode > SPI_FLASH_FASTRD && (SPI_LL_PERIPH_BITWIDTH(config->host_id) < 2)) {
                     io_mode++;
                     continue;
                 }
@@ -1112,6 +1113,7 @@ void test_flash_counter(const esp_partition_t* part)
     // check for resset_counter after used
     TEST_ASSERT_EACH_EQUAL_HEX8(0, &flash_counter, sizeof(esp_flash_counters_t));
 
+#if SOC_FLASH_ENC_SUPPORTED
     TEST_ASSERT_EQUAL(ESP_OK, esp_flash_write_encrypted(chip, offs, write_buf, TEST_CNT_RW_LEN) );
     TEST_ASSERT_EQUAL(ESP_OK, esp_flash_read_encrypted(chip, offs, read_buf, TEST_CNT_RW_LEN) );
 
@@ -1126,6 +1128,7 @@ void test_flash_counter(const esp_partition_t* part)
     TEST_ASSERT_EQUAL_UINT32(1 * TEST_CNT_RW_LEN, flash_counter.read.bytes);
     TEST_ASSERT_EQUAL_UINT32(1 * TEST_CNT_RW_LEN, flash_counter.write.bytes);
     TEST_ASSERT_EQUAL_UINT32(0, flash_counter.erase.bytes);
+#endif //SOC_FLASH_ENC_SUPPORTED
 }
 
 TEST_CASE_FLASH("SPI flash counter test", test_flash_counter);

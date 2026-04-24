@@ -6,8 +6,9 @@ Wi-Fi 场景下低功耗模式介绍
 本节将结合纯系统下的功耗模式来介绍 Wi-Fi 场景下的低功耗模式。因为 Wi-Fi 场景的复杂性，本节会首先介绍 Wi-Fi 省电的基本原理，然后再介绍具体的低功耗模式。本节主要针对 station 模式。
 
 .. todo - add sleep-current/esp32c61_summary.inc
+.. todo - add sleep-current/esp32s31_summary.inc
 
-.. only:: not esp32c61
+.. only:: not esp32c61 and not esp32s31
 
   Wi-Fi 场景如何选择低功耗模式
   --------------------------------------
@@ -364,8 +365,9 @@ Modem-sleep 模式配置
           - false
 
     .. todo - add sleep-current/esp32c61_modem_sleep.inc
+    .. todo - add sleep-current/esp32s31_modem_sleep.inc
 
-    .. only:: not esp32c61
+    .. only:: not esp32c61 and not esp32s31
 
       - 配置表现
 
@@ -378,8 +380,9 @@ Auto Light-sleep 模式 + Wi-Fi 场景配置
 Auto Light-sleep 在 Wi-Fi 场景下的配置比纯系统下少了唤醒源的配置要求，其余几乎与纯系统下配置一致，因此可配置选项、配置步骤、推荐配置的详细介绍可以参考上文 :ref:`Deep-sleep 模式`。同时 Wi-Fi 相关配置保持默认。
 
 .. todo - add sleep-current/esp32c61_light_sleep.inc
+.. todo - add sleep-current/esp32s31_light_sleep.inc
 
-.. only:: not esp32c61
+.. only:: not esp32c61 and not esp32s31
 
   - 配置表现
 

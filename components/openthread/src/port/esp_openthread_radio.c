@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -84,6 +84,11 @@ static uint8_t s_key_id;
 static struct otMacKeyMaterial s_pervious_key;
 static struct otMacKeyMaterial s_current_key;
 static struct otMacKeyMaterial s_next_key;
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+static uint8_t s_pervious_key_bytes[16];
+static uint8_t s_current_key_bytes[16];
+static uint8_t s_next_key_bytes[16];
+#endif
 static bool s_with_security_enh_ack = false;
 static uint32_t s_ack_frame_counter;
 static uint8_t s_ack_key_id;
@@ -93,8 +98,16 @@ static uint8_t s_security_addr[8];
 static void ot_set_security_key_from_key_material(struct otMacKeyMaterial a_key_material)
 {
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
-    size_t keyLength = 0;
-    psa_export_key(a_key_material.mKeyMaterial.mKeyRef, s_security_key, 16, &keyLength);
+    /* Key bytes are pre-exported in task context (otPlatRadioSetMacKey).
+     * Identify which cached buffer to use by comparing the key reference.
+     * Jira TZ-2472 */
+    if (a_key_material.mKeyMaterial.mKeyRef == s_pervious_key.mKeyMaterial.mKeyRef) {
+        memcpy(s_security_key, s_pervious_key_bytes, 16);
+    } else if (a_key_material.mKeyMaterial.mKeyRef == s_next_key.mKeyMaterial.mKeyRef) {
+        memcpy(s_security_key, s_next_key_bytes, 16);
+    } else {
+        memcpy(s_security_key, s_current_key_bytes, 16);
+    }
 #else
     memcpy(s_security_key, a_key_material.mKeyMaterial.mKey.m8, sizeof(a_key_material.mKeyMaterial.mKey.m8));
 #endif
@@ -509,8 +522,16 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKe
 
     s_key_id = aKeyId;
     s_pervious_key = *aPrevKey;
-    s_current_key = *aCurrKey;
-    s_next_key = *aNextKey;
+    s_current_key  = *aCurrKey;
+    s_next_key     = *aNextKey;
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    /* Pre-export raw key bytes in task context to avoid calling psa_export_key()
+     * from ISR context (enh_ack_generator), which would attempt to take a mutex. */
+    size_t keyLength = 0;
+    psa_export_key(aPrevKey->mKeyMaterial.mKeyRef, s_pervious_key_bytes, 16, &keyLength);
+    psa_export_key(aCurrKey->mKeyMaterial.mKeyRef, s_current_key_bytes,  16, &keyLength);
+    psa_export_key(aNextKey->mKeyMaterial.mKeyRef, s_next_key_bytes,     16, &keyLength);
+#endif
 }
 
 void otPlatRadioSetMacFrameCounter(otInstance *aInstance, uint32_t aMacFrameCounter)

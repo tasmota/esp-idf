@@ -36,7 +36,7 @@ variables:
   # --prune --prune-tags: in case remote branch or tag is force pushed
   GIT_FETCH_EXTRA_FLAGS: "--no-recurse-submodules --prune --prune-tags"
 
-  LATEST_GIT_TAG: v6.0
+  LATEST_GIT_TAG: v6.0.1
 
   SUBMODULE_FETCH_TOOL: "tools/ci/ci_fetch_submodule.py"
   # by default we will fetch all submodules
@@ -87,6 +87,7 @@ variables:
 
   IDF_CI_BUILD: 1
 
+  PYTHONWARNINGS: "ignore"
   # ccache settings
   # some settings need to set in .gitlab-ci.yml as it takes effect while start-up the job
   # https://ccache.dev/manual/latest.html#_configuring_ccache

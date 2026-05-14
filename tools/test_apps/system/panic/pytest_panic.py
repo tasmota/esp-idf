@@ -16,7 +16,7 @@ TARGETS_XTENSA_DUAL_CORE = ['esp32', 'esp32s3']
 TARGETS_XTENSA = TARGETS_XTENSA_SINGLE_CORE + TARGETS_XTENSA_DUAL_CORE
 
 TARGETS_RISCV_SINGLE_CORE = ['esp32c2', 'esp32c3', 'esp32c5', 'esp32c6', 'esp32h2', 'esp32c61']
-TARGETS_RISCV_DUAL_CORE = ['esp32p4', 'esp32s31']
+TARGETS_RISCV_DUAL_CORE = ['esp32p4', 'esp32s31', 'esp32h4']
 TARGETS_RISCV_TARGETS = TARGETS_RISCV_SINGLE_CORE + TARGETS_RISCV_DUAL_CORE
 
 TARGETS_RISCV = TARGETS_RISCV_SINGLE_CORE + TARGETS_RISCV_DUAL_CORE
@@ -66,6 +66,7 @@ CONFIG_PANIC = list(
                 'esp32s2',
                 'esp32s3',
                 'esp32p4',
+                'esp32h4',
                 'esp32c5',
                 'esp32c6',
                 'esp32c61',

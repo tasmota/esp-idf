@@ -23,7 +23,9 @@ def _run_non_recoverable_case(dut: IdfDut, test_name: str, expected_reason: str)
 @pytest.mark.generic
 @idf_parametrize(
     'config,target',
-    [('default', 'supported_targets')],
+    [
+        ('default', 'supported_targets'),
+    ],
     indirect=['config', 'target'],
 )
 def test_cpu(dut: IdfDut) -> None:
@@ -33,7 +35,9 @@ def test_cpu(dut: IdfDut) -> None:
 @pytest.mark.generic
 @idf_parametrize(
     'config,target',
-    [('default', 'supported_targets')],
+    [
+        ('default', 'supported_targets'),
+    ],
     indirect=['config', 'target'],
 )
 def test_cpu_reset(dut: IdfDut) -> None:
@@ -43,7 +47,9 @@ def test_cpu_reset(dut: IdfDut) -> None:
 @pytest.mark.generic
 @idf_parametrize(
     'config,target',
-    [('default', 'supported_targets')],
+    [
+        ('default', 'supported_targets'),
+    ],
     indirect=['config', 'target'],
 )
 def test_cpu_non_recoverable(dut: IdfDut) -> None:

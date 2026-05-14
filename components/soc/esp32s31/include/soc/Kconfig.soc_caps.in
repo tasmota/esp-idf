@@ -163,6 +163,10 @@ config SOC_ECC_EXTENDED_MODES_SUPPORTED
     bool
     default y
 
+config SOC_BOD_SUPPORTED
+    bool
+    default y
+
 config SOC_PAU_SUPPORTED
     bool
     default y
@@ -232,6 +236,10 @@ config SOC_SPI_FLASH_HAS_DEDICATED_LDO
     default y
 
 config SOC_TOUCH_SENSOR_SUPPORTED
+    bool
+    default y
+
+config SOC_RNG_SUPPORTED
     bool
     default y
 
@@ -755,6 +763,10 @@ config SOC_TIMER_SUPPORT_ETM
     bool
     default y
 
+config SOC_TIMER_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_MWDT_SUPPORT_XTAL
     bool
     default y
@@ -914,6 +926,14 @@ config SOC_FLASH_ENCRYPTION_XTS_AES
 config SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX
     int
     default 64
+
+config SOC_RECOVERY_BOOTLOADER_SUPPORTED
+    bool
+    default y
+
+config SOC_BOOTLOADER_ANTI_ROLLBACK_SUPPORTED
+    bool
+    default y
 
 config SOC_UART_NUM
     int
@@ -1207,7 +1227,15 @@ config SOC_LP_CORE_CONFIGURABLE_BOOT_ADDR
     bool
     default y
 
+config SOC_LP_CORE_SUPPORT_I2C
+    bool
+    default y
+
 config SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
+    bool
+    default y
+
+config SOC_LP_CORE_HAS_PMP
     bool
     default y
 
@@ -1236,6 +1264,10 @@ config SOC_MCPWM_SUPPORT_EVENT_COMPARATOR
     default y
 
 config SOC_MCPWM_CAPTURE_CLK_FROM_GROUP
+    bool
+    default y
+
+config SOC_MCPWM_SUPPORT_SLEEP_RETENTION
     bool
     default y
 

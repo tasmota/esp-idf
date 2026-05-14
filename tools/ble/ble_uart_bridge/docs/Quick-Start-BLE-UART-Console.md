@@ -21,7 +21,7 @@ The Console is useful when you want to type data into a BLE UART device and insp
 
    On Windows, run `export.bat` or `export.ps1` from the ESP-IDF root directory before installing `requirements.txt`. If you use your own Python virtual environment instead, activate it before installing `requirements.txt`.
 
-3. A BLE device advertising the BLE UART service. By default the tool scans for Nordic UART Service UUIDs. For a known-compatible test target, build and flash the [BLE UART Service example](../../../../examples/bluetooth/ble_uart_service), which acts as an Echo Server by echoing RX writes back through TX notifications.
+3. A BLE device advertising the BLE UART service. By default the tool scans for the de-facto BLE UART-over-GATT UUIDs (`6E400001-…` / `…02` / `…03`). For a known-compatible test target, build and flash the [BLE UART Service example](../../../../examples/bluetooth/ble_uart_service), which acts as an Echo Server by echoing RX writes back through TX notifications.
 
 ## Find a device
 
@@ -136,7 +136,7 @@ This affects BLE GATT write behavior only. It does not create an application-lev
 Use the [BLE UART Service example](../../../../examples/bluetooth/ble_uart_service) when you want a ready-made ESP-IDF Echo Server for testing BLE UART Bridge Console. After building, flashing, and pairing with the example, open Console and type any text; the example should echo the same data back as `[RX]` output.
 
 ```bash
-# List nearby BLE UART devices and use the printed device ID as DEVICE_ID
+# List nearby BLE devices and use the printed device ID as DEVICE_ID
 python main.py list-devices
 python main.py console AA:BB:CC:DD:EE:FF
 ```
@@ -190,6 +190,14 @@ aa 55 01 00
 - Make sure no other host is already connected to the BLE device.
 - Restart advertising on the device.
 - Run `connection-check` before opening the console.
+- On Linux, reset the system Bluetooth service if connections keep failing,
+  pairing gets stuck, or service discovery cannot find the BLE UART service or
+  characteristics:
+
+  ```bash
+  sudo systemctl stop bluetooth
+  sudo systemctl start bluetooth
+  ```
 
 ### Text looks broken
 

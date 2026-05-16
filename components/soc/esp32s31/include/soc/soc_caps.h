@@ -23,7 +23,7 @@
 #define _SOC_CAPS_TARGET_IS_ESP32S31       1 // [gen_soc_caps:ignore]
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
-// #define SOC_ADC_SUPPORTED               1      // TODO: [ESP32S31] IDF-14741
+#define SOC_ADC_SUPPORTED               1
 #define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
@@ -35,7 +35,7 @@
 #define SOC_DMA2D_SUPPORTED             1
 #define SOC_GPTIMER_SUPPORTED           1
 #define SOC_LCDCAM_SUPPORTED            1
-// #define SOC_LCDCAM_CAM_SUPPORTED        1      // TODO: [ESP32S31] IDF-14722
+#define SOC_LCDCAM_CAM_SUPPORTED        1
 #define SOC_LCDCAM_I80_LCD_SUPPORTED    1
 #define SOC_LCDCAM_RGB_LCD_SUPPORTED    1
 #define SOC_LCD_I80_SUPPORTED           1
@@ -128,8 +128,30 @@
 
 /*-------------------------- ADC CAPS ----------------------------------------*/
 /*!< SAR ADC Module*/
-#define SOC_ADC_MAX_CHANNEL_NUM                 (10)
+#define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_PERIPH_NUM                      (2)
+#define SOC_ADC_MAX_CHANNEL_NUM                 (8)
+#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (8)
+#define SOC_ADC_ATTEN_NUM                       (1U)
+#define SOC_ADC_RTC_MIN_BITWIDTH                (17)
+#define SOC_ADC_RTC_MAX_BITWIDTH                (17)
+
+#define SOC_ADC_DMA_SUPPORTED                   1
+#define SOC_ADC_DIGI_CONTROLLER_NUM             (2)
+#define SOC_ADC_PATT_LEN_MAX                    (16)
+#define SOC_ADC_DIGI_MIN_BITWIDTH               (17)
+#define SOC_ADC_DIGI_MAX_BITWIDTH               (17)
+#define SOC_ADC_DIGI_RESULT_BYTES               (4)
+#define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
+#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        (1)
+#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          (83333U)
+#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           (611U)
+#define SOC_ADC_DIGI_MONITOR_NUM                (2)
+
+#define SOC_ADC_DIFF_SUPPORTED                  (1)
+
+/*!< ADC power control is shared by PWDET, TempSensor */
+#define SOC_ADC_SHARED_POWER                    1
 
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_CACHE_WRITEBACK_SUPPORTED           1
@@ -169,8 +191,11 @@
 /*-------------------------- GDMA CAPS -------------------------------------*/
 #define SOC_AHB_GDMA_VERSION                2
 #define SOC_GDMA_SUPPORT_ETM                1
-// #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1 // TODO: [ESP32S31] IDF-14760
+#define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 #define SOC_GDMA_EXT_MEM_ENC_ALIGNMENT   (16)
+
+/*-------------------------- MODEM CAPS --------------------------------------*/
+#define SOC_MODEM_SUPPORT_ETM               1
 
 /*-------------------------- APM CAPS ----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */
@@ -365,6 +390,10 @@
 // TODO: [ESP32S31] IDF-14626
 #define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY    1 /*!< Key manager responsible to deploy ECDSA key */
 // #define SOC_KEY_MANAGER_FE_KEY_DEPLOY       1 /*!< Key manager responsible to deploy Flash Encryption key */
+
+/*--------------------------- CAM ---------------------------------*/
+#define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
+
 /*-------------------------- Secure Boot CAPS----------------------------*/
 // TODO: [ESP32S31] IDF-14629
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3

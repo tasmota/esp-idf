@@ -179,6 +179,23 @@ typedef enum {
     LCD_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
 } soc_periph_lcd_clk_src_t;
 
+//////////////////////////////////////////////////CAM///////////////////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of CAM
+ */
+#define SOC_CAM_CLKS {SOC_MOD_CLK_PLL_F160M, SOC_MOD_CLK_XTAL, SOC_MOD_CLK_APLL}
+
+/**
+ * @brief Type of CAM clock source
+ */
+typedef enum {
+    CAM_CLK_SRC_PLL160M = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the source clock */
+    CAM_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as the source clock */
+    CAM_CLK_SRC_APLL = SOC_MOD_CLK_APLL,         /*!< Select APLL as the source clock */
+    CAM_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F160M, /*!< Select PLL_F160M as the default choice */
+} soc_periph_cam_clk_src_t;
+
 //////////////////////////////////////////////////SYSTIMER//////////////////////////////////////////////////////////////
 
 /**
@@ -679,6 +696,19 @@ typedef enum {
     PCNT_CLK_SRC_APB = SOC_MOD_CLK_APB,           /*!< Select APB as the source clock */
     PCNT_CLK_SRC_DEFAULT = SOC_MOD_CLK_APB,       /*!< Select APB as the default choice */
 } soc_periph_pcnt_clk_src_t;
+
+//////////////////////////////////////////////////ADC///////////////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of ADC
+ */
+#define SOC_ADC_DIGI_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_RC_FAST}
+
+typedef enum {
+    ADC_DIGI_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,   /*!< Select FOSC (internal RC oscillator) as ADC source clock */
+    ADC_DIGI_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL as ADC source clock */
+    ADC_DIGI_CLK_SRC_DEFAULT = SOC_MOD_CLK_XTAL,       /*!< Select XTAL as the default clock choice */
+} soc_periph_adc_digi_clk_src_t;
 
 #ifdef __cplusplus
 }

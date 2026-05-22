@@ -77,6 +77,12 @@ I2S 时钟
 
     通常，MCLK 应该同时是 ``采样率`` 和 BCLK 的倍数。字段 :cpp:member:`i2s_std_clk_config_t::mclk_multiple` 表示 MCLK 相对于 ``采样率`` 的倍数。在大多数情况下，将其设置为 ``I2S_MCLK_MULTIPLE_256`` 即可。但如果 ``slot_bit_width`` 被设置为 ``I2S_SLOT_BIT_WIDTH_24BIT``，为了保证 MCLK 是 BCLK 的整数倍，应该将 :cpp:member:`i2s_std_clk_config_t::mclk_multiple` 设置为能被 3 整除的倍数，如 ``I2S_MCLK_MULTIPLE_384``，否则 WS 会不精准。
 
+.. only:: esp32
+
+    .. note::
+
+        在ESP32上，MCLK 管脚必须使用 GPIO0、GPIO1 或 GPIO3 管脚。其他的时钟管脚可以使用任意的 GPIO。注意，由于 GPIO0 为 Strapping 管脚，一般不推荐用作其他功能。
+
 .. _i2s-communication-mode:
 
 I2S 通信模式
@@ -284,6 +290,15 @@ I2S 通道有三种状态，分别为 ``registered（已注册）``、 ``ready�
 I2S 的数据传输（包括数据发送和接收）由 DMA 实现。在传输数据之前，请调用 :cpp:func:`i2s_channel_enable` 来启用特定的通道。发送或接收的数据达到 DMA 缓冲区的大小时，将触发 ``I2S_OUT_EOF`` 或 ``I2S_IN_SUC_EOF`` 中断。注意，DMA 缓冲区的大小不等于 :cpp:member:`i2s_chan_config_t::dma_frame_num`，这里的一帧是指一个 WS 周期内的所有采样数据。因此， ``dma_buffer_size = dma_frame_num * slot_num * slot_bit_width / 8``。传输数据时，可以调用 :cpp:func:`i2s_channel_write` 来输入数据，并把数据从源缓冲区复制到 DMA TX 缓冲区等待传输完成。此过程将重复进行，直到发送的字节数达到配置的大小。接收数据时，用户可以调用函数 :cpp:func:`i2s_channel_read` 来等待接收包含 DMA 缓冲区地址的消息队列，从而将数据从 DMA RX 缓冲区复制到目标缓冲区。
 
 :cpp:func:`i2s_channel_write` 和 :cpp:func:`i2s_channel_read` 都是阻塞函数，在源缓冲区的数据发送完毕前，或是整个目标缓冲区都被加载数据占用时，它们会一直保持等待状态。在等待时间达到最大阻塞时间时，返回 ``ESP_ERR_TIMEOUT`` 错误。要实现异步发送或接收数据，可以通过 :cpp:func:`i2s_channel_register_event_callback` 注册回调，随即便可在回调函数中直接访问 DMA 缓冲区，无需通过这两个阻塞函数来发送或接收数据。但请注意，该回调是一个中断回调，不要在该回调中添加复杂的逻辑、进行浮点运算或调用不可重入函数。
+
+.. only:: SOC_I2S_SUPPORTS_BT_DEST
+
+    在 {IDF_TARGET_NAME} 上，可在调用 :cpp:func:`i2s_new_channel` 时通过 :cpp:member:`i2s_chan_config_t::tx_destination` 与 :cpp:member:`i2s_chan_config_t::rx_destination` 分别为 TX 与 RX 方向选择数据路径；每个方向可在 **DMA** 与 **Bluetooth** 二者中择一：
+
+    - **DMA（默认）**：使用 DMA 作为 TX/RX 数据通路，与前文所述机制一致。
+    - **Bluetooth**：使用 **蓝牙** 作为 TX/RX 数据通路。依赖 DMA 缓冲的常用操作（例如 :cpp:func:`i2s_channel_write`、:cpp:func:`i2s_channel_read`、:cpp:func:`i2s_channel_preload_data`、:cpp:func:`i2s_channel_register_event_callback` 等）在该方向上不可用。仅 **I2S0** 可选用 Bluetooth 路径。
+
+    与蓝牙协议栈及音频链路的衔接，请参阅 :doc:`ESP-IDF 蓝牙 API 参考 <../bluetooth/index>`。
 
 配置
 ^^^^

@@ -7,6 +7,10 @@ config SOC_ADC_SUPPORTED
     bool
     default y
 
+config SOC_ANA_CMPR_SUPPORTED
+    bool
+    default y
+
 config SOC_DEDICATED_GPIO_SUPPORTED
     bool
     default y
@@ -149,7 +153,7 @@ config SOC_ECC_EXTENDED_MODES_SUPPORTED
 
 config SOC_FLASH_ENC_SUPPORTED
     bool
-    default n
+    default y
 
 config SOC_SECURE_BOOT_SUPPORTED
     bool
@@ -347,6 +351,14 @@ config SOC_APB_BACKUP_DMA
     bool
     default n
 
+config SOC_ANA_CMPR_SUPPORT_ETM
+    bool
+    default y
+
+config SOC_ANA_CMPR_SUPPORT_ETM_SCAN
+    bool
+    default y
+
 config SOC_CACHE_WRITEBACK_SUPPORTED
     bool
     default y
@@ -506,6 +518,10 @@ config SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 config SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK
     int
     default 0
+
+config SOC_RTC_GPIO_EDGE_WAKEUP_SUPPORTED
+    bool
+    default y
 
 config SOC_GPIO_SUPPORT_FORCE_HOLD
     bool
@@ -991,6 +1007,10 @@ config SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS
     int
     default 3
 
+config SOC_EFUSE_SECURE_BOOT_P384_WR_DIS
+    bool
+    default y
+
 config SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS
     bool
     default y
@@ -1007,11 +1027,19 @@ config SOC_FLASH_ENCRYPTION_XTS_AES
     bool
     default y
 
+config SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS
+    bool
+    default y
+
 config SOC_FLASH_ENCRYPTION_XTS_AES_128
     bool
     default y
 
 config SOC_FLASH_ENCRYPTION_XTS_AES_256
+    bool
+    default y
+
+config SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND
     bool
     default y
 

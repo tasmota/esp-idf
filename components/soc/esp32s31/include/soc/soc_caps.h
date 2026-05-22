@@ -45,11 +45,13 @@
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_TWAI_FD_SUPPORTED           1
 #define SOC_ETM_SUPPORTED               1
-// #define SOC_PARLIO_SUPPORTED            1      // TODO: [ESP32S31] IDF-14711
+#define SOC_PARLIO_SUPPORTED            1
+#define SOC_PARLIO_LCD_SUPPORTED        1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_USB_OTG_SUPPORTED           1
-// #define SOC_USB_SERIAL_JTAG_SUPPORTED   1      // TODO: [ESP32S31] IDF-14788
 #define SOC_TEMP_SENSOR_SUPPORTED       1
+#define SOC_USB_SERIAL_JTAG_SUPPORTED   1
+// #define SOC_TEMP_SENSOR_SUPPORTED       1      // TODO: [ESP32S31] IDF-14799
 // #define SOC_SUPPORTS_SECURE_DL_MODE     1      // TODO: [ESP32S31] IDF-14629
 #define SOC_ULP_SUPPORTED               1
 #define SOC_LP_CORE_SUPPORTED           1
@@ -68,10 +70,11 @@
 #define SOC_AES_SUPPORTED               1
 #define SOC_MPI_SUPPORTED               1
 #define SOC_SHA_SUPPORTED               1
-// #define SOC_HMAC_SUPPORTED              1      // TODO: [ESP32S31] IDF-14621
-// #define SOC_DIG_SIGN_SUPPORTED          1      // TODO: [ESP32S31] IDF-14624
+#define SOC_HMAC_SUPPORTED              1
+#define SOC_DIG_SIGN_SUPPORTED          1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
+#define SOC_ECDSA_SUPPORTED             1
 // #define SOC_FLASH_ENC_SUPPORTED         1         // TODO: [ESP32S31] IDF-14628
 // #define SOC_SECURE_BOOT_SUPPORTED       1      // TODO: [ESP32S31] IDF-14629
 #define SOC_BOD_SUPPORTED               1
@@ -86,7 +89,7 @@
 #define SOC_LP_SPI_SUPPORTED            1
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_PSRAM_DMA_CAPABLE           1
-// #define SOC_SDMMC_HOST_SUPPORTED        1      // TODO: [ESP32S31] IDF-14705
+#define SOC_SDMMC_HOST_SUPPORTED        1
 #define SOC_CLK_TREE_SUPPORTED          1
 #define SOC_ASSIST_DEBUG_SUPPORTED      1
 #define SOC_CPU_LOCKUP_DEBUG_SUPPORTED  1
@@ -96,6 +99,7 @@
 #define SOC_SPI_FLASH_SUPPORTED         1         // TODO: [ESP32S31] IDF-14777
 #define SOC_SPI_FLASH_HAS_DEDICATED_LDO 1
 #define SOC_TOUCH_SENSOR_SUPPORTED      1
+#define SOC_GP_LDO_SUPPORTED            1 // General purpose LDO
 #define SOC_RNG_SUPPORTED               1
 #define SOC_PPA_SUPPORTED               1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
@@ -298,6 +302,16 @@
 #define SOC_MMU_DI_VADDR_SHARED               (1) /*!< D/I vaddr are shared */
 #define SOC_MMU_PER_EXT_MEM_TARGET            (1) /*!< MMU is per physical external memory target (flash, psram) */
 
+/*-------------------------- SDMMC CAPS -----------------------------------------*/
+#define SOC_SDMMC_USE_IOMUX               1
+#define SOC_SDMMC_NUM_SLOTS               2
+#define SOC_SDMMC_DATA_WIDTH_MAX          4
+/* Supported host clock delay phase number */
+#define SOC_SDMMC_DELAY_PHASE_NUM         8
+#define SOC_SDMMC_IO_UHS_POWER_EXTERNAL   1    ///< SDMMC IO power controlled by external power supply
+#define SOC_SDMMC_PSRAM_DMA_CAPABLE       1    ///< SDMMC peripheral can do DMA transfer to/from PSRAMsts
+#define SOC_SDMMC_UHS_I_SUPPORTED         1
+
 /*-------------------------- SPI CAPS ----------------------------------------*/
 #define SOC_SPI_PERIPH_NUM                  3
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE         64
@@ -343,6 +357,15 @@
 #define SOC_TWAI_RANGE_FILTER_NUM           1U
 #define SOC_TWAI_SUPPORT_SLEEP_RETENTION    1
 
+/*-------------------------- PARLIO CAPS --------------------------------------*/
+#define SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH      16 /*!< Number of data lines of the TX unit */
+#define SOC_PARLIO_RX_UNIT_MAX_DATA_WIDTH      16 /*!< Number of data lines of the RX unit */
+#define SOC_PARLIO_TX_CLK_SUPPORT_GATING       1  /*!< Support gating TX clock */
+#define SOC_PARLIO_RX_CLK_SUPPORT_GATING       1  /*!< Support gating RX clock */
+#define SOC_PARLIO_TX_SUPPORT_LOOP_TRANSMISSION 1 /*!< Support loop transmission */
+#define SOC_PARLIO_SUPPORT_SLEEP_RETENTION     1  /*!< Support back up registers before sleep */
+#define SOC_PARLIO_SUPPORT_I80_LCD             1  /*!< Support to drive I80 interfaced LCD */
+
 /*-------------------------- AES CAPS ----------------------------------------*/
 #define SOC_AES_GDMA                            (1)
 #define SOC_AES_SUPPORT_DMA                     (1)
@@ -365,14 +388,28 @@
 #define SOC_SHA_SUPPORT_SHA512_256      (1)
 #define SOC_SHA_SUPPORT_SHA512_T        (1)
 
-/*-------------------------- MPI/RSA CAPS ----------------------------------------*/
+/*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM          (4)
 #define SOC_MPI_OPERATIONS_NUM          (3)
+
+/*--------------------------- RSA CAPS ---------------------------------------*/
 #define SOC_RSA_MAX_BIT_LEN             (4096)
 
-/*-------------------------- ECC CAPS ----------------------------------------*/
+/*--------------------------- ECC CAPS ---------------------------------------*/
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 #define SOC_ECC_SUPPORT_CURVE_P384      (1)
+
+/*--------------------------- ECDSA CAPS ---------------------------------------*/
+#define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY              (1)
+#define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE         (1)
+#define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP      (1)
+#define SOC_ECDSA_SUPPORT_CURVE_P384                 (1)
+#define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
+
+/*-------------------------- Digital Signature CAPS ----------------------------------------*/
+#define SOC_DS_SIGNATURE_MAX_BIT_LEN    (4096)
+#define SOC_DS_KEY_PARAM_MD_IV_LENGTH   (16)
+#define SOC_DS_KEY_CHECK_MAX_WAIT_US    (1100)
 
 /*-------------------------- eFuse CAPS----------------------------*/
 #define SOC_EFUSE_DIS_PAD_JTAG 1
@@ -386,10 +423,17 @@
 #define SOC_EFUSE_ECDSA_KEY_P192 1
 #define SOC_EFUSE_ECDSA_KEY_P384 1
 
+/*-------------------------- HUK CAPS----------------------------*/
+#define SOC_HUK_SUPPORTED                       1
+
 /*-------------------------- Key Manager CAPS----------------------------*/
 // TODO: [ESP32S31] IDF-14626
-#define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY    1 /*!< Key manager responsible to deploy ECDSA key */
-// #define SOC_KEY_MANAGER_FE_KEY_DEPLOY       1 /*!< Key manager responsible to deploy Flash Encryption key */
+#define SOC_KEY_MANAGER_SUPPORTED                   1
+#define SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT      1 /*!< Key manager supports key deployment */
+#define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY            1 /*!< Key manager responsible to deploy ECDSA key */
+#define SOC_KEY_MANAGER_HMAC_KEY_DEPLOY             1 /*!< Key manager responsible to deploy HMAC key */
+#define SOC_KEY_MANAGER_DS_KEY_DEPLOY               1 /*!< Key manager responsible to deploy DS key */
+// SOC_KEY_MANAGER_FE_KEY_DEPLOY (incl. XTS-AES-128/256) will be enabled along with Flash Encryption support.
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
@@ -461,7 +505,7 @@
 #define SOC_TOUCH_MAX_CHAN_ID                       (13)    /*!< Touch maximum channel number */
 
 /* Touch Sensor Features */
-#define SOC_TOUCH_SUPPORT_SLEEP_WAKEUP              (0)     /*!< Touch sensor supports sleep awake */
+#define SOC_TOUCH_SUPPORT_SLEEP_WAKEUP              (1)     /*!< Touch sensor supports sleep awake */
 #define SOC_TOUCH_SUPPORT_BENCHMARK                 (1)     /*!< Touch sensor supports benchmark configuration */
 #define SOC_TOUCH_SUPPORT_WATERPROOF                (1)     /*!< Touch sensor supports waterproof */
 #define SOC_TOUCH_SUPPORT_PROX_SENSING              (1)     /*!< Touch sensor supports proximity sensing */
@@ -579,6 +623,7 @@
 #define SOC_I2S_SUPPORTS_TX_SYNC_CNT          (1)     // Support TX synchronization count (ideal_cnt)
 #define SOC_I2S_SUPPORTS_RX_RECOMB            (1)     // Support RX recomb for DMA data format reorganization
 #define SOC_I2S_SUPPORTS_TDM                  (1)
+#define SOC_I2S_SUPPORTS_BT_DEST              (1)     // Support routing I2S TX/RX data to Bluetooth (Classic sync link / voice path), not via DMA
 #define SOC_I2S_PDM_MAX_TX_LINES              (2)     // On I2S0
 #define SOC_I2S_PDM_MAX_RX_LINES              (4)     // On I2S0
 

@@ -77,6 +77,12 @@ Clock Terminology
 
     Normally, MCLK should be the multiple of ``sample rate`` and BCLK at the same time. The field :cpp:member:`i2s_std_clk_config_t::mclk_multiple` indicates the multiple of MCLK to the ``sample rate``. In most cases, ``I2S_MCLK_MULTIPLE_256`` should be enough. However, if ``slot_bit_width`` is set to ``I2S_SLOT_BIT_WIDTH_24BIT``, to keep MCLK a multiple to the BCLK, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` should be set to multiples that are divisible by 3 such as ``I2S_MCLK_MULTIPLE_384``. Otherwise, WS will be inaccurate.
 
+.. only:: esp32
+
+    .. note::
+
+        On ESP32, the MCLK pin must use GPIO0, GPIO1, or GPIO3. The other clock pins (e.g., BCLK, WS) can use any valid GPIO. Note that GPIO0 is generally not recommended for other functions because it is a strapping pin.
+
 .. _i2s-communication-mode:
 
 I2S Communication Mode
@@ -284,6 +290,15 @@ Data Transport
 The data transport of the I2S peripheral, including sending and receiving, is realized by DMA. Before transporting data, please call :cpp:func:`i2s_channel_enable` to enable the specific channel. When the sent or received data reaches the size of one DMA buffer, the ``I2S_OUT_EOF`` or ``I2S_IN_SUC_EOF`` interrupt will be triggered. Note that the DMA buffer size is not equal to :cpp:member:`i2s_chan_config_t::dma_frame_num`. One frame here refers to all the sampled data in one WS circle. Therefore, ``dma_buffer_size = dma_frame_num * slot_num * slot_bit_width / 8``. For the data transmitting, users can input the data by calling :cpp:func:`i2s_channel_write`. This function helps users to copy the data from the source buffer to the DMA TX buffer and wait for the transmission to finish. Then it will repeat until the sent bytes reach the given size. For the data receiving, the function :cpp:func:`i2s_channel_read` waits to receive the message queue which contains the DMA buffer address. It helps users copy the data from the DMA RX buffer to the destination buffer.
 
 Both :cpp:func:`i2s_channel_write` and :cpp:func:`i2s_channel_read` are blocking functions. They keeps waiting until the whole source buffer is sent or the whole destination buffer is loaded, unless they exceed the max blocking time, where the error code ``ESP_ERR_TIMEOUT`` returns. To send or receive data asynchronously, callbacks can be registered by  :cpp:func:`i2s_channel_register_event_callback`. Users are able to access the DMA buffer directly in the callback function instead of transmitting or receiving by the two blocking functions. However, please be aware that it is an interrupt callback, so do not add complex logic, run floating operation, or call non-reentrant functions in the callback.
+
+.. only:: SOC_I2S_SUPPORTS_BT_DEST
+
+    On {IDF_TARGET_NAME}, when calling :cpp:func:`i2s_new_channel`, you can select the data path for TX and RX separately via :cpp:member:`i2s_chan_config_t::tx_destination` and :cpp:member:`i2s_chan_config_t::rx_destination`. For each direction you can choose either **DMA** or **Bluetooth**:
+
+    - **:cpp:enumerator:`i2s_destination_t::I2S_DESTINATION_DMA` (default)**: Use **DMA** as the TX/RX data path, consistent with the mechanisms described above.
+    - **:cpp:enumerator:`i2s_destination_t::I2S_DESTINATION_BT`**: Use **Bluetooth** as the TX/RX data path. Common operations that rely on DMA buffering (such as :cpp:func:`i2s_channel_write`, :cpp:func:`i2s_channel_read`, :cpp:func:`i2s_channel_preload_data`, :cpp:func:`i2s_channel_register_event_callback`, etc.) are not available on that direction. Only **I2S0** can select the Bluetooth path.
+
+    For integration with the Bluetooth stack and audio links, see the :doc:`ESP-IDF Bluetooth API Reference <../bluetooth/index>`.
 
 Configuration
 ^^^^^^^^^^^^^

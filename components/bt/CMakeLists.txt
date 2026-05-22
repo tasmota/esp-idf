@@ -8,6 +8,8 @@ if(CONFIG_IDF_TARGET_ESP32S3)
     set(TARGET_SRC_NAME "esp32c3")
 elseif(CONFIG_IDF_TARGET_ESP32C61)
     set(TARGET_SRC_NAME "esp32c6")
+elseif(CONFIG_IDF_TARGET_ESP32H21)
+    set(TARGET_SRC_NAME "esp32h2")
 else()
     set(TARGET_SRC_NAME "${idf_target}")
 endif()
@@ -98,6 +100,12 @@ idf_component_register(SRCS "${srcs}"
                        PRIV_REQUIRES "${bt_priv_requires}"
                        LDFRAGMENTS "${ldscripts}")
 
+idf_component_get_property(bt_component_type bt COMPONENT_TYPE)
+if(bt_component_type STREQUAL "LIBRARY")
+    idf_component_optional_requires(PRIVATE ble_insights)
+else()
+    idf_component_optional_requires(INTERFACE ble_insights)
+endif()
 
 if(CONFIG_BT_ENABLED)
     target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-implicit-fallthrough -Wno-unused-const-variable)

@@ -32,7 +32,7 @@
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_ADC_SUPPORTED               1
-// #define SOC_ANA_CMPR_SUPPORTED          1
+#define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
 #define SOC_UHCI_SUPPORTED              1
@@ -71,9 +71,8 @@
 #define SOC_HMAC_SUPPORTED              1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
-#define SOC_FLASH_ENC_SUPPORTED         0       // TODO: [ESP32H4] IDF-12261
+#define SOC_FLASH_ENC_SUPPORTED         1
 #define SOC_SECURE_BOOT_SUPPORTED       1
-
 #define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12256
 #define SOC_PMU_SUPPORTED               1    // TODO: [ESP32H4] IDF-12286
@@ -154,8 +153,8 @@
 #define SOC_APB_BACKUP_DMA              (0)
 
 /*------------------------- Analog Comparator CAPS ---------------------------*/
-// #define SOC_ANA_CMPR_SUPPORT_ETM               (1)
-// #define SOC_ANA_CMPR_SUPPORT_ETM_SCAN          (1)
+#define SOC_ANA_CMPR_SUPPORT_ETM               (1)
+#define SOC_ANA_CMPR_SUPPORT_ETM_SCAN          (1)
 
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 // #define SOC_BROWNOUT_RESET_SUPPORTED 1
@@ -228,6 +227,7 @@
 #define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP      (1)
 #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP               SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 #define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK       (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5)
+#define SOC_RTC_GPIO_EDGE_WAKEUP_SUPPORTED              (1)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_6~GPIO_NUM_39)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK  (SOC_GPIO_VALID_GPIO_MASK & ~((1ULL<<6) - 1))
@@ -430,14 +430,17 @@
 #define SOC_SECURE_BOOT_V2_RSA              0
 #define SOC_SECURE_BOOT_V2_ECC              1
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
+#define SOC_EFUSE_SECURE_BOOT_P384_WR_DIS   1
 #define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1
 #define SOC_SUPPORT_SECURE_BOOT_REVOKE_KEY  1
 
 /*-------------------------- Flash Encryption CAPS----------------------------*/
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
-#define SOC_FLASH_ENCRYPTION_XTS_AES        1
-#define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
-#define SOC_FLASH_ENCRYPTION_XTS_AES_256    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES            1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_128        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_256        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1
 
 /*-------------------------- APM CAPS ----------------------------------------*/
 #define SOC_APM_CTRL_FILTER_SUPPORTED   1 /*!< Support for APM control filter */

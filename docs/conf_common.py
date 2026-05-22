@@ -330,6 +330,8 @@ ESP32C6_DOCS = [
 
 ESP32H2_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst'] + ESP_TEE_DOCS
 
+ESP32H21_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst']
+
 ESP32H4_DOCS = [
     'api-reference/system/ipc.rst',
     'api-guides/RF_calibration.rst',
@@ -338,6 +340,7 @@ ESP32H4_DOCS = [
 
 ESP32S31_DOCS = [
     'api-reference/system/ipc.rst',
+    'api-reference/peripherals/sd_pullup_requirements.rst',
     'api-guides/RF_calibration.rst',
     'api-guides/phy.rst',
 ]
@@ -426,6 +429,7 @@ conditional_include_dict = {
     'esp32c6': ESP32C6_DOCS,
     'esp32c61': ESP32C61_DOCS,
     'esp32h2': ESP32H2_DOCS,
+    'esp32h21': ESP32H21_DOCS,
     'esp32h4': ESP32H4_DOCS,
     'esp32s31': ESP32S31_DOCS,
     'esp32p4': ESP32P4_DOCS,

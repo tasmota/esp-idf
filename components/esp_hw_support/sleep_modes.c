@@ -42,7 +42,7 @@
 #include "hal/rtc_io_hal.h"
 #include "hal/clk_tree_hal.h"
 
-#if SOC_IS(ESP32C5) // Remove after all chips rng_ll.h implemented
+#if RNG_LL_NEEDS_RESET_WHEN_WAKEUP
 #include "hal/rng_ll.h"
 #endif
 
@@ -755,7 +755,7 @@ static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
 #if SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
     temperature_sensor_hal_i2c_saradc_reg_restore();
 #endif
-#if RNG_LL_DEPENDS_ON_LP_PERIPH
+#if RNG_LL_NEEDS_RESET_WHEN_WAKEUP
     if (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) {
         // Re-enable the RNG module.
         rng_ll_reset();
@@ -991,14 +991,15 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
             spi_flash_enable_deep_power_down_mode(false);
         }
 #endif
-        /* Cache Resume 1: Resume cache for continue running*/
-        sleep_cache_resume();
-#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && CONFIG_SPIRAM_XIP_FROM_PSRAM
-        // Code outside of esp_sleep_start_safe may be linked to FLASH, and if CONFIG_SPIRAM_XIP_FROM_PSRAM
-        // is enabled, code in Flash will be copied to PSRAM for execution. We need to wait here until
-        // PSRAM exits half-sleep before returning.
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && (CONFIG_SPIRAM_XIP_FROM_PSRAM || !CONFIG_PM_SLP_IRAM_OPT)
+        // Code outside of esp_sleep_start_safe may be linked to FLASH if CONFIG_PM_SLP_IRAM_OPT is false,
+        // Code that accesses flash memory may cause cached PSRAM data to be replaced back into PSRAM before
+        // it has fully resumed. And if CONFIG_SPIRAM_XIP_FROM_PSRAM is enabled, code in Flash will be copied
+        // to PSRAM for execution. We need to wait here until PSRAM exits half-sleep before returning.
         esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
 #endif
+        /* Cache Resume 1: Resume cache for continue running*/
+        sleep_cache_resume();
     }
     return result;
 }
@@ -1181,7 +1182,7 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
     }
 #endif
     // Restore CPU frequency
-#if SOC_PM_SUPPORT_PMU_MODEM_STATE
+#if SOC_PM_SUPPORT_PMU_MODEM_STATE && !SOC_PM_BBPLL_PD_IN_MODEM_STATE
     if (pmu_sleep_pll_already_enabled()) {
         rtc_clk_cpu_freq_to_pll_and_pll_lock_release(esp_pm_impl_get_cpu_freq(PM_MODE_CPU_MAX));
     } else
@@ -1574,6 +1575,7 @@ esp_err_t esp_light_sleep_start(void)
      * will be set in `sleep_flags`.
      */
     if (sleep_flags & RTC_SLEEP_PD_VDDSDIO) {
+#if !SOC_PM_FLASH_KEEP_POWER_IN_LSLP
         /*
         * When VDD_SDIO power domain has to be turned off, the minimum sleep time of the
         * system needs to meet the sum below:
@@ -1609,8 +1611,13 @@ esp_err_t esp_light_sleep_start(void)
                 s_config.sleep_time_adjustment -= flash_enable_time_us;
             }
         }
-    } else if (!(sleep_flags & RTC_SLEEP_PD_VDDSDIO)) {
+#else
+        sleep_flags &= ~RTC_SLEEP_PD_VDDSDIO;
+#endif
+    }
+
 #if CONFIG_ESP_SLEEP_SET_FLASH_DPD
+    if (!(sleep_flags & RTC_SLEEP_PD_VDDSDIO) && (sleep_flags & RTC_SLEEP_FLASH_DPD)) {
         const uint32_t flash_enable_dpd_us = spi_flash_dpd_get_enter_duration() + spi_flash_dpd_get_exit_duration();
         if (s_config.sleep_duration > flash_enable_dpd_us) {
             if (s_config.sleep_time_overhead_out < flash_enable_dpd_us) {
@@ -1625,8 +1632,8 @@ esp_err_t esp_light_sleep_start(void)
                 s_config.sleep_time_adjustment -= flash_enable_dpd_us;
             }
         }
-#endif
     }
+#endif
 
     periph_inform_out_light_sleep_overhead(s_config.sleep_time_adjustment - sleep_time_overhead_in);
 
@@ -1693,19 +1700,19 @@ esp_err_t esp_light_sleep_start(void)
     esp_clk_private_unlock();
     esp_timer_private_unlock();
 
+#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && !CONFIG_SPIRAM_XIP_FROM_PSRAM && CONFIG_PM_SLP_IRAM_OPT
+    // If CONFIG_SPIRAM_XIP_FROM_PSRAM is not enabled and CONFIG_PM_SLP_IRAM_OPT is enable,
+    // the sleep-wake process prior to this point does not access the PSRAM, so we can postpone waiting
+    // for the PSRAM to resume until here, in order to reuse the time overhead
+    // of the wake-up process as much as possible.
+    esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
+#endif
+
 #if CONFIG_ESP_SLEEP_CACHE_SAFE_ASSERTION && CONFIG_PM_SLP_IRAM_OPT
     /* Cache Resume 0: sleep process done, resume cache for continue running */
     if (!(s_config.wakeup_triggers & ignore_check_wakeup_triggers)) {
         sleep_cache_resume();
     }
-#endif
-
-#if CONFIG_PM_SLP_SPIRAM_HALFSLEEP_ENABLED && !CONFIG_SPIRAM_XIP_FROM_PSRAM
-    // If CONFIG_SPIRAM_XIP_FROM_PSRAM is not enabled, the sleep-wake process
-    // prior to this point does not access the PSRAM, so we can postpone waiting
-    // for the PSRAM to resume until here, in order to reuse the time overhead
-    // of the wake-up process as much as possible.
-    esp_psram_impl_resume_from_halfsleep_mode(s_config.rtc_clk_cal_period);
 #endif
 
 #if !CONFIG_FREERTOS_UNICORE
@@ -1813,7 +1820,7 @@ esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source)
         s_config.wakeup_triggers &= ~RTC_VBAT_UNDER_VOLT_TRIG_EN;
 #endif
     } else {
-        ESP_LOGE(TAG, "Incorrect wakeup source (%d) to disable.", (int) source);
+        ESP_EARLY_LOGE(TAG, "Incorrect wakeup source (%d) to disable.", (int) source);
         return ESP_ERR_INVALID_STATE;
     }
     return ESP_OK;
@@ -2954,9 +2961,20 @@ static SLEEP_FN_ATTR uint32_t get_power_down_flags(void)
 #endif
 
 #if CONFIG_ESP_SLEEP_SET_FLASH_DPD
-    if (!(pd_flags & RTC_SLEEP_PD_VDDSDIO)) {
-        // Flash power domain will disable DPD mode.
-        pd_flags |= RTC_SLEEP_FLASH_DPD;
+    {
+        uint32_t pd_flags_for_dpd = pd_flags;
+#if SOC_PM_FLASH_KEEP_POWER_IN_LSLP
+        /* Light sleep never powers down the flash supply on these targets; an app may still set VDDSDIO
+         * domain to OFF manually, and we later strip RTC_SLEEP_PD_VDDSDIO.
+         * Mask the bit when deriving DPD so flash deep power-down is not suppressed. */
+        pd_flags_for_dpd &= ~RTC_SLEEP_PD_VDDSDIO;
+#endif
+        if (!(pd_flags_for_dpd & RTC_SLEEP_PD_VDDSDIO)) {
+            // Flash power domain will disable DPD mode.
+            pd_flags |= RTC_SLEEP_FLASH_DPD;
+        } else {
+            ESP_LOGW(TAG, "Flash DPD mode cannot be enabled when VDDSDIO is configured to power down.");
+        }
     }
 #endif
 

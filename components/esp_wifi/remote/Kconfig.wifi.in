@@ -333,6 +333,13 @@ config WIFI_RMT_ENABLE_WPA3_OWE_SOFTAP
     help
         Select this option to allow the device to enable OWE Only mode for softap.
 
+config WIFI_RMT_PASN_SUPPORT
+    bool "Enable PASN support"
+    default n
+    help
+        Pre-Association Security Negotiation (PASN) for Wi-Fi NAN.
+        The wpa_supplicant exposes CONFIG_PASN when this is on.
+
 config WIFI_RMT_SLP_IRAM_OPT
     bool "WiFi SLP IRAM speed optimization"
     select PM_SLP_DEFAULT_PARAMS_OPT
@@ -596,6 +603,16 @@ config WIFI_RMT_NAN_USD_ENABLE
     help
         Enable Wi-Fi Aware: Unsynchronized service discovery (NAN-USD)
 
+config WIFI_RMT_NAN_PAIRING
+    bool "Enable NAN Pairing"
+    depends on WIFI_RMT_NAN_SECURITY && IDF_EXPERIMENTAL_FEATURES && WIFI_RMT_MBEDTLS_CRYPTO
+    select WIFI_RMT_PASN_SUPPORT
+    default n
+    help
+        Enable NAN Pairing support. This allows devices to establish
+        secure pairing using bootstrapping methods like PIN code.
+        Requires PASN in wpa_supplicant (WIFI_RMT_PASN_SUPPORT)
+
 config WIFI_RMT_MBEDTLS_CRYPTO
     bool "Use MbedTLS crypto APIs"
     default y
@@ -732,6 +749,17 @@ config WIFI_RMT_DPP_SUPPORT
     select WIFI_RMT_MBEDTLS_CRYPTO
     help
         Select this option to enable WiFi Easy Connect Support.
+
+config WIFI_RMT_DPP_MAX_CONF_OBJ
+    int "Maximum number of DPP configuration objects"
+    depends on WIFI_RMT_DPP_SUPPORT
+    range 1 10
+    default 3
+    help
+        Maximum number of configuration objects that can be received and stored
+        during a DPP configuration exchange. DPP v2 configurators may send
+        multiple configuration objects (e.g., for different SSIDs or AKMs).
+        Increasing this value will increase the memory usage for DPP events.
 
 config WIFI_RMT_11R_SUPPORT
     bool "Enable 802.11R (Fast Transition) Support"
@@ -886,6 +914,23 @@ config WIFI_RMT_PASSIVE_HIDDEN_AP_SUPPORT
     help
         Select this option to enable/disable support for station connections
         to hidden APs using passive scan when the country policy is set to auto.
+
+config WIFI_RMT_PRIVACY_ENHANCEMENTS_ENABLED
+    bool "WiFi Privacy Enhancements enabled"
+    default n
+    help
+        Select this option to enable WiFi Privacy Enhancements (enables random mac,
+        seq number, dialogue token number, vendor seq number cnt).
+        Supported on station interface only; softAP may be added in future.
+
+config WIFI_RMT_RMAC_AUTO_RESET_INTERVAL
+    int "Random MAC Auto-Reset Interval time"
+    depends on WIFI_RMT_PRIVACY_ENHANCEMENTS_ENABLED
+    range 1 24
+    default 12
+    help
+        Interval in hours to rotate the random MAC while not connected to an AP.
+        Values below 1 or above 24 are not allowed.
 
 if !ESP_WIFI_ENABLED
     rsource "Kconfig.wifi_is_remote.in"

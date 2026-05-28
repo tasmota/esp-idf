@@ -47,11 +47,13 @@ typedef enum {
 typedef enum {
     WIFI_OFFCHAN_TX_CANCEL,   /**< Cancel off-channel transmission */
     WIFI_OFFCHAN_TX_REQ,      /**< Request off-channel transmission */
+    WIFI_OFFCHAN_TX_CONNECTING_REQ,  /**< Off-channel Tx request during connecting state; not recommended for use by public APIs */
 } wifi_action_tx_t;
 
 typedef enum {
     WIFI_ROC_CANCEL,    /**< Cancel remain on channel */
     WIFI_ROC_REQ,       /**< Request remain on channel */
+    WIFI_ROC_CONNECTING_REQ,   /**< Remain-on-channel request during connecting state; not recommended for use by public APIs */
 } wifi_roc_t;
 /**
   * @brief Wi-Fi country policy
@@ -591,6 +593,8 @@ typedef struct {
     uint8_t sae_h2e_identifier[SAE_H2E_IDENTIFIER_LEN];           /**< Password identifier for H2E. Strings null-terminated (length < SAE_H2E_IDENTIFIER_LEN) or non-null terminated (length = SAE_H2E_IDENTIFIER_LEN) are accepted. Non-null terminated string with 0xFF for full length of SAE_H2E_IDENTIFIER_LEN is not considered a valid identifier */
 } wifi_sta_config_t;
 
+#define ESP_WIFI_NAN_NIK_LEN            16     /**< Length of NAN Identity Key (NIK) */
+
 /**
   * @brief NAN Discovery start configuration
   */
@@ -600,6 +604,9 @@ typedef struct {
     uint8_t scan_time;      /**< Scan time in seconds while searching for a NAN cluster */
     uint16_t warm_up_sec;   /**< Warm up time before assuming NAN Anchor Master role */
     bool disable_random_mac;/**< Disable the MAC Randomisation in NAN */
+    uint8_t nik[ESP_WIFI_NAN_NIK_LEN];  /**< Optional NIK. Auto-generated when nik_valid is false. */
+    uint8_t nik_valid: 1;               /**< NIK present in nik[] and should be used as-is. */
+    uint8_t reserved: 7;                /**< Reserved for future use. */
 } wifi_nan_sync_config_t;
 
 /**
@@ -924,6 +931,8 @@ typedef enum {
     WIFI_NAN_CSID_NCS_SK_256       = 2,    /**< NCS-SK-256 (PSK/Passphrase). Reserved: not supported right now. */
     WIFI_NAN_CSID_NCS_PK_2WDH_128  = 3,    /**< NCS-PK-2WDH-128. Reserved: not supported right now. */
     WIFI_NAN_CSID_NCS_PK_2WDH_256  = 4,    /**< NCS-PK-2WDH-256. Reserved: not supported right now. */
+    WIFI_NAN_CSID_NCS_GTK_CCM_128  = 5,
+    WIFI_NAN_CSID_NCS_GTK_GCM_256  = 6,
     WIFI_NAN_CSID_NCS_PK_PASN_128  = 7,    /**< NCS-PK-PASN-128. Reserved: not supported right now. */
     WIFI_NAN_CSID_NCS_PK_PASN_256  = 8,    /**< NCS-PK-PASN-256. Reserved: not supported right now. */
 } wifi_nan_cipher_suite_id_t;
@@ -932,6 +941,8 @@ typedef enum {
 #define WIFI_NAN_CSID_BIT_NCS_SK_256       (1 << WIFI_NAN_CSID_NCS_SK_256)
 #define WIFI_NAN_CSID_BIT_NCS_PK_2WDH_128  (1 << WIFI_NAN_CSID_NCS_PK_2WDH_128)
 #define WIFI_NAN_CSID_BIT_NCS_PK_2WDH_256  (1 << WIFI_NAN_CSID_NCS_PK_2WDH_256)
+#define WIFI_NAN_CSID_BIT_NCS_GTK_CCM_128  (1 << WIFI_NAN_CSID_NCS_GTK_CCM_128)
+#define WIFI_NAN_CSID_BIT_NCS_GTK_GCM_256  (1 << WIFI_NAN_CSID_NCS_GTK_GCM_256)
 #define WIFI_NAN_CSID_BIT_NCS_PK_PASN_128  (1 << WIFI_NAN_CSID_NCS_PK_PASN_128)
 #define WIFI_NAN_CSID_BIT_NCS_PK_PASN_256  (1 << WIFI_NAN_CSID_NCS_PK_PASN_256)
 
@@ -968,6 +979,35 @@ typedef struct {
     uint8_t num_credentials;                     /**< Number of valid entries in @c creds (0..ESP_WIFI_NAN_MAX_CREDS_PER_SVC). 0 = open service. */
     wifi_nan_credential_t creds[ESP_WIFI_NAN_MAX_CREDS_PER_SVC]; /**< Credentials list. */
 } wifi_nan_discovery_security_params_t;
+
+/**
+  * @brief NAN Pairing Bootstrapping Method bitmap (per Wi-Fi Aware 4.0 spec)
+  *
+  * Each bit corresponds to one bootstrapping method (WIFI_NAN_BOOTSTRAP_*).
+  * Multiple bits may be set in bootstrapping_methods / NPBA.
+  */
+#define WIFI_NAN_BOOTSTRAP_OPPORTUNISTIC        BIT(0)  /**< Opportunistic bootstrapping */
+#define WIFI_NAN_BOOTSTRAP_PIN_CODE_DISPLAY     BIT(1)  /**< Pin-code display */
+#define WIFI_NAN_BOOTSTRAP_PASSPHRASE_DISPLAY   BIT(2)  /**< Passphrase display */
+#define WIFI_NAN_BOOTSTRAP_QR_CODE_DISPLAY      BIT(3)  /**< QR-code display */
+#define WIFI_NAN_BOOTSTRAP_NFC_TAG              BIT(4)  /**< NFC tag */
+#define WIFI_NAN_BOOTSTRAP_PIN_CODE_KEYPAD      BIT(5)  /**< Keypad (pin-code only) */
+#define WIFI_NAN_BOOTSTRAP_PASSPHRASE_KEYPAD    BIT(6)  /**< Keypad (passphrase) */
+#define WIFI_NAN_BOOTSTRAP_QR_CODE_SCAN         BIT(7)  /**< QR-code scan */
+#define WIFI_NAN_BOOTSTRAP_NFC_READER           BIT(8)  /**< NFC reader */
+
+/**
+  * @brief NAN Pairing configuration parameters for Publish/Subscribe
+  *
+  */
+typedef struct {
+    uint8_t pairing_setup: 1;           /**< 0 - Pairing setup disabled, 1 - enabled */
+    uint8_t npk_nik_caching: 1;         /**< 0 - NPK/NIK caching disabled, 1 - enabled */
+    uint8_t pairing_verification: 1;    /**< 0 - Pairing verification disabled, 1 - enabled */
+    uint8_t reserved: 5;                /**< Reserved bits */
+    uint16_t bootstrapping_methods;     /**< Bitmap of WIFI_NAN_BOOTSTRAP_* method bits */
+    uint16_t comeback_delay;            /**< Comeback delay in TUs, 0 if comeback not required */
+} wifi_nan_pairing_cfg_t;
 
 /**
   * @brief USD specific configuration parameters
@@ -1018,6 +1058,7 @@ typedef struct {
                                                           The driver makes a private copy during esp_wifi_nan_publish_service();
                                                           the caller may free this immediately after the call returns. */
     nan_vendor_ie_t *vendor_ie;                     /**< Vendor specific IE to be added in publish frames */
+    wifi_nan_pairing_cfg_t *pairing;                /**< Pairing configuration parameters */
 } wifi_nan_publish_cfg_t;
 
 /**
@@ -1044,6 +1085,7 @@ typedef struct {
                                                           The driver makes a private copy during esp_wifi_nan_subscribe_service();
                                                           the caller may free this immediately after the call returns. */
     nan_vendor_ie_t *vendor_ie;                     /**< Vendor specific IE to be added in subscribe frames */
+    wifi_nan_pairing_cfg_t *pairing;                /**< Pairing configuration parameters */
 } wifi_nan_subscribe_cfg_t;
 
 /**
@@ -1260,8 +1302,12 @@ typedef enum {
 
     WIFI_EVENT_STA_BEACON_OFFSET_UNSTABLE,  /**< Station sampled beacon offset unstable */
     WIFI_EVENT_DPP_URI_READY,            /**< DPP URI is ready through Bootstrapping */
-    WIFI_EVENT_DPP_CFG_RECVD,            /**< Config received via DPP Authentication */
+    WIFI_EVENT_DPP_CFG_RECVD,            /**< DPP Configuration Response; payload is wifi_event_dpp_config_received_t */
     WIFI_EVENT_DPP_FAILED,               /**< DPP failed */
+    WIFI_EVENT_NAN_BOOTSTRAP_INDICATION, /**< Received NAN Pairing Bootstrapping Request from a Peer */
+    WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED,  /**< NAN Pairing Bootstrapping completed (success/failure) */
+    WIFI_EVENT_NAN_PAIRING_INDICATION,   /**< Received NAN Pairing indication (reserved) */
+    WIFI_EVENT_NAN_PAIRING_CONFIRM,      /**< NAN PASN pairwise key installation completed */
     WIFI_EVENT_MAX,                      /**< Invalid Wi-Fi event ID */
 } wifi_event_t;
 
@@ -1499,21 +1545,24 @@ typedef struct {
   * @brief Argument structure for WIFI_EVENT_NAN_SVC_MATCH event
   */
 typedef struct {
-    uint8_t subscribe_id;       /**< Subscribe Service Identifier */
-    uint8_t publish_id;         /**< Publish Service Identifier */
-    uint8_t pub_if_mac[6];      /**< NAN Interface MAC of the Publisher */
-    bool update_pub_id;         /**< Indicates whether publisher's service ID needs to be updated */
-    uint8_t datapath_reqd: 1;   /**< NAN Datapath required for the service */
-    uint8_t fsd_reqd: 1;        /**< Further Service Discovery(FSD) required */
-    uint8_t fsd_gas: 1;         /**< 0 - Follow-up used for FSD, 1 - GAS used for FSD */
-    uint8_t ndpe_support: 1;    /**< NDPE supported by peer */
-    uint8_t security_reqd: 1;   /**< Security: 0 - Open, 1 - Required (NDP Security) */
-    uint8_t reserved: 3;        /**< Reserved */
-    uint32_t reserved_1;        /**< Reserved */
-    uint32_t reserved_2;        /**< Reserved */
-    uint8_t ssi_version;        /**< Indicates version of SSI in Publish instance, 0 if not available */
-    uint16_t ssi_len;           /**< Length of service specific info */
-    uint8_t ssi[];              /**< Service specific info of Publisher */
+    uint8_t subscribe_id;           /**< Subscribe Service Identifier */
+    uint8_t publish_id;             /**< Publish Service Identifier */
+    uint8_t pub_if_mac[6];          /**< NAN Interface MAC of the Publisher */
+    bool update_pub_id;             /**< Indicates whether publisher's service ID needs to be updated */
+    uint8_t datapath_reqd: 1;       /**< NAN Datapath required for the service */
+    uint8_t fsd_reqd: 1;            /**< Further Service Discovery(FSD) required */
+    uint8_t fsd_gas: 1;             /**< 0 - Follow-up used for FSD, 1 - GAS used for FSD */
+    uint8_t ndpe_support: 1;        /**< NDPE supported by peer */
+    uint8_t security_reqd: 1;       /**< Security: 0 - Open, 1 - Required (NDP Security) */
+    uint8_t pairing_setup: 1;       /**< Pairing setup: 0 - disabled, 1 - enabled (needs security_reqd:1) */
+    uint8_t npk_nik_caching: 1;     /**< NPK/NIK caching: 0 - disabled, 1 - enabled (valid if pairing_setup:1)*/
+    uint8_t already_paired: 1;      /**< 0 - not paired, 1 - device already paired */
+    uint16_t csid_bitmap;           /**< Supported Cipher Suite bitmap, each bit of type WIFI_NAN_CSID_BIT_[] */
+    uint16_t bootstrapping_methods; /**< Peer advertised bootstrapping methods (WIFI_NAN_BOOTSTRAP_* bitmap) */
+    uint32_t reserved_2;            /**< Reserved */
+    uint8_t ssi_version;            /**< Indicates version of SSI in Publish instance, 0 if not available */
+    uint16_t ssi_len;               /**< Length of service specific info */
+    uint8_t ssi[];                  /**< Service specific info of Publisher */
 } wifi_event_nan_svc_match_t;
 
 /**
@@ -1578,6 +1627,50 @@ typedef struct {
     uint8_t ndp_id;                             /**< NDP instance id */
     uint8_t init_ndi[6];                        /**< Initiator's NAN Data Interface MAC */
 } wifi_event_ndp_terminated_t;
+
+/**
+  * @brief Argument structure for WIFI_EVENT_NAN_BOOTSTRAP_INDICATION event
+  *
+  * Posted when a NAN Pairing Bootstrapping Request is received from a peer.
+  * The application should respond using esp_wifi_nan_bootstrap_response().
+  */
+typedef struct {
+    uint8_t peer_svc_id;                        /**< Peer's service instance id */
+    uint8_t own_svc_id;                         /**< Own service instance id */
+    uint8_t peer_nmi[6];                        /**< Peer's NAN Management Interface MAC */
+    uint16_t selected_method;                   /**< Bootstrapping method selected by initiator (one WIFI_NAN_BOOTSTRAP_* bit) */
+    uint8_t is_comeback;                        /**< 1 if this is a comeback retry with cookie */
+    uint32_t cookie;                            /**< Comeback cookie from initiator (0 if none) */
+} wifi_event_nan_bootstrap_indication_t;
+
+/**
+  * @brief Argument structure for WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED event
+  *
+  * Posted when a NAN Pairing Bootstrapping Response is received,
+  * or when the bootstrapping handshake completes/fails.
+  */
+typedef struct {
+    uint8_t status;                             /**< 0=Accepted, 1=Rejected, 2=Comeback (wifi_nan_pairing_status_t) */
+    uint8_t peer_svc_id;                        /**< Peer's service instance id */
+    uint8_t own_svc_id;                         /**< Own service instance id */
+    uint8_t peer_nmi[6];                        /**< Peer's NAN Management Interface MAC */
+    uint16_t matched_method;                    /**< Matched bootstrapping method, one WIFI_NAN_BOOTSTRAP_* bit (valid if accepted) */
+    uint8_t reason_code;                        /**< Rejection reason (valid if rejected) */
+    uint16_t comeback_after;                    /**< Comeback deferral time in TUs (valid if comeback) */
+    uint32_t cookie;                            /**< Comeback cookie from responder (0 if none) */
+} wifi_event_nan_bootstrap_complete_t;
+
+/**
+  * @brief Argument structure for WIFI_EVENT_NAN_PAIRING_CONFIRM event
+  *
+ * Posted when PASN pairwise key installation completes.
+ * Distinct from WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED (NPBA follow-up bootstrapping).
+  */
+typedef struct {
+    uint8_t status;                             /**< 0=Accepted, 1=Rejected (wifi_nan_pairing_status_t) */
+    uint8_t reason_code;                        /**< Rejection reason (valid if rejected) */
+    uint8_t peer_nmi[6];                        /**< Peer's NAN Management Interface MAC */
+} wifi_event_nan_pairing_complete_t;
 
 /**
   * @brief Argument structure for WIFI_EVENT_STA_NEIGHBOR_REP event
@@ -1665,14 +1758,75 @@ typedef struct {
     char uri[];                  /**< URI data */
 } wifi_event_dpp_uri_ready_t;
 
-/** Argument structure for WIFI_EVENT_DPP_CFG_RECVD event */
+#define ESP_DPP_MAX_CONNECTOR_LEN 512
+#define ESP_DPP_MAX_KEY_LEN 128
+
+/**
+  * @brief One provisioned network from a DPP Configuration Response
+  *
+  *        Filled by the stack for WIFI_EVENT_DPP_CFG_RECVD. A single network row may contain hybrid
+  *        credentials (e.g., both a DPP Connector and a legacy PSK/SAE password). The application
+  *        should pass this structure to esp_supp_dpp_set_config() to load any DPP credentials, and
+  *        also extract the SSID/password for esp_wifi_set_config() to configure the driver for
+  *        legacy connection and fallback.
+  *
+  * @note Memory footprint: this structure uses fixed-size buffers for the connector and keys
+  *       (dominated by ESP_DPP_MAX_CONNECTOR_LEN and ESP_DPP_MAX_KEY_LEN). While this avoids
+  *       dynamic allocation and keeps the structure application-friendly, it results in a
+  *       size of nearly 1KB per entry.
+  */
 typedef struct {
-    wifi_config_t wifi_cfg;                  /**< Received WIFI config in DPP */
+    uint8_t ssid[MAX_SSID_LEN];              /**< SSID octets; valid length is @ref ssid_len */
+    uint8_t ssid_len;                        /**< SSID length in octets, 0 .. MAX_SSID_LEN */
+    uint8_t password[MAX_PASSPHRASE_LEN];    /**< Legacy AKM: passphrase or hex PSK octets; length @ref password_len */
+    uint8_t password_len;                    /**< Password length in octets, 0 .. MAX_PASSPHRASE_LEN; 0 if unused */
+    char connector[ESP_DPP_MAX_CONNECTOR_LEN]; /**< DPP Connector when akm includes DPP; NUL-terminated when @ref connector_len > 0 */
+    uint16_t connector_len;                  /**< Connector length in octets, excluding NUL; 0 if absent */
+    uint8_t net_access_key[ESP_DPP_MAX_KEY_LEN]; /**< Network access key when akm includes DPP */
+    uint16_t net_access_key_len;             /**< Used length of net_access_key */
+    uint8_t c_sign_key[ESP_DPP_MAX_KEY_LEN]; /**< C-sign key when akm includes DPP */
+    uint16_t c_sign_key_len;                 /**< Used length of c_sign_key */
+    uint64_t net_access_key_expiry;          /**< Optional expiry hint for net_access_key from configurator */
+    uint8_t curr_chan;                       /**< Channel from the DPP exchange for this row; used for off-channel network introduction */
+    uint8_t akm;                             /**< AKM for this row; values are esp_dpp_akm_t (stored as uint8_t) */
+} esp_dpp_config_data_t;
+
+/**
+  * @brief Argument structure for WIFI_EVENT_DPP_CFG_RECVD event
+  *
+  * Contains STA configurations received from the DPP Configurator. wifi_cfg is
+  * populated from the first configuration object for backward compatibility.
+  * Application should iterate through configs[] if the first connection attempt fails.
+  * The event data is only valid within the callback handler; applications must
+  * copy the configurations if they need to use them after the handler returns.
+  * If the first configuration object from the Configurator uses a DPP AKM and includes a connector, the supplicant
+  * automatically loads it into the internal DPP store for Network Introduction for backward
+  * compatibility. esp_supp_dpp_set_config() replaces that store when the application selects a
+  * row explicitly.
+  *
+  * Only the first CONFIG_ESP_WIFI_DPP_MAX_CONF_OBJ objects from the Configurator are forwarded; additional objects in the
+  * DPP response are ignored.
+  *
+  * Variable-length payload: base struct plus total_conf elements of configs[].
+  *
+  * @note Memory footprint: total event payload is roughly
+  *       sizeof(wifi_event_dpp_config_received_t) + total_conf * sizeof(esp_dpp_config_data_t),
+  *       i.e. ~1KB per forwarded configuration object. esp_event_post() deep-copies
+  *       this payload into the event queue, so transient peak heap usage during the post is
+  *       roughly twice the payload. Applications must copy these configurations if they
+  *       need to use them after the event handler returns, as they will no longer be available.
+  *       Memory-constrained applications can cap the payload by lowering
+  *       CONFIG_ESP_WIFI_DPP_MAX_CONF_OBJ (default 3).
+  */
+typedef struct {
+    wifi_config_t wifi_cfg;                  /**< STA summary from the first configuration object */
+    uint8_t total_conf;                      /**< Number of esp_dpp_config_data_t entries in configs */
+    esp_dpp_config_data_t configs[];         /**< One row per provisioned network, configurator order */
 } wifi_event_dpp_config_received_t;
 
-/** Argument structure for WIFI_EVENT_DPP_FAIL event */
+/** Argument structure for WIFI_EVENT_DPP_FAILED event */
 typedef struct {
-    int failure_reason;                      /**< Failure reason */
+    int failure_reason;                      /**< esp_err_t code (e.g. ESP_ERR_DPP_FAILURE) */
 } wifi_event_dpp_failed_t;
 
 #ifdef __cplusplus

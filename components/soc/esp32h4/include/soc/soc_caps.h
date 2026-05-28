@@ -64,6 +64,7 @@
 #define SOC_GPSPI_SUPPORTED             1
 #define SOC_LEDC_SUPPORTED              1
 #define SOC_I2C_SUPPORTED               1
+#define SOC_RNG_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1
 // #define SOC_SUPPORT_COEXISTENCE         1    // TODO: [ESP32H4] IDF-12251 IDF-12252 IDF-12253
 #define SOC_AES_SUPPORTED               1
@@ -507,7 +508,6 @@
 #define SOC_PM_CPU_RETENTION_BY_SW          (1)
 #define SOC_PM_FPU_RETENTION_BY_SW          (1)
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA    (1)
-#define SOC_PM_MODEM_CLK_CONF_RETENTION     (1)  /*!< In esp32H4, i2c lpcon is placed in top domain*/
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN (1)
 
 #define SOC_PM_PAU_LINK_NUM                 (4)
@@ -515,11 +515,16 @@
 #define SOC_PM_RETENTION_MODULE_NUM         (64)
 
 #define SOC_PM_TOP_DEPENDS_ON_RTC_PERIPH    (1) // In ESP32H4, RTC_PERIPH should be pd only together with TOP, otherwise there is some current leak.
+#define SOC_PM_BBPLL_PD_IN_MODEM_STATE      (1)
+#define SOC_PM_MODEM_LOCK_CLK_WORKAROUND    (1) // In ESP32H4, the modem lock will lock the xtalx2, bbpll and other xpd state during modem2active.
+
+#define SOC_PM_FLASH_KEEP_POWER_IN_LSLP     (1)  /*!<Keep flash on in light sleep to reduce wake latency*/
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
 
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
+#define SOC_RNG_CLOCK_IS_INDEPENDENT              (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */

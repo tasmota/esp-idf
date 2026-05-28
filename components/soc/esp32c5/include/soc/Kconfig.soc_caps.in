@@ -1255,14 +1255,6 @@ config SOC_CRYPTO_DPA_PROTECTION_SUPPORTED
     bool
     default y
 
-config SOC_RNG_BUF_CHAIN_ENTROPY_SOURCE
-    bool
-    default y
-
-config SOC_RNG_RTC_TIMER_ENTROPY_SOURCE
-    bool
-    default y
-
 config SOC_UART_NUM
     int
     default 3
@@ -1462,6 +1454,10 @@ config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
 config SOC_PM_RETENTION_MODULE_NUM
     int
     default 32
+
+config SOC_PM_FLASH_KEEP_POWER_IN_LSLP
+    bool
+    default y
 
 config SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
     bool

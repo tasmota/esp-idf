@@ -354,6 +354,13 @@ menu "Wi-Fi"
             help
                 Select this option to allow the device to enable OWE Only mode for softap.
 
+        config ESP_WIFI_PASN_SUPPORT
+            bool "Enable PASN support"
+            default n
+            help
+                Pre-Association Security Negotiation (PASN) for Wi-Fi NAN.
+                The wpa_supplicant exposes CONFIG_PASN when this is on.
+
         config ESP_WIFI_SLP_IRAM_OPT
             bool "WiFi SLP IRAM speed optimization"
             select PM_SLP_DEFAULT_PARAMS_OPT
@@ -617,6 +624,16 @@ menu "Wi-Fi"
             help
                 Enable Wi-Fi Aware: Unsynchronized service discovery (NAN-USD)
 
+        config ESP_WIFI_NAN_PAIRING
+            bool "Enable NAN Pairing"
+            depends on ESP_WIFI_NAN_SECURITY && IDF_EXPERIMENTAL_FEATURES && ESP_WIFI_MBEDTLS_CRYPTO
+            select ESP_WIFI_PASN_SUPPORT
+            default n
+            help
+                Enable NAN Pairing support. This allows devices to establish
+                secure pairing using bootstrapping methods like PIN code.
+                Requires PASN in wpa_supplicant (ESP_WIFI_PASN_SUPPORT)
+
         config ESP_WIFI_MBEDTLS_CRYPTO
             bool "Use MbedTLS crypto APIs"
             default y
@@ -753,6 +770,17 @@ menu "Wi-Fi"
             select ESP_WIFI_MBEDTLS_CRYPTO
             help
                 Select this option to enable WiFi Easy Connect Support.
+
+        config ESP_WIFI_DPP_MAX_CONF_OBJ
+            int "Maximum number of DPP configuration objects"
+            depends on ESP_WIFI_DPP_SUPPORT
+            range 1 10
+            default 3
+            help
+                Maximum number of configuration objects that can be received and stored
+                during a DPP configuration exchange. DPP v2 configurators may send
+                multiple configuration objects (e.g., for different SSIDs or AKMs).
+                Increasing this value will increase the memory usage for DPP events.
 
         config ESP_WIFI_11R_SUPPORT
             bool "Enable 802.11R (Fast Transition) Support"
@@ -907,6 +935,23 @@ menu "Wi-Fi"
             help
                 Select this option to enable/disable support for station connections
                 to hidden APs using passive scan when the country policy is set to auto.
+
+        config ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED
+            bool "WiFi Privacy Enhancements enabled"
+            default n
+            help
+                Select this option to enable WiFi Privacy Enhancements (enables random mac,
+                seq number, dialogue token number, vendor seq number cnt).
+                Supported on station interface only; softAP may be added in future.
+
+        config ESP_WIFI_RMAC_AUTO_RESET_INTERVAL
+            int "Random MAC Auto-Reset Interval time"
+            depends on ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED
+            range 1 24
+            default 12
+            help
+                Interval in hours to rotate the random MAC while not connected to an AP.
+                Values below 1 or above 24 are not allowed.
 
     endif # wifi enabled
 

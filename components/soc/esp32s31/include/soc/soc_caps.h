@@ -93,7 +93,7 @@
 #define SOC_CLK_TREE_SUPPORTED          1
 #define SOC_ASSIST_DEBUG_SUPPORTED      1
 #define SOC_CPU_LOCKUP_DEBUG_SUPPORTED  1
-// #define SOC_DEBUG_PROBE_SUPPORTED       1      // TODO: [ESP32S31] IDF-14798
+#define SOC_DEBUG_PROBE_SUPPORTED       1
 #define SOC_WDT_SUPPORTED               1
 #define SOC_RTC_WDT_SUPPORTED           1
 #define SOC_SPI_FLASH_SUPPORTED         1         // TODO: [ESP32S31] IDF-14777
@@ -111,6 +111,15 @@
 #define SOC_CORDIC_SUPPORTED            1
 #define SOC_REGI2C_SUPPORTED            1
 #define SOC_JPEG_CODEC_SUPPORTED        1
+#define SOC_EMAC_SUPPORTED              1
+
+/*-------------------------- EMAC CAPS ----------------------------------------*/
+#define SOC_EMAC_SUPPORT_1000M                     (1)      /*!< EMAC Supports 1000Mbps mode */
+#define SOC_EMAC_IEEE1588V2_SUPPORTED              (1)      /*!< EMAC Supports IEEE1588v2 time stamping */
+#define SOC_EMAC_USE_MULTI_IO_MUX                  (1)      /*!< Multiple GPIO pad options exist to connect EMAC signal via IO_MUX */
+#define SOC_EMAC_MII_USE_GPIO_MATRIX               (1)      /*!< EMAC MII signals are connected to GPIO pads via GPIO Matrix */
+#define SOC_EMAC_DEDICATED_GPIO_CTRL_SUPPORTED     (1)      /*!< EMAC has dedicated CNNT-domain pad control registers */
+// #define SOC_EMAC_SUPPORT_SLEEP_RETENTION           (1)   // TODO: [ESP32S31] IDF-14731 - implement sleep retention for EMAC
 
 /*------------------------- Analog Comparator CAPS ---------------------------*/
 #define SOC_ANA_CMPR_SUPPORT_ETM        (1)
@@ -239,6 +248,10 @@
 #define SOC_GPIO_CLOCKOUT_BY_GPIO_MATRIX         (1)
 #define SOC_GPIO_CLOCKOUT_CHANNEL_NUM            (3)
 #define SOC_CLOCKOUT_SUPPORT_CHANNEL_DIVIDER     (1)
+
+/*-------------------------- DEBUG PROBE CAPS ---------------------------------*/
+#define SOC_DEBUG_PROBE_NUM_UNIT                 (2U)  // Unit 0: HP probe, Unit 1: LP probe
+#define SOC_DEBUG_PROBE_MAX_OUTPUT_WIDTH         (16)  // Maximum width of the debug probe output in each unit
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 #define SOC_RTCIO_PIN_COUNT                 8

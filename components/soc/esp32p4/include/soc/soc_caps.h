@@ -50,6 +50,7 @@
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_EMAC_SUPPORTED              1
 #define SOC_USB_OTG_SUPPORTED           1
+#define SOC_USB_DFU_SUPPORTED           1
 #define SOC_WIRELESS_HOST_SUPPORTED     1
 #define SOC_USB_SERIAL_JTAG_SUPPORTED   1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
@@ -111,7 +112,7 @@
 #define SOC_SPI_FLASH_SUPPORTED         1
 #define SOC_TOUCH_SENSOR_SUPPORTED      1
 #define SOC_RNG_SUPPORTED               1
-#define SOC_GP_LDO_SUPPORTED            1 // General purpose LDO
+#define SOC_GP_LDO_SUPPORTED            1
 #define SOC_PPA_SUPPORTED               1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
 #define SOC_DEEP_SLEEP_SUPPORTED        1
@@ -142,30 +143,18 @@
 #define SOC_ADC_DIG_CTRL_SUPPORTED              1
 // #define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
 // #define SOC_ADC_MONITOR_SUPPORTED               1
-#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
 #define SOC_ADC_DMA_SUPPORTED                   1
 #define SOC_ADC_PERIPH_NUM                      (2)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         ((PERIPH_NUM==0)? 8: 6)
-#define SOC_ADC_MAX_CHANNEL_NUM                 (8)
 #define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
-#define SOC_ADC_DIGI_CONTROLLER_NUM             (2)
 #define SOC_ADC_PATT_LEN_MAX                    (16) /*!< Four pattern tables, each contains 4 items. Each item takes 1 byte */
-#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
-#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
+#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MONITOR_NUM                (2)
 #define SOC_ADC_DIGI_RESULT_BYTES               (4)
 #define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-/*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
-
-/*!< RTC */
-#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
-#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
-
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
 #define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
@@ -393,6 +382,9 @@
 #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 #define SOC_LEDC_SUPPORT_SLEEP_RETENTION    (1)
 #define SOC_LEDC_SUPPORT_ETM                (1)
+
+/*-------------------------- LDO CAPS ----------------------------------------*/
+#define SOC_GP_LDO_NUM_UNITS                4    // Number of general purpose LDO units
 
 /*-------------------------- MMU CAPS ----------------------------------------*/
 #define SOC_MMU_PERIPH_NUM                    (2U)

@@ -51,20 +51,18 @@
 #define SOC_USB_OTG_SUPPORTED           1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
 #define SOC_USB_SERIAL_JTAG_SUPPORTED   1
-// #define SOC_TEMP_SENSOR_SUPPORTED       1      // TODO: [ESP32S31] IDF-14799
 // #define SOC_SUPPORTS_SECURE_DL_MODE     1      // TODO: [ESP32S31] IDF-14629
 #define SOC_ULP_SUPPORTED               1
 #define SOC_LP_CORE_SUPPORTED           1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD     1
 #define SOC_EFUSE_SUPPORTED             1
 #define SOC_RTC_FAST_MEM_SUPPORTED      1
-#define SOC_RTC_MEM_SUPPORTED           1      // TODO: [ESP32S31] IDF-14645
+#define SOC_RTC_MEM_SUPPORTED           1
 #define SOC_RMT_SUPPORTED               1
 #define SOC_I2S_SUPPORTED               1
 #define SOC_SDM_SUPPORTED               1
 #define SOC_GPSPI_SUPPORTED             1
 #define SOC_LEDC_SUPPORTED              1
-// #define SOC_ISP_SUPPORTED               1      // TODO: [ESP32S31] IDF-14769
 #define SOC_I2C_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1
 #define SOC_AES_SUPPORTED               1
@@ -75,8 +73,8 @@
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_ECDSA_SUPPORTED             1
-// #define SOC_FLASH_ENC_SUPPORTED         1         // TODO: [ESP32S31] IDF-14628
-// #define SOC_SECURE_BOOT_SUPPORTED       1      // TODO: [ESP32S31] IDF-14629
+#define SOC_FLASH_ENC_SUPPORTED         1
+#define SOC_SECURE_BOOT_SUPPORTED       1
 #define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1      // TODO: [ESP32S31] IDF-14620
 #define SOC_PAU_SUPPORTED                  1
@@ -96,10 +94,10 @@
 #define SOC_DEBUG_PROBE_SUPPORTED       1
 #define SOC_WDT_SUPPORTED               1
 #define SOC_RTC_WDT_SUPPORTED           1
-#define SOC_SPI_FLASH_SUPPORTED         1         // TODO: [ESP32S31] IDF-14777
+#define SOC_SPI_FLASH_SUPPORTED         1
 #define SOC_SPI_FLASH_HAS_DEDICATED_LDO 1
 #define SOC_TOUCH_SENSOR_SUPPORTED      1
-#define SOC_GP_LDO_SUPPORTED            1 // General purpose LDO
+#define SOC_GP_LDO_SUPPORTED            1
 #define SOC_RNG_SUPPORTED               1
 #define SOC_PPA_SUPPORTED               1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
@@ -112,6 +110,7 @@
 #define SOC_REGI2C_SUPPORTED            1
 #define SOC_JPEG_CODEC_SUPPORTED        1
 #define SOC_EMAC_SUPPORTED              1
+#define SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED    1
 
 /*-------------------------- EMAC CAPS ----------------------------------------*/
 #define SOC_EMAC_SUPPORT_1000M                     (1)      /*!< EMAC Supports 1000Mbps mode */
@@ -143,22 +142,15 @@
 /*!< SAR ADC Module*/
 #define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_PERIPH_NUM                      (2)
-#define SOC_ADC_MAX_CHANNEL_NUM                 (8)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (8)
 #define SOC_ADC_ATTEN_NUM                       (1U)
-#define SOC_ADC_RTC_MIN_BITWIDTH                (17)
-#define SOC_ADC_RTC_MAX_BITWIDTH                (17)
 
 #define SOC_ADC_DMA_SUPPORTED                   1
-#define SOC_ADC_DIGI_CONTROLLER_NUM             (2)
 #define SOC_ADC_PATT_LEN_MAX                    (16)
 #define SOC_ADC_DIGI_MIN_BITWIDTH               (17)
 #define SOC_ADC_DIGI_MAX_BITWIDTH               (17)
 #define SOC_ADC_DIGI_RESULT_BYTES               (4)
 #define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        (1)
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          (83333U)
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           (611U)
 #define SOC_ADC_DIGI_MONITOR_NUM                (2)
 
 #define SOC_ADC_DIFF_SUPPORTED                  (1)
@@ -279,6 +271,9 @@
 #define SOC_LEDC_FADE_PARAMS_BIT_WIDTH      (10)
 #define SOC_LEDC_SUPPORT_SLEEP_RETENTION    (1)
 #define SOC_LEDC_SUPPORT_ETM                (1)
+
+/*-------------------------- LDO CAPS ----------------------------------------*/
+#define SOC_GP_LDO_NUM_UNITS                1U    // Number of general purpose LDO units
 
 /*--------------------------- RMT CAPS ---------------------------------------*/
 #define SOC_RMT_MEM_WORDS_PER_CHANNEL         48 /*!< Each channel owns 48 words memory (1 word = 4 Bytes) */
@@ -435,29 +430,38 @@
 #define SOC_EFUSE_ECDSA_KEY 1
 #define SOC_EFUSE_ECDSA_KEY_P192 1
 #define SOC_EFUSE_ECDSA_KEY_P384 1
+#define SOC_EFUSE_XTS_AES_KEY_128 1
+#define SOC_EFUSE_XTS_AES_KEY_256 1
 
 /*-------------------------- HUK CAPS----------------------------*/
 #define SOC_HUK_SUPPORTED                       1
 
 /*-------------------------- Key Manager CAPS----------------------------*/
-// TODO: [ESP32S31] IDF-14626
 #define SOC_KEY_MANAGER_SUPPORTED                   1
 #define SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT      1 /*!< Key manager supports key deployment */
 #define SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY            1 /*!< Key manager responsible to deploy ECDSA key */
+#define SOC_KEY_MANAGER_FE_KEY_DEPLOY               1 /*!< Key manager responsible to deploy Flash Encryption key */
+#define SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128   1 /*!< Key manager responsible to deploy the XTS-AES-128 key */
+#define SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256   1 /*!< Key manager responsible to deploy the XTS-AES-256 key */
 #define SOC_KEY_MANAGER_HMAC_KEY_DEPLOY             1 /*!< Key manager responsible to deploy HMAC key */
 #define SOC_KEY_MANAGER_DS_KEY_DEPLOY               1 /*!< Key manager responsible to deploy DS key */
-// SOC_KEY_MANAGER_FE_KEY_DEPLOY (incl. XTS-AES-128/256) will be enabled along with Flash Encryption support.
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
-// TODO: [ESP32S31] IDF-14629
+#define SOC_SECURE_BOOT_V2_RSA              1
+#define SOC_SECURE_BOOT_V2_ECC              0
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
+#define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1
+#define SOC_SUPPORT_SECURE_BOOT_REVOKE_KEY  1
 
 /*-------------------------- Flash Encryption CAPS----------------------------*/
-// TODO: [ESP32S31] IDF-14628
-#define SOC_FLASH_ENCRYPTION_XTS_AES        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES                       1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS               1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_128                   1  /* SOC_EFUSE_XTS_AES_KEY_128 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128 (1) */
+#define SOC_FLASH_ENCRYPTION_XTS_AES_256                   1  /* SOC_EFUSE_XTS_AES_KEY_256 (1) || SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256 (1) */
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 
 /*------------------------Bootloader CAPS---------------------------------*/

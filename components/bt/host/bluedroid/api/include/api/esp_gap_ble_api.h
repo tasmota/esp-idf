@@ -984,7 +984,15 @@ typedef struct {
     esp_ble_addr_type_t peer_addr_type; /*!< ext adv peer address type */
     esp_bd_addr_t peer_addr;            /*!< ext adv peer address */
     esp_ble_adv_filter_t filter_policy; /*!< ext adv filter policy */
-    int8_t tx_power;                    /*!< ext adv tx power */
+    int8_t tx_power;                    /*!< ext adv tx power.
+                                             For this advertising set, priority is higher than
+                                             `esp_ble_tx_power_set()`, `esp_ble_tx_power_set_enhanced()`,
+                                             and menuconfig default TX power (`CONFIG_BT_CTRL_DFT_TX_POWER_LEVEL`).
+                                             The actual applied TX power may be different from the requested value,
+                                             depending on the Controller TX power granularity/level mechanism.
+                                             (for example ESP32-C3/ESP32-S3 with 3 dBm step), the actual
+                                             applied TX power may be rounded down and be 0 to 2 dBm lower
+                                             than the requested value.) */
     esp_ble_gap_pri_phy_t primary_phy;  /*!< ext adv primary phy */
     uint8_t max_skip;                   /*!< ext adv maximum skip */
     esp_ble_gap_phy_t secondary_phy;    /*!< ext adv secondary phy.
@@ -2524,7 +2532,6 @@ typedef union {
      */
     struct ble_cs_read_local_supp_caps_evt {
         esp_bt_status_t status;                  /*!< Indicate channel sounding read local supported capabilities command successfully completed */
-        uint16_t conn_handle;                    /*!< Connection Handle */
         uint8_t num_config_supported;            /*!< Number of CS configurations supported per connection */
         uint16_t max_consecutive_proc_supported; /*!< 0x0000: Support for both a fixed number of consecutive CS procedures and for an indefinite number of CS procedures until termination
                                                     0x0001 to 0xFFFF: Maximum number of consecutive CS procedures supported */
@@ -2902,7 +2909,11 @@ typedef void (* esp_gap_ble_cb_t)(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_p
  *
  * @param[in]       callback: callback function
  *
- * @note            Avoid performing time-consuming operations within the callback functions.
+ * @note            Do NOT perform time-consuming operations in the callback. Time-consuming operations
+ *                  include: taking semaphores that may block for a long time (e.g. xSemaphoreTake with
+ *                  long timeout or portMAX_DELAY), blocking delays (e.g. vTaskDelay), and flash
+ *                  read/write/erase. Such operations may block the Bluetooth stack and lead to
+ *                  instability or deadlock. Defer heavy work to a separate task if needed.
  *
  * @return
  *                  - ESP_OK : success
@@ -3100,6 +3111,11 @@ esp_err_t esp_ble_gap_add_device_to_resolving_list(esp_bd_addr_t peer_addr, uint
 
 /**
  * @brief           This function clears the random address for the application
+ *
+ * @note            This function shall not be used when:
+ *                  - Advertising is enabled,
+ *                  - Scanning is enabled, or
+ *                  - any LE connection exists / a create connection command is pending.
  *
  * @return
  *                  - ESP_OK : success

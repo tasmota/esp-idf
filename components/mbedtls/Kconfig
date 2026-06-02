@@ -37,19 +37,22 @@ menu "mbedTLS"
                 If you do intend to use contexts between threads, you will need to enable
                 this layer to prevent race conditions.
 
-        config MBEDTLS_THREADING_ALT
-            bool "Enable threading alternate implementation"
+        choice MBEDTLS_THREADING_IMPLEMENTATION
+            prompt "Threading implementation"
             depends on MBEDTLS_THREADING_C
-            default n
-            help
-                Enable threading alt to allow your own alternate threading implementation.
+            default MBEDTLS_THREADING_PTHREAD
 
-        config MBEDTLS_THREADING_PTHREAD
-            bool "Enable threading pthread implementation"
-            depends on MBEDTLS_THREADING_C
-            default y
-            help
-                Enable the pthread wrapper layer for the threading layer.
+            config MBEDTLS_THREADING_ALT
+                bool "Enable threading alternate implementation"
+                help
+                    Enable threading alt to allow your own alternate threading implementation.
+
+            config MBEDTLS_THREADING_PTHREAD
+                bool "Enable threading pthread implementation"
+                help
+                    Enable the pthread wrapper layer for the threading layer.
+
+        endchoice
 
         config MBEDTLS_ERROR_STRINGS
             bool "Enable error code to error string conversion"
@@ -728,7 +731,7 @@ menu "mbedTLS"
 
             config MBEDTLS_KEY_EXCHANGE_ECJPAKE
                 bool "Enable ECJPAKE based ciphersuite modes"
-                depends on MBEDTLS_ECP_DP_SECP256R1_ENABLED
+                depends on MBEDTLS_ECJPAKE_C && MBEDTLS_ECP_DP_SECP256R1_ENABLED
                 default n
                 help
                     Enable to support ciphersuites with prefix TLS-ECJPAKE-WITH-
@@ -1092,6 +1095,13 @@ menu "mbedTLS"
                 default y
                 help
                         Enable ECDH. Needed to use ECDHE-xxx TLS ciphersuites.
+
+            config MBEDTLS_ECJPAKE_C
+                bool "Elliptic curve J-PAKE"
+                depends on MBEDTLS_ECP_C
+                default n
+                help
+                        Enable ECJPAKE. Needed to use ECJPAKE-xxx TLS ciphersuites.
 
             config MBEDTLS_ECDSA_C
                 bool "Elliptic Curve DSA"

@@ -430,6 +430,7 @@
 
 // USB OTG Caps
 #define SOC_USB_OTG_PERIPH_NUM          (2U)
+#define SOC_USB_FSLS_PHY_NUM            (1U)
 
 // USB PHY Caps
 #define SOC_USB_UTMI_PHY_NUM            (1U)
@@ -640,6 +641,10 @@
 #define SOC_PSRAM_ENCRYPTION_SEPARATE_KEY       1  /* PSRAM encryption can use independent key */
 #define SOC_PSRAM_ENCRYPTION_PAGE_CONFIGURABLE  1  /* PSRAM encryption can be configured on a MMU page basis */
 
+/*------------------------Bootloader CAPS---------------------------------*/
+/* Support Recovery Bootloader */
+#define SOC_RECOVERY_BOOTLOADER_SUPPORTED             (1)
+
 /*-------------------------- MEMPROT CAPS ------------------------------------*/
 
 /*-------------------------- UART CAPS ---------------------------------------*/
@@ -745,6 +750,9 @@
 #define SOC_JPEG_CODEC_SUPPORTED                  (1)
 #define SOC_JPEG_DECODE_SUPPORTED                 (1)
 #define SOC_JPEG_ENCODE_SUPPORTED                 (1)
+
+/*--------------------------- H264 --------------------------------*/
+#define SOC_H264_ENCODER_SUPPORTED                (1)
 
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)

@@ -738,9 +738,6 @@ static SLEEP_FN_ATTR void misc_modules_sleep_prepare(uint32_t sleep_flags, bool 
         }
 #endif
 #if CONFIG_MAC_BB_PD
-# if CONFIG_IDF_TARGET_ESP32C5
-        clk_ll_soc_root_clk_auto_gating_bypass(false);
-# endif
         mac_bb_power_down_cb_execute();
 #endif
 #if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
@@ -812,9 +809,6 @@ static SLEEP_FN_ATTR void misc_modules_wake_prepare(uint32_t sleep_flags)
 #endif
 #if CONFIG_MAC_BB_PD
     mac_bb_power_up_cb_execute();
-# if CONFIG_IDF_TARGET_ESP32C5
-    clk_ll_soc_root_clk_auto_gating_bypass(true);
-# endif
 #endif
 #if REGI2C_ANA_CALI_PD_WORKAROUND
     regi2c_analog_cali_reg_write();
@@ -1925,6 +1919,7 @@ static void ext0_wakeup_prepare(void)
 #endif
     rtcio_hal_ext0_set_wakeup_pin(rtc_gpio_num, s_config.ext0_trigger_level);
     rtcio_hal_function_select(rtc_gpio_num, RTCIO_LL_FUNC_RTC);
+    rtcio_hal_iomux_func_sel(rtc_gpio_num, RTCIO_LL_PIN_FUNC);
     rtcio_hal_input_enable(rtc_gpio_num);
 }
 
@@ -2061,6 +2056,8 @@ static void ext1_wakeup_prepare(void)
 #if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
         // Route pad to RTC
         rtcio_hal_function_select(rtc_pin, RTCIO_LL_FUNC_RTC);
+        // Select LP GPIO function
+        rtcio_hal_iomux_func_sel(rtc_pin, RTCIO_LL_PIN_FUNC);
         // set input enable in sleep mode
         rtcio_hal_input_enable(rtc_pin);
 #if SOC_PM_SUPPORT_RTC_PERIPH_PD

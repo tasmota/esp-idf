@@ -73,6 +73,9 @@
 #include "hal/touch_sens_hal.h"
 #endif
 #include "hal/mspi_ll.h"
+#if SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
+#include "hal/lp_aon_hal.h"
+#endif
 
 #include "sdkconfig.h"
 #include "esp_rom_uart.h"
@@ -1064,6 +1067,7 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, uint32_t cl
         rtc_hal_ulp_wakeup_enable();
 #elif CONFIG_ULP_COPROC_TYPE_LP_CORE
         pmu_ll_hp_clear_sw_intr_status(&PMU);
+        pmu_ll_hp_clear_lp_cpu_exc_intr_status(&PMU);
 #else
         rtc_hal_ulp_int_clear();
 #endif
@@ -1224,10 +1228,18 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
 
     esp_sync_timekeeping_timers();
 
+    // Must acquire all spinlocks which may be acquired during sleep process before stalling other core,
+    // otherwise deadlock may occur.
+    portENTER_CRITICAL(&spinlock_rtc_deep_sleep);
+#if !CONFIG_FREERTOS_UNICORE
+    extern portMUX_TYPE rtc_spinlock;
+    portENTER_CRITICAL_SAFE(&rtc_spinlock); // Maybe acquired from temp_sensor_get_raw_value by phy_close_rf callback
+    esp_clk_private_lock(); // Maybe acquired from esp_clk_slowclk_cal_set
+#endif
+
     /* Disable interrupts and stall another core in case another task writes
      * to RTC memory while we calculate RTC memory CRC.
      */
-    portENTER_CRITICAL(&spinlock_rtc_deep_sleep);
     esp_ipc_isr_stall_other_cpu();
     esp_ipc_isr_stall_pause();
 
@@ -1298,6 +1310,10 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     // Never returns here, except that the sleep is rejected.
     esp_ipc_isr_stall_resume();
     esp_ipc_isr_release_other_cpu();
+#if !CONFIG_FREERTOS_UNICORE
+    esp_clk_private_unlock();
+    portEXIT_CRITICAL_SAFE(&rtc_spinlock);
+#endif
     portEXIT_CRITICAL(&spinlock_rtc_deep_sleep);
     return err;
 }
@@ -2153,6 +2169,9 @@ esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepslee
         ESP_LOGE(TAG, "invalid mode");
         return ESP_ERR_INVALID_ARG;
     }
+    if (gpio_pin_mask == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
     gpio_int_type_t intr_type = ((mode == ESP_GPIO_WAKEUP_GPIO_LOW) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
     esp_err_t err = ESP_OK;
 
@@ -2362,6 +2381,15 @@ uint32_t esp_sleep_get_wakeup_causes(void)
     uint32_t wakeup_cause_raw = pmu_ll_hp_get_wakeup_cause(&PMU);
 #else
     uint32_t wakeup_cause_raw = rtc_cntl_ll_get_wakeup_cause();
+#endif
+
+#if SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
+    /* LP store register to read wakeup cause saved by LP core.
+     * Must match the register used in lp_core_utils.c */
+    uint32_t lp_core_wakeup_cause_status0 = lp_aon_hal_load_wakeup_cause();
+    if ((wakeup_cause_raw == 0) && (lp_core_wakeup_cause_status0 != 0)) {
+        wakeup_cause_raw = lp_core_wakeup_cause_status0;
+    }
 #endif
 
     if (wakeup_cause_raw & RTC_TIMER_TRIG_EN) {

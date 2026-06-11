@@ -73,7 +73,7 @@
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
 #define SOC_FLASH_ENC_SUPPORTED         1
-#define SOC_SECURE_BOOT_SUPPORTED       1
+#define SOC_SECURE_BOOT_SUPPORTED       0
 #define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12256
 #define SOC_PMU_SUPPORTED               1    // TODO: [ESP32H4] IDF-12286
@@ -89,6 +89,7 @@
 #define SOC_WDT_SUPPORTED               1
 #define SOC_RTC_WDT_SUPPORTED           1
 #define SOC_SPI_FLASH_SUPPORTED         1
+#define SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED    1
 #define SOC_ECDSA_SUPPORTED             1
 #define SOC_SPIRAM_SUPPORTED            1
 #define SOC_LIGHT_SLEEP_SUPPORTED       1
@@ -375,6 +376,8 @@
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
 #define SOC_SPI_MEM_SUPPORT_WRAP                          (1)
+#define SOC_SPI_MEM_SUPPORT_TSUS_TRES_SEPERATE_CTR        (1)
+#define SOC_SPI_MEM_SUPPORT_CACHE_32BIT_ADDR_MAP          (1)
 #define SOC_MEMSPI_IS_INDEPENDENT                          1
 
 #define SOC_MEMSPI_ENCRYPTION_ALIGNMENT           16    /*!< 16-byte alignment restriction to mem addr and size if encryption is enabled */
@@ -417,7 +420,7 @@
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
 #define SOC_SECURE_BOOT_V2_RSA              0
-#define SOC_SECURE_BOOT_V2_ECC              1
+#define SOC_SECURE_BOOT_V2_ECC              0
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
 #define SOC_EFUSE_SECURE_BOOT_P384_WR_DIS   1
 #define SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS   1

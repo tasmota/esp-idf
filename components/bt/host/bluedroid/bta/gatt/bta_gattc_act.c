@@ -1484,8 +1484,9 @@ void bta_gattc_write_cmpl(tBTA_GATTC_CLCB *p_clcb, tBTA_GATTC_OP_CMPL *p_data)
             ( *p_clcb->p_rcb->p_cback)(BTA_GATTC_PREP_WRITE_EVT, (tBTA_GATTC *)&cb_data);
             return;
         }
-        /* Rsp value is one ATT chunk (<= MTU-5), not necessarily full api_write.len. */
-        {
+        /* Rsp value is one ATT chunk (<= MTU-5), not necessarily full api_write.len.
+         * Only validate echo on success; ATT Error Response has no prepare-write body. */
+        if (p_data->status == BTA_GATT_OK) {
             UINT16 rsp_len = p_data->p_cmpl->att_value.len;
             UINT16 req_len = p_clcb->p_q_cmd->api_write.len;
             tGATT_VALUE *a = &p_data->p_cmpl->att_value;
@@ -2264,12 +2265,14 @@ void bta_gattc_process_indicate(UINT16 conn_id, tGATTC_OPTYPE op, tGATT_CL_COMPL
                 bta_gattc_proc_other_indication(p_clcb, op, p_data, &notify);
             }
         } else {
-            /* No app registered for this handle: drop the PDU, but log it
-             * so the common "registered a wrong handle" bug is visible
-             * instead of silently failing. */
-            APPL_TRACE_WARNING("drop %s, handle 0x%04x not registered",
-                               (op == GATTC_OPTYPE_INDICATION) ? "ind" : "notif",
-                               handle);
+            /* GATT stack broadcasts notif/ind to every client app; drop here
+             * when this gatt_if did not register. Only warn if no app at all
+             * registered for the handle (likely wrong handle). */
+            if (!bta_gattc_any_notif_registry(p_srcb, &notify)) {
+                APPL_TRACE_WARNING("drop %s, handle 0x%04x not registered",
+                                   (op == GATTC_OPTYPE_INDICATION) ? "ind" : "notif",
+                                   handle);
+            }
             if (op == GATTC_OPTYPE_INDICATION) {
                 GATTC_SendHandleValueConfirm(conn_id, handle);
             }

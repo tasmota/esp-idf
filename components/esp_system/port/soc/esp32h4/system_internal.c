@@ -85,6 +85,8 @@ void esp_system_reset_modules_on_exit(void)
     CLEAR_PERI_REG_MASK(PCR_HMAC_CONF_REG, PCR_HMAC_RST_EN);
     SET_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_ECC_MEM_LP_CTRL_REG, PCR_ECC_MEM_LP_EN);
+    SET_PERI_REG_MASK(PCR_ECC_MEM_LP_CTRL_REG, PCR_ECC_MEM_FORCE_CTRL);
 
     // UART's sclk is controlled in the PCR register and does not reset with the UART module. The ROM missed enabling
     // it when initializing the ROM UART. If it is not turned on, it will trigger LP_WDT in the ROM.
@@ -96,7 +98,7 @@ static void IRAM_ATTR __attribute__((noinline, noreturn)) esp_restart_noos_inner
     const uint32_t core_id = esp_cpu_get_core_id();
 
     // Disable cache
-    Cache_Disable_Cache(CACHE_MAP_ALL);
+    Cache_Disable_Cache(CACHE_MAP_MASK);
 
     esp_system_reset_modules_on_exit();
 

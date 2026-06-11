@@ -123,16 +123,6 @@ esp_err_t bootloader_flash_erase_range(uint32_t start_addr, uint32_t size)
 #include "hal/mmu_ll.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
-
-#if CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/opi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
-#include "esp32p4/rom/opi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C5
-#include "esp32c5/rom/opi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C61
-#include "esp32c61/rom/opi_flash.h"
-#endif
 #include "esp_flash_chips/spi_flash_defs.h"
 
 #if ESP_TEE_BUILD
@@ -699,7 +689,7 @@ void bootloader_flash_32bits_address_map_enable(esp_rom_spiflash_read_mode_t fla
         break;
     }
     cache_hal_disable(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
-    esp_rom_opiflash_cache_mode_config(flash_mode, &cache_rd);
+    esp_rom_spiflash_cache_mode_config(flash_mode, &cache_rd);
     cache_hal_enable(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_ALL);
 }
 #endif

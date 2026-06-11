@@ -107,6 +107,10 @@ config SOC_USB_OTG_SUPPORTED
     bool
     default y
 
+config SOC_USB_DFU_SUPPORTED
+    bool
+    default y
+
 config SOC_TEMP_SENSOR_SUPPORTED
     bool
     default y
@@ -1519,6 +1523,18 @@ config SOC_PM_MODEM_RETENTION_BY_REGDMA
     bool
     default y
 
+config SOC_PM_SUPPORT_PMU_MODEM_STATE
+    bool
+    default y
+
+config SOC_PM_MODEM_STATE_USE_XTAL
+    bool
+    default y
+
+config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
+    bool
+    default y
+
 config SOC_PM_RETENTION_MODULE_NUM
     int
     default 64
@@ -1544,6 +1560,10 @@ config SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
     default y
 
 config SOC_LP_CORE_HAS_PMP
+    bool
+    default y
+
+config SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED
     bool
     default y
 

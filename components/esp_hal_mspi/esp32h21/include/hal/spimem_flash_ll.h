@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -223,6 +223,34 @@ static inline void spimem_flash_ll_set_sus_delay(spi_mem_dev_t *dev, uint32_t dl
     dev->ctrl1.cs_hold_dly_res = dly_val;
     dev->sus_status.flash_per_dly_128 = 1;
     dev->sus_status.flash_pes_dly_128 = 1;
+}
+
+/**
+ * @brief Get trs unit values in SPI_CLK cycles
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @return uint32_t trs unit values
+ */
+static inline uint32_t spimem_flash_ll_get_trs_unit_in_cycles(spi_mem_dev_t *dev)
+{
+    uint32_t trs_unit = 0;
+    if (dev->sus_status.flash_per_dly_128 == 1) {
+        trs_unit = 128;
+    } else {
+        trs_unit = 4;
+    }
+    return trs_unit;
+}
+
+/**
+ * Configure the delay after Resume
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @param dly_val delay time
+ */
+static inline void spimem_flash_ll_set_rs_delay(spi_mem_dev_t *dev, uint32_t dly_val)
+{
+    dev->ctrl1.cs_hold_dly_per = dly_val;
 }
 
 /**
@@ -643,10 +671,10 @@ static inline uint8_t spimem_flash_ll_get_source_freq_mhz(void)
     uint8_t clock_val = 0;
     switch (PCR.mspi_conf.mspi_clk_sel) {
     case 0:
-        clock_val = 48;
+        clock_val = 32;
         break;
     case 1:
-        clock_val = 8;
+        clock_val = 20;
         break;
     case 2:
         clock_val = 64;

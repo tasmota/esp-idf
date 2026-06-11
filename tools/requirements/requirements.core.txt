@@ -22,9 +22,11 @@ esp-idf-size
 esp-idf-diag
 esp-idf-panic-decoder
 esp-idf-sbom
+esp-pylib[cli,ide]
 pyclang
 construct
 rich
+esp-pylib[cli]
 psutil
 
 # ble's compressed log testing tool

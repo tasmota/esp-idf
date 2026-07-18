@@ -18,6 +18,7 @@
 #include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <sys/lock.h>
+#include <time.h>
 #include "esp_vfs.h"
 #include "esp_err.h"
 #include "esp_rom_spiflash.h"

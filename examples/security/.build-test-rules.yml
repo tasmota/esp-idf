@@ -52,6 +52,16 @@ examples/security/nvs_encryption_hmac:
   depends_filepatterns:
     - examples/security/nvs_encryption_hmac/**/*
 
+examples/security/psa_its_custom_backend:
+  disable:
+    - if: IDF_TARGET not in ["esp32"]
+      reason: example is target-agnostic, one chip is enough for CI
+  depends_components:
+    - mbedtls
+    - nvs_flash
+  depends_filepatterns:
+    - examples/security/psa_its_custom_backend/**/*
+
 examples/security/security_features_app:
   disable:
     - if: IDF_TARGET not in ["esp32c3", "esp32s3"]
@@ -60,7 +70,6 @@ examples/security/tee/tee_attestation:
   disable:
     - if: IDF_TARGET not in ["esp32c6", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_attestation/**/*
@@ -69,7 +78,6 @@ examples/security/tee/tee_basic:
   disable:
     - if: IDF_TARGET not in ["esp32c6", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_basic/**/*
@@ -78,7 +86,6 @@ examples/security/tee/tee_secure_ota:
   disable:
     - if: IDF_TARGET not in ["esp32c6", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
     - protocol_examples_common
   depends_filepatterns:
@@ -88,7 +95,6 @@ examples/security/tee/tee_secure_storage:
   disable:
     - if: IDF_TARGET not in ["esp32c6", "esp32c61"]
   depends_components:
-    - *common_components
     - esp_tee
   depends_filepatterns:
     - examples/security/tee/tee_secure_storage/**/*

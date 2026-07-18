@@ -272,7 +272,13 @@ void btu_task_start_up(void *param)
     btu_init_core();
 
     /* Initialize any optional stack components */
-    BTE_InitStack();
+    if (BTE_InitStack() != BT_STATUS_SUCCESS) {
+        HCI_TRACE_ERROR("BTE_InitStack failed");
+        if (bluedroid_init_done_cb) {
+            bluedroid_init_done_cb(BT_STATUS_NOMEM);
+        }
+        return;
+    }
 
 #if (defined(BTA_INCLUDED) && BTA_INCLUDED == TRUE)
     bta_sys_init();
@@ -280,11 +286,9 @@ void btu_task_start_up(void *param)
 
     // Inform the bt jni thread initialization is ok.
     // btif_transfer_context(btif_init_ok, 0, NULL, 0, NULL);
-#if(defined(BT_APP_DEMO) && BT_APP_DEMO == TRUE)
     if (bluedroid_init_done_cb) {
-        bluedroid_init_done_cb();
+        bluedroid_init_done_cb(BT_STATUS_SUCCESS);
     }
-#endif
 }
 
 void btu_task_shut_down(void)
@@ -313,6 +317,21 @@ static void btu_general_alarm_process(void *param)
     TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)param;
     assert(p_tle != NULL);
 
+    /* Skip stale alarms: btu_free_timer removes the entry before the owning
+     * structure may be freed, and btu_stop_timer clears in_use, but neither can
+     * retract a SIG_BTU_GENERAL_ALARM that was already queued to the BTU task. */
+    osi_mutex_lock(&btu_general_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
+    bool active = hash_map_has_key(btu_general_alarm_hash_map, p_tle);
+    osi_mutex_unlock(&btu_general_alarm_lock);
+    if (!active) {
+        osi_mutex_lock(&btu_oneshot_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
+        active = hash_map_has_key(btu_oneshot_alarm_hash_map, p_tle);
+        osi_mutex_unlock(&btu_oneshot_alarm_lock);
+    }
+    if (!active || p_tle->in_use == FALSE) {
+        return;
+    }
+
     switch (p_tle->event) {
     case BTU_TTYPE_BTM_DEV_CTL:
 #if (CLASSIC_BT_INCLUDED == TRUE)
@@ -321,6 +340,7 @@ static void btu_general_alarm_process(void *param)
         break;
 
     case BTU_TTYPE_L2CAP_LINK:
+    case BTU_TTYPE_L2CAP_LINK_RETRY:
     case BTU_TTYPE_L2CAP_CHNL:
     case BTU_TTYPE_L2CAP_HOLD:
     case BTU_TTYPE_L2CAP_INFO:
@@ -385,6 +405,12 @@ static void btu_general_alarm_process(void *param)
 #if (GATTC_INCLUDED == TRUE)
         gatt_ind_ack_timeout(p_tle);
 #endif // (GATTC_INCLUDED == TRUE)
+        break;
+
+    case BTU_TTYPE_ATT_WAIT_FOR_CONF:
+#if (GATTS_INCLUDED == TRUE)
+        gatt_conf_timeout(p_tle);
+#endif // (GATTS_INCLUDED == TRUE)
         break;
 
 #if (defined(SMP_INCLUDED) && SMP_INCLUDED == TRUE)
@@ -549,6 +575,13 @@ static void btu_l2cap_alarm_process(void *param)
 {
     TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)param;
     assert(p_tle != NULL);
+
+    osi_mutex_lock(&btu_l2cap_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
+    if (!hash_map_has_key(btu_l2cap_alarm_hash_map, p_tle) || p_tle->in_use == FALSE) {
+        osi_mutex_unlock(&btu_l2cap_alarm_lock);
+        return;
+    }
+    osi_mutex_unlock(&btu_l2cap_alarm_lock);
 
     switch (p_tle->event) {
     case BTU_TTYPE_L2CAP_CHNL:      /* monitor or retransmission timer */

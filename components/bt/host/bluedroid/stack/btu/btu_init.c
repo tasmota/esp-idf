@@ -39,6 +39,9 @@
 #if (BLE_INCLUDED == TRUE)
 #include "stack/gatt_api.h"
 #include "gatt_int.h"
+#if (BLE_EATT_INCLUDED == TRUE)
+#include "gatt_eatt_int.h"
+#endif
 #if SMP_INCLUDED == TRUE
 #include "smp_int.h"
 #endif
@@ -120,6 +123,14 @@ void btu_init_core(void)
 ******************************************************************************/
 void btu_free_core(void)
 {
+#if (BLE_INCLUDED == TRUE && defined(GATT_INCLUDED) && GATT_INCLUDED == true && BLE_EATT_INCLUDED == TRUE)
+    /* Tear down EATT before l2c_free(): gatt_eatt_deinit() deregisters the EATT
+     * LE CoC PSM (L2CA_DeregisterLECoc) and the EATT GATT interface
+     * (GATT_Deregister, which may disconnect open links). Both need live L2CAP
+     * state; running them after l2c_free() dereferences the freed l2c_cb_ptr. */
+    gatt_eatt_deinit();
+#endif
+
     // Free the mandatory core stack components
     l2c_free();
 
@@ -148,10 +159,10 @@ void btu_free_core(void)
 **                  NOTE: Must be called before creating any tasks
 **                      (RPC, BTU, HCIT, APPL, etc.)
 **
-** Returns          void
+** Returns          true for success, otherwise false
 **
 ******************************************************************************/
-void BTU_StartUp(void)
+bool BTU_StartUp(void)
 {
 #if BTU_DYNAMIC_MEMORY
     btu_cb_ptr = (tBTU_CB *)osi_malloc(sizeof(tBTU_CB));
@@ -194,11 +205,12 @@ void BTU_StartUp(void)
         goto error_exit;
     }
 
-    return;
+    return true;
 
 error_exit:;
     LOG_ERROR("%s Unable to allocate resources for bt_workqueue", __func__);
     BTU_ShutDown();
+    return false;
 }
 
 /*****************************************************************************

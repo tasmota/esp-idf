@@ -53,6 +53,9 @@ BLE_DOCS = [
     'migration-guides/release-5.x/5.0/bluetooth-low-energy.rst',
 ]
 
+BLE_DUAL_IDENTITY_DOCS = [
+    'api-guides/ble/bluedroid-dual-identity-host-dev.rst',
+]
 
 BLE_MESH_DOCS = [
     'api-guides/esp-ble-mesh/ble-mesh-index.rst',
@@ -334,6 +337,7 @@ ESP32P4_DOCS = [
 conditional_include_dict = {
     'SOC_BT_SUPPORTED': BT_DOCS,
     'SOC_BLE_SUPPORTED': BLE_DOCS,
+    'SOC_BLE_50_SUPPORTED': BLE_DUAL_IDENTITY_DOCS,
     'SOC_BLE_MESH_SUPPORTED': BLE_MESH_DOCS,
     'SOC_BLUFI_SUPPORTED': BLUFI_DOCS,
     'SOC_WIFI_SUPPORTED': WIFI_DOCS,
@@ -368,6 +372,7 @@ conditional_include_dict = {
     'SOC_ECDSA_SUPPORTED': ['api-reference/peripherals/ecdsa.rst'],
     'SOC_HMAC_SUPPORTED': ['api-reference/peripherals/hmac.rst'],
     'SOC_ASYNC_MEMCPY_SUPPORTED': ['api-reference/system/async_memcpy.rst'],
+    'SOC_DMA2D_SUPPORTED': ['api-reference/peripherals/async_color_convert.rst'],
     'SOC_KEY_MANAGER_SUPPORTED': ['api-reference/peripherals/key_manager.rst'],
     'CONFIG_IDF_TARGET_ARCH_XTENSA': XTENSA_DOCS,
     'CONFIG_IDF_TARGET_ARCH_RISCV': RISCV_DOCS,
@@ -409,6 +414,7 @@ conditional_include_dict = {
 extensions += [  # noqa: F405
     'sphinx_copybutton',
     'sphinxcontrib.wavedrom',
+    'sphinxcontrib.mermaid',
     # Note: order is important here, events must
     # be registered by one extension before they can be
     # connected to another extension

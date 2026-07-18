@@ -72,8 +72,8 @@ int bt_mesh_ccm_encrypt(const struct bt_mesh_key *key, uint8_t nonce[13],
         return -EIO;
     }
 
-    if (tc_ccm_generation_encryption(enc_data, len + mic_size, aad, aad_len,
-                                     plaintext, len, &ccm) == TC_CRYPTO_FAIL) {
+    if (tc_ccm_generation_encryption(enc_data, (unsigned int)(len + mic_size), aad, (unsigned int)aad_len,
+                                     plaintext, (unsigned int)len, &ccm) == TC_CRYPTO_FAIL) {
         return -EIO;
     }
 
@@ -236,8 +236,8 @@ void bt_mesh_set_private_key_raw(const uint8_t pri_key[32])
         return;
     }
 
-    BT_DBG("Pubkey:%s", bt_hex(dh_pair.public_key, PUB_KEY_SIZE));
-    BT_DBG("Privkey:%s", bt_hex(dh_pair.private_key, PRIV_KEY_SIZE));
+    // BT_DBG("Pubkey:%s", bt_hex(dh_pair.public_key, PUB_KEY_SIZE));
+    // BT_DBG("Privkey:%s", bt_hex(dh_pair.private_key, PRIV_KEY_SIZE));
     dh_pair.is_ready = true;
 }
 

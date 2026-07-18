@@ -30,6 +30,38 @@ menu "mbedTLS"
                 which is added through vfs component for ESP32 based targets or by
                 the host system when the target is Linux.
 
+        config MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND
+            bool "Enable custom storage backend for PSA ITS"
+            default n
+            help
+                Enable support for registering a custom storage backend that
+                handles PSA ITS operations for keys in a reserved UID range.
+                When enabled, users can call esp_psa_its_register_custom_backend()
+                to route storage operations for UIDs in the configured range to
+                their own implementation. UIDs outside the range continue using
+                the default NVS backend.
+
+        config MBEDTLS_PSA_ITS_CUSTOM_BACKEND_UID_MIN
+            hex "Minimum UID for custom backend range"
+            depends on MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND
+            default 0x30000000
+            range 0x00000001 0x3FFFFFFF
+            help
+                The minimum UID value (inclusive) that will be routed to the
+                custom storage backend. Must be within the PSA user key ID
+                range (0x00000001 - 0x3FFFFFFF).
+
+        config MBEDTLS_PSA_ITS_CUSTOM_BACKEND_UID_MAX
+            hex "Maximum UID for custom backend range"
+            depends on MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND
+            default 0x3FFFFFFF
+            range MBEDTLS_PSA_ITS_CUSTOM_BACKEND_UID_MIN 0x3FFFFFFF
+            help
+                The maximum UID value (inclusive) that will be routed to the
+                custom storage backend. Must be >= the minimum UID and within
+                the PSA user key ID range (0x00000001 - 0x3FFFFFFF); the lower
+                bound is enforced by Kconfig.
+
         config MBEDTLS_THREADING_C
             bool "Enable the threading abstraction layer"
             default y
@@ -1000,49 +1032,49 @@ menu "mbedTLS"
             config MBEDTLS_ECP_DP_SECP384R1_ENABLED
                 bool "Enable SECP384R1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         Enable support for SECP384R1 Elliptic Curve.
 
             config MBEDTLS_ECP_DP_SECP521R1_ENABLED
                 bool "Enable SECP521R1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         Enable support for SECP521R1 Elliptic Curve.
 
             config MBEDTLS_ECP_DP_SECP256K1_ENABLED
                 bool "Enable SECP256K1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         Enable support for SECP256K1 Elliptic Curve.
 
             config MBEDTLS_ECP_DP_BP256R1_ENABLED
                 bool "Enable BP256R1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         support for DP Elliptic Curve.
 
             config MBEDTLS_ECP_DP_BP384R1_ENABLED
                 bool "Enable BP384R1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         support for DP Elliptic Curve.
 
             config MBEDTLS_ECP_DP_BP512R1_ENABLED
                 bool "Enable BP512R1 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         support for DP Elliptic Curve.
 
             config MBEDTLS_ECP_DP_CURVE25519_ENABLED
                 bool "Enable CURVE25519 curve"
                 depends on MBEDTLS_ECP_C
-                default y if !(MBEDTLS_ATCA_HW_ECDSA_SIGN || MBEDTLS_ATCA_HW_ECDSA_VERIFY)
+                default y
                 help
                         Enable support for CURVE25519 Elliptic Curve.
         endmenu
@@ -1510,19 +1542,14 @@ menu "mbedTLS"
                 it also increases the binary size by ~1.2 KB as it pulls in the peripheral's block
                 mode code as well.
 
-        config MBEDTLS_ATCA_HW_ECDSA_SIGN
-            bool "Enable hardware ECDSA sign acceleration when using ATECC608A"
+        config MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED
+            bool "Enable secure element hardware support (e.g., ATECC608A)"
             default n
             help
-                This option enables hardware acceleration for ECDSA sign function, only
-                when using ATECC608A cryptoauth chip.
-
-        config MBEDTLS_ATCA_HW_ECDSA_VERIFY
-            bool "Enable hardware ECDSA verify acceleration when using ATECC608A"
-            default n
-            help
-                This option enables hardware acceleration for ECDSA sign function, only
-                when using ATECC608A cryptoauth chip.
+                Enable PSA Crypto driver support for external secure elements.
+                This enables sign, verify, and key export operations via runtime-registered
+                callbacks from the secure element component (e.g., esp-cryptoauthlib).
+                The private key never leaves the secure element.
 
         config MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL
             bool "Enable hardware RSA digital signature peripheral acceleration"
@@ -1611,8 +1638,7 @@ menu "mbedTLS"
 
     config MBEDTLS_USE_CRYPTO_ROM_IMPL_BOOTLOADER
         bool "Use ROM implementation of the crypto algorithm in the bootloader"
-        # TODO: IDF-15012
-        depends on ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB && !MBEDTLS_VER_4_X_SUPPORT
+        depends on ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB && ESP32C2_REV_MIN_200
         default "n"
         select MBEDTLS_AES_C
         help
@@ -1623,8 +1649,7 @@ menu "mbedTLS"
 
     config MBEDTLS_USE_CRYPTO_ROM_IMPL
         bool "Use ROM implementation of the crypto algorithm"
-        # TODO: IDF-15012
-        depends on ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB && !MBEDTLS_VER_4_X_SUPPORT
+        depends on ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB && ESP32C2_REV_MIN_200
         default "n"
         select MBEDTLS_SHA512_C
         select MBEDTLS_AES_C
@@ -1638,12 +1663,11 @@ menu "mbedTLS"
             Enable this flag to use mbedtls crypto algorithm from ROM instead of ESP-IDF.
 
             This configuration option saves flash footprint in the application binary.
-            Note that the version of mbedtls crypto algorithm library in ROM(ECO1~ECO3) is v2.16.12,
-            and the version of mbedtls crypto algorithm library in ROM(ECO4) is v3.6.0.
-            We have done the security analysis of the mbedtls revision in ROM (ECO1~ECO4)
-            and ensured that affected symbols have been patched (removed). If in the future
-            mbedtls revisions there are security issues that also affects the version in
-            ROM (ECO1~ECO4) then we shall patch the relevant symbols. This would increase
-            the flash footprint and hence care must be taken to keep some reserved space
-            for the application binary in flash layout.
+            It is available for ESP32-C2 rev2.0 and later, where the ECO4 ROM contains
+            the mbedtls crypto algorithm library v3.6.0.
+            We have done the security analysis of the mbedtls revision in ROM and ensured
+            that affected symbols have been patched (removed). If future mbedtls revisions
+            include security issues that also affect the version in ROM, then we shall patch
+            the relevant symbols. This would increase the flash footprint and hence care must
+            be taken to keep some reserved space for the application binary in flash layout.
 endmenu  # mbedTLS

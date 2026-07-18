@@ -938,12 +938,6 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
     }
 #endif
 
-#if CONFIG_ESP_TLS_USE_SECURE_ELEMENT
-    if (config->use_secure_element) {
-        esp_transport_ssl_use_secure_element(ssl);
-    }
-#endif
-
 #if CONFIG_ESP_TLS_USE_DS_PERIPHERAL
     if (config->ds_data != NULL) {
         esp_transport_ssl_set_ds_data(ssl, config->ds_data);
@@ -962,26 +956,32 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
     }
 #endif
 
-    if (config->client_key_pem) {
-        if (!config->client_key_len) {
-            esp_transport_ssl_set_client_key_data(ssl, config->client_key_pem, strlen(config->client_key_pem));
-        } else {
-            esp_transport_ssl_set_client_key_data_der(ssl, config->client_key_pem, config->client_key_len);
+    /* Check for unified key config */
+    if (config->client_key != NULL) {
+        esp_transport_ssl_set_client_key_config(ssl, config->client_key);
+    } else {
+        /* Legacy key configuration */
+        if (config->client_key_pem) {
+            if (!config->client_key_len) {
+                esp_transport_ssl_set_client_key_data(ssl, config->client_key_pem, strlen(config->client_key_pem));
+            } else {
+                esp_transport_ssl_set_client_key_data_der(ssl, config->client_key_pem, config->client_key_len);
+            }
         }
-    }
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
-    if (config->use_ecdsa_peripheral) {
+        if (config->use_ecdsa_peripheral) {
 #if SOC_ECDSA_SUPPORT_CURVE_P384
-        esp_transport_ssl_set_client_key_ecdsa_peripheral_extended(ssl, config->ecdsa_key_efuse_blk, config->ecdsa_key_efuse_blk_high);
+            esp_transport_ssl_set_client_key_ecdsa_peripheral_extended(ssl, config->ecdsa_key_efuse_blk, config->ecdsa_key_efuse_blk_high);
 #else
-        esp_transport_ssl_set_client_key_ecdsa_peripheral(ssl, config->ecdsa_key_efuse_blk);
+            esp_transport_ssl_set_client_key_ecdsa_peripheral(ssl, config->ecdsa_key_efuse_blk);
 #endif
-        // Set the ECDSA curve
-        esp_transport_ssl_set_ecdsa_curve(ssl, config->ecdsa_curve);
-    }
+            // Set the ECDSA curve
+            esp_transport_ssl_set_ecdsa_curve(ssl, config->ecdsa_curve);
+        }
 #endif
-    if (config->client_key_password && config->client_key_password_len > 0) {
-        esp_transport_ssl_set_client_key_password(ssl, config->client_key_password, config->client_key_password_len);
+        if (config->client_key_password && config->client_key_password_len > 0) {
+            esp_transport_ssl_set_client_key_password(ssl, config->client_key_password, config->client_key_password_len);
+        }
     }
 
     if (config->skip_cert_common_name_check) {
@@ -1151,6 +1151,19 @@ esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client)
         return ESP_ERR_INVALID_ARG;
     }
     ESP_LOGD(TAG, "Redirect to %s", client->location);
+
+    /* On an HTTPS origin, only allow https:// redirect targets. Any other
+     * scheme (http, ftp, ws, ...) is rejected before client state is
+     * modified to prevent transport-layer downgrade attacks. */
+    if (client->connection_info.scheme != NULL &&
+        strcasecmp(client->connection_info.scheme, "https") == 0 &&
+        strncasecmp(client->location, "https://", 8) != 0) {
+        ESP_LOGE(TAG, "HTTPS origin can only redirect to https:// targets (got %s). "
+                 "Set disable_auto_redirect and handle manually if intended.",
+                 client->location);
+        return ESP_ERR_HTTP_REDIRECT_DOWNGRADE;
+    }
+
     esp_err_t err = esp_http_client_set_url(client, client->location);
     if (err == ESP_OK) {
         client->redirect_counter ++;
@@ -1187,9 +1200,10 @@ static esp_err_t esp_http_check_response(esp_http_client_handle_t client)
             if (client->disable_auto_redirect) {
                 http_dispatch_event(client, HTTP_EVENT_REDIRECT, NULL, 0);
             } else {
-                if (esp_http_client_set_redirection(client) != ESP_OK){
-                    return ESP_FAIL;
-                };
+                esp_err_t redir_err = esp_http_client_set_redirection(client);
+                if (redir_err != ESP_OK) {
+                    return redir_err;
+                }
             }
             esp_http_client_redirect_event_data_t evt_data = {
                 .status_code = client->response->status_code,
@@ -1803,7 +1817,26 @@ esp_err_t esp_http_client_request_send(esp_http_client_handle_t client, int writ
     }
 
     int wlen = client->buffer_size_tx - first_line_len;
+#ifdef CONFIG_ESP_HTTP_CLIENT_STRICT_HEADER_BUFFER
+    int prev_header_index = client->header_index;
+#endif
     while ((client->header_index = http_header_generate_string(client->request->headers, client->header_index, client->request->buffer->data + first_line_len, &wlen))) {
+#ifdef CONFIG_ESP_HTTP_CLIENT_STRICT_HEADER_BUFFER
+        /* No-progress detection: a positive return equal to (or below)
+         * the input index means the offending header at prev_header_index
+         * is larger than the buffer and pagination cannot advance. */
+        if (client->header_index <= prev_header_index) {
+            ESP_LOGD(TAG, "Header at index %d does not fit in tx buffer (size: %d)",
+                     prev_header_index, client->buffer_size_tx);
+            /* This is a permanent failure, not a transient one. Clear errno so
+             * the async caller (which keys "retry later" off errno == EAGAIN)
+             * cannot misread a stale EAGAIN and spin retrying a request that
+             * can never succeed. */
+            errno = 0;
+            return ESP_ERR_HTTP_HEADER_TOO_LONG;
+        }
+        prev_header_index = client->header_index;
+#endif
         if (wlen <= 0) {
             break;
         }
@@ -1828,6 +1861,20 @@ esp_err_t esp_http_client_request_send(esp_http_client_handle_t client, int writ
         }
         wlen = client->buffer_size_tx;
     }
+
+#ifdef CONFIG_ESP_HTTP_CLIENT_STRICT_HEADER_BUFFER
+    /* Case where the very first header (at index 0) is larger than the
+     * buffer: the helper returns 0 with *buffer_len zeroed, so the loop
+     * exits without entering the body. Distinguish from a legitimate
+     * empty/already-done state by the zeroed wlen. */
+    if (client->header_index == 0 && wlen == 0) {
+        ESP_LOGD(TAG, "Header at index 0 does not fit in tx buffer (size: %d)", client->buffer_size_tx);
+        /* Permanent failure: clear errno so the async caller does not treat a
+         * stale EAGAIN as "retry later" and spin on an unsendable request. */
+        errno = 0;
+        return ESP_ERR_HTTP_HEADER_TOO_LONG;
+    }
+#endif
 
     client->data_written_index = 0;
     client->data_write_left = client->post_len;

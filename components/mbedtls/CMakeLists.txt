@@ -7,14 +7,24 @@ if(esp_tee_build)
     return()
 elseif(BOOTLOADER_BUILD)   # TODO: IDF-11673
     if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL_BOOTLOADER)
-        set(include_dirs "${COMPONENT_DIR}/mbedtls/include"
+        set(include_dirs "${COMPONENT_DIR}/port/include"
+                         "${COMPONENT_DIR}/mbedtls/include"
+                         "${COMPONENT_DIR}/mbedtls/tf-psa-crypto/include"
+                         "${COMPONENT_DIR}/mbedtls/tf-psa-crypto/drivers/builtin/include"
+                         "${COMPONENT_DIR}/port/psa_driver/include"
                          "port/mbedtls_rom")
         set(srcs "port/mbedtls_rom/mbedtls_rom_osi_bootloader.c")
+        set(public_compile_definitions
+            -DMBEDTLS_CONFIG_FILE="mbedtls/esp_config.h"
+            MBEDTLS_CIPHER_MODE_XTS)
     endif()
 
     idf_component_register(SRCS "${srcs}"
                            INCLUDE_DIRS "${include_dirs}"
                            PRIV_REQUIRES esp_hal_dma)
+    if(public_compile_definitions)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC ${public_compile_definitions})
+    endif()
     return()
 endif()
 
@@ -26,7 +36,8 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
     endif()
 endif()
 
-set(mbedtls_srcs "port/esp_mem.c")
+set(mbedtls_srcs "port/esp_mem.c"
+                 "port/psa_crypto_storage/esp_psa_key_file.c")
 set(mbedtls_include_dirs
     "port/include"
     "mbedtls/include"
@@ -47,6 +58,7 @@ endif()
 
 
 list(APPEND mbedtls_include_dirs "${COMPONENT_DIR}/port/psa_driver/include")
+list(APPEND mbedtls_include_dirs "${COMPONENT_DIR}/port/psa_crypto_storage/include")
 
 idf_component_register(SRCS "${mbedtls_srcs}"
     INCLUDE_DIRS "${mbedtls_include_dirs}"
@@ -230,6 +242,7 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
         target_link_libraries(tfpsacrypto PRIVATE "$<$<TARGET_EXISTS:idf::nvs_flash>:idf::nvs_flash>")
         # Define compile definition to indicate ESP-IDF PSA ITS implementation is available
         target_compile_definitions(tfpsacrypto PUBLIC "$<$<TARGET_EXISTS:idf::nvs_flash>:ESP_PSA_ITS_AVAILABLE>")
+        target_include_directories(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/psa_crypto_storage/include")
     else()
         # For v1: check if component is in build before adding source and linking
         idf_build_get_property(build_components BUILD_COMPONENTS)
@@ -238,6 +251,7 @@ if(NOT ${IDF_TARGET} STREQUAL "linux")
             idf_component_get_property(nvs_flash_lib nvs_flash COMPONENT_LIB)
             target_link_libraries(tfpsacrypto PRIVATE ${nvs_flash_lib})
             target_compile_definitions(tfpsacrypto PUBLIC ESP_PSA_ITS_AVAILABLE)
+            target_include_directories(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/psa_crypto_storage/include")
         endif()
     endif()
 endif()
@@ -458,10 +472,16 @@ if(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN OR CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY OR
     endif()
 endif()
 
-# if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
-#     target_sources(mbedcrypto PRIVATE  "${COMPONENT_DIR}/port/mbedtls_rom/mbedtls_rom_osi.c")
-#     target_link_libraries(${COMPONENT_LIB} PRIVATE "-u mbedtls_rom_osi_functions_init")
-# endif()
+if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
+    target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/mbedtls_rom/mbedtls_rom_osi.c")
+    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u mbedtls_rom_osi_functions_init")
+endif()
+
+if(CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED)
+    target_sources(tfpsacrypto PRIVATE
+        "${COMPONENT_DIR}/port/psa_driver/secure_element/psa_crypto_driver_secure_element.c")
+    target_include_directories(tfpsacrypto PUBLIC "${COMPONENT_DIR}/port/psa_driver/include")
+endif()
 
 if(CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(${COMPONENT_LIB} PRIVATE "-fno-analyzer")
@@ -489,6 +509,7 @@ if(CONFIG_MBEDTLS_DYNAMIC_BUFFER)
         mbedtls_ssl_handshake_client_step
         mbedtls_ssl_tls13_handshake_client_step
         mbedtls_ssl_handshake_server_step
+        mbedtls_ssl_tls13_handshake_server_step
         mbedtls_ssl_read
         mbedtls_ssl_write
         mbedtls_ssl_free
@@ -529,11 +550,6 @@ endfunction()
 if(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN_CONSTANT_TIME_CM)
     target_link_libraries(tfpsacrypto PRIVATE idf::esp_timer)
 endif()
-
-# # Link esp-cryptoauthlib to mbedtls
-# if(CONFIG_ATCA_MBEDTLS_ECDSA)
-#     mbedcrypto_optional_deps(espressif__esp-cryptoauthlib esp-cryptoauthlib)
-# endif()
 
 # Apply -fno-analyzer to ALL mbedTLS targets at the very end when all targets are created
 if(CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU")

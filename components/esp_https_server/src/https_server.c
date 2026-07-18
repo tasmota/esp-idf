@@ -23,6 +23,7 @@ typedef struct httpd_ssl_transport_ctx {
     httpd_ssl_ctx_t *global_ctx;
 } httpd_ssl_transport_ctx_t;
 
+#ifdef CONFIG_ESP_HTTPS_SERVER_EVENTS
 ESP_EVENT_DEFINE_BASE(ESP_HTTPS_SERVER_EVENT);
 
 #if CONFIG_ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT == -1
@@ -31,7 +32,6 @@ ESP_EVENT_DEFINE_BASE(ESP_HTTPS_SERVER_EVENT);
 #define ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT pdMS_TO_TICKS(CONFIG_ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT)
 #endif
 
-
 static void http_dispatch_event_to_event_loop(int32_t event_id, const void* event_data, size_t event_data_size)
 {
     esp_err_t err = esp_event_post(ESP_HTTPS_SERVER_EVENT, event_id, event_data, event_data_size, ESP_HTTPS_SERVER_EVENT_POST_TIMEOUT);
@@ -39,6 +39,15 @@ static void http_dispatch_event_to_event_loop(int32_t event_id, const void* even
         ESP_LOGE(TAG, "Failed to post http_client event: %"PRId32", error: %s", event_id, esp_err_to_name(err));
     }
 }
+#else // CONFIG_ESP_HTTPS_SERVER_EVENTS
+static void http_dispatch_event_to_event_loop(int32_t event_id, const void* event_data, size_t event_data_size)
+{
+    // Events disabled, do nothing
+    (void) event_id;
+    (void) event_data;
+    (void) event_data_size;
+}
+#endif // CONFIG_ESP_HTTPS_SERVER_EVENTS
 
 /**
  * SSL socket close handler
@@ -339,48 +348,47 @@ static esp_err_t create_secure_context(const struct httpd_ssl_config *config, ht
 #endif
     }
 
-    /* Pass on secure element boolean */
-    cfg->use_secure_element = config->use_secure_element;
-    if (!cfg->use_secure_element) {
-        if (config->use_ecdsa_peripheral) {
+    if (config->use_ecdsa_peripheral) {
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
-            (*ssl_ctx)->tls_cfg->use_ecdsa_peripheral = config->use_ecdsa_peripheral;
-            (*ssl_ctx)->tls_cfg->ecdsa_key_efuse_blk = config->ecdsa_key_efuse_blk;
+        (*ssl_ctx)->tls_cfg->use_ecdsa_peripheral = config->use_ecdsa_peripheral;
+        (*ssl_ctx)->tls_cfg->ecdsa_key_efuse_blk = config->ecdsa_key_efuse_blk;
 #if SOC_ECDSA_SUPPORT_CURVE_P384
-            (*ssl_ctx)->tls_cfg->ecdsa_key_efuse_blk_high = config->ecdsa_key_efuse_blk_high;
+        (*ssl_ctx)->tls_cfg->ecdsa_key_efuse_blk_high = config->ecdsa_key_efuse_blk_high;
 #endif
-            (*ssl_ctx)->tls_cfg->ecdsa_curve = config->ecdsa_curve;
+        (*ssl_ctx)->tls_cfg->ecdsa_curve = config->ecdsa_curve;
 #else
-            ESP_LOGE(TAG, "Please enable the support for signing using ECDSA peripheral in menuconfig.");
-            ret = ESP_ERR_NOT_SUPPORTED;
-            goto exit;
+        ESP_LOGE(TAG, "Please enable the support for signing using ECDSA peripheral in menuconfig.");
+        ret = ESP_ERR_NOT_SUPPORTED;
+        goto exit;
 #endif
-        } else if (config->prvtkey_pem != NULL && config->prvtkey_len > 0) {
-            cfg->serverkey_buf = malloc(config->prvtkey_len);
+    } else if (config->server_key != NULL) {
+        /* Unified key config - pass directly to esp_tls */
+        cfg->server_key = config->server_key;
+    } else if (config->prvtkey_pem != NULL && config->prvtkey_len > 0) {
+        cfg->serverkey_buf = malloc(config->prvtkey_len);
 
-            if (cfg->serverkey_buf) {
-                memcpy((char *) cfg->serverkey_buf, config->prvtkey_pem, config->prvtkey_len);
-                cfg->serverkey_bytes = config->prvtkey_len;
-            } else {
-                ESP_LOGE(TAG, "Could not allocate memory for server key");
-                ret = ESP_ERR_NO_MEM;
-                goto exit;
-            }
+        if (cfg->serverkey_buf) {
+            memcpy((char *) cfg->serverkey_buf, config->prvtkey_pem, config->prvtkey_len);
+            cfg->serverkey_bytes = config->prvtkey_len;
         } else {
+            ESP_LOGE(TAG, "Could not allocate memory for server key");
+            ret = ESP_ERR_NO_MEM;
+            goto exit;
+        }
+    } else {
 #if defined(CONFIG_ESP_HTTPS_SERVER_CERT_SELECT_HOOK)
-            if (config->cert_select_cb == NULL) {
-                ESP_LOGE(TAG, "No Server key supplied and no certificate selection hook is present");
-                ret = ESP_ERR_INVALID_ARG;
-                goto exit;
-            } else {
-                ESP_LOGW(TAG, "Server key not supplied, make sure to supply it in the certificate selection hook");
-            }
-#else
-            ESP_LOGE(TAG, "No Server key supplied");
+        if (config->cert_select_cb == NULL) {
+            ESP_LOGE(TAG, "No Server key supplied and no certificate selection hook is present");
             ret = ESP_ERR_INVALID_ARG;
             goto exit;
-#endif
+        } else {
+            ESP_LOGW(TAG, "Server key not supplied, make sure to supply it in the certificate selection hook");
         }
+#else
+        ESP_LOGE(TAG, "No Server key supplied");
+        ret = ESP_ERR_INVALID_ARG;
+        goto exit;
+#endif
     }
 
     return ret;

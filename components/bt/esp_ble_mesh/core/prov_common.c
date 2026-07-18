@@ -2,7 +2,7 @@
 
 /*
  * SPDX-FileCopyrightText: 2017 Intel Corporation
- * SPDX-FileContributor: 2018-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileContributor: 2018-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -103,6 +103,14 @@ static const struct {
 
 bool bt_mesh_prov_pdu_check(uint8_t type, uint16_t length, uint8_t *reason)
 {
+    if (type >= ARRAY_SIZE(prov_pdu)) {
+        BT_ERR("Invalid PDU type 0x%02x", type);
+        if (reason) {
+            *reason = PROV_ERR_NVAL_PDU;
+        }
+        return false;
+    }
+
     if (prov_pdu[type].length != length) {
 #if CONFIG_BLE_MESH_CERT_BASED_PROV
         if ((type == PROV_REC_LIST || type == PROV_REC_RSP) &&
@@ -180,6 +188,8 @@ bool bt_mesh_gen_prov_start(struct bt_mesh_prov_link *link,
                             struct net_buf_simple *buf,
                             struct prov_rx *rx, bool *close)
 {
+    uint8_t last_seg = START_LAST_SEG(rx->gpc);
+
     if (link->rx.seg) {
         BT_INFO("Get Start while there are unreceived segments");
         return false;
@@ -191,12 +201,23 @@ bool bt_mesh_gen_prov_start(struct bt_mesh_prov_link *link,
         return false;
     }
 
+    /* Reset the reassembly buffer so every transaction starts from the
+     * buffer origin. prov_msg_recv() pulls the PDU type byte (advancing
+     * buf->data by one) and nothing restores it between transactions, so
+     * without this reset buf->data would drift forward by one byte per
+     * received PDU: the segment-0 memcpy below would then write past the
+     * end of the statically allocated rx buffer (PROV_RX_BUF_SIZE), and
+     * the XACT_SEG_DATA() offsets used for continuation segments would
+     * be skewed by the accumulated drift.
+     */
+    net_buf_simple_reset(link->rx.buf);
+
     link->rx.buf->len = net_buf_simple_pull_be16(buf);
     link->rx.id = rx->xact_id;
     link->rx.fcs = net_buf_simple_pull_u8(buf);
 
     BT_DBG("LinkId:%08x,len %u last_seg %u total_len %u fcs 0x%02x", link->link_id, buf->len,
-            START_LAST_SEG(rx->gpc), link->rx.buf->len, link->rx.fcs);
+            last_seg, link->rx.buf->len, link->rx.fcs);
 
     /* At least one-octet pdu type is needed */
     if (link->rx.buf->len < 1) {
@@ -207,8 +228,8 @@ bool bt_mesh_gen_prov_start(struct bt_mesh_prov_link *link,
         return false;
     }
 
-    if (START_LAST_SEG(rx->gpc) > START_LAST_SEG_MAX) {
-        BT_ERR("Invalid SegN 0x%02x", START_LAST_SEG(rx->gpc));
+    if (last_seg > START_LAST_SEG_MAX) {
+        BT_ERR("Invalid SegN 0x%02x", last_seg);
         if (close) {
             *close = true;
         }
@@ -224,16 +245,50 @@ bool bt_mesh_gen_prov_start(struct bt_mesh_prov_link *link,
         return false;
     }
 
-    if (START_LAST_SEG(rx->gpc) > 0 && link->rx.buf->len <= 20) {
-        BT_ERR("Too small total length for multi-segment PDU");
-        if (close) {
-            *close = true;
+    /* Validate that the declared total length and the actual start-segment
+     * payload length match the claimed segment count before copying segment 0.
+     * This keeps malformed extended advertising reports from writing past the
+     * fixed provisioning rx buffer.
+     */
+    if (last_seg > 0) {
+        /* Minimum length = first segment (20) + (last_seg - 1) *
+         * full continuation (23) + one byte in the last segment.
+         */
+        uint16_t min_len = START_PAYLOAD_MAX + CONT_PAYLOAD_MAX * (last_seg - 1) + 1;
+        if (link->rx.buf->len < min_len) {
+            BT_ERR("Total length %u too small for %u segments (min %u)",
+                   link->rx.buf->len, last_seg + 1, min_len);
+            if (close) {
+                *close = true;
+            }
+            return false;
         }
-        return false;
     }
 
-    link->rx.seg = (1 << (START_LAST_SEG(rx->gpc) + 1)) - 1;
-    link->rx.last_seg = START_LAST_SEG(rx->gpc);
+    {
+        uint16_t max_len = START_PAYLOAD_MAX + CONT_PAYLOAD_MAX * last_seg;
+        uint16_t seg_0_len = last_seg ? START_PAYLOAD_MAX : link->rx.buf->len;
+
+        if (link->rx.buf->len > max_len) {
+            BT_ERR("Total length %u too large for %u segments (max %u)",
+                   link->rx.buf->len, last_seg + 1, max_len);
+            if (close) {
+                *close = true;
+            }
+            return false;
+        }
+
+        if (buf->len != seg_0_len) {
+            BT_ERR("Invalid start segment len %u != %u", buf->len, seg_0_len);
+            if (close) {
+                *close = true;
+            }
+            return false;
+        }
+    }
+
+    link->rx.seg = (1 << (last_seg + 1)) - 1;
+    link->rx.last_seg = last_seg;
     memcpy(link->rx.buf->data, buf->data, buf->len);
     XACT_SEG_RECV(link, 0);
     BT_DBG("Seg: %04x, lastSeg: %04x, Data: %s", link->rx.seg, link->rx.last_seg, bt_hex(buf->data, buf->len));
@@ -375,7 +430,7 @@ static void free_segments(struct bt_mesh_prov_link *link)
         struct net_buf *buf = link->tx.buf[i];
 
         if (!buf) {
-            break;
+            continue;
         }
 
         link->tx.buf[i] = NULL;
@@ -536,6 +591,8 @@ static void send_reliable(struct bt_mesh_prov_link *link, uint8_t xmit)
 {
     link->tx.start = k_uptime_get();
 
+    bt_mesh_mutex_lock(&link->buf_lock);
+
     for (size_t i = 0; i < ARRAY_SIZE(link->tx.buf); i++) {
         struct net_buf *buf = link->tx.buf[i];
 
@@ -549,6 +606,8 @@ static void send_reliable(struct bt_mesh_prov_link *link, uint8_t xmit)
             bt_mesh_adv_send(buf, xmit, &buf_sent_cb, link);
         }
     }
+
+    bt_mesh_mutex_unlock(&link->buf_lock);
 }
 
 int bt_mesh_prov_bearer_ctl_send(struct bt_mesh_prov_link *link, uint8_t op,
@@ -737,6 +796,7 @@ int bt_mesh_prov_send(struct bt_mesh_prov_link *link, struct net_buf_simple *buf
     return bt_mesh_prov_send_adv(link, buf);
 #endif /* CONFIG_BLE_MESH_PB_ADV */
 
-    /* Shall not reach here. */
-    return 0;
+    /* Shall not reach here - no provisioning bearer is enabled */
+    BT_ERR("No provisioning bearer available");
+    return -ENOTSUP;
 }

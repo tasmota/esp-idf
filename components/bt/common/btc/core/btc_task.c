@@ -26,6 +26,9 @@
 #include "btc_gap_ble.h"
 #include "btc_iso_ble.h"
 #include "btc_ble_cte.h"
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+#include "btc_ble_l2cap.h"
+#endif
 #include "btc/btc_dm.h"
 #include "bta/bta_gatt_api.h"
 #if CLASSIC_BT_INCLUDED
@@ -279,6 +282,9 @@ static const btc_func_t profile_tab[BTC_PID_NUM] = {
 #if (BLE_FEAT_CTE_EN == TRUE)
     [BTC_PID_BLE_CTE]           = {btc_ble_cte_call_handler,                    btc_ble_cte_cb_handler                   },
 #endif // #if (BLE_FEAT_CTE_EN == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+    [BTC_PID_BLE_L2CAP]         = {btc_ble_l2cap_call_handler,                  btc_ble_l2cap_cb_handler                 },
+#endif // #if (BLE_L2CAP_COC_INCLUDED == TRUE)
 };
 
 /*****************************************************************************
@@ -353,7 +359,10 @@ bt_status_t btc_transfer_context(btc_msg_t *msg, void *arg, int arg_len, btc_arg
 
     memcpy(lmsg, msg, sizeof(btc_msg_t));
     if (arg) {
-        memset(lmsg->arg, 0x00, arg_len);    //important, avoid arg which have no length
+        /* memcpy below covers exactly arg_len bytes, which is the full size of
+         * the destination buffer (it was sized as sizeof(btc_msg_t) + arg_len),
+         * so a prior memset would be redundant. Deep-copy callbacks must only
+         * read fields that were written by the caller-supplied arg. */
         memcpy(lmsg->arg, arg, arg_len);
         if (copy_func) {
             copy_func(lmsg, lmsg->arg, arg);

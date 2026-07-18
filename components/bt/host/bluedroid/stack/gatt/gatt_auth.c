@@ -28,6 +28,9 @@
 #include <string.h>
 
 #include "gatt_int.h"
+#if (BLE_EATT_INCLUDED == TRUE)
+#include "gatt_eatt_int.h"
+#endif
 #include "stack/gatt_api.h"
 #include "btm_int.h"
 
@@ -171,7 +174,7 @@ void gatt_sec_check_complete(BOOLEAN sec_check_ok, tGATT_CLCB   *p_clcb, UINT8 s
 void gatt_enc_cmpl_cback(BD_ADDR bd_addr, tBT_TRANSPORT transport, void *p_ref_data, tBTM_STATUS result)
 {
     tGATT_TCB   *p_tcb;
-    UINT8       sec_flag;
+    UINT8       sec_flag = 0;
     BOOLEAN     status = FALSE;
     UNUSED(p_ref_data);
 
@@ -185,9 +188,8 @@ void gatt_enc_cmpl_cback(BD_ADDR bd_addr, tBT_TRANSPORT transport, void *p_ref_d
         if (p_buf != NULL) {
             if (result == BTM_SUCCESS) {
                 if (gatt_get_sec_act(p_tcb) == GATT_SEC_ENCRYPT_MITM ) {
-                    BTM_GetSecurityFlagsByTransport(bd_addr, &sec_flag, transport);
-
-                    if (sec_flag & BTM_SEC_FLAG_LKEY_AUTHED) {
+                    if (BTM_GetSecurityFlagsByTransport(bd_addr, &sec_flag, transport) &&
+                            (sec_flag & BTM_SEC_FLAG_LKEY_AUTHED)) {
                         status = TRUE;
                     }
                 } else {
@@ -230,31 +232,40 @@ void gatt_notify_enc_cmpl(BD_ADDR bd_addr)
     tGATT_TCB   *p_tcb;
     UINT8        i = 0;
 
-    if ((p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE)) != NULL) {
-        for (i = 0; i < GATT_MAX_APPS; i++) {
-            if (gatt_cb.cl_rcb[i].in_use && gatt_cb.cl_rcb[i].app_cb.p_enc_cmpl_cb) {
-                (*gatt_cb.cl_rcb[i].app_cb.p_enc_cmpl_cb)(gatt_cb.cl_rcb[i].gatt_if, bd_addr);
-            }
-        }
-
-        if (gatt_get_sec_act(p_tcb) == GATT_SEC_ENC_PENDING) {
-            gatt_set_sec_act(p_tcb, GATT_SEC_NONE);
-
-            size_t count = fixed_queue_length(p_tcb->pending_enc_clcb);
-            for (; count > 0; count--) {
-                tGATT_PENDING_ENC_CLCB *p_buf =
-                    (tGATT_PENDING_ENC_CLCB *)fixed_queue_dequeue(p_tcb->pending_enc_clcb, 0);
-                if (p_buf != NULL) {
-                    gatt_security_check_start(p_buf->p_clcb);
-                    osi_free(p_buf);
-                } else {
-                    break;
-                }
-            }
-        }
-    } else {
+    if ((p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE)) == NULL) {
         GATT_TRACE_DEBUG("notify GATT for encryption completion of unknown device");
+        return;
     }
+
+    for (i = 0; i < GATT_MAX_APPS; i++) {
+        if (gatt_cb.cl_rcb[i].in_use && gatt_cb.cl_rcb[i].app_cb.p_enc_cmpl_cb) {
+            (*gatt_cb.cl_rcb[i].app_cb.p_enc_cmpl_cb)(gatt_cb.cl_rcb[i].gatt_if, bd_addr);
+        }
+    }
+
+    /* p_tcb may be removed in p_enc_cmpl_cb (e.g. disconnect); re-lookup before use */
+    if ((p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE)) == NULL) {
+        return;
+    }
+
+    if (gatt_get_sec_act(p_tcb) == GATT_SEC_ENC_PENDING) {
+        gatt_set_sec_act(p_tcb, GATT_SEC_NONE);
+
+        size_t count = fixed_queue_length(p_tcb->pending_enc_clcb);
+        for (; count > 0; count--) {
+            tGATT_PENDING_ENC_CLCB *p_buf =
+                (tGATT_PENDING_ENC_CLCB *)fixed_queue_dequeue(p_tcb->pending_enc_clcb, 0);
+            if (p_buf != NULL) {
+                gatt_security_check_start(p_buf->p_clcb);
+                osi_free(p_buf);
+            } else {
+                break;
+            }
+        }
+    }
+#if (BLE_EATT_INCLUDED == TRUE)
+    gatt_eatt_on_encrypted(bd_addr);
+#endif
     return;
 }
 #endif // (SMP_INCLUDED == TRUE)
@@ -305,7 +316,7 @@ tGATT_SEC_ACTION gatt_get_sec_act(tGATT_TCB *p_tcb)
 tGATT_SEC_ACTION gatt_determine_sec_act(tGATT_CLCB *p_clcb )
 {
     tGATT_SEC_ACTION    act = GATT_SEC_OK;
-    UINT8               sec_flag;
+    UINT8               sec_flag = 0;
     tGATT_TCB           *p_tcb = p_clcb->p_tcb;
     tGATT_AUTH_REQ      auth_req = p_clcb->auth_req;
     BOOLEAN             is_link_encrypted = FALSE;

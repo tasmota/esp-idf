@@ -32,16 +32,6 @@
 #include "esp_crt_bundle.h"
 #endif
 
-#ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT
-/* cryptoauthlib includes */
-#include "mbedtls/atca_mbedtls_wrap.h"
-#include "tng_atca.h"
-#include "cryptoauthlib.h"
-static const atcacert_def_t *cert_def = NULL;
-/* Prototypes for functions */
-static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki);
-#endif /* CONFIG_ESP_TLS_USE_SECURE_ELEMENT */
-
 #if defined(CONFIG_ESP_TLS_USE_DS_PERIPHERAL)
 #include <pk_wrap.h>
 #include "psa/crypto.h"
@@ -493,46 +483,32 @@ void esp_mbedtls_cleanup(esp_tls_t *tls)
     mbedtls_x509_crt_free(&tls->cacert);
     mbedtls_x509_crt_free(&tls->clientcert);
 
-    /* For opaque keys (DS peripheral, hardware ECDSA), mbedtls_pk_free() does
-     * not destroy the PSA key — ownership is external. Destroy it manually
-     * before calling mbedtls_pk_free(). */
-#ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
-    if (mbedtls_pk_get_type(&tls->clientkey) == MBEDTLS_PK_RSASSA_PSS) {
-        if (tls->clientkey.MBEDTLS_PRIVATE(priv_id) != PSA_KEY_ID_NULL) {
-            psa_destroy_key(tls->clientkey.MBEDTLS_PRIVATE(priv_id));
+    /* For opaque keys, mbedtls_pk_free() does not release the underlying PSA
+     * key — ownership is tracked separately. Dispatch on ownership, not on the
+     * key lifetime: a caller-supplied key (ESP_KEY_SOURCE_PSA, e.g. a
+     * pre-provisioned secure element) is owned externally and must never be
+     * destroyed on connection close — at most purge it to drop the cached slot
+     * (a no-op for a volatile key). A key esp-tls created itself is always
+     * volatile and is destroyed to release its slot. mbedtls_pk_wrap_psa() sets
+     * the pk_info to mbedtls_{rsa,ecdsa}_opaque_info, both of type
+     * MBEDTLS_PK_OPAQUE, so one runtime check covers every opaque path (DS
+     * peripheral, hardware ECDSA, and caller-supplied PSA keys). clientkey and
+     * serverkey share storage via union, so one branch suffices. */
+    if (mbedtls_pk_get_type(&tls->clientkey) == MBEDTLS_PK_OPAQUE) {
+        psa_key_id_t kid = tls->clientkey.MBEDTLS_PRIVATE(priv_id);
+        if (kid != PSA_KEY_ID_NULL) {
+            if (tls->opaque_key_is_external) {
+                psa_purge_key(kid);
+            } else {
+                psa_destroy_key(kid);
+            }
             tls->clientkey.MBEDTLS_PRIVATE(priv_id) = PSA_KEY_ID_NULL;
         }
     }
-    if (mbedtls_pk_get_type(&tls->serverkey) == MBEDTLS_PK_RSASSA_PSS) {
-        if (tls->serverkey.MBEDTLS_PRIVATE(priv_id) != PSA_KEY_ID_NULL) {
-            psa_destroy_key(tls->serverkey.MBEDTLS_PRIVATE(priv_id));
-            tls->serverkey.MBEDTLS_PRIVATE(priv_id) = PSA_KEY_ID_NULL;
-        }
-    }
-#endif
-
-#ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
-    if (mbedtls_pk_get_type(&tls->clientkey) == MBEDTLS_PK_ECDSA) {
-        ESP_LOGD(TAG, "Cleaning up client key");
-        if (tls->clientkey.MBEDTLS_PRIVATE(priv_id) != PSA_KEY_ID_NULL) {
-            psa_destroy_key(tls->clientkey.MBEDTLS_PRIVATE(priv_id));
-            tls->clientkey.MBEDTLS_PRIVATE(priv_id) = PSA_KEY_ID_NULL;
-        }
-    }
-    if (mbedtls_pk_get_type(&tls->serverkey) == MBEDTLS_PK_ECDSA) {
-        if (tls->serverkey.MBEDTLS_PRIVATE(priv_id) != PSA_KEY_ID_NULL) {
-            psa_destroy_key(tls->serverkey.MBEDTLS_PRIVATE(priv_id));
-            tls->serverkey.MBEDTLS_PRIVATE(priv_id) = PSA_KEY_ID_NULL;
-        }
-    }
-#endif
 
     mbedtls_pk_free(&tls->clientkey);
     mbedtls_ssl_config_free(&tls->conf);
     mbedtls_ssl_free(&tls->ssl);
-#ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT
-    atcab_release();
-#endif
 }
 
 static esp_err_t set_ca_cert(esp_tls_t *tls, const unsigned char *cacert, size_t cacert_len)
@@ -624,6 +600,7 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
 
             // Import opaque key reference
             psa_status_t status = psa_import_key(&key_attr, (uint8_t*) &opaque_key, sizeof(opaque_key), &priv_key_id);
+            psa_reset_key_attributes(&key_attr);
             if (status != PSA_SUCCESS) {
                 ESP_LOGE(TAG, "Failed to import opaque key reference");
                 return ESP_ERR_MBEDTLS_PK_PARSE_KEY_FAILED;
@@ -632,10 +609,9 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
             ret = mbedtls_pk_wrap_psa(pki->pk_key, priv_key_id);
             if (ret != 0) {
                 ESP_LOGE(TAG, "Failed to wrap opaque key reference");
+                psa_destroy_key(priv_key_id);
                 return ret;
             }
-
-            psa_reset_key_attributes(&key_attr);
         } else
 #endif
         if (pki->privkey_pem_buf != NULL) {
@@ -776,28 +752,53 @@ static esp_err_t set_server_config(esp_tls_cfg_server_t *cfg, esp_tls_t *tls)
 #endif // CONFIG_ESP_TLS_SERVER_MIN_AUTH_MODE_OPTIONAL
     }
 
-    if (cfg->use_secure_element) {
-#ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT
+    if (cfg->server_key != NULL && cfg->server_key->source == ESP_KEY_SOURCE_BUFFER) {
+        /* Unified key config with buffer source */
         esp_tls_pki_t pki = {
             .public_cert = &tls->servercert,
             .pk_key = &tls->serverkey,
             .publiccert_pem_buf = cfg->servercert_buf,
             .publiccert_pem_bytes = cfg->servercert_bytes,
-            .privkey_pem_buf = NULL,
-            .privkey_pem_bytes = 0,
-            .privkey_password = NULL,
-            .privkey_password_len = 0,
+            .privkey_pem_buf = cfg->server_key->buffer.data,
+            .privkey_pem_bytes = cfg->server_key->buffer.len,
+            .privkey_password = (const unsigned char *)cfg->server_key->buffer.password,
+            .privkey_password_len = cfg->server_key->buffer.password_len,
         };
-
-        ret = esp_set_atecc608a_pki_context(tls, (void*) &pki);
-        if (ret != ESP_OK) {
-            return ret;
+        esp_ret = set_pki_context(tls, &pki);
+        if (esp_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to set server pki context");
+            return esp_ret;
         }
-#else
-        ESP_LOGE(TAG, "Please enable secure element support for ESP-TLS in menuconfig");
-        return ESP_FAIL;
-#endif /* CONFIG_ESP_TLS_USE_SECURE_ELEMENT */
-    }  else if (cfg->use_ecdsa_peripheral) {
+    } else if (cfg->server_key != NULL && cfg->server_key->source == ESP_KEY_SOURCE_PSA) {
+        if (cfg->servercert_buf == NULL) {
+            ESP_LOGE(TAG, "Server certificate is required when using a PSA-backed server key");
+            return ESP_ERR_INVALID_ARG;
+        }
+        mbedtls_svc_key_id_t key_id = cfg->server_key->psa.key_id;
+        mbedtls_pk_init(&tls->serverkey);
+        tls->opaque_key_is_external = true;
+        ret = mbedtls_pk_wrap_psa(&tls->serverkey, key_id);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "mbedtls_pk_wrap_psa returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_PK_PARSE_KEY_FAILED;
+        }
+        ret = mbedtls_x509_crt_parse(&tls->servercert, cfg->servercert_buf, cfg->servercert_bytes);
+        if (ret < 0) {
+            ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
+        }
+        ret = mbedtls_ssl_conf_own_cert(&tls->conf, &tls->servercert, &tls->serverkey);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "mbedtls_ssl_conf_own_cert returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_SSL_CONF_OWN_CERT_FAILED;
+        }
+    } else if (cfg->use_ecdsa_peripheral) {
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
         tls->use_ecdsa_peripheral = cfg->use_ecdsa_peripheral;
 #if SOC_ECDSA_SUPPORT_CURVE_P384
@@ -844,6 +845,10 @@ static esp_err_t set_server_config(esp_tls_cfg_server_t *cfg, esp_tls_t *tls)
 #if defined(CONFIG_ESP_TLS_PSK_VERIFICATION)
     } else if (cfg->psk_hint_key) {
         ESP_LOGD(TAG, "PSK authentication");
+        if (cfg->psk_hint_key->hint == NULL) {
+            ESP_LOGE(TAG, "Failed to use psk_hint_key");
+            return ESP_ERR_MBEDTLS_SSL_CONF_PSK_FAILED;
+        }
         ret = mbedtls_ssl_conf_psk(&tls->conf, cfg->psk_hint_key->key, cfg->psk_hint_key->key_size,
                                    (const unsigned char *)cfg->psk_hint_key->hint, strlen(cfg->psk_hint_key->hint));
         if (ret != 0) {
@@ -998,6 +1003,10 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
         //
         // PSK encryption mode is configured only if no certificate supplied and psk pointer not null
         ESP_LOGD(TAG, "ssl psk authentication");
+        if (cfg->psk_hint_key->hint == NULL) {
+            ESP_LOGE(TAG, "Failed to use psk_hint_key");
+            return ESP_ERR_MBEDTLS_SSL_CONF_PSK_FAILED;
+        }
         ret = mbedtls_ssl_conf_psk(&tls->conf, cfg->psk_hint_key->key, cfg->psk_hint_key->key_size,
                                    (const unsigned char *)cfg->psk_hint_key->hint, strlen(cfg->psk_hint_key->hint));
         if (ret != 0) {
@@ -1016,26 +1025,52 @@ esp_err_t set_client_config(const char *hostname, size_t hostlen, esp_tls_cfg_t 
 #endif
     }
 
-    if (cfg->use_secure_element) {
-#ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT
+    if (cfg->client_key != NULL && cfg->client_key->source == ESP_KEY_SOURCE_BUFFER) {
+        /* Unified key config with buffer source */
         esp_tls_pki_t pki = {
             .public_cert = &tls->clientcert,
             .pk_key = &tls->clientkey,
             .publiccert_pem_buf = cfg->clientcert_buf,
             .publiccert_pem_bytes = cfg->clientcert_bytes,
-            .privkey_pem_buf = NULL,
-            .privkey_pem_bytes = 0,
-            .privkey_password = NULL,
-            .privkey_password_len = 0,
+            .privkey_pem_buf = cfg->client_key->buffer.data,
+            .privkey_pem_bytes = cfg->client_key->buffer.len,
+            .privkey_password = (const unsigned char *)cfg->client_key->buffer.password,
+            .privkey_password_len = cfg->client_key->buffer.password_len,
         };
-        ret = esp_set_atecc608a_pki_context(tls, (void*) &pki);
-        if (ret != ESP_OK) {
-            return ret;
+        esp_err_t esp_ret = set_pki_context(tls, &pki);
+        if (esp_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to set client pki context");
+            return esp_ret;
         }
-#else
-        ESP_LOGE(TAG, "Please enable secure element support for ESP-TLS in menuconfig");
-        return ESP_FAIL;
-#endif /* CONFIG_ESP_TLS_USE_SECURE_ELEMENT */
+    } else if (cfg->client_key != NULL && cfg->client_key->source == ESP_KEY_SOURCE_PSA) {
+        if (cfg->clientcert_buf == NULL) {
+            ESP_LOGE(TAG, "Client certificate is required when using a PSA-backed client key");
+            return ESP_ERR_INVALID_ARG;
+        }
+        mbedtls_svc_key_id_t key_id = cfg->client_key->psa.key_id;
+        mbedtls_pk_init(&tls->clientkey);
+        tls->opaque_key_is_external = true;
+        ret = mbedtls_pk_wrap_psa(&tls->clientkey, key_id);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "mbedtls_pk_wrap_psa returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_PK_PARSE_KEY_FAILED;
+        }
+        ret = mbedtls_x509_crt_parse(&tls->clientcert, cfg->clientcert_buf, cfg->clientcert_bytes);
+        if (ret < 0) {
+            ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
+        }
+        ret = mbedtls_ssl_conf_own_cert(&tls->conf, &tls->clientcert, &tls->clientkey);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "mbedtls_ssl_conf_own_cert returned -0x%04X", -ret);
+            mbedtls_print_error_msg(ret);
+            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
+            return ESP_ERR_MBEDTLS_SSL_CONF_OWN_CERT_FAILED;
+        }
     } else if (cfg->ds_data != NULL) {
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
         if (cfg->clientcert_pem_buf == NULL) {
@@ -1297,133 +1332,74 @@ const int *esp_mbedtls_get_ciphersuites_list(void)
     return mbedtls_ssl_list_ciphersuites();
 }
 
-#ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT
-static esp_err_t esp_init_atecc608a(uint8_t i2c_addr)
-{
-    cfg_ateccx08a_i2c_default.atcai2c.address = i2c_addr;
-    int ret = atcab_init(&cfg_ateccx08a_i2c_default);
-    if(ret != 0) {
-        ESP_LOGE(TAG, "Failed to initialize atca device, returned -0x%04X", -ret);
-        return ESP_FAIL;
-    }
-    return ESP_OK;
-}
-
-static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki)
-{
-    int ret = 0;
-    esp_err_t esp_ret = ESP_FAIL;
-    ESP_LOGI(TAG, "Initialize the ATECC interface...");
-    (void)esp_ret;
-    (void)cert_def;
-#if defined(CONFIG_ATECC608A_TNG) || defined(CONFIG_ATECC608A_TFLEX)
-#ifdef CONFIG_ATECC608A_TNG
-    esp_ret = esp_init_atecc608a(CONFIG_ATCA_I2C_ADDRESS);
-    if (ret != ESP_OK) {
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-#elif CONFIG_ATECC608A_TFLEX /* CONFIG_ATECC608A_TNG */
-    esp_ret = esp_init_atecc608a(CONFIG_ATCA_I2C_ADDRESS);
-    if (ret != ESP_OK) {
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-#endif /* CONFIG_ATECC608A_TFLEX */
-    mbedtls_x509_crt_init(&tls->clientcert);
-    ret = tng_get_device_cert_def(&cert_def);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to get device cert def");
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-
-    /* Extract the device certificate and convert to mbedtls cert */
-    ret = atca_mbedtls_cert_add(&tls->clientcert, cert_def);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to parse cert from device, return 0x%04X", ret);
-        mbedtls_print_error_msg(ret);
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-#elif CONFIG_ATECC608A_TCUSTOM
-    esp_ret = esp_init_atecc608a(CONFIG_ATCA_I2C_ADDRESS);
-    if (ret != ESP_OK) {
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-    mbedtls_x509_crt_init(&tls->clientcert);
-
-    esp_tls_pki_t *pki_l = (esp_tls_pki_t *) pki;
-    if (pki_l->publiccert_pem_buf != NULL) {
-        ret = mbedtls_x509_crt_parse(&tls->clientcert, pki_l->publiccert_pem_buf, pki_l->publiccert_pem_bytes);
-        if (ret < 0) {
-            ESP_LOGE(TAG, "mbedtls_x509_crt_parse of client cert returned -0x%04X", -ret);
-            mbedtls_print_error_msg(ret);
-            ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
-            return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
-        }
-    } else {
-        ESP_LOGE(TAG, "Device certificate must be provided for TrustCustom Certs");
-        return ESP_FAIL;
-    }
-#endif /* CONFIG_ATECC608A_TCUSTOM */
-    ret = atca_mbedtls_pk_init(&tls->clientkey, 0);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to parse key from device");
-        ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
-        mbedtls_print_error_msg(ret);
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-
-    ret = mbedtls_ssl_conf_own_cert(&tls->conf, &tls->clientcert, &tls->clientkey);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to configure client cert, returned -0x%04X", ret);
-        mbedtls_print_error_msg(ret);
-        ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
-        return ESP_ERR_ESP_TLS_SE_FAILED;
-    }
-
-    return ESP_OK;
-}
-#endif /* CONFIG_ESP_TLS_USE_SECURE_ELEMENT */
-
 #ifdef CONFIG_ESP_TLS_USE_DS_PERIPHERAL
+/*
+ * tf-psa-crypto 1.1 made mbedtls_pk_wrap_psa() call psa_export_public_key() on
+ * the imported PSA key. The DS peripheral cannot expose any key material
+ * (private or public), so the export fails with PK_INVALID_ALG. Copy the
+ * already-parsed raw public key from the device certificate so wrap_psa()'s
+ * export step short-circuits (pk.c:145-148, returns early when pub_raw_len>0).
+ */
+static esp_err_t inject_rsa_pubkey_from_cert(mbedtls_pk_context *dst, const mbedtls_x509_crt *cert)
+{
+    const mbedtls_pk_context *src = &cert->pk;
+    size_t src_len = src->MBEDTLS_PRIVATE(pub_raw_len);
+    if (src_len == 0 || src_len > sizeof(dst->MBEDTLS_PRIVATE(pub_raw))) {
+        ESP_LOGE(TAG, "Invalid cert pubkey length: %zu", src_len);
+        return ESP_ERR_INVALID_STATE;
+    }
+    memcpy(dst->MBEDTLS_PRIVATE(pub_raw), src->MBEDTLS_PRIVATE(pub_raw), src_len);
+    dst->MBEDTLS_PRIVATE(pub_raw_len) = src_len;
+    dst->MBEDTLS_PRIVATE(bits) = src->MBEDTLS_PRIVATE(bits);
+    dst->MBEDTLS_PRIVATE(psa_type) = PSA_KEY_TYPE_RSA_PUBLIC_KEY;
+    return ESP_OK;
+}
+
+static psa_status_t import_ds_key(const esp_ds_data_ctx_t *ds_data, psa_key_id_t *out_key_id)
+{
+    esp_rsa_ds_opaque_key_t rsa_ds_opaque_key = {0};
+    rsa_ds_opaque_key.ds_data_ctx = (esp_ds_data_ctx_t *)ds_data;
+
+    psa_key_attributes_t attrs = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attrs, PSA_KEY_TYPE_RSA_KEY_PAIR);
+    psa_set_key_bits(&attrs, ds_data->rsa_length_bits);
+    psa_set_key_usage_flags(&attrs, PSA_KEY_USAGE_SIGN_HASH);
+    psa_set_key_algorithm(&attrs, PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_ANY_HASH));
+#ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
+    psa_set_key_enrollment_algorithm(&attrs, PSA_ALG_RSA_PSS(PSA_ALG_ANY_HASH));
+#endif
+    psa_set_key_lifetime(&attrs, PSA_KEY_LIFETIME_ESP_RSA_DS_VOLATILE);
+
+    psa_status_t status = psa_import_key(&attrs,
+                                         (const uint8_t *)&rsa_ds_opaque_key,
+                                         sizeof(rsa_ds_opaque_key),
+                                         out_key_id);
+    psa_reset_key_attributes(&attrs);
+    return status;
+}
+
 static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
 {
-    esp_ds_data_ctx_t *ds_data = ((const esp_tls_pki_t*)pki)->esp_ds_data;
-    if (ds_data == NULL) {
-        ESP_LOGE(TAG, "DS data context is NULL");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    esp_tls_pki_t *pki_l = (esp_tls_pki_t *) pki;
-    if (pki_l->pk_key == NULL) {
-        ESP_LOGE(TAG, "PK key context is NULL");
+    const esp_tls_pki_t *pki_l = (const esp_tls_pki_t *)pki;
+    if (pki_l->esp_ds_data == NULL || pki_l->pk_key == NULL || pki_l->public_cert == NULL) {
+        ESP_LOGE(TAG, "DS pki context missing required fields");
         return ESP_ERR_INVALID_ARG;
     }
 
     psa_key_id_t ds_key_id = 0;
-    psa_status_t status = PSA_ERROR_GENERIC_ERROR;
-
-    esp_rsa_ds_opaque_key_t rsa_ds_opaque_key = {0};
-    rsa_ds_opaque_key.ds_data_ctx = ds_data;
-
-    psa_key_attributes_t ds_key_attributes = PSA_KEY_ATTRIBUTES_INIT;
-    psa_algorithm_t alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_ANY_HASH);
-#ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    psa_set_key_enrollment_algorithm(&ds_key_attributes, PSA_ALG_RSA_PSS(PSA_ALG_ANY_HASH));
-#endif /* CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 */
-
-    psa_set_key_type(&ds_key_attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
-    psa_set_key_bits(&ds_key_attributes, rsa_ds_opaque_key.ds_data_ctx->rsa_length_bits);
-    psa_set_key_usage_flags(&ds_key_attributes, PSA_KEY_USAGE_SIGN_HASH);
-    psa_set_key_algorithm(&ds_key_attributes, alg);
-    psa_set_key_lifetime(&ds_key_attributes, PSA_KEY_LIFETIME_ESP_RSA_DS_VOLATILE);
-    status = psa_import_key(&ds_key_attributes,
-                            (const uint8_t *)&rsa_ds_opaque_key,
-                            sizeof(rsa_ds_opaque_key),
-                            &ds_key_id);
-    psa_reset_key_attributes(&ds_key_attributes);
+    psa_status_t status = import_ds_key(pki_l->esp_ds_data, &ds_key_id);
     if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to import DS key to PSA, status = %d", status);
         return ESP_ERR_INVALID_STATE;
     }
+
+    /* Pre-populate pub_raw so wrap_psa() does not attempt to export it. */
+    esp_err_t esp_ret = inject_rsa_pubkey_from_cert(pki_l->pk_key, pki_l->public_cert);
+    if (esp_ret != ESP_OK) {
+        psa_destroy_key(ds_key_id);
+        return esp_ret;
+    }
+
     int ret = mbedtls_pk_wrap_psa(pki_l->pk_key, ds_key_id);
     if (ret != 0) {
         ESP_LOGE(TAG, "mbedtls_pk_wrap_psa failed with -0x%04X", -ret);

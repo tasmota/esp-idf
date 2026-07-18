@@ -104,6 +104,91 @@ The deprecated :cpp:func:`esp_tls_conn_http_new` function has been removed. Use 
 
 The new API requires you to create the :cpp:type:`esp_tls_t` structure using :cpp:func:`esp_tls_init` and provides better control over the connection process.
 
+Unified Private Key Interface
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``use_secure_element`` field has been removed from :cpp:type:`esp_tls_cfg`, :cpp:type:`esp_tls_cfg_server`, and :cpp:type:`httpd_ssl_config`. The ATECC608A secure element and all other hardware-backed key sources (DS peripheral, ECDSA peripheral, Key Manager) are now accessed through a unified :cpp:type:`esp_key_config_t` interface via PSA Crypto key IDs.
+
+**Migration Steps**
+
+1. Replace ``use_secure_element = true`` with the new :cpp:type:`esp_key_config_t` using ``ESP_KEY_SOURCE_PSA`` and a PSA key ID obtained from ``psa_import_key()``.
+
+2. The ``atcab_init()`` call is no longer performed internally by ESP-TLS. Applications using the ATECC608A must ensure the secure element is initialized at the application level before use. Refer to the `esp-cryptoauthlib documentation <https://github.com/espressif/esp-cryptoauthlib>`_ for details.
+
+3. The ``esp_transport_ssl_use_secure_element()`` function has been removed from ``tcp_transport``. Use ``esp_transport_ssl_set_client_key_config()`` instead.
+
+4. The Kconfig options for the secure element driver have been consolidated from ``CONFIG_MBEDTLS_ATCA_HW_ECDSA_SIGN`` / ``CONFIG_MBEDTLS_ATCA_HW_ECDSA_VERIFY`` into a single ``CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED``. The old names are automatically mapped via ``sdkconfig.rename``.
+
+For detailed usage examples, see :ref:`atecc608a-with-esp-tls`.
+
+ESP HTTP Server
+---------------
+
+WebSocket Handler No Longer Called During Handshake
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+From v6.0.1, the URI handler registered for a WebSocket endpoint is **no longer called** during the WebSocket handshake.
+
+Prior to this change, the handler was invoked with ``req->method == HTTP_GET`` immediately after the handshake completed, which applications used for connection-time initialization:
+
+.. code-block:: c
+
+    /* Pre-v6.0.1 pattern — no longer works from v6.0.1 onwards */
+    static esp_err_t ws_handler(httpd_req_t *req)
+    {
+        if (req->method == HTTP_GET) {
+            ESP_LOGI(TAG, "New WebSocket connection established");
+            return ESP_OK;
+        }
+        /* Handle WebSocket frames ... */
+    }
+
+From v6.0.1, the handler is invoked only for subsequent WebSocket data frames, so the ``HTTP_GET`` check is no longer needed in frame handlers.
+
+Migration Options
+^^^^^^^^^^^^^^^^^
+
+**Option 1 (Recommended)** — Move connection-time logic into a dedicated post-handshake callback:
+
+1. Enable :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` in menuconfig.
+2. Register a ``ws_post_handshake_cb`` on the ``httpd_uri_t`` struct. The frame handler remains clean with no ``HTTP_GET`` check.
+
+.. code-block:: c
+
+    static esp_err_t ws_on_connect(httpd_req_t *req)
+    {
+        ESP_LOGI(TAG, "New WebSocket connection established");
+        return ESP_OK;
+    }
+
+    static esp_err_t ws_handler(httpd_req_t *req)
+    {
+        /* Handle WebSocket frames only */
+    }
+
+    static const httpd_uri_t ws_uri = {
+        .uri                  = "/ws",
+        .method               = HTTP_GET,
+        .handler              = ws_handler,
+        .is_websocket         = true,
+        .ws_post_handshake_cb = ws_on_connect,
+    };
+
+**Option 2 (Minimal change)** — Set ``.ws_post_handshake_cb`` to the same function as ``.handler``:
+
+1. Enable :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` in menuconfig.
+2. Set ``.ws_post_handshake_cb = ws_handler`` in the URI registration. The existing ``if (req->method == HTTP_GET)`` check inside the handler continues to work without any further code changes.
+
+.. code-block:: c
+
+    static const httpd_uri_t ws_uri = {
+        .uri                  = "/ws",
+        .method               = HTTP_GET,
+        .handler              = ws_handler,
+        .is_websocket         = true,
+        .ws_post_handshake_cb = ws_handler,   /* same function restores old behavior */
+    };
+
 ESP-Modbus
 ----------
 

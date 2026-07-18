@@ -90,6 +90,7 @@ Below are additional configuration fields of the :cpp:type:`twai_onchip_node_con
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_loopback`: Enables loopback mode. The node will receive its own transmitted messages (subject to filter configuration), while also transmitting them to the bus.
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_listen_only`: Configures the node in listen-only mode. In this mode, the node only receives and does not transmit any dominant bits, including ACK and error frames.
     - :cpp:member:`twai_onchip_node_config_t::flags::no_receive_rtr`: When using filters, determines whether remote frames matching the ID pattern should be filtered out.
+    - :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx`: Enables scheduled transmission. This option requires a non-zero :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz`.
 
 The :cpp:func:`twai_node_enable` function starts the TWAI controller. Once enabled, the controller is connected to the bus and can transmit messages. It also generates events upon receiving messages from other nodes on the bus or when bus errors are detected.
 
@@ -134,6 +135,7 @@ The :cpp:type:`twai_frame_t` message structure also includes other configuration
 - :cpp:member:`twai_frame_t::header::fdf`: Marks the frame as an FD format frame, supporting up to 64 bytes of data.
 - :cpp:member:`twai_frame_t::header::brs`: Enables use of a separate data-phase baud rate when transmitting.
 - :cpp:member:`twai_frame_t::header::esi`: For received frames, indicates the error state of the transmitting node.
+- :cpp:member:`twai_frame_t::tx_queue_priority`: Local transmit queue priority. See `Transmit Queue Priority`_ for details.
 
 Receiving Messages
 ------------------
@@ -175,6 +177,34 @@ The TWAI driver supports creating a 64-bit timestamp for each successfully recei
 
 The node time inherits from the system time, i.e. the time starts from the power-on of the chip, and is not affected by the stop/restart/BUS_OFF state during the node's lifetime.
 
+.. only:: SOC_TWAI_FD_SUPPORTED
+
+    Scheduled Transmission
+    ----------------------
+
+    The {IDF_TARGET_NAME} TWAI supports schedule a transmitted frame by trigger time. Enable :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx` and set :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz` when creating the node, then fill :cpp:member:`twai_frame_t::header::trigger_time` before calling :cpp:func:`twai_node_transmit`. The trigger time uses the same timebase as received frame timestamps.
+
+    .. code:: c
+
+        twai_onchip_node_config_t node_config = {
+            .io_cfg.tx = 4,
+            .io_cfg.rx = 5,
+            .bit_timing.bitrate = 500000,
+            .timestamp_resolution_hz = 1000,  // 1 tick = 1 ms
+            .tx_queue_depth = 4,
+            .flags.enable_scheduled_tx = true,
+        };
+
+        twai_frame_t tx_msg = {
+            .header.id = 0x10,
+            .header.trigger_time = 2000,  // transmit when node timestamp reaches 2000 ticks
+        };
+        ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &tx_msg, 0));
+
+    .. note::
+
+        If the frame's trigger time has already been reached when the frame is ready to transmit, the driver starts transmitting it immediately. When multiple scheduled frames are queued, the driver processes them in software submission order. Frames are not reordered by :cpp:member:`twai_frame_t::header::trigger_time`, so a later-submitted frame with an earlier trigger time cannot overtake frames submitted before it.
+
 Stopping and Deleting the Node
 ------------------------------
 
@@ -213,6 +243,13 @@ The TWAI driver supports transmitting messages from an Interrupt Service Routine
 
 .. note::
     When calling :cpp:func:`twai_node_transmit` from an ISR, the ``timeout`` parameter is ignored, and the function will not block. If the transmit queue is full, the function will return immediately with an error. It is the application's responsibility to handle cases where the queue is full. Similarly, the ``twai_frame_t`` structure and the memory pointed to by ``buffer`` must remain valid until the transmission is complete. You can get the completed frame by the :cpp:member:`twai_tx_done_event_data_t::done_tx_frame` pointer.
+
+Transmit Queue Priority
+-----------------------
+
+The TWAI driver supports local transmit queue prioritization through :cpp:member:`twai_frame_t::tx_queue_priority`. When multiple frames are pending in the driver's transmit queue, frames with a higher ``tx_queue_priority`` value are dequeued and started transmitting first. Frames with the same priority keep their enqueue order.
+
+This priority only affects the driver's local transmit queue. It is not transmitted on the TWAI bus and does not replace TWAI bus arbitration. If the controller has multiple hardware transmit buffers (for example, 4 hardware transmit buffers for esp32c5), the already cached frames will not be preempted by newly queued higher-priority frames. Once a frame reaches the bus, arbitration is still determined by the frame ID, where lower IDs have higher bus priority.
 
 Bit Timing Customization
 ------------------------

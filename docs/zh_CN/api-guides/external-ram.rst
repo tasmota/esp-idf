@@ -114,7 +114,14 @@ ESP-IDF 启动过程中，片外 RAM 被映射到数据虚拟地址空间，该�
 
 如果优先考虑的内部或外部存储器中没有可用的存储块，分配程序则会选择其他类型存储。
 
-由于有些内存缓冲器仅可在内部存储器中分配，因此需要使用第二个配置项 :ref:`CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL` 定义一个内部内存池，仅限显式的内部存储器分配使用（例如用于 DMA 的存储器）。常规 ``malloc()`` 将不会从该池中分配，但可以使用 :ref:`MALLOC_CAP_DMA <dma-capable-memory>` 和 ``MALLOC_CAP_INTERNAL`` 标志从该池中分配存储器。
+由于有些内存缓冲器仅可在内部存储器中分配，因此需要使用第二个配置项 :ref:`CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL` 在启动阶段（PSRAM 初始化完成后，于 ``main_task`` 中）预留一块内部 DMA 可用内存池。该内存从常规内部堆中分配出，并重新注册为独立的内存池。
+
+预留池通过堆能力优先级机制管理：
+
+- **中优先级** — ``MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL``：显式使用这些标志的 ``heap_caps_malloc()`` 请求会优先从此池分配。
+- **低优先级** — ``MALLOC_CAP_DEFAULT``：仅当其他具有更高优先级 ``MALLOC_CAP_DEFAULT`` 的内部堆耗尽后，``malloc()`` 才会回退使用此池。
+
+因此，在正常情况下 ``malloc()`` 不会从该池分配；仅当其他内部内存耗尽后，``malloc()`` 才会将其作为最后的回退来源以避免分配完全失败。
 
 .. _external_ram_config_bss:
 
@@ -248,6 +255,30 @@ ESP-IDF 启动过程中，片外 RAM 被映射到数据虚拟地址空间，该�
     .. only:: SOC_PSRAM_ENCRYPTION_PAGE_CONFIGURABLE
 
         在 {IDF_TARGET_NAME} 上，PSRAM 加密可以按 MMU 页面粒度进行控制，允许对单个 PSRAM 页面选择性地加密或不加密。但在默认配置下，启用 flash 加密时所有 PSRAM 页面都会被加密。
+
+        预留未加密的 PSRAM 区域
+        -----------------------
+
+        启用 :ref:`CONFIG_SPIRAM_ENC_EXEMPT` 会在 PSRAM 上端（最高物理地址区，大小由 :ref:`CONFIG_SPIRAM_ENC_EXEMPT_SIZE` 指定，单位为 KB，向上取整到 MMU 页面大小）预留一段区域，该区域在映射时不启用加密。此区域被注册为一个独立的堆池，仅可通过 ``MALLOC_CAP_SPIRAM_NO_ENC`` 能力位访问。其余 PSRAM（以及 flash）仍然保持加密。
+
+        .. warning::
+
+            通过 ``MALLOC_CAP_SPIRAM_NO_ENC`` 分配的内存以明文形式存储在 PSRAM 中，攻击者若能物理接触 PSRAM 接口即可读取其内容。切勿将 TLS 状态、密钥或其他敏感数据放入该区域。
+
+        典型使用场景：PSRAM 加密会对缓冲区施加对齐约束，部分 DMA 引擎（如 2D-DMA）无法满足这些约束。需要被此类引擎进行 DMA 访问的缓冲区可以从该未加密区域分配：
+
+        .. code-block:: c
+
+            #if CONFIG_SPIRAM_ENC_EXEMPT
+            uint32_t caps = MALLOC_CAP_SPIRAM_NO_ENC;
+            #else
+            uint32_t caps = MALLOC_CAP_SPIRAM;
+            #endif
+            uint8_t *buf = heap_caps_malloc(buf_size, caps);
+
+        必须显式请求 ``MALLOC_CAP_SPIRAM_NO_ENC``。该能力位有意未与 ``MALLOC_CAP_SPIRAM`` 或 ``MALLOC_CAP_DEFAULT`` 组合，因此普通 SPIRAM/堆分配不会意外落入该未加密区域。
+
+        如需在分配后验证缓冲区是否确实位于未加密的预留区域（例如调用 ``heap_caps_malloc_prefer()`` 后可能回退到加密的 PSRAM），可使用 ``esp_psram_ptr_is_no_enc()``。
 
     .. only:: SOC_PSRAM_ENCRYPTION_SEPARATE_KEY
 

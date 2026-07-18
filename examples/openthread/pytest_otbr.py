@@ -3,7 +3,7 @@
 # !/usr/bin/env python3
 import copy
 import logging
-import os.path
+import os
 import random
 import re
 import secrets
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Generator
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import ot_ci_function as ocf
@@ -94,19 +95,52 @@ def fixture_Init_interface() -> bool:
     return True
 
 
-default_br_ot_para = ocf.thread_parameter('leader', '', '12', '7766554433221100', True)
-default_br_wifi_para = ocf.wifi_parameter('OTCITE', 'otcitest888', 10)
-default_cli_ot_para = ocf.thread_parameter('router', '', '', '', False)
-ESPPORT1 = os.getenv('ESPPORT1')
-ESPPORT2 = os.getenv('ESPPORT2')
-ESPPORT3 = os.getenv('ESPPORT3')
-ESPPORT4 = os.getenv('ESPPORT4')
+PORT_MAPPING = {
+    'ESPPORT1': 'esp32h2',
+    'ESPPORT2': 'esp32s3',
+    'ESPPORT3': 'esp32c6',
+    'ESPPORT4': 'esp32c5',
+}
+ESPPORT1, ESPPORT2, ESPPORT3, ESPPORT4 = (os.getenv(name) for name in PORT_MAPPING)
 
-PORT_MAPPING = {'ESPPORT1': 'esp32h2', 'ESPPORT2': 'esp32s3', 'ESPPORT3': 'esp32c6', 'ESPPORT4': 'esp32c5'}
+_RUNNER_CHANNEL = os.getenv('CHANNEL', '12')
+_RUNNER_NETWORKKEY = os.getenv('NETWORKKEY', '99112233445566778899aabbccddeeff')
+_BR_EXTADDR = '7766554433221100'
+
+
+def _leader_ot_para(bbr: bool = True) -> ocf.thread_parameter:
+    para = ocf.thread_parameter('leader', '', _RUNNER_CHANNEL, _BR_EXTADDR, bbr)
+    if _RUNNER_NETWORKKEY:
+        para.setnetworkkey(_RUNNER_NETWORKKEY)
+    return para
+
+
+default_br_ot_para = _leader_ot_para()
+default_br_wifi_para = ocf.wifi_parameter(os.getenv('RUNNER_AP_SSID'), os.getenv('RUNNER_AP_PASSWORD'), 10)
+default_cli_ot_para = ocf.thread_parameter('router', '', '', '', False)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def erase_flash_after_all_cases() -> Generator[None, None, None]:
+    yield
+
+    serial_ports = list(dict.fromkeys(filter(None, map(os.getenv, PORT_MAPPING))))
+    failed_ports = []
+    for serial_port in serial_ports:
+        command = ['python', '-m', 'esptool', '--port', serial_port, 'erase_flash']
+        logging.info('Erasing flash on %s: %s', serial_port, ' '.join(command))
+        result = subprocess.run(command, capture_output=True, text=True)
+        logging.info('Erase flash stdout on %s:\n%s', serial_port, result.stdout)
+        if result.stderr:
+            logging.info('Erase flash stderr on %s:\n%s', serial_port, result.stderr)
+        if result.returncode != 0:
+            failed_ports.append(serial_port)
+
+    assert not failed_ports, f'Failed to erase flash on ports: {failed_ports}'
 
 
 # Case 1: Thread network formation and attaching
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_connect
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -206,7 +240,7 @@ def formBasicWiFiThreadNetwork(br: IdfDut, cli: IdfDut) -> None:
 
 
 # Case 2: Bidirectional IPv6 connectivity
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_connect
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -246,11 +280,7 @@ def test_Bidirectional_IPv6_connectivity(Init_interface: bool, dut: tuple[IdfDut
         cli_global_unicast_addr = ocf.get_global_unicast_addr(cli, br)
         logging.info(f'cli_global_unicast_addr {cli_global_unicast_addr}')
         interface_name = ocf.get_host_interface_name()
-        command = 'ifconfig ' + interface_name + ' | grep inet6 | grep global'
-        out_bytes = subprocess.check_output(command, shell=True, timeout=5)
-        out_str = out_bytes.decode('utf-8')
-        pattern = rf'\W+({onlinkprefix}(?:\w+:){{3}}\w+)\W+'
-        host_global_unicast_addr = re.findall(pattern, out_str)
+        host_global_unicast_addr = ocf.list_host_usable_onlink_global_addresses(interface_name, onlinkprefix)
         logging.info(f'host_global_unicast_addr: {host_global_unicast_addr}')
         if not host_global_unicast_addr:
             raise Exception(f'onlinkprefix: {onlinkprefix}, host_global_unicast_addr: {host_global_unicast_addr}')
@@ -404,7 +434,7 @@ def test_multicast_forwarding_B(Init_interface: bool, dut: tuple[IdfDut, IdfDut,
 
 
 # Case 5: discover dervice published by Thread device
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_service
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -474,8 +504,8 @@ def test_service_discovery_of_Thread_device(
 
 
 # Case 6: discover dervice published by Wi-Fi device
-@pytest.mark.openthread_br
-@pytest.mark.flaky(reruns=3, reruns_delay=5)
+@pytest.mark.openthread_br_service
+@pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
     [
@@ -546,10 +576,11 @@ def test_service_discovery_of_WiFi_device(
         tmp = ocf.get_output_string(cli, command, 10)
         assert 'response for _testxxx' in str(tmp)
         assert 'Port:12347' in str(tmp)
+        instance_label = ocf.parse_dns_browse_instance(str(tmp))
 
-        command = 'dns service testxxx _testxxx._udp.default.service.arpa.'
+        command = 'dns service ' + ocf.escape_ot_cli_arg(instance_label) + ' _testxxx._udp.default.service.arpa.'
         tmp = ocf.get_output_string(cli, command, 10)
-        assert 'response for testxxx' in str(tmp)
+        assert f'response for {instance_label}' in str(tmp)
         assert 'Port:12347' in str(tmp)
     finally:
         ocf.host_close_service()
@@ -561,7 +592,7 @@ def test_service_discovery_of_WiFi_device(
 
 
 # Case 7: ICMP communication via NAT64
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_nat64
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -598,7 +629,7 @@ def test_ICMP_NAT64(Init_interface: bool, dut: tuple[IdfDut, IdfDut, IdfDut]) ->
 
 
 # Case 8: UDP communication via NAT64
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_nat64
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -653,7 +684,7 @@ def test_UDP_NAT64(Init_interface: bool, dut: tuple[IdfDut, IdfDut, IdfDut]) -> 
 
 
 # Case 9: TCP communication via NAT64
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_nat64
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -757,7 +788,7 @@ def test_ot_sleepy_device(dut: tuple[IdfDut, IdfDut]) -> None:
     try:
         ocf.init_thread(leader)
         time.sleep(3)
-        leader_para = ocf.thread_parameter('leader', '', '12', '7766554433221100', False)
+        leader_para = _leader_ot_para(bbr=False)
         ocf.SetThreadNetworkPara(leader, leader_para)
         ocf.StartThreadNetwork(leader, leader_para)
         ocf.wait(leader, 5)
@@ -874,7 +905,7 @@ def test_NAT64_DNS(Init_interface: bool, dut: tuple[IdfDut, IdfDut, IdfDut]) -> 
 
 
 # Case 13: Meshcop discovery of Border Router
-@pytest.mark.openthread_br
+@pytest.mark.openthread_br_service
 @pytest.mark.flaky(reruns=1, reruns_delay=5)
 @pytest.mark.parametrize(
     'config, count, app_path, target, port',
@@ -1096,7 +1127,7 @@ def test_ot_ssed_device(dut: tuple[IdfDut, IdfDut]) -> None:
         ssed_device.expect('32k XTAL in use', timeout=20)
         ocf.init_thread(leader)
         time.sleep(3)
-        leader_para = ocf.thread_parameter('leader', '', '12', '7766554433221100', False)
+        leader_para = _leader_ot_para(bbr=False)
         ocf.SetThreadNetworkPara(leader, leader_para)
         ocf.StartThreadNetwork(leader, leader_para)
         ocf.wait(leader, 5)
@@ -1108,7 +1139,7 @@ def test_ot_ssed_device(dut: tuple[IdfDut, IdfDut]) -> None:
         ssed_device.expect('Done', timeout=5)
         ocf.execute_command(ssed_device, 'csl period 3000000')
         ssed_device.expect('Done', timeout=5)
-        ocf.execute_command(ssed_device, 'csl channel 12')
+        ocf.execute_command(ssed_device, f'csl channel {_RUNNER_CHANNEL}')
         ssed_device.expect('Done', timeout=5)
         ocf.execute_command(ssed_device, 'ifconfig up')
         ssed_device.expect('Done', timeout=5)

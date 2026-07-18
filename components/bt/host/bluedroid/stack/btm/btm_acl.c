@@ -43,6 +43,10 @@
 #include "stack/btu.h"
 #include "stack/btm_api.h"
 #include "btm_int.h"
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+#include "btm_ble_int.h"
+#include "btm_ble_pseudo.h"
+#endif
 #include "stack/acl_hci_link_interface.h"
 #include "l2c_int.h"
 #include "stack/l2cap_hci_link_interface.h"
@@ -597,6 +601,11 @@ void btm_acl_removed (BD_ADDR bda, tBT_TRANSPORT transport)
 #if (CLASSIC_BT_INCLUDED == TRUE)
         list_remove(btm_cb.p_pm_mode_db_list, p->p_pm_mode_db);
 #endif // #if (CLASSIC_BT_INCLUDED == TRUE)
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (BLE_50_EXTEND_ADV_EN == TRUE)
+        if (p->transport == BT_TRANSPORT_LE) {
+            btm_ble_clear_ext_adv_ter_con_handle(p->hci_handle);
+        }
+#endif
         /* Remove and free the ACL connection data */
         list_remove(btm_cb.p_acl_db_list, p);
         p = NULL;
@@ -2279,7 +2288,7 @@ void btm_acl_pkt_types_changed(UINT8 status, UINT16 handle, UINT16 pkt_types)
 tBTM_STATUS BTM_ReadChannelMap(BD_ADDR remote_bda)
 {
     tACL_CONN *p;
-    tBTM_BLE_CH_MAP_RESULTS result;
+    tBTM_BLE_CH_MAP_RESULTS result = {0};
     tBTM_BLE_LEGACY_GAP_CB_PARAMS cb_params;
     UINT8 status;
 
@@ -2322,7 +2331,7 @@ void BTM_BleGetWhiteListSize(uint16_t *length)
 {
     tBTM_BLE_CB *p_cb = &btm_cb.ble_ctr_cb;
     if (p_cb->white_list_avail_size == 0) {
-        BTM_TRACE_WARNING("%s Whitelist full.", __func__);
+        BTM_TRACE_WARNING("%s Whitelist size is 0.", __func__);
     }
     *length = p_cb->white_list_avail_size;
     return;
@@ -2356,7 +2365,7 @@ void BTM_BleGetPeriodicAdvListSize(uint8_t *size)
 *******************************************************************************/
 void btm_read_channel_map_complete(UINT8 *p)
 {
-    tBTM_BLE_CH_MAP_RESULTS results;
+    tBTM_BLE_CH_MAP_RESULTS results = {0};
     UINT16 handle;
     tACL_CONN *p_acl_cb = NULL;
 
@@ -2387,7 +2396,7 @@ void btm_read_channel_map_complete(UINT8 *p)
                 memcpy(results.rem_bda, p_acl_cb->remote_addr, BD_ADDR_LEN);
             }
         } else {
-            results.status = BTM_ERR_PROCESSING;
+            results.status = BTM_HCI_ERROR | results.hci_status;
             BTM_TRACE_ERROR("BTM Channel Map Read Failed: hci status 0x%02x", results.hci_status);
         }
 
@@ -2913,6 +2922,17 @@ BOOLEAN btm_acl_disconnected(UINT16 handle, UINT8 reason)
     }
 
 #endif  /* SMP_INCLUDED == TRUE */
+
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    /* Drop the per-connection pseudo identity mapping for this handle. */
+    BLE_PSEUDO_DBG("disconnect: handle=0x%x reason=0x%x -> cleanup", handle, reason);
+    btm_ble_conn_identity_unregister(handle);
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (BLE_50_EXTEND_ADV_EN == TRUE)
+    /* Unbind ext-adv sets so a reused handle cannot leak into another inst. */
+    btm_ble_clear_ext_adv_ter_con_handle(handle);
+#endif
 
     return status;
 }

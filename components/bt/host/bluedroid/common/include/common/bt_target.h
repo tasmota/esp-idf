@@ -73,6 +73,8 @@
 #define SDP_INCLUDED                TRUE
 #define BTA_DM_QOS_INCLUDED         TRUE
 
+#define BR_EDR_MAX_RECONNECT_ON_COLLISION UC_BT_CLASSIC_MAX_RECONNECT_ON_COLLISION
+
 #define ENC_KEY_SIZE_CTRL_MODE_NONE 0
 #define ENC_KEY_SIZE_CTRL_MODE_STD  1
 #define ENC_KEY_SIZE_CTRL_MODE_VSC  2
@@ -242,6 +244,14 @@
 #define BLE_50_FEATURE_SUPPORT   TRUE
 #else
 #define BLE_50_FEATURE_SUPPORT   FALSE
+#endif
+
+/* Peripheral dual local-identity bond isolation via Host-internal pseudo
+ * address. Guarded so default builds keep the legacy single-bond behavior. */
+#if (UC_BT_BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+#define BLE_PERIPH_PSEUDO_ADDR_BOND   TRUE
+#else
+#define BLE_PERIPH_PSEUDO_ADDR_BOND   FALSE
 #endif
 
 #if (UC_BT_BLE_ENABLED ==TRUE)
@@ -441,11 +451,47 @@
 #define BT_BLE_FEAT_CHANNEL_SOUNDING     FALSE
 #endif
 
+#if (BT_BLE_FEAT_CHANNEL_SOUNDING == TRUE) && (UC_BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS == TRUE)
+#define BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS     TRUE
+#else
+#define BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS     FALSE
+#endif
+
 /* LE Monitor Advertisement (Bluetooth Core 6.0) */
 #if (BLE_50_FEATURE_SUPPORT == TRUE) && (defined UC_BT_BLE_FEAT_ADV_MONITOR) && (UC_BT_BLE_FEAT_ADV_MONITOR == TRUE)
 #define BLE_FEAT_ADV_MONITOR     TRUE
 #else
 #define BLE_FEAT_ADV_MONITOR     FALSE
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (UC_BT_BLE_FEAT_DBAF == TRUE)
+#define BLE_FEAT_DBAF     TRUE
+#else
+#define BLE_FEAT_DBAF     FALSE
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (UC_BT_BLE_FEAT_FRAME_SPACE_UPDATE == TRUE)
+#define BLE_FEAT_FRAME_SPACE_UPDATE     TRUE
+#else
+#define BLE_FEAT_FRAME_SPACE_UPDATE     FALSE
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (UC_BT_BLE_FEAT_LL_EXT_FEAT == TRUE)
+#define BLE_FEAT_LL_EXT_FEAT     TRUE
+#else
+#define BLE_FEAT_LL_EXT_FEAT     FALSE
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (UC_BT_BLE_FEAT_SHORTER_CONN_INTERVALS == TRUE)
+#define BLE_FEAT_SHORTER_CONN_INTERVALS     TRUE
+#else
+#define BLE_FEAT_SHORTER_CONN_INTERVALS     FALSE
+#endif
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE) && (UC_BT_BLE_FEAT_LE_UTP == TRUE)
+#define BLE_FEAT_LE_UTP     TRUE
+#else
+#define BLE_FEAT_LE_UTP     FALSE
 #endif
 
 #if (UC_BT_BLE_VENDOR_HCI_EN == TRUE)
@@ -1458,7 +1504,85 @@
 
 /* Support status of L2CAP connection-oriented dynamic channels over LE transport with dynamic CID */
 #ifndef BLE_L2CAP_COC_INCLUDED
-#define BLE_L2CAP_COC_INCLUDED          FALSE // LE COC not use by default
+#if (UC_BT_BLE_L2CAP_COC_ENABLED == TRUE)
+#define BLE_L2CAP_COC_INCLUDED          TRUE
+#else
+#define BLE_L2CAP_COC_INCLUDED          FALSE
+#endif
+#endif
+
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+#undef BLE_MAX_L2CAP_CLIENTS
+#define BLE_MAX_L2CAP_CLIENTS           UC_BT_BLE_L2CAP_COC_MAX_CHAN
+#endif
+
+/* Initial LE CoC/ECFC RX credit window (K-frames) from
+ * CONFIG_BT_BLE_L2CAP_COC_INIT_CREDITS. Defined even when CoC is disabled so
+ * that internal headers that reference L2CAP_LE_INIT_CREDITS remain valid. */
+#ifndef L2CAP_LE_INIT_CREDITS
+#define L2CAP_LE_INIT_CREDITS           UC_BT_BLE_L2CAP_COC_INIT_CREDITS
+#endif
+
+/* Default LE CoC/ECFC MPS from CONFIG_BT_BLE_L2CAP_COC_MPS. */
+#ifndef L2CAP_LE_COC_MPS
+#define L2CAP_LE_COC_MPS                UC_BT_BLE_L2CAP_COC_MPS
+#endif
+
+#ifndef BLE_L2CAP_COC_CLIENT_INCLUDED
+#if (BLE_L2CAP_COC_INCLUDED == TRUE) && (GATTC_INCLUDED == TRUE)
+#define BLE_L2CAP_COC_CLIENT_INCLUDED     TRUE
+#else
+#define BLE_L2CAP_COC_CLIENT_INCLUDED     FALSE
+#endif
+#endif
+
+#ifndef BLE_L2CAP_COC_SERVER_INCLUDED
+#if (BLE_L2CAP_COC_INCLUDED == TRUE) && (GATTS_INCLUDED == TRUE)
+#define BLE_L2CAP_COC_SERVER_INCLUDED     TRUE
+#else
+#define BLE_L2CAP_COC_SERVER_INCLUDED     FALSE
+#endif
+#endif
+
+#ifndef BLE_L2CAP_ENHANCED_COC_INCLUDED
+#if (UC_BT_BLE_L2CAP_ENHANCED_COC == TRUE) && (BLE_L2CAP_COC_INCLUDED == TRUE)
+#define BLE_L2CAP_ENHANCED_COC_INCLUDED TRUE
+#else
+#define BLE_L2CAP_ENHANCED_COC_INCLUDED FALSE
+#endif
+#endif
+
+#ifndef BLE_EATT_INCLUDED
+#if (UC_BT_BLE_EATT_ENABLE == TRUE) && (BLE_L2CAP_ENHANCED_COC_INCLUDED == TRUE)
+#define BLE_EATT_INCLUDED               TRUE
+#else
+#define BLE_EATT_INCLUDED               FALSE
+#endif
+#endif
+
+#ifndef BLE_EATT_CLIENT_INCLUDED
+#if (BLE_EATT_INCLUDED == TRUE) && (GATTC_INCLUDED == TRUE)
+#define BLE_EATT_CLIENT_INCLUDED          TRUE
+#else
+#define BLE_EATT_CLIENT_INCLUDED          FALSE
+#endif
+#endif
+
+#ifndef BLE_EATT_SERVER_INCLUDED
+#if (BLE_EATT_INCLUDED == TRUE) && (GATTS_INCLUDED == TRUE)
+#define BLE_EATT_SERVER_INCLUDED          TRUE
+#else
+#define BLE_EATT_SERVER_INCLUDED          FALSE
+#endif
+#endif
+
+/* EATT bearer count and MTU from CONFIG_BT_BLE_EATT_CHAN_NUM / CONFIG_BT_BLE_EATT_MTU. */
+#ifndef GATT_EATT_MAX_CHAN
+#define GATT_EATT_MAX_CHAN              UC_BT_BLE_EATT_CHAN_NUM
+#endif
+
+#ifndef GATT_EATT_MTU
+#define GATT_EATT_MTU                   UC_BT_BLE_EATT_MTU
 #endif
 
 /* Support status of L2CAP connection-oriented dynamic channels over LE or BR/EDR transport with dynamic CID */

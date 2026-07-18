@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,8 +24,8 @@ extern "C" {
 #define GDMA_LL_CHANNEL_MAX_PRIORITY 5 // supported priority levels: [0,5]
 #define GDMA_LL_CHANNEL_MAX_WEIGHT   15  // supported weight levels: [0,15]
 
-#define GDMA_LL_RX_EVENT_MASK       (0x7F)
-#define GDMA_LL_TX_EVENT_MASK       (0x3F)
+#define AHB_DMA_LL_RX_EVENT_MASK    (0x7F)
+#define AHB_DMA_LL_TX_EVENT_MASK    (0x3F)
 
 // any "dummy" peripheral ID can be used for M2M mode
 #define AHB_DMA_LL_M2M_FREE_PERIPH_ID_MASK (0xFE75)
@@ -232,9 +232,6 @@ static inline void ahb_dma_ll_rx_set_burst_size(ahb_dma_dev_t *dev, uint32_t cha
         break;
     case 32:
         burst_mode = 2; // incr8
-        break;
-    case 64:
-        burst_mode = 3; // incr16
         break;
     default:
         HAL_ASSERT(false);
@@ -510,9 +507,6 @@ static inline void ahb_dma_ll_tx_set_burst_size(ahb_dma_dev_t *dev, uint32_t cha
         break;
     case 32:
         burst_mode = 2; // incr8
-        break;
-    case 64:
-        burst_mode = 3; // incr16
         break;
     default:
         HAL_ASSERT(false);

@@ -15,20 +15,22 @@
 
 psa_status_t esp_hmac_abort_transparent(esp_hmac_transparent_operation_t *esp_hmac_ctx)
 {
-    psa_status_t status = PSA_ERROR_CORRUPTION_DETECTED;
-
-#if CONFIG_MBEDTLS_ROM_MD5
-    psa_algorithm_t hash_alg = PSA_ALG_GET_HASH(esp_hmac_ctx->alg);
-    if (hash_alg == PSA_ALG_MD5) {
-        status = esp_md5_hash_abort(&esp_hmac_ctx->md5_ctx);
-    } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
-    {
-        status = esp_sha_hash_abort(&esp_hmac_ctx->esp_sha_ctx);
+    if (esp_hmac_ctx == NULL) {
+        return PSA_SUCCESS;
     }
 
-    if (status != PSA_SUCCESS) {
-        return status;
+    if (esp_hmac_ctx->alg == 0) {
+        return PSA_SUCCESS;
+    }
+
+#if defined(ESP_MD5_DRIVER_ENABLED)
+    psa_algorithm_t hash_alg = PSA_ALG_GET_HASH(esp_hmac_ctx->alg);
+    if (hash_alg == PSA_ALG_MD5) {
+        (void)esp_md5_hash_abort(&esp_hmac_ctx->md5_ctx);
+    } else
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
+    {
+        (void)esp_sha_hash_abort(&esp_hmac_ctx->esp_sha_ctx);
     }
 
     // Free dynamically allocated opad buffer
@@ -39,7 +41,7 @@ psa_status_t esp_hmac_abort_transparent(esp_hmac_transparent_operation_t *esp_hm
     }
 
     mbedtls_platform_zeroize(esp_hmac_ctx, sizeof(esp_hmac_transparent_operation_t));
-    return status;
+    return PSA_SUCCESS;
 }
 
 psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hmac_ctx,
@@ -59,19 +61,33 @@ psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hm
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (!PSA_ALG_IS_HMAC(alg)) {
+        return PSA_ERROR_NOT_SUPPORTED;
+    }
+    if (psa_get_key_type(attributes) != PSA_KEY_TYPE_HMAC) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (esp_hmac_ctx->alg != 0) {
+        return PSA_ERROR_BAD_STATE;
+    }
+
     memset(esp_hmac_ctx, 0, sizeof(esp_hmac_transparent_operation_t));
+
+    esp_hmac_ctx->alg = alg;
 
     // Allocate opad buffer dynamically
     esp_hmac_ctx->opad = (uint8_t *)malloc(PSA_HMAC_MAX_HASH_BLOCK_SIZE);
     if (esp_hmac_ctx->opad == NULL) {
-        return PSA_ERROR_INSUFFICIENT_MEMORY;
+        status = PSA_ERROR_INSUFFICIENT_MEMORY;
+        goto cleanup;
     }
     memset(esp_hmac_ctx->opad, 0, PSA_HMAC_MAX_HASH_BLOCK_SIZE);
 
     if (
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
         hash_alg != PSA_ALG_MD5 &&
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
         (hash_alg < PSA_ALG_SHA_1
 #if SOC_SHA_SUPPORT_SHA512
         || hash_alg > PSA_ALG_SHA_512
@@ -80,10 +96,8 @@ psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hm
 #endif // SOC_SHA_SUPPORT_SHA512
         )) {
         status = PSA_ERROR_NOT_SUPPORTED;
-        goto error;
+        goto cleanup;
     }
-
-    esp_hmac_ctx->alg = alg;
 
     /* Sanity checks on block_size, to guarantee that there won't be a buffer
     * overflow below. This should never trigger if the hash algorithm
@@ -92,28 +106,28 @@ psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hm
     * have the same size (PSA_HMAC_MAX_HASH_BLOCK_SIZE). */
     if ((block_size > sizeof(ipad)) || (block_size < hash_size)) {
         status = PSA_ERROR_NOT_SUPPORTED;
-        goto error;
+        goto cleanup;
     }
 
     if (key_buffer_size > block_size) {
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
         if (hash_alg == PSA_ALG_MD5) {
             status = esp_md5_hash_compute(hash_alg, key_buffer, key_buffer_size,
                                     ipad, sizeof(ipad), &key_buffer_size);
         } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
         {
             status = esp_sha_hash_compute(hash_alg, key_buffer, key_buffer_size,
                                     ipad, sizeof(ipad), &key_buffer_size);
         }
         if (status != PSA_SUCCESS) {
-            goto error;
+            goto cleanup;
         }
         /* After hashing, key_buffer_size is set to the hash size, which
         * should be <= block_size. Verify this for static analysis. */
         if (key_buffer_size > block_size) {
             status = PSA_ERROR_CORRUPTION_DETECTED;
-            goto error;
+            goto cleanup;
         }
     }
     /* A 0-length key is not commonly used in HMAC when used as a MAC,
@@ -124,7 +138,7 @@ psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hm
         /* Additional safety check: ensure key fits in ipad buffer */
         if (key_buffer_size > sizeof(ipad)) {
             status = PSA_ERROR_INVALID_ARGUMENT;
-            goto error;
+            goto cleanup;
         }
         memcpy(ipad, key_buffer, key_buffer_size);
     }
@@ -164,50 +178,63 @@ psa_status_t esp_hmac_setup_transparent(esp_hmac_transparent_operation_t *esp_hm
         memset(esp_hmac_ctx->opad + key_buffer_size, 0x5C, fill_size);
     }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_setup(&esp_hmac_ctx->md5_ctx, hash_alg);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_setup(&esp_hmac_ctx->esp_sha_ctx, hash_alg);
     }
     if (status != PSA_SUCCESS) {
-        goto error;
+        goto cleanup;
     }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_update(&esp_hmac_ctx->md5_ctx, ipad, block_size);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_update(&esp_hmac_ctx->esp_sha_ctx, ipad, block_size);
     }
     if (status != PSA_SUCCESS) {
-        goto error;
+        goto cleanup;
     }
 
-    return status;
+    status = PSA_SUCCESS;
 
-error:
-    esp_hmac_abort_transparent(esp_hmac_ctx);
+cleanup:
+    mbedtls_platform_zeroize(ipad, sizeof(ipad));
+    if (status != PSA_SUCCESS) {
+        esp_hmac_abort_transparent(esp_hmac_ctx);
+    }
     return status;
 }
 
 psa_status_t esp_hmac_update_transparent(esp_hmac_transparent_operation_t *esp_hmac_ctx, const uint8_t *data, size_t data_length)
 {
 
-    if (esp_hmac_ctx == NULL || data == NULL) {
+    if (esp_hmac_ctx == NULL) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
+    if (data == NULL && data_length != 0) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (esp_hmac_ctx->alg == 0) {
+        return PSA_ERROR_BAD_STATE;
+    }
+    if (data_length == 0) {
+        return PSA_SUCCESS;
+    }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+
+#if defined(ESP_MD5_DRIVER_ENABLED)
     psa_algorithm_t hash_alg = PSA_ALG_GET_HASH(esp_hmac_ctx->alg);
     if (hash_alg == PSA_ALG_MD5) {
         return esp_md5_hash_update(&esp_hmac_ctx->md5_ctx, data, data_length);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         return esp_sha_hash_update(&esp_hmac_ctx->esp_sha_ctx, data, data_length);
     }
@@ -225,30 +252,45 @@ psa_status_t esp_hmac_finish_transparent(
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (esp_hmac_ctx->alg == 0) {
+        return PSA_ERROR_BAD_STATE;
+    }
+
     psa_algorithm_t hash_alg = PSA_ALG_GET_HASH(esp_hmac_ctx->alg);
 
     uint8_t tmp[PSA_HASH_MAX_SIZE];
     size_t hash_size = 0;
     size_t block_size = PSA_HASH_BLOCK_LENGTH(hash_alg);
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_finish(&esp_hmac_ctx->md5_ctx, tmp, sizeof(tmp), &hash_size);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_finish(&esp_hmac_ctx->esp_sha_ctx, tmp, sizeof(tmp), &hash_size);
     }
     if (status != PSA_SUCCESS) {
+        (void)esp_hmac_abort_transparent(esp_hmac_ctx);
         return status;
     }
     /* From here on, tmp needs to be wiped. */
 
-#if CONFIG_MBEDTLS_ROM_MD5
+    /* Inner hash finished — abort it before reusing for the outer hash. */
+#if defined(ESP_MD5_DRIVER_ENABLED)
+    if (hash_alg == PSA_ALG_MD5) {
+        (void)esp_md5_hash_abort(&esp_hmac_ctx->md5_ctx);
+    } else
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
+    {
+        (void)esp_sha_hash_abort(&esp_hmac_ctx->esp_sha_ctx);
+    }
+
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_setup(&esp_hmac_ctx->md5_ctx, hash_alg);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_setup(&esp_hmac_ctx->esp_sha_ctx, hash_alg);
     }
@@ -256,11 +298,11 @@ psa_status_t esp_hmac_finish_transparent(
         goto exit;
     }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_update(&esp_hmac_ctx->md5_ctx, esp_hmac_ctx->opad, block_size);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_update(&esp_hmac_ctx->esp_sha_ctx, esp_hmac_ctx->opad, block_size);
     }
@@ -268,11 +310,11 @@ psa_status_t esp_hmac_finish_transparent(
         goto exit;
     }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_update(&esp_hmac_ctx->md5_ctx, tmp, hash_size);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_update(&esp_hmac_ctx->esp_sha_ctx, tmp, hash_size);
     }
@@ -280,11 +322,11 @@ psa_status_t esp_hmac_finish_transparent(
         goto exit;
     }
 
-#if CONFIG_MBEDTLS_ROM_MD5
+#if defined(ESP_MD5_DRIVER_ENABLED)
     if (hash_alg == PSA_ALG_MD5) {
         status = esp_md5_hash_finish(&esp_hmac_ctx->md5_ctx, tmp, sizeof(tmp), &hash_size);
     } else
-#endif // CONFIG_MBEDTLS_ROM_MD5
+#endif // defined(ESP_MD5_DRIVER_ENABLED)
     {
         status = esp_sha_hash_finish(&esp_hmac_ctx->esp_sha_ctx, tmp, sizeof(tmp), &hash_size);
     }
@@ -301,6 +343,7 @@ psa_status_t esp_hmac_finish_transparent(
 
 exit:
     mbedtls_platform_zeroize(tmp, hash_size);
+    (void)esp_hmac_abort_transparent(esp_hmac_ctx);
     return status;
 }
 
@@ -357,7 +400,11 @@ psa_status_t esp_hmac_verify_finish_transparent(
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (mac_length > sizeof(actual_mac)) {
+    if (esp_hmac_ctx->alg == 0) {
+        return PSA_ERROR_BAD_STATE;
+    }
+
+    if (mac_length == 0 || mac_length > sizeof(actual_mac)) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 

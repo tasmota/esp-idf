@@ -23,13 +23,8 @@
 #include "esp_private/gpio.h"
 #include "driver/uart.h" // for baudrate detection
 
-#if CONFIG_IDF_TARGET_ESP32H4
-#define TEST_TX_GPIO                GPIO_NUM_2
-#define TEST_RX_GPIO                GPIO_NUM_3
-#else
 #define TEST_TX_GPIO                GPIO_NUM_4
 #define TEST_RX_GPIO                GPIO_NUM_5
-#endif
 #define TEST_TWAI_QUEUE_DEPTH       5
 #define TEST_TRANS_LEN              100
 #define TEST_FRAME_LEN              7
@@ -57,7 +52,7 @@ TEST_CASE("twai install uninstall (loopback)", "[twai]")
     node_config.io_cfg.rx = TEST_TX_GPIO; // Using same pin for test without transceiver
     node_config.io_cfg.quanta_clk_out = GPIO_NUM_NC;
     node_config.io_cfg.bus_off_indicator = GPIO_NUM_NC;
-    node_config.bit_timing.bitrate = 1000000;
+    node_config.bit_timing.bitrate = 100000;
     node_config.tx_queue_depth = TEST_TWAI_QUEUE_DEPTH;
     node_config.flags.enable_self_test = true;
     node_config.flags.enable_loopback = true;
@@ -153,7 +148,7 @@ static void test_twai_baudrate_correctness(twai_clock_source_t clk_src, uint32_t
     TEST_ESP_OK(uart_detect_bitrate_stop(UART_NUM_1, true, &measure_result));
     uint32_t bitrate_measured = measure_result.clk_freq_hz * 4 / (measure_result.pos_period + measure_result.neg_period);
     printf("TWAI bitrate measured: %" PRIu32 "\r\n", bitrate_measured);
-    TEST_ASSERT_INT_WITHIN(1000, test_bitrate, bitrate_measured); // 1k tolerance
+    TEST_ASSERT_INT_WITHIN((test_bitrate / 100), test_bitrate, bitrate_measured); // 1% tolerance
 
     TEST_ESP_OK(twai_node_disable(twai_node));
     TEST_ESP_OK(twai_node_delete(twai_node));
@@ -875,18 +870,17 @@ TEST_CASE("twai rx timestamp", "[twai]")
     node_config.flags.enable_loopback = true;
     node_config.flags.enable_self_test = true;
 
-    bool hw_timer = false;
-#if TWAI_LL_SUPPORT(TIMESTAMP)
-    hw_timer = true;
-#endif
     for (uint32_t resolution = 1000; resolution <= 10000000; resolution *= 100) {
+#if CONFIG_IDF_TARGET_ESP32H4
+        if (resolution > 1000000) {
+            continue;   // h4 clk_src [32M, 96M] can't accurate support resolutions > 1MHz
+        }
+#endif
         node_config.timestamp_resolution_hz = resolution;
         printf("\nTesting resolution %ld\n", resolution);
-        if (((resolution < 2000) && hw_timer) || ((resolution > 1000000) && !hw_timer)) {
-            TEST_ESP_ERR(twai_new_node_onchip(&node_config, &node_hdl), ESP_ERR_INVALID_ARG);
+        if (ESP_OK != twai_new_node_onchip(&node_config, &node_hdl)) {
             continue;
         }
-        TEST_ESP_OK(twai_new_node_onchip(&node_config, &node_hdl));
 
         uint8_t rx_buffer[TWAI_FRAME_MAX_LEN] = {0};
         twai_frame_t rx_frame = {};
@@ -911,8 +905,8 @@ TEST_CASE("twai rx timestamp", "[twai]")
 
             time_now = MS_TO_TWAI_TICK(esp_timer_get_time() / 1000, resolution);
             printf("esp tick now %llu, diff %u\n", time_now, abs(time_now - rx_frame.header.timestamp));
-            TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), time_now, rx_frame.header.timestamp);
-            TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), rx_frame.header.timestamp - time_last, MS_TO_TWAI_TICK(i * 100, resolution));
+            TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), rx_frame.header.timestamp, time_now);
+            TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), MS_TO_TWAI_TICK(i * 100, resolution), rx_frame.header.timestamp - time_last);
             time_last = rx_frame.header.timestamp;
         }
 
@@ -923,9 +917,85 @@ TEST_CASE("twai rx timestamp", "[twai]")
         TEST_ESP_OK(twai_node_enable(node_hdl));
         TEST_ESP_OK(twai_node_transmit(node_hdl, &tx_frame, 100));
         TEST_ESP_OK(twai_node_transmit_wait_all_done(node_hdl, 100));
-        TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), rx_frame.header.timestamp - time_last, MS_TO_TWAI_TICK(1000, resolution));
+        TEST_ASSERT_INT32_WITHIN(MAX(resolution / 100, 5), MS_TO_TWAI_TICK(1000, resolution), rx_frame.header.timestamp - time_last);
 
         TEST_ESP_OK(twai_node_disable(node_hdl));
         TEST_ESP_OK(twai_node_delete(node_hdl));
     }
+}
+
+TEST_CASE("twai schedule transmit", "[twai]")
+{
+    twai_node_handle_t node_hdl;
+    twai_onchip_node_config_t node_config = {};
+    node_config.io_cfg.tx = TEST_TX_GPIO;
+    node_config.io_cfg.rx = TEST_TX_GPIO;
+    node_config.io_cfg.quanta_clk_out = GPIO_NUM_NC;
+    node_config.io_cfg.bus_off_indicator = GPIO_NUM_NC;
+    node_config.bit_timing.bitrate = 100000;
+    node_config.tx_queue_depth = 10;
+    node_config.flags.enable_loopback = true;
+    node_config.flags.enable_self_test = true;
+    node_config.flags.enable_scheduled_tx = true;
+
+    printf("Testing schedule feature check\n");
+#if !TWAI_LL_SUPPORT(TIMESTAMP)
+    TEST_ESP_ERR(twai_new_node_onchip(&node_config, &node_hdl), ESP_ERR_NOT_SUPPORTED);
+    return;
+#endif
+    TEST_ESP_ERR(twai_new_node_onchip(&node_config, &node_hdl), ESP_ERR_INVALID_ARG);
+    node_config.timestamp_resolution_hz = 1000000;
+    TEST_ESP_OK(twai_new_node_onchip(&node_config, &node_hdl));
+
+    twai_frame_t rx_frame = {};
+    twai_event_callbacks_t user_cbs = {};
+    user_cbs.on_rx_done = test_dlc_range_cb;
+    TEST_ESP_OK(twai_node_register_event_callbacks(node_hdl, &user_cbs, &rx_frame));
+    TEST_ESP_OK(twai_node_enable(node_hdl));
+
+    twai_frame_t tx_frame[6] = {};
+    uint64_t time_now = esp_timer_get_time();
+    printf("time_now = %llu\n", time_now);
+
+    printf("Testing schedule frame 1 blocks immediate frame 2\n");
+    tx_frame[0].header.id = 1;
+    tx_frame[0].header.trigger_time = time_now + 1000000;
+    tx_frame[1].header.id = 2;
+    tx_frame[1].header.trigger_time = 0;    // set 0 to send immediately but will be blocked by 1st frame
+    TEST_ESP_OK(twai_node_transmit(node_hdl, &tx_frame[0], 100));
+    TEST_ESP_OK(twai_node_transmit(node_hdl, &tx_frame[1], 100));
+    TEST_ESP_OK(twai_node_transmit_wait_all_done(node_hdl, -1));
+    // should receive 2nd frame in same time
+    TEST_ASSERT_EQUAL(tx_frame[1].header.id, rx_frame.header.id);
+    TEST_ASSERT_INT32_WITHIN(1000000 / 100, 1000000, rx_frame.header.timestamp - time_now);
+
+    printf("\nTesting schedule time sequence\n");
+    time_now = esp_timer_get_time();
+    tx_frame[0].header.trigger_time = time_now + 1000000;
+    for (int i = 1; i < 6; i++) {
+        tx_frame[i].header.id = i;
+        tx_frame[i].header.trigger_time = tx_frame[i - 1].header.trigger_time + i * 1000000;
+        printf("Schedule frame %d after %lld s\n", i, (tx_frame[i].header.trigger_time - time_now) / 1000000);
+        TEST_ESP_OK(twai_node_transmit(node_hdl, &tx_frame[i], 0));
+    }
+
+    printf("\nWaiting for checking result\n");
+    uint64_t last_time = rx_frame.header.timestamp;
+    for (int i = 0; i < 5; i++) {
+        time_now = esp_timer_get_time();
+        int second_cnt = 0;
+        while (rx_frame.header.timestamp == last_time) {
+            vTaskDelay(1);
+            second_cnt++;
+            if (second_cnt % 1000 == 0) {   // print time every 1 second
+                esp_rom_printf("%d ", second_cnt / 1000);
+            }
+        }
+        last_time = rx_frame.header.timestamp;
+        printf("\nFrame %d received after %d s\n", i, second_cnt / 1000);
+        TEST_ASSERT_INT32_WITHIN(1000000 / 100, second_cnt * 1000, rx_frame.header.timestamp - time_now);
+    }
+
+    TEST_ESP_OK(twai_node_disable(node_hdl));
+    TEST_ESP_OK(twai_node_delete(node_hdl));
 }

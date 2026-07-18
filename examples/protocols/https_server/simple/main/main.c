@@ -25,6 +25,7 @@
 
 #include <esp_https_server.h>
 #include "esp_tls.h"
+#include "esp_key_config.h"
 #include "sdkconfig.h"
 
 #if CONFIG_EXAMPLE_ENABLE_HTTPS_SERVER_CUSTOM_CIPHERSUITES
@@ -37,6 +38,7 @@
 
 static const char *TAG = "example";
 
+#ifdef CONFIG_ESP_HTTPS_SERVER_EVENTS
 /* Event handler for catching system events */
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
@@ -48,6 +50,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         }
     }
 }
+#endif // CONFIG_ESP_HTTPS_SERVER_EVENTS
 
 /* An HTTP GET handler */
 static esp_err_t root_get_handler(httpd_req_t *req)
@@ -204,8 +207,14 @@ static httpd_handle_t start_webserver(void)
 
     extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
     extern const unsigned char prvtkey_pem_end[]   asm("_binary_prvtkey_pem_end");
-    conf.prvtkey_pem = prvtkey_pem_start;
-    conf.prvtkey_len = prvtkey_pem_end - prvtkey_pem_start;
+    static esp_key_config_t server_key = {
+        .source = ESP_KEY_SOURCE_BUFFER,
+        .buffer = {
+            .data = prvtkey_pem_start,
+        }
+    };
+    server_key.buffer.len = prvtkey_pem_end - prvtkey_pem_start;
+    conf.server_key = &server_key;
 
 #if CONFIG_EXAMPLE_ENABLE_HTTPS_SERVER_CUSTOM_CIPHERSUITES
     static const int ciphersuites_to_use[] = {
@@ -295,7 +304,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
 #endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
 #endif // !CONFIG_IDF_TARGET_LINUX
+#ifdef CONFIG_ESP_HTTPS_SERVER_EVENTS
     ESP_ERROR_CHECK(esp_event_handler_register(ESP_HTTPS_SERVER_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
+#endif // CONFIG_ESP_HTTPS_SERVER_EVENTS
 
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in

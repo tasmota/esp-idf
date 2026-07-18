@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,7 +26,7 @@ pm_check_state = 0x40000cb4;
 pm_set_beacon_filter = 0x40000cd8;
 //pm_is_in_wifi_slice_threshold = 0x40000cdc;
 //pm_keep_alive = 0x40000ce4;
-pm_process_tim = 0x40000d14;
+//pm_process_tim = 0x40000d14;
 //pm_tbtt_process = 0x40000d28;
 pm_tx_data_process = 0x40000d44;
 pm_twt_process = 0x40000d54;
@@ -89,10 +89,10 @@ phy_reg_init = 0x400010e8;
 phy_xpd_rf = 0x400010ec;
 phy_get_mac_addr = 0x400010f4;
 phy_set_mac_data = 0x400010f8;
-phy_rfcal_data_sub = 0x400010fc;
-phy_rf_cal_data_recovery = 0x40001100;
-phy_rf_cal_data_backup = 0x40001104;
-phy_rfcal_data_check = 0x40001108;
+//phy_rfcal_data_sub = 0x400010fc;
+//phy_rf_cal_data_recovery = 0x40001100;
+//phy_rf_cal_data_backup = 0x40001104;
+//phy_rfcal_data_check = 0x40001108;
 phy_pwdet_reg_init = 0x4000110c;
 phy_pwdet_sar2_init = 0x40001110;
 phy_en_pwdet = 0x40001114;

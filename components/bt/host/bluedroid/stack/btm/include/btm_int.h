@@ -291,8 +291,8 @@ DEV_CLASS            dev_class;         /* Local device class                   
 
 TIMER_LIST_ENT       ble_channels_timer;
 
-tBTM_CMPL_CB        *p_le_test_cmd_cmpl_cb;   /* Callback function to be called when
-                                                  LE test mode command has been sent successfully */
+tBTM_DTM_CMD_CMPL_CBACK *p_le_test_cmd_cmpl_cb; /* Callback function to be called when
+                                                   LE test mode command has been sent successfully */
 
 BD_ADDR                 read_tx_pwr_addr;   /* read TX power target address     */
 
@@ -623,6 +623,12 @@ typedef struct {
     tBLE_ADDR_TYPE      current_addr_type; /* current adv addr type*/
     BD_ADDR             current_addr;      /* current adv addr*/
     bool                current_addr_valid; /* current addr info is valid or not*/
+#endif
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    BOOLEAN             is_pseudo_bond;     /* record is keyed by a Host pseudo
+                                             * (dual local-identity bond); never
+                                             * consolidate it onto the peer
+                                             * Identity or its LTK is lost */
 #endif
 } tBTM_SEC_BLE;
 
@@ -1201,6 +1207,19 @@ void btm_read_remote_trans_pwr_level_cmpl(UINT8 status);
 void btm_subrate_req_cmd_status(UINT8 status);
 #endif // #if (BLE_FEAT_CONN_SUBRATING == TRUE)
 
+#if (BLE_FEAT_FRAME_SPACE_UPDATE == TRUE)
+void btm_frame_space_update_cmd_status(UINT8 status, UINT16 conn_handle);
+#endif // #if (BLE_FEAT_FRAME_SPACE_UPDATE == TRUE)
+
+#if (BLE_FEAT_LL_EXT_FEAT == TRUE)
+void btm_read_all_remote_feat_cmd_status(UINT8 status);
+#endif // #if (BLE_FEAT_LL_EXT_FEAT == TRUE)
+
+#if (BLE_FEAT_SHORTER_CONN_INTERVALS == TRUE)
+void btm_conn_rate_req_cmd_status(UINT8 status, UINT16 conn_handle);
+void btm_ble_read_min_supp_conn_interval_cmd_status(UINT8 status);
+#endif // #if (BLE_FEAT_SHORTER_CONN_INTERVALS == TRUE)
+
 #if (BT_BLE_FEAT_CHANNEL_SOUNDING == TRUE)
 void btm_ble_cs_read_local_supp_caps_cmpl_evt(UINT8 *p);
 void btm_ble_cs_read_remote_supp_caps_cmd_status(UINT8 status);
@@ -1269,6 +1288,7 @@ void btm_page_to_setup_timeout (void *p_tle);
 BOOLEAN btm_dev_support_switch (BD_ADDR bd_addr);
 
 tBTM_SEC_DEV_REC  *btm_sec_alloc_dev (BD_ADDR bd_addr);
+tBTM_SEC_DEV_REC  *btm_sec_alloc_dev_ex (BD_ADDR bd_addr, tBTM_SEC_DEV_REC *exclude_rec);
 void              btm_sec_free_dev (tBTM_SEC_DEV_REC *p_dev_rec, tBT_TRANSPORT transport);
 tBTM_SEC_DEV_REC  *btm_find_dev (BD_ADDR bd_addr);
 tBTM_SEC_DEV_REC  *btm_find_or_alloc_dev (BD_ADDR bd_addr);

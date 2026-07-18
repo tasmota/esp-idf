@@ -455,7 +455,7 @@ void ble_mesh_5_gap_callback(tBTA_DM_BLE_5_GAP_EVENT event,
         break;
     case BTA_DM_BLE_5_GAP_EXT_SCAN_STOP_COMPLETE_EVT:
         if (params->scan_stop.status != BTM_SUCCESS) {
-            BT_ERR("BTM_BLE_5_GAP_EXT_SCAN_START_COMPLETE_EVT Failed");
+            BT_ERR("BTA_DM_BLE_5_GAP_EXT_SCAN_STOP_COMPLETE_EVT Failed");
         }
         break;
     default:
@@ -571,7 +571,7 @@ static int start_le_scan(uint8_t scan_type, uint16_t interval, uint16_t window,
     if (interval == 0 ||
         interval < window) {
         BT_ERR("invalid scan param itvl %d win %d", interval, window);
-        return EINVAL;
+        return -EINVAL;
     }
 
     ext_scan_params.own_addr_type = BLE_MESH_ADDR_PUBLIC;
@@ -640,7 +640,7 @@ static void bt_mesh_scan_result_callback(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARC
         if (bt_mesh_scan_dev_found_cb) {
             bt_mesh_scan_dev_found_cb(&adv_rpt);
 
-            if (p_data->inq_res.scan_rsp_len) {
+            if (p_data->inq_res.scan_rsp_len && bt_mesh_scan_dev_found_cb) {
                 adv_rpt.adv_type = BLE_MESH_ADV_SCAN_RSP;
                 net_buf_simple_init_with_data(&adv_rpt.adv_data, p_data->inq_res.p_eir + p_data->inq_res.adv_data_len, p_data->inq_res.scan_rsp_len);
                 bt_mesh_scan_dev_found_cb(&adv_rpt);
@@ -649,7 +649,9 @@ static void bt_mesh_scan_result_callback(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARC
     } else if (event == BTA_DM_INQ_CMPL_EVT) {
         BT_INFO("Scan completed, number of scan response %d", p_data->inq_cmpl.num_resps);
     } else {
-        BT_WARN("Unexpected scan result event %d", event);
+        if (event != BTA_DM_INQ_DISCARD_NUM_EVT) {
+            BT_WARN("Unexpected scan result event %d", event);
+        }
     }
 }
 #endif
@@ -970,11 +972,19 @@ int bt_mesh_ble_ext_adv_start(const uint8_t inst_id,
     if (data && param->adv_type != BLE_MESH_ADV_DIRECT_IND &&
         param->adv_type != BLE_MESH_ADV_DIRECT_IND_LOW_DUTY) {
         if (data->adv_data_len) {
+            if (data->adv_data_len > sizeof(set.data)) {
+                BT_ERR("adv_data_len %u exceeds buffer size %zu", data->adv_data_len, sizeof(set.data));
+                return -EINVAL;
+            }
             set.len = data->adv_data_len;
             memcpy(set.data, data->adv_data, data->adv_data_len);
                 BTA_DmBleGapConfigExtAdvDataRaw(false, inst_id, set.len, set.data);
         }
         if (data->scan_rsp_data_len && param->adv_type != BLE_MESH_ADV_NONCONN_IND) {
+            if (data->scan_rsp_data_len > sizeof(set.data)) {
+                BT_ERR("scan_rsp_data_len %u exceeds buffer size %zu", data->scan_rsp_data_len, sizeof(set.data));
+                return -EINVAL;
+            }
             set.len = data->scan_rsp_data_len;
             memcpy(set.data, data->scan_rsp_data, data->scan_rsp_data_len);
                 BTA_DmBleGapConfigExtAdvDataRaw(true, inst_id, set.len, set.data);
@@ -1157,7 +1167,7 @@ static void bt_mesh_bta_gatts_cb(tBTA_GATTS_EVT event, tBTA_GATTS *p_data)
         uint8_t index = BLE_MESH_GATT_GET_CONN_ID(p_data->req_data.conn_id);
         tBTA_GATTS_RSP rsp = {0};
         uint8_t buf[100] = {0};
-        uint16_t len = 0;
+        ssize_t len = 0;
 
         BT_DBG("gatts read, handle %d", p_data->req_data.p_data->read_req.handle);
 
@@ -1179,7 +1189,7 @@ static void bt_mesh_bta_gatts_cb(tBTA_GATTS_EVT event, tBTA_GATTS *p_data)
     case BTA_GATTS_WRITE_EVT: {
         struct bt_mesh_gatt_attr *attr = bt_mesh_gatts_find_attr_by_handle(p_data->req_data.p_data->write_req.handle);
         uint8_t index = BLE_MESH_GATT_GET_CONN_ID(p_data->req_data.conn_id);
-        uint16_t len = 0;
+        ssize_t len = 0;
 
         BT_DBG("gatts write, handle %d, len %d, data %s", p_data->req_data.p_data->write_req.handle,
                p_data->req_data.p_data->write_req.len,
@@ -1608,6 +1618,10 @@ int bt_mesh_gatts_service_register(struct bt_mesh_gatt_service *svc)
                 break;
             }
             case BLE_MESH_UUID_GATT_CHRC_VAL: {
+                if (i + 1 >= svc->attr_count) {
+                    BT_ERR("Characteristic declaration at index %d missing value attribute", i);
+                    goto cleanup;
+                }
                 gatts_future_mesh = future_new();
                 struct bt_mesh_gatt_char *gatts_chrc = (struct bt_mesh_gatt_char *)svc->attrs[i].user_data;
                 bta_uuid_to_bt_mesh_uuid(&bta_uuid, gatts_chrc->uuid);
@@ -2315,7 +2329,11 @@ static void bt_mesh_bta_gattc_cb(tBTA_GATTC_EVT event, tBTA_GATTC *p_data)
         }
         break;
     case BTA_GATTC_CLOSE_EVT:
-        bta_gattc_clcb_dealloc_by_conn_id(p_data->close.conn_id);
+        /* CLCB lifetime is owned by BTA: bta_gattc_close() deallocates the
+         * CLCB right after invoking this synchronous callback. Calling
+         * bta_gattc_clcb_dealloc_by_conn_id() here would be a redundant
+         * double-dealloc (currently a no-op only because of NULL checks in
+         * bta_gattc_clcb_dealloc()). Keep this branch as a pure notification. */
         BT_DBG("BTA_GATTC_CLOSE_EVT");
         break;
     case BTA_GATTC_CONNECT_EVT: {

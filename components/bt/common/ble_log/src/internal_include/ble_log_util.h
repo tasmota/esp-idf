@@ -37,6 +37,7 @@
 #define BLE_LOG_INLINE                          inline
 
 /* Section */
+#define BLE_LOG_DRAM_ATTR                       DRAM_ATTR
 #if defined(CONFIG_IDF_TARGET_ESP32C2)
 #define BLE_LOG_IRAM_ATTR                       _SECTION_ATTR_IMPL(".ble_log_iram1", __COUNTER__)
 #else
@@ -92,6 +93,7 @@ void ble_log_cas_release(volatile bool *cas_lock)
 #define BLE_LOG_INLINE
 
 /* Section */
+#define BLE_LOG_DRAM_ATTR
 #define BLE_LOG_IRAM_ATTR
 
 /* Memory operation */
@@ -144,6 +146,7 @@ typedef enum {
     BLE_LOG_INT_SRC_INFO,
     BLE_LOG_INT_SRC_FLUSH,
     BLE_LOG_INT_SRC_BUF_UTIL,
+    BLE_LOG_INT_SRC_FINAL_STAT,
     BLE_LOG_INT_SRC_MAX,
 } ble_log_int_src_t;
 

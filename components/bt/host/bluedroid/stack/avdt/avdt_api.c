@@ -776,6 +776,10 @@ UINT16 AVDT_ReconfigReq(UINT8 handle, tAVDT_CFG *p_cfg)
     UINT16          result = AVDT_SUCCESS;
     tAVDT_SCB_EVT   evt;
 
+    if (p_cfg == NULL) {
+        return AVDT_BAD_PARAMS;
+    }
+
     /* map handle to scb */
     if ((p_scb = avdt_scb_by_hdl(handle)) == NULL) {
         result = AVDT_BAD_HANDLE;
@@ -940,6 +944,7 @@ UINT16 AVDT_WriteReqOpt(UINT8 handle, BT_HDR *p_pkt, UINT32 time_stamp, UINT8 m_
     }
     /* map handle to scb */
     if ((p_scb = avdt_scb_by_hdl(handle)) == NULL) {
+        osi_free(p_pkt);
         result = AVDT_BAD_HANDLE;
     } else {
         evt.apiwrite.p_buf = p_pkt;

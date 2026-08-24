@@ -39,7 +39,7 @@
 #define SOC_I2C_SUPPORTED               1
 #define SOC_LEDC_SUPPORTED              1
 #define SOC_SYSTIMER_SUPPORTED          1
-//  \#define SOC_SUPPORT_COEXISTENCE         1
+#define SOC_SUPPORT_COEXISTENCE         1
 #define SOC_SHA_SUPPORTED               1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
@@ -451,7 +451,6 @@
 
 /*-------------------------- EXTERNAL COEXISTENCE CAPS -------------------------------------*/
 #define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE ADVANCED EXTERNAL COEXISTENCE CAPS */
-#define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)

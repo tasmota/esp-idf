@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,7 @@
 #endif
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_psram.h"
 
 static const char *TAG = "jpeg.common";
 
@@ -40,6 +41,7 @@ esp_err_t jpeg_acquire_codec_handle(jpeg_codec_handle_t *jpeg_new_codec)
 #endif
     esp_err_t ret = ESP_OK;
     bool new_codec = false;
+    bool bus_clock_enabled = false;
     jpeg_codec_t *codec = NULL;
     _lock_acquire(&s_jpeg_platform.mutex);
     if (!s_jpeg_platform.jpeg_codec) {
@@ -50,7 +52,7 @@ esp_err_t jpeg_acquire_codec_handle(jpeg_codec_handle_t *jpeg_new_codec)
             codec->intr_priority = -1;
             codec->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
             codec->codec_mutex = xSemaphoreCreateBinaryWithCaps(JPEG_MEM_ALLOC_CAPS);
-            ESP_RETURN_ON_FALSE(codec->codec_mutex, ESP_ERR_NO_MEM, TAG, "No memory for codec mutex");
+            ESP_GOTO_ON_FALSE(codec->codec_mutex, ESP_ERR_NO_MEM, err, TAG, "No memory for codec mutex");
             SLIST_INIT(&codec->jpeg_isr_handler_list);
             xSemaphoreGive(codec->codec_mutex);
             // init the clock
@@ -58,8 +60,10 @@ esp_err_t jpeg_acquire_codec_handle(jpeg_codec_handle_t *jpeg_new_codec)
                 jpeg_ll_enable_bus_clock(true);
                 jpeg_ll_reset_module_register();
             }
+            bus_clock_enabled = true;
 #if CONFIG_PM_ENABLE
-            ESP_RETURN_ON_ERROR(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "jpeg_codec", &codec->pm_lock), TAG, "create pm lock failed");
+            ESP_GOTO_ON_ERROR(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "jpeg_codec", &codec->pm_lock),
+                              err, TAG, "create pm lock failed");
 #endif
             jpeg_hal_init(&codec->hal);
         } else {
@@ -76,6 +80,27 @@ esp_err_t jpeg_acquire_codec_handle(jpeg_codec_handle_t *jpeg_new_codec)
     }
 
     *jpeg_new_codec = s_jpeg_platform.jpeg_codec;
+    _lock_release(&s_jpeg_platform.mutex);
+    return ret;
+
+err:
+    if (codec) {
+        if (codec->codec_mutex) {
+            vSemaphoreDeleteWithCaps(codec->codec_mutex);
+        }
+#if CONFIG_PM_ENABLE
+        if (codec->pm_lock) {
+            esp_pm_lock_delete(codec->pm_lock);
+        }
+#endif
+        if (bus_clock_enabled) {
+            PERIPH_RCC_ATOMIC() {
+                jpeg_ll_enable_bus_clock(false);
+            }
+        }
+        free(codec);
+    }
+    s_jpeg_platform.jpeg_codec = NULL;
     _lock_release(&s_jpeg_platform.mutex);
     return ret;
 }
@@ -197,4 +222,18 @@ esp_err_t jpeg_check_intr_priority(jpeg_codec_handle_t jpeg_codec, int intr_prio
     }
     ESP_RETURN_ON_FALSE(!intr_priority_conflict, ESP_ERR_INVALID_STATE, TAG, "intr_priority conflict, already is %d but attempt to %d", jpeg_codec->intr_priority, intr_priority);
     return ret;
+}
+
+bool jpeg_check_dma2d_buffer(const void *buffer)
+{
+#if CONFIG_SECURE_FLASH_ENC_ENABLED
+    // jpeg cannot handle encrypted data.
+    if (esp_ptr_external_ram(buffer) && !esp_psram_ptr_is_no_enc(buffer)) {
+        return false;
+    }
+    if (esp_ptr_in_drom(buffer)) {
+        return false;
+    }
+#endif
+    return true;
 }

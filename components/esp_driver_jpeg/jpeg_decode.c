@@ -17,6 +17,7 @@
 #include "hal/cache_ll.h"
 #include "hal/cache_hal.h"
 #include "hal/jpeg_defs.h"
+#include "hal/hal_utils.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -268,6 +269,10 @@ esp_err_t jpeg_decoder_process(jpeg_decoder_handle_t decoder_engine, const jpeg_
     //TODO: IDF-9637
     ESP_RETURN_ON_FALSE(esp_dma_is_buffer_alignment_satisfied(decode_outbuf, outbuf_size, dma_mem_info), ESP_ERR_INVALID_ARG, TAG, "jpeg decode decode_outbuf or out_buffer size is not aligned, please use jpeg_alloc_decoder_mem to malloc your buffer");
 
+    // both the bitstream and output buffer are accessed by the 2D-DMA
+    ESP_RETURN_ON_FALSE(jpeg_check_dma2d_buffer(bit_stream) && jpeg_check_dma2d_buffer(decode_outbuf), ESP_ERR_INVALID_ARG, TAG,
+                        "jpeg decode buffer is not 16-byte aligned or not in unencrypted PSRAM, please use jpeg_alloc_decoder_mem to malloc your buffer");
+
     esp_err_t ret = ESP_OK;
 
     if (decoder_engine->codec_base->pm_lock) {
@@ -343,7 +348,14 @@ esp_err_t jpeg_decoder_process(jpeg_decoder_handle_t decoder_engine, const jpeg_
     return ESP_OK;
 
 err1:
-    dma2d_force_end(decoder_engine->trans_desc, &need_yield);
+    // The transaction may still be pending in the pool queue (never picked up), so try to dequeue it first.
+    // Dequeuing is atomic against the pick that turns a pending transaction into an in-flight one, so if the
+    // transaction is no longer in the queue, it is already in-flight and we force end it instead.
+    if (dma2d_dequeue(decoder_engine->dma2d_group_handle, decoder_engine->trans_desc) != ESP_OK) {
+        if (dma2d_force_end(decoder_engine->trans_desc, &need_yield) != ESP_OK) {
+            ESP_LOGE(TAG, "failed to end the transaction, it is neither pending nor in-flight");
+        }
+    }
 err2:
     xSemaphoreGive(decoder_engine->codec_base->codec_mutex);
     if (decoder_engine->codec_base->pm_lock) {
@@ -392,15 +404,21 @@ void *jpeg_alloc_decoder_mem(size_t size, const jpeg_decode_memory_alloc_cfg_t *
        FOr input buffer(for decoder is PSRAM write to 2DDMA), no restriction for any align (both cache writeback and requirement from 2DDMA).
     */
     size_t cache_align = 0;
+    size_t buffer_align = 0;
     esp_cache_get_alignment(MALLOC_CAP_SPIRAM, &cache_align);
-    if (mem_cfg->buffer_direction == JPEG_DEC_ALLOC_OUTPUT_BUFFER) {
-        size = JPEG_ALIGN_UP(size, cache_align);
-        *allocated_size = size;
-        return heap_caps_aligned_calloc(cache_align, 1, size, MALLOC_CAP_SPIRAM);
-    } else {
-        *allocated_size = size;
-        return heap_caps_calloc(1, size, MALLOC_CAP_SPIRAM);
+    buffer_align = MAX(cache_align, JPEG_DMA2D_BUFFER_ALIGN);
+    size = JPEG_ALIGN_UP(size, buffer_align);
+    *allocated_size = size;
+    // To simplify the logic, we always use the LCM of cache and 2D-DMA alignment to satisfy both requirements
+    void *buffer = heap_caps_aligned_calloc(buffer_align, 1, size, JPEG_SPIRAM_ALLOC_CAPS);
+    if (buffer == NULL) {
+#if CONFIG_SPIRAM_ENC_EXEMPT
+        ESP_LOGE(TAG, "no mem for %zu bytes decode buffer in unencrypted PSRAM, please enlarge CONFIG_SPIRAM_ENC_EXEMPT_SIZE", size);
+#else
+        ESP_LOGE(TAG, "no mem for %zu bytes decode buffer", size);
+#endif
     }
+    return buffer;
 }
 
 /****************************************************************

@@ -7,9 +7,6 @@
   # run host_test jobs immediately, only after upload cache
   needs:
     - pipeline_variables
-    - job: upload-pip-cache
-      optional: true
-      artifacts: false
     - job: upload-submodules-cache
       optional: true
       artifacts: false
@@ -368,12 +365,11 @@ test_pytest_qemu:
       --build-system cmake
       --target $IDF_TARGET
       -m qemu
-      --modified-files ${MR_MODIFIED_FILES}
+      --modified-files \"${MR_MODIFIED_FILES}\"
     - run_cmd idf-ci gitlab download-known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
     - run_cmd pytest
       --target $IDF_TARGET
       -m qemu
-      --embedded-services idf,qemu
       --junitxml=XUNIT_RESULT.xml
       --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
       --qemu-extra-args \"-global driver=timer.$IDF_TARGET.timg,property=wdt_disable,value=true\"
@@ -394,18 +390,18 @@ test_pytest_linux:
       -p components -p examples -p tools/test_apps
       --target linux
       --only-test-related
-      --modified-files ${MR_MODIFIED_FILES}
+      --modified-files \"${MR_MODIFIED_FILES}\"
     - run_cmd idf-ci gitlab download-known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
     - run_cmd pytest
       --target linux
-      --embedded-services idf
+      -m \"not macos\"
       --junitxml=XUNIT_RESULT.xml
       --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
 
 test_pytest_macos:
   extends:
     - .host_test_template
-    - .brew-macos-settings
+    - .macos-settings
   artifacts:
     paths:
       - XUNIT_RESULT.xml
@@ -420,7 +416,7 @@ test_pytest_macos:
       --target linux
       --only-test-related
       -m macos
-      --modified-files ${MR_MODIFIED_FILES}
+      --modified-files \"${MR_MODIFIED_FILES}\"
     - run_cmd idf-ci gitlab download-known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
     - run_cmd pytest
       --target linux
@@ -461,6 +457,31 @@ test_pytest_macos:
       --junitxml ${CI_PROJECT_DIR}/XUNIT_RESULT.xml
       --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
 
+.test_build_system_minimal_cmake_template:
+  extends: .test_build_system_template
+  variables:
+    INSTALL_EXTRA_TOOLS: cmake@3.16.3
+  script:
+    - MINIMAL_SUPPORTED_CMAKE_VERSION=$(echo "${INSTALL_EXTRA_TOOLS}" | sed -n 's/.*cmake@\([0-9.]*\).*/\1/p')
+    - export PATH=$(echo "$PATH" | sed -E "s|/tools/cmake/[0-9.]+|/tools/cmake/${MINIMAL_SUPPORTED_CMAKE_VERSION}|")
+    - ACTUAL_CMAKE_VERSION=$(cmake --version | head -n1 | awk '{print $3}')
+    - |
+      if [ "${ACTUAL_CMAKE_VERSION}" != "${MINIMAL_SUPPORTED_CMAKE_VERSION}" ]; then
+        echo "ERROR: Wrong minimal CMake version! Detected: ${ACTUAL_CMAKE_VERSION}, but should be: ${MINIMAL_SUPPORTED_CMAKE_VERSION}"
+        exit 1
+      fi
+    - ${IDF_PATH}/tools/ci/test_configure_ci_environment.sh
+    - cd ${IDF_PATH}/tools/test_build_system
+    - run_cmd idf-ci gitlab download-known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
+    - pytest
+      -k cmake
+      --cleanup-idf-copy
+      --parallel-count ${CI_NODE_TOTAL:-1}
+      --parallel-index ${CI_NODE_INDEX:-1}
+      --work-dir ${CI_PROJECT_DIR}/test_build_system
+      --junitxml ${CI_PROJECT_DIR}/XUNIT_RESULT.xml
+      --ignore-result-files ${KNOWN_FAILURE_CASES_FILE_NAME}
+
 pytest_build_system:
   extends: .test_build_system_template
   parallel: 3
@@ -468,6 +489,17 @@ pytest_build_system:
 pytest_build_system_macos:
   extends:
     - .test_build_system_template
-    - .brew-macos-settings
+    - .macos-settings
     - .rules:build:macos
   parallel: 3
+
+pytest_build_system_minimal_cmake:
+  extends: .test_build_system_minimal_cmake_template
+
+pytest_build_system_macos_minimal_cmake:
+  extends:
+    - .test_build_system_minimal_cmake_template
+    - .macos-settings
+    - .rules:build:macos
+  variables:
+    INSTALL_EXTRA_TOOLS: ninja cmake@3.16.3

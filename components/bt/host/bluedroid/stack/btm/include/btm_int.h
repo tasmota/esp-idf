@@ -624,6 +624,12 @@ typedef struct {
     BD_ADDR             current_addr;      /* current adv addr*/
     bool                current_addr_valid; /* current addr info is valid or not*/
 #endif
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    BOOLEAN             is_pseudo_bond;     /* record is keyed by a Host pseudo
+                                             * (dual local-identity bond); never
+                                             * consolidate it onto the peer
+                                             * Identity or its LTK is lost */
+#endif
 } tBTM_SEC_BLE;
 
 
@@ -1097,7 +1103,7 @@ void         btm_inq_rmt_name_failed(void);
 /* Inquiry related functions */
 void         btm_clr_inq_db (BD_ADDR p_bda);
 void         btm_inq_db_init (void);
-void         btm_process_inq_results (UINT8 *p, UINT8 inq_res_mode);
+void         btm_process_inq_results (UINT8 *p, UINT16 evt_len, UINT8 inq_res_mode);
 void         btm_process_inq_complete (UINT8 status, UINT8 mode);
 void         btm_process_cancel_complete(UINT8 status, UINT8 mode);
 void         btm_event_filter_complete (UINT8 *p);
@@ -1109,8 +1115,8 @@ BOOLEAN      btm_inq_find_bdaddr (BD_ADDR p_bda);
 BOOLEAN btm_lookup_eir(BD_ADDR_PTR p_rem_addr);
 
 #if (CLASSIC_BT_INCLUDED == TRUE)
-void btm_read_iscan_tx_power_complete (UINT8 *p);
-void btm_write_inq_tx_power_complete (UINT8 *p);
+void btm_read_iscan_tx_power_complete (UINT8 *p, UINT16 evt_len);
+void btm_write_inq_tx_power_complete (UINT8 *p, UINT16 evt_len);
 #endif // #if (CLASSIC_BT_INCLUDED == TRUE)
 
 /* Internal functions provided by btm_bredr_pwr_ctrl.c
@@ -1147,12 +1153,12 @@ tBTM_STATUS  btm_set_packet_types (tACL_CONN *p, UINT16 pkt_types);
 void         btm_process_clk_off_comp_evt (UINT16 hci_handle, UINT16 clock_offset);
 void         btm_acl_role_changed (UINT8 hci_status, BD_ADDR bd_addr, UINT8 new_role);
 void         btm_acl_encrypt_change (UINT16 handle, UINT8 status, UINT8 encr_enable);
-UINT16       btm_get_acl_disc_reason_code (void);
+UINT8        btm_get_acl_disc_reason_code (void);
 tBTM_STATUS  btm_remove_acl (BD_ADDR bd_addr, tBT_TRANSPORT transport);
 void         btm_read_remote_features_complete (UINT8 *p);
 void         btm_read_remote_ext_features_complete (UINT8 *p);
 void         btm_read_remote_ext_features_failed (UINT8 status, UINT16 handle);
-void         btm_read_remote_version_complete (UINT8 *p);
+void         btm_read_remote_version_complete (UINT8 *p, UINT16 evt_len);
 void         btm_establish_continue (tACL_CONN *p_acl_cb);
 
 // btla-specific ++
@@ -1200,6 +1206,19 @@ void btm_read_remote_trans_pwr_level_cmpl(UINT8 status);
 #if (BLE_FEAT_CONN_SUBRATING == TRUE)
 void btm_subrate_req_cmd_status(UINT8 status);
 #endif // #if (BLE_FEAT_CONN_SUBRATING == TRUE)
+
+#if (BLE_FEAT_FRAME_SPACE_UPDATE == TRUE)
+void btm_frame_space_update_cmd_status(UINT8 status, UINT16 conn_handle);
+#endif // #if (BLE_FEAT_FRAME_SPACE_UPDATE == TRUE)
+
+#if (BLE_FEAT_LL_EXT_FEAT == TRUE)
+void btm_read_all_remote_feat_cmd_status(UINT8 status);
+#endif // #if (BLE_FEAT_LL_EXT_FEAT == TRUE)
+
+#if (BLE_FEAT_SHORTER_CONN_INTERVALS == TRUE)
+void btm_conn_rate_req_cmd_status(UINT8 status, UINT16 conn_handle);
+void btm_ble_read_min_supp_conn_interval_cmd_status(UINT8 status);
+#endif // #if (BLE_FEAT_SHORTER_CONN_INTERVALS == TRUE)
 
 #if (BT_BLE_FEAT_CHANNEL_SOUNDING == TRUE)
 void btm_ble_cs_read_local_supp_caps_cmpl_evt(UINT8 *p);
@@ -1269,6 +1288,7 @@ void btm_page_to_setup_timeout (void *p_tle);
 BOOLEAN btm_dev_support_switch (BD_ADDR bd_addr);
 
 tBTM_SEC_DEV_REC  *btm_sec_alloc_dev (BD_ADDR bd_addr);
+tBTM_SEC_DEV_REC  *btm_sec_alloc_dev_ex (BD_ADDR bd_addr, tBTM_SEC_DEV_REC *exclude_rec);
 void              btm_sec_free_dev (tBTM_SEC_DEV_REC *p_dev_rec, tBT_TRANSPORT transport);
 tBTM_SEC_DEV_REC  *btm_find_dev (BD_ADDR bd_addr);
 tBTM_SEC_DEV_REC  *btm_find_or_alloc_dev (BD_ADDR bd_addr);
@@ -1306,8 +1326,8 @@ void  btm_io_capabilities_req (UINT8 *p);
 void  btm_io_capabilities_rsp (UINT8 *p);
 #if (CLASSIC_BT_INCLUDED == TRUE)
 void  btm_proc_sp_req_evt (tBTM_SP_EVT event, UINT8 *p);
-void  btm_keypress_notif_evt (UINT8 *p);
-void  btm_simple_pair_complete (UINT8 *p);
+void  btm_keypress_notif_evt (UINT8 *p, UINT16 evt_len);
+void  btm_simple_pair_complete (UINT8 *p, UINT16 evt_len);
 #endif /* (CLASSIC_BT_INCLUDED == TRUE) */
 void  btm_sec_link_key_notification (UINT8 *p_bda, UINT8 *p_link_key, UINT8 key_type);
 void  btm_sec_link_key_request (UINT8 *p_bda);

@@ -36,12 +36,15 @@ from _pytest.config import Config
 from _pytest.fixtures import FixtureRequest
 from idf_ci import PytestCase
 from idf_ci.idf_pytest import IDF_CI_PYTEST_CASE_KEY
+from idf_ci_utils import APP_EXTRA_S3_ARTIFACT_TYPE
+from idf_ci_utils import IDF_PATH
 from idf_ci_utils import idf_relpath
 from idf_pytest.constants import DEFAULT_LOGDIR
 from idf_pytest.plugin import IDF_LOCAL_PLUGIN_KEY
 from idf_pytest.plugin import IdfLocalPlugin
 from idf_pytest.plugin import requires_elf_or_map
 from idf_pytest.utils import format_case_id
+from pytest_embedded.plugin import _request_param_or_config_option_or_default
 from pytest_embedded.plugin import multi_dut_fixture
 from pytest_embedded.utils import to_bytes
 from pytest_embedded.utils import to_str
@@ -125,7 +128,7 @@ class AppDownloader:
         self.commit_sha = commit_sha
         self.pipeline_id = pipeline_id
 
-    def download_app(self, app_build_path: str, artifact_type: t.Optional[str] = None) -> None:
+    def download_app(self, app_dir: str, build_dir: str, artifact_type: t.Optional[str] = None) -> None:
         args = [
             'idf-ci',
             'gitlab',
@@ -135,15 +138,53 @@ class AppDownloader:
         ]
         if artifact_type:
             args.extend(['--type', artifact_type])
+
         if self.pipeline_id:
             args.extend(['--pipeline-id', self.pipeline_id])
-        args.append(app_build_path)
 
-        subprocess.run(
-            args,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
+        args.extend(
+            [
+                app_dir,
+                '--build-dir',
+                build_dir,
+            ]
         )
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            cwd=IDF_PATH,
+        )
+        logging.info(result.stdout)
+        if result.stderr:
+            logging.info(result.stderr)
+
+    def download_app_extra(self, app_dir: str) -> None:
+        """Download app-dir artifacts defined under app_extra in .idf_ci.toml."""
+        args = [
+            'idf-ci',
+            'gitlab',
+            'download-artifacts',
+            '--commit-sha',
+            self.commit_sha,
+            '--type',
+            APP_EXTRA_S3_ARTIFACT_TYPE,
+            app_dir,
+        ]
+        if self.pipeline_id:
+            args.extend(['--pipeline-id', self.pipeline_id])
+
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            cwd=IDF_PATH,
+        )
+        logging.info(result.stdout)
+        if result.stderr:
+            logging.info(result.stderr)
+        if result.returncode != 0:
+            raise RuntimeError(f'Failed to download {APP_EXTRA_S3_ARTIFACT_TYPE} artifacts for {app_dir}')
 
 
 PRESIGNED_JSON = 'presigned.json'
@@ -187,7 +228,7 @@ class OpenOCD:
         ocd_env = os.environ.copy()
         ocd_env['LIBUSB_DEBUG'] = '1'
 
-        for _ in range(1, self.MAX_RETRIES + 1):
+        for attempt in range(1, self.MAX_RETRIES + 1):
             try:
                 self.proc = pexpect.spawn(
                     command='openocd',
@@ -203,7 +244,9 @@ class OpenOCD:
                     self.write('log_output {}'.format(self.log_file))
                     return self
             except (pexpect.exceptions.EOF, pexpect.exceptions.TIMEOUT, ConnectionRefusedError) as e:
-                logging.error('Error running OpenOCD: %s', str(e))
+                logging.error(
+                    'OpenOCD connection attempt %d/%d failed. Error: %s', attempt, self.MAX_RETRIES, type(e).__name__
+                )
                 self.kill()
             time.sleep(self.RETRY_DELAY)
 
@@ -277,6 +320,18 @@ def app_downloader(pipeline_id: t.Optional[str]) -> t.Optional[AppDownloader]:
 
 
 @pytest.fixture
+def download_app_extra(app_downloader: t.Optional[AppDownloader]) -> t.Callable[[str], None]:
+    """Download app_extra S3 artifacts for the given app path (no-op outside CI)."""
+
+    def _download_app_extra(app_path: str) -> None:
+        if app_downloader is None:
+            return
+        app_downloader.download_app_extra(idf_relpath(app_path))
+
+    return _download_app_extra
+
+
+@pytest.fixture
 @multi_dut_fixture
 def build_dir(
     request: FixtureRequest,
@@ -305,12 +360,13 @@ def build_dir(
         downloader = app_downloader
 
     if downloader:
+        app_dir = idf_relpath(app_path)
+        build_dir = f'build_{target}_{config}'
         # somehow hardcoded...
-        app_build_path = os.path.join(idf_relpath(app_path), f'build_{target}_{config}')
         if requires_elf_or_map(case):
-            downloader.download_app(app_build_path)
+            downloader.download_app(app_dir, build_dir)
         else:
-            downloader.download_app(app_build_path, 'flash')
+            downloader.download_app(app_dir, build_dir, 'flash')
         check_dirs = [f'build_{target}_{config}']
     else:
         check_dirs = []
@@ -494,12 +550,12 @@ def log_minimum_free_heap_size(dut: IdfDut, config: str, idf_path: str) -> t.Cal
 
 @pytest.fixture(scope='session')
 def dev_password(request: FixtureRequest) -> str:
-    return request.config.getoption('dev_passwd') or ''
+    return _request_param_or_config_option_or_default(request, 'dev_password', '')  # type: ignore
 
 
 @pytest.fixture(scope='session')
 def dev_user(request: FixtureRequest) -> str:
-    return request.config.getoption('dev_user') or ''
+    return _request_param_or_config_option_or_default(request, 'dev_user', '')  # type: ignore
 
 
 ##################
@@ -542,7 +598,7 @@ def pytest_unconfigure(config: Config) -> None:
         config.pluginmanager.unregister(idf_local_plugin)
 
 
-dut_artifacts_url = []
+dut_artifacts_url: t.List[str] = []
 
 
 @pytest.hookimpl(hookwrapper=True)

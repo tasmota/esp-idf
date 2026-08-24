@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -34,9 +34,9 @@ static esp_err_t lp_core_uart_param_config(const lp_core_uart_cfg_t *cfg)
     esp_err_t ret = ESP_OK;
 
     /* Argument sanity check */
-    if ((cfg->uart_proto_cfg.rx_flow_ctrl_thresh > SOC_LP_UART_FIFO_LEN) ||
-            (cfg->uart_proto_cfg.flow_ctrl > UART_HW_FLOWCTRL_MAX) ||
-            (cfg->uart_proto_cfg.data_bits > UART_DATA_BITS_MAX)) {
+    if ((cfg->uart_proto_cfg.rx_flow_ctrl_thresh >= SOC_LP_UART_FIFO_LEN) ||
+            (cfg->uart_proto_cfg.flow_ctrl >= UART_HW_FLOWCTRL_MAX) ||
+            (cfg->uart_proto_cfg.data_bits >= UART_DATA_BITS_MAX)) {
         // Invalid config
         return ESP_ERR_INVALID_ARG;
     }
@@ -101,16 +101,24 @@ static esp_err_t lp_uart_config_io(gpio_num_t pin, rtc_gpio_mode_t direction, ui
     /* Connect pins */
     const uart_periph_sig_t *upin = &uart_periph_signal[LP_UART_PORT_NUM].pins[idx];
 #if !SOC_LP_GPIO_MATRIX_SUPPORTED
-    /* When LP_IO Matrix is not support, LP_IO Mux must be connected to the pins */
-    ret = rtc_gpio_iomux_func_sel(pin, upin->iomux_func);
-#else
-    /* If the configured pin is the default LP_IO Mux pin for LP UART, then set the LP_IO MUX function */
-    if (upin->default_gpio == pin) {
-        ret = rtc_gpio_iomux_func_sel(pin, upin->iomux_func);
+    /* On targets that do not support the LP IO Matrix, LP UART uses fixed pads.
+     * rtc_gpio_iomux_output / rtc_gpio_iomux_input select the UART RTC IOMUX function and direction. */
+    if (direction == RTC_GPIO_MODE_OUTPUT_ONLY) {
+        ret = rtc_gpio_iomux_output(pin, upin->iomux_func);
     } else {
-        /* Select FUNC1 for LP_IO Matrix */
-        ret = rtc_gpio_iomux_func_sel(pin, 1);
-        /* Connect the LP_IO to the LP UART peripheral signal */
+        ret = rtc_gpio_iomux_input(pin, upin->iomux_func, UART_PERIPH_SIGNAL(LP_UART_PORT_NUM, idx));
+    }
+#else
+    /* Default LP UART pin: same RTC IOMUX path as on targets that do not support the LP IO Matrix. */
+    if (upin->default_gpio == pin) {
+        /* Select LP UART on this pin including direction and LP IO Matrix bypass. */
+        if (direction == RTC_GPIO_MODE_OUTPUT_ONLY) {
+            ret = rtc_gpio_iomux_output(pin, upin->iomux_func);
+        } else {
+            ret = rtc_gpio_iomux_input(pin, upin->iomux_func, UART_PERIPH_SIGNAL(LP_UART_PORT_NUM, idx));
+        }
+    } else {
+        /* Non-default pin: route LP UART TX/RX through the LP IO Matrix. */
         if (direction == RTC_GPIO_MODE_OUTPUT_ONLY) {
             ret = lp_gpio_connect_out_signal(pin, UART_PERIPH_SIGNAL(LP_UART_PORT_NUM, idx), 0, 0);
         } else {
@@ -146,10 +154,13 @@ static esp_err_t lp_core_uart_set_pin(const lp_core_uart_cfg_t *cfg)
     ret = lp_uart_config_io(cfg->uart_pin_cfg.tx_io_num, RTC_GPIO_MODE_OUTPUT_ONLY, SOC_UART_TX_PIN_IDX);
     /* Configure Rx Pin */
     ret = lp_uart_config_io(cfg->uart_pin_cfg.rx_io_num, RTC_GPIO_MODE_INPUT_ONLY, SOC_UART_RX_PIN_IDX);
-    /* Configure RTS Pin */
-    ret = lp_uart_config_io(cfg->uart_pin_cfg.rts_io_num, RTC_GPIO_MODE_OUTPUT_ONLY, SOC_UART_RTS_PIN_IDX);
-    /* Configure CTS Pin */
-    ret = lp_uart_config_io(cfg->uart_pin_cfg.cts_io_num, RTC_GPIO_MODE_INPUT_ONLY, SOC_UART_CTS_PIN_IDX);
+    /* Configure RTS/CTS only when hardware flow control is enabled */
+    if (cfg->uart_proto_cfg.flow_ctrl & UART_HW_FLOWCTRL_RTS) {
+        ret = lp_uart_config_io(cfg->uart_pin_cfg.rts_io_num, RTC_GPIO_MODE_OUTPUT_ONLY, SOC_UART_RTS_PIN_IDX);
+    }
+    if (cfg->uart_proto_cfg.flow_ctrl & UART_HW_FLOWCTRL_CTS) {
+        ret = lp_uart_config_io(cfg->uart_pin_cfg.cts_io_num, RTC_GPIO_MODE_INPUT_ONLY, SOC_UART_CTS_PIN_IDX);
+    }
 
     return ret;
 }

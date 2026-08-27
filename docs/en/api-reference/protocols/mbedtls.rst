@@ -404,6 +404,10 @@ The following table shows typical memory usage with different configs when the :
 
     These values are subject to change with changes in configuration options and versions of Mbed TLS.
 
+.. note::
+
+    :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` is enabled by default. If cross-signed certificate chains are not required, disabling it reduces peak heap usage during the TLS handshake by approximately 1 KB, at the cost of a larger certificate bundle in flash. See :doc:`/api-reference/protocols/esp_crt_bundle` for details.
+
 
 Reducing Binary Size
 ^^^^^^^^^^^^^^^^^^^^
@@ -411,5 +415,5 @@ Reducing Binary Size
 Under ``Component Config`` > ``mbedTLS``, several Mbed TLS features are enabled by default. These can be disabled if not needed to save code size. More information is available in the :ref:`Minimizing Binary Size <minimizing_binary_mbedtls>` documentation.
 
 
-.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v3.6.5/
+.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v4.1.1/
 .. _`Knowledge Base`: https://mbed-tls.readthedocs.io/en/latest/kb/

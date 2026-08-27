@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "esp_rom_tlsf.h"
 #include "esp_rom_sys.h"
 #include "tlsf_block_functions.h"
@@ -63,6 +64,9 @@ esp_err_t esp_tee_heap_init(void *start_ptr, size_t size)
         return ESP_ERR_INVALID_SIZE;
     }
 
+    /* Zeroize the entire region before registering it as the TEE heap*/
+    memset(start_ptr, 0, size);
+
 #if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2
     void *heap = tlsf_create_with_pool(start_ptr + sizeof(heap_t), usable_size);
     size_t overhead = tlsf_size();
@@ -107,7 +111,10 @@ void *esp_tee_heap_malloc(size_t size)
 
 void *esp_tee_heap_calloc(size_t n, size_t size)
 {
-    size_t reg_size = n * size;
+    size_t reg_size;
+    if (__builtin_mul_overflow(n, size, &reg_size)) {
+        return NULL;
+    }
     void *ptr = esp_tee_heap_malloc(reg_size);
     if (ptr != NULL) {
         memset(ptr, 0x00, reg_size);
@@ -224,7 +231,7 @@ void esp_tee_heap_dump_info(void)
 
 /* Definitions for functions from the heap component, used in files shared with ESP-IDF */
 
-void *heap_caps_malloc(size_t alignment, size_t size, uint32_t caps)
+void *heap_caps_malloc(size_t size, uint32_t caps)
 {
     (void) caps;
     return esp_tee_heap_malloc(size);
@@ -239,7 +246,10 @@ void *heap_caps_aligned_alloc(size_t alignment, size_t size, uint32_t caps)
 void *heap_caps_aligned_calloc(size_t alignment, size_t n, size_t size, uint32_t caps)
 {
     (void) caps;
-    uint32_t reg_size = n * size;
+    size_t reg_size;
+    if (__builtin_mul_overflow(n, size, &reg_size)) {
+        return NULL;
+    }
 
     void *ptr = esp_tee_heap_aligned_alloc(reg_size, alignment);
     if (ptr != NULL) {

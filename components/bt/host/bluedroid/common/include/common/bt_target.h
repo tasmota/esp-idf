@@ -2115,7 +2115,7 @@
 
 /* The port receive queue low watermark level, in number of buffers. */
 #ifndef PORT_RX_BUF_LOW_WM
-#define PORT_RX_BUF_LOW_WM          4
+#define PORT_RX_BUF_LOW_WM          6
 #endif
 
 /* The port receive queue high watermark level, in number of buffers. */
@@ -2555,11 +2555,6 @@
 
 #ifndef GAP_INCLUDED
 #define GAP_INCLUDED                TRUE
-#endif
-
-/* This is set to enable posting event for data write */
-#ifndef GAP_CONN_POST_EVT_INCLUDED
-#define GAP_CONN_POST_EVT_INCLUDED  FALSE
 #endif
 
 /* The maximum number of simultaneous GAP L2CAP connections. */

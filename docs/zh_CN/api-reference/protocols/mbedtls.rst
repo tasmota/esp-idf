@@ -404,6 +404,10 @@ Mbed TLS 配置系统支持预设配置。``Component Config`` > ``mbedTLS`` 中
 
     这些值会随着配置选项和 Mbed TLS 版本的变化而变化。
 
+.. note::
+
+    :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` 默认启用。如果无需支持交叉签名证书链，禁用该选项可将 TLS 握手期间的堆内存峰值降低约 1 KB，但代价是 flash 中的证书包体积会增大。详情请参阅 :doc:`/api-reference/protocols/esp_crt_bundle`。
+
 
 减小固件大小
 ^^^^^^^^^^^^^^^^^^
@@ -411,5 +415,5 @@ Mbed TLS 配置系统支持预设配置。``Component Config`` > ``mbedTLS`` 中
 在 ``Component Config`` > ``mbedTLS`` 配置中，多个 Mbed TLS 功能已默认启用。如无需使用，可以禁用以减小固件大小。详情请参阅 :ref:`最小化固件大小 <minimizing_binary_mbedtls>`。
 
 
-.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v3.6.5/
+.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v4.1.1/
 .. _`Knowledge Base`: https://mbed-tls.readthedocs.io/en/latest/kb/

@@ -1,7 +1,7 @@
 {
   "name": "framework-espidf",
   "version": "3.60100",
-  "description": "Espressif IoT Development Framework",
+  "description": "Espressif IoT Development Framework for Tasmota",
   "keywords": [
     "framework",
     "esp32",
@@ -23,6 +23,6 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pioarduino/esp-idf"
+    "url": "https://github.com/tasmota/esp-idf"
   }
 }

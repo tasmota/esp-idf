@@ -184,9 +184,18 @@ bool BTU_StartUp(void)
     osi_mutex_new(&btu_l2cap_alarm_lock);
 
     const size_t workqueue_len[] = {BTU_TASK_WORKQUEUE0_LEN};
+#if (!CONFIG_BT_BLUEDROID_BTU_TASK_STACK_IN_EXT_MEM)
     btu_thread = osi_thread_create(BTU_TASK_NAME, BTU_TASK_STACK_SIZE, BTU_TASK_PRIO, BTU_TASK_PINNED_TO_CORE,
-                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len);
+                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len, false);
+#else
+    btu_thread = osi_thread_create(BTU_TASK_NAME, BTU_TASK_STACK_SIZE, BTU_TASK_PRIO, BTU_TASK_PINNED_TO_CORE,
+                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len, true);
+#endif
     if (btu_thread == NULL) {
+        goto error_exit;
+    }
+
+    if (!btu_acl_queue_init()) {
         goto error_exit;
     }
 
@@ -213,10 +222,19 @@ error_exit:;
 ******************************************************************************/
 void BTU_ShutDown(void)
 {
+    btu_acl_queue_close();
+
+    btu_task_shut_down();
+
+    if (btu_thread) {
+        osi_thread_free(btu_thread);
+        btu_thread = NULL;
+    }
+
+    btu_acl_queue_deinit();
 #if BTU_DYNAMIC_MEMORY
     FREE_AND_RESET(btu_cb_ptr);
 #endif
-    btu_task_shut_down();
 
     hash_map_free(btu_general_alarm_hash_map);
     osi_mutex_free(&btu_general_alarm_lock);
@@ -226,11 +244,6 @@ void BTU_ShutDown(void)
 
     hash_map_free(btu_l2cap_alarm_hash_map);
     osi_mutex_free(&btu_l2cap_alarm_lock);
-
-    if (btu_thread) {
-        osi_thread_free(btu_thread);
-        btu_thread = NULL;
-    }
 
     btu_general_alarm_hash_map = NULL;
     btu_oneshot_alarm_hash_map = NULL;

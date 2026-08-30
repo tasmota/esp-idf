@@ -6,16 +6,23 @@ set(public_include "include")
 
 set(priv_requires "esp_driver_gpio")
 
-set(requires "esp_hal_cam")
+
+if(${target} STREQUAL "linux")
+    set(requires "")
+else()
+    set(requires "esp_hal_cam" "esp_mm" "esp_driver_dma")
+endif()
 
 if(CONFIG_SOC_ISP_SUPPORTED)
     list(APPEND srcs "src/isp_core.c"
+                     "src/isp_dma.c"
                      "src/isp_af.c"
                      "src/isp_ccm.c"
                      "src/isp_awb.c"
                      "src/isp_ae.c"
                      "src/isp_gamma.c"
-                     "src/isp_hist.c")
+                     "src/isp_hist.c"
+                     "src/isp_dpc.c")
 endif()
 
 if(CONFIG_SOC_ISP_BF_SUPPORTED)

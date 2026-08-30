@@ -265,7 +265,6 @@ bool bootloader_utility_load_partition_table(bootloader_state_t *bs)
 
     bootloader_munmap(partitions);
 
-    ESP_LOGI(TAG, "End of partition table");
     return true;
 }
 
@@ -785,7 +784,7 @@ static void load_image(const esp_image_metadata_t *image_data)
     }
 #endif
 
-    ESP_LOGI(TAG, "Disabling RNG early entropy source...");
+    ESP_LOGD(TAG, "Disabling RNG early entropy source...");
     bootloader_random_disable();
 
     /* Disable glitch reset after all the security checks are completed.
@@ -1081,7 +1080,7 @@ static void set_cache_and_start_app(
     }
     //we use the MMU_LL_END_DROM_ENTRY_ID mmu entry as a map page for app to find the boot partition
     mmu_hal_map_region(0, MMU_TARGET_FLASH0, MMU_DROM_END_ENTRY_VADDR_FROM_VAL(mmu_page_size), drom_addr_aligned, mmu_page_size, &actual_mapped_len);
-    ESP_EARLY_LOGV(TAG, "mapped one page of the rodata, from paddr=0x%08" PRIx32 " and vaddr=0x%08" PRIx32 ", 0x%" PRIx32 " bytes are mapped", drom_addr_aligned, MMU_LL_END_DROM_ENTRY_VADDR, actual_mapped_len);
+    ESP_EARLY_LOGV(TAG, "mapped one page of the rodata, from paddr=0x%08" PRIx32 " and vaddr=0x%08x, 0x%" PRIx32 " bytes are mapped", drom_addr_aligned, MMU_LL_END_DROM_ENTRY_VADDR, actual_mapped_len);
 #endif
 
     //-----------------------MAP IROM--------------------------

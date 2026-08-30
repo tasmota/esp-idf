@@ -26,7 +26,7 @@ TARGETS_RISCV = panic_tests.TARGETS_RISCV
 TARGETS_RISCV_DUAL_CORE = panic_tests.TARGETS_RISCV_DUAL_CORE
 COREDUMP_APP = str(Path(__file__).resolve().parent)
 
-COREDUMP_UNSUPPORTED_TARGETS = {'esp32h4'}
+COREDUMP_UNSUPPORTED_TARGETS = {''}
 COREDUMP_TARGETS_ALL = [target for target in TARGETS_ALL if target not in COREDUMP_UNSUPPORTED_TARGETS]
 COREDUMP_TARGETS_DUAL_CORE = [target for target in TARGETS_DUAL_CORE if target not in COREDUMP_UNSUPPORTED_TARGETS]
 COREDUMP_TARGETS_RISCV = [target for target in TARGETS_RISCV if target not in COREDUMP_UNSUPPORTED_TARGETS]
@@ -62,7 +62,10 @@ CONFIG_COREDUMP_SUMMARY_FLASH_ENCRYPTED = panic_tests.configs_for_app(
     COREDUMP_APP, ['coredump_flash_encrypted', 'coredump_flash_encrypted_coredump_plain']
 )
 CONFIG_GDBSTUB_COREDUMP = panic_tests.configs_for_app(COREDUMP_APP, ['gdbstub_coredump'])
-CONFIG_TCB_CORRUPTED = panic_tests.configs_for_app(COREDUMP_APP, ['coredump_flash_default'])
+# Uses the dedicated coredump stack (CONFIG_ESP_COREDUMP_STACK_SIZE) on purpose: this test
+# faults in idle-task context, whose small stack overflows the FreeRTOS end-of-stack watchpoint
+# if the coredump runs in place, causing a double panic. Do not switch back to coredump_flash_default.
+CONFIG_TCB_CORRUPTED = panic_tests.configs_for_app(COREDUMP_APP, ['coredump_flash_custom_stack'])
 
 
 @pytest.mark.generic
@@ -103,6 +106,12 @@ def _test_panic_extram_stack_impl(dut: PanicTestDut, config: str) -> None:
     elif dut.target == 'esp32s3':
         # ESP32-S3 External data memory range [0x3c000000-0x3e000000)
         coredump_pattern = re.compile('.coredump.tasks.data (0x3[c-dC-D][0-9a-fA-F]{6}) (0x[a-fA-F0-9]+) RW')
+    elif dut.target == 'esp32s31':
+        # ESP32-S31 External data memory range [0x50000000-0x54000000)
+        coredump_pattern = re.compile('.coredump.tasks.data (0x5[0-9a-fA-F]{7}) (0x[a-fA-F0-9]+) RW')
+    elif dut.target == 'esp32p4':
+        # ESP32-P4 External data memory range [0x48000000-0x4c000000)
+        coredump_pattern = re.compile('.coredump.tasks.data (0x4[8-9a-bA-B][0-9a-fA-F]{6}) (0x[a-fA-F0-9]+) RW')
     else:
         # RISC-V targets (esp32c5, esp32c61, etc.) External data memory range [0x42000000-0x44000000)
         coredump_pattern = re.compile('.coredump.tasks.data (0x4[2-3][0-9a-fA-F]{6}) (0x[a-fA-F0-9]+) RW')
@@ -129,7 +138,6 @@ def get_psram_marker(target: str) -> pytest.mark:
 )
 @pytest.mark.temp_skip_ci(targets=['esp32p4'], reason='p4 rev3 migration')
 @pytest.mark.temp_skip_ci(targets=['esp32c5', 'esp32c61', 'esp32p4', 'esp32s31'], reason='TODO: IDF-15623')
-@pytest.mark.temp_skip_ci(targets=['esp32h4'], reason='IDF-12308')
 def test_panic_extram_stack_heap_psram(dut: PanicTestDut, config: str) -> None:
     _test_panic_extram_stack_impl(dut, config)
 
@@ -144,7 +152,6 @@ def test_panic_extram_stack_heap_psram(dut: PanicTestDut, config: str) -> None:
 )
 @pytest.mark.temp_skip_ci(targets=['esp32p4'], reason='p4 rev3 migration')
 @pytest.mark.temp_skip_ci(targets=['esp32c5', 'esp32c61', 'esp32p4', 'esp32s31'], reason='TODO: IDF-15623')
-@pytest.mark.temp_skip_ci(targets=['esp32h4'], reason='IDF-12308')
 def test_panic_extram_stack_heap_bss(dut: PanicTestDut, config: str) -> None:
     _test_panic_extram_stack_impl(dut, config)
 
@@ -159,7 +166,6 @@ def test_panic_extram_stack_heap_bss(dut: PanicTestDut, config: str) -> None:
 )
 @pytest.mark.temp_skip_ci(targets=['esp32p4'], reason='p4 rev3 migration')
 @pytest.mark.temp_skip_ci(targets=['esp32c5', 'esp32c61', 'esp32p4', 'esp32s31'], reason='TODO: IDF-15623')
-@pytest.mark.temp_skip_ci(targets=['esp32h4'], reason='IDF-12308')
 def test_panic_extram_stack_heap_bss_xip(dut: PanicTestDut, config: str) -> None:
     _test_panic_extram_stack_impl(dut, config)
 
@@ -305,7 +311,7 @@ def test_capture_dram(dut: PanicTestDut, config: str, test_func_name: str) -> No
     buffer_value = str(dut.gdb_data_eval_expr('g_noinit_buffer'))
     assert 'NOINIT_TEST_STRING' in buffer_value
 
-    if dut.target not in ['esp32c61', 'esp32c2']:
+    if dut.target in soc_filtered_targets('SOC_RTC_MEM_SUPPORTED == 1'):
         assert int(dut.gdb_data_eval_expr('g_rtc_data_var')) == 0x55AA
         assert int(dut.gdb_data_eval_expr('g_rtc_fast_var')) == 0xAABBCCDD
 

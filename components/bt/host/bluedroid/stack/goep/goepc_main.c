@@ -231,7 +231,7 @@ static void goepc_sm_act_connect(tGOEPC_CCB *p_ccb, tGOEPC_CONNECTED *connected)
 
 static void goepc_sm_act_disconnect(tGOEPC_CCB *p_ccb)
 {
-    tGOEPC_MSG msg;
+    tGOEPC_MSG msg = {0};
     if (p_ccb->obex_handle) {
         OBEX_RemoveConn(p_ccb->obex_handle);
     }
@@ -354,10 +354,6 @@ static void goepc_sm_state_opened_idle(tGOEPC_CCB *p_ccb, UINT8 event, tGOEPC_DA
         break;
     default:
         GOEPC_TRACE_ERROR("goepc_sm_state_opened_idle unexpected event: 0x%x\n", event);
-        if (p_data->pkt != NULL) {
-            osi_free(p_data->pkt);
-            p_data->pkt = NULL;
-        }
         break;
     }
 }
@@ -514,7 +510,7 @@ static void goepc_srm_sm_act_req(tGOEPC_CCB *p_ccb, BOOLEAN srm_en, BOOLEAN srm_
         }
         break;
     case GOEPC_SRM_STATE_ENABLE_WAIT:
-        if (!srm_wait) {
+        if (!srm_wait){
             p_ccb->srm_wait = FALSE;
         }
         if (!p_ccb->srm_wait && !p_ccb->srm_peer_wait) {
@@ -549,7 +545,7 @@ static void goepc_srm_sm_act_rsp(tGOEPC_CCB *p_ccb, BOOLEAN srm_en, BOOLEAN srm_
         }
         break;
     case GOEPC_SRM_STATE_ENABLE_WAIT:
-        if (!srm_wait) {
+        if (!srm_wait){
             p_ccb->srm_peer_wait = FALSE;
         }
         if (!p_ccb->srm_wait && !p_ccb->srm_peer_wait) {

@@ -2345,6 +2345,11 @@
 #define AVDT_NUM_SEPS               UC_BT_A2DP_SEP_NUM_MAX
 #endif
 
+/* Maximum number of peer SEPs accepted in AVDTP Discover results. */
+#ifndef AVDT_DIS_RES_MAX_NUM_SEPS
+#define AVDT_DIS_RES_MAX_NUM_SEPS    32
+#endif
+
 /* Number of transport channels setup per media stream(audio or video) */
 #ifndef AVDT_NUM_CHANNELS
 
@@ -2487,11 +2492,6 @@
 
 #ifndef GAP_INCLUDED
 #define GAP_INCLUDED                TRUE
-#endif
-
-/* This is set to enable posting event for data write */
-#ifndef GAP_CONN_POST_EVT_INCLUDED
-#define GAP_CONN_POST_EVT_INCLUDED  FALSE
 #endif
 
 /* The maximum number of simultaneous GAP L2CAP connections. */

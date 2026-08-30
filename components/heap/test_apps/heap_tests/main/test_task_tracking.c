@@ -1,16 +1,21 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 #include "unity.h"
 #include "stdio.h"
 #include <string.h>
+#include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "esp_heap_task_info.h"
+#include "esp_timer.h"
+
+extern void set_leak_threshold(int threshold);
 
 // This test only apply when task tracking is enabled
 #if defined(CONFIG_HEAP_TASK_TRACKING) && defined(CONFIG_HEAP_TRACK_DELETED_TASKS)
@@ -246,6 +251,269 @@ TEST_CASE("heap task tracking check alloc arrays and get info on specific task",
 
     // delete the task.
     vTaskDelete(test_task_handle);
+}
+
+typedef struct {
+    void *ptr;
+    TaskHandle_t task;
+} handle_reuse_allocation_t;
+
+#define NUM_HANDLE_REUSE_ATTEMPTS 500
+
+static volatile handle_reuse_allocation_t s_handle_reuse_allocations[NUM_HANDLE_REUSE_ATTEMPTS];
+static volatile bool s_handle_reuse_found = false;
+static volatile TaskHandle_t s_reused_task_handle = NULL;
+static volatile bool s_alloc_task_done = false;
+
+static bool task_usage_underflowed(size_t usage)
+{
+    /* size_t underflow looks negative when printed with %d (e.g. -16 -> 0xFFFFFFF0). */
+    return usage > ((size_t)INT32_MAX);
+}
+
+static void assert_no_underflow_for_reused_handle(TaskHandle_t handle)
+{
+    heap_all_tasks_stat_t tasks_stat;
+    esp_err_t ret_val = heap_caps_alloc_all_task_stat_arrays(&tasks_stat);
+    TEST_ASSERT_EQUAL(ESP_OK, ret_val);
+    ret_val = heap_caps_get_all_task_stat(&tasks_stat);
+    TEST_ASSERT_EQUAL(ESP_OK, ret_val);
+
+    size_t matching = 0;
+    for (size_t task_index = 0; task_index < tasks_stat.task_count; task_index++) {
+        task_stat_t task_stat = tasks_stat.stat_arr[task_index];
+        if (task_stat.handle != handle) {
+            continue;
+        }
+
+        matching++;
+        TEST_ASSERT_FALSE_MESSAGE(task_usage_underflowed(task_stat.overall_current_usage),
+                                  "overall_current_usage underflowed");
+        for (size_t heap_index = 0; heap_index < task_stat.heap_count; heap_index++) {
+            TEST_ASSERT_FALSE_MESSAGE(task_usage_underflowed(task_stat.heap_stat[heap_index].current_usage),
+                                      "heap current_usage underflowed");
+        }
+    }
+
+    TEST_ASSERT_GREATER_THAN(0, matching);
+    heap_caps_free_all_task_stat_arrays(&tasks_stat);
+}
+
+static void realloc_then_free(void *ptr, size_t size)
+{
+    void *new_ptr = heap_caps_realloc(ptr, size, MALLOC_CAP_DEFAULT);
+    if (new_ptr != NULL) {
+        ptr = new_ptr;
+    }
+    heap_caps_free(ptr);
+}
+
+static void handle_reuse_dummy_task(void *args)
+{
+    (void)args;
+    while (1) {
+        taskYIELD();
+    }
+}
+
+static void handle_reuse_alloc_task(void *args)
+{
+    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+    size_t i = (size_t)args;
+
+    s_handle_reuse_allocations[i].ptr = heap_caps_malloc(10, MALLOC_CAP_DEFAULT);
+    if (s_handle_reuse_allocations[i].ptr == NULL) {
+        abort();
+    }
+    s_handle_reuse_allocations[i].task = handle;
+
+    for (size_t j = 0; j < i; j++) {
+        if (s_handle_reuse_allocations[j].task == handle) {
+            /* Same TaskHandle_t as a previously deleted task: exercise the realloc path. */
+            realloc_then_free(s_handle_reuse_allocations[i].ptr, 20);
+            realloc_then_free(s_handle_reuse_allocations[j].ptr, 20);
+            s_handle_reuse_allocations[i].ptr = NULL;
+            s_handle_reuse_allocations[j].ptr = NULL;
+
+            s_handle_reuse_found = true;
+            s_reused_task_handle = handle;
+            s_alloc_task_done = true;
+            vTaskDelete(NULL);
+            return;
+        }
+    }
+
+    s_alloc_task_done = true;
+    vTaskDelete(NULL);
+}
+
+/* Reproduce the scenario from GoeBachmann/esp-idf (heap-tracking-bug branch),
+ * examples/system/heap_task_tracking/basic: create many short-lived tasks until
+ * a new task reuses a deleted task's TaskHandle_t, then realloc/free allocations
+ * from both lifetimes. Without the fix, overall_current_usage underflows and
+ * appears negative in logs.
+ */
+TEST_CASE("heap task tracking realloc with reused TaskHandle does not underflow usage", "[heap]")
+{
+    TaskHandle_t dummy_task_handle = NULL;
+
+    set_leak_threshold(-50000);
+
+    s_handle_reuse_found = false;
+    s_reused_task_handle = NULL;
+    memset((void *)s_handle_reuse_allocations, 0, sizeof(s_handle_reuse_allocations));
+
+    xTaskCreate(&handle_reuse_dummy_task, "dummy_task", 3072, NULL, 0, &dummy_task_handle);
+
+    for (size_t i = 0; i < NUM_HANDLE_REUSE_ATTEMPTS; i++) {
+        s_alloc_task_done = false;
+        xTaskCreate(&handle_reuse_alloc_task, "alloc_task", 3072, (void *)i, 5, NULL);
+        while (!s_alloc_task_done) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+
+        if (s_handle_reuse_found) {
+            break;
+        }
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(s_handle_reuse_found,
+                             "Could not force TaskHandle reuse within iteration limit");
+    assert_no_underflow_for_reused_handle(s_reused_task_handle);
+
+    vTaskDelete(dummy_task_handle);
+}
+
+#define STRESS_ALLOC_BYTES  128
+#define STRESS_DURATION_MS  3000
+
+static int64_t s_stress_end_time;
+
+static void task_tracking_stress_task(void *args)
+{
+    while (esp_timer_get_time() < s_stress_end_time) {
+        void *ptr = heap_caps_malloc(STRESS_ALLOC_BYTES, MALLOC_CAP_INTERNAL);
+        if (ptr != NULL) {
+            heap_caps_free(ptr);
+        }
+    }
+
+    // let the test know that this task is done before deleting itself
+    xTaskNotifyGive((TaskHandle_t)args);
+    vTaskDelete(NULL);
+}
+
+/**
+ * @brief Start one allocation stress task on every core, each running for STRESS_DURATION_MS.
+ *
+ * The tasks are created with the priority of the calling task so that they share the CPU with
+ * it instead of starving it.
+ */
+static void start_stress_tasks(void)
+{
+    s_stress_end_time = esp_timer_get_time() + (STRESS_DURATION_MS * 1000);
+    for (int core = 0; core < CONFIG_FREERTOS_NUMBER_OF_CORES; core++) {
+        xTaskCreatePinnedToCore(&task_tracking_stress_task, "tt_stress", 3072,
+                                (void *)xTaskGetCurrentTaskHandle(),
+                                uxTaskPriorityGet(NULL), NULL, core);
+    }
+}
+
+/**
+ * @brief Wait for all the allocation stress tasks to be done.
+ */
+static void wait_for_stress_tasks(void)
+{
+    for (int core = 0; core < CONFIG_FREERTOS_NUMBER_OF_CORES; core++) {
+        // the notification count is not cleared: each stress task notifies once
+        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
+    }
+}
+
+#if CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
+
+#define ISR_ALLOC_BYTES     64
+#define ISR_TIMER_PERIOD_US 500
+
+static volatile uint32_t s_isr_alloc_count;
+static volatile bool s_isr_alloc_failed;
+
+static void IRAM_ATTR task_tracking_isr_alloc_cb(void *args)
+{
+    void *ptr = heap_caps_malloc(ISR_ALLOC_BYTES, MALLOC_CAP_INTERNAL);
+    if (ptr == NULL) {
+        s_isr_alloc_failed = true;
+        return;
+    }
+
+    heap_caps_free(ptr);
+    s_isr_alloc_count++;
+}
+
+/* malloc() and free() can run from an ISR or a critical section, and task tracking
+ * is updated on those paths. A blocking lock around the statistics deadlocks here
+ * (interrupt watchdog timeout). Allocate and free from an ISR while every core does
+ * the same from a task.
+ */
+TEST_CASE("heap task tracking is safe when malloc/free run from an ISR", "[heap]")
+{
+    const esp_timer_create_args_t timer_args = {
+        .callback = &task_tracking_isr_alloc_cb,
+        .dispatch_method = ESP_TIMER_ISR,
+        .name = "tt_isr",
+    };
+    esp_timer_handle_t timer = NULL;
+
+    // the task tracking statistics of the stress tasks are kept after their deletion
+    set_leak_threshold(-5000);
+
+    s_isr_alloc_count = 0;
+    s_isr_alloc_failed = false;
+
+    start_stress_tasks();
+
+    TEST_ESP_OK(esp_timer_create(&timer_args, &timer));
+    TEST_ESP_OK(esp_timer_start_periodic(timer, ISR_TIMER_PERIOD_US));
+
+    wait_for_stress_tasks();
+
+    TEST_ESP_OK(esp_timer_stop(timer));
+    TEST_ESP_OK(esp_timer_delete(timer));
+
+    TEST_ASSERT_FALSE_MESSAGE(s_isr_alloc_failed, "allocation from ISR failed");
+    TEST_ASSERT_GREATER_THAN_UINT32(0, s_isr_alloc_count);
+    TEST_ASSERT_TRUE(heap_caps_check_integrity_all(true));
+}
+
+#endif // CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
+
+/* Reading and printing statistics must not hold the tracking lock for the whole
+ * operation. Call the getters and printers while every core allocates and frees,
+ * so a lock that is held too long would stall the allocator.
+ */
+TEST_CASE("heap task tracking get and print stats while allocating from all cores", "[heap][qemu-ignore]")
+{
+    // the task tracking statistics of the stress tasks are kept after their deletion
+    set_leak_threshold(-5000);
+
+    start_stress_tasks();
+
+    for (size_t i = 0; i < 5; i++) {
+        heap_all_tasks_stat_t tasks_stat = {};
+
+        TEST_ESP_OK(heap_caps_alloc_all_task_stat_arrays(&tasks_stat));
+        TEST_ESP_OK(heap_caps_get_all_task_stat(&tasks_stat));
+        heap_caps_free_all_task_stat_arrays(&tasks_stat);
+
+        heap_caps_print_all_task_stat_overview(stdout);
+        heap_caps_print_single_task_stat(stdout, xTaskGetCurrentTaskHandle());
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    wait_for_stress_tasks();
+
+    TEST_ASSERT_TRUE(heap_caps_check_integrity_all(true));
 }
 
 #endif // CONFIG_HEAP_TASK_TRACKING

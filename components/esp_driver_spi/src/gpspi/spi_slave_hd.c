@@ -263,11 +263,14 @@ esp_err_t spi_slave_hd_init(spi_host_device_t host_id, const spi_bus_config_t *b
         //Append mode
 #if SOC_GDMA_SUPPORTED
         // config gmda event callback for gdma supported chip
-        gdma_rx_event_callbacks_t txrx_cbs = {
+        gdma_tx_event_callbacks_t tx_cbs = {
+            .on_trans_eof = s_spi_slave_hd_append_gdma_isr,
+        };
+        gdma_rx_event_callbacks_t rx_cbs = {
             .on_recv_eof = s_spi_slave_hd_append_gdma_isr,
         };
-        gdma_register_tx_event_callbacks(host->dma_ctx->tx_dma_chan, (gdma_tx_event_callbacks_t *)&txrx_cbs, host);
-        gdma_register_rx_event_callbacks(host->dma_ctx->rx_dma_chan, &txrx_cbs, host);
+        gdma_register_tx_event_callbacks(host->dma_ctx->tx_dma_chan, &tx_cbs, host);
+        gdma_register_rx_event_callbacks(host->dma_ctx->rx_dma_chan, &rx_cbs, host);
 #else
         //On ESP32S2, `cmd7` and `cmd8` are designed as all `spi_dma` events, so use `dma_src` only
         ret = esp_intr_alloc(spicommon_irqdma_source_for_host(host_id), bus_config->intr_flags, s_spi_slave_hd_append_legacy_isr,
@@ -698,7 +701,7 @@ static SPI_SLAVE_ISR_ATTR void s_spi_slave_hd_append_legacy_isr(void *arg)
 static void s_spi_slave_hd_destroy_priv_trans(spi_host_device_t host, spi_slave_hd_trans_priv_t *priv_trans, spi_slave_chan_t chan)
 {
     spi_slave_hd_data_t *orig_trans = priv_trans->trans;
-    if (priv_trans->aligned_buffer != orig_trans->data) {
+    if (priv_trans->aligned_buffer && priv_trans->aligned_buffer != orig_trans->data) {
         if (chan == SPI_SLAVE_CHAN_RX) {
             memcpy(orig_trans->data, priv_trans->aligned_buffer, orig_trans->trans_len);
         }
@@ -792,7 +795,7 @@ esp_err_t s_spi_slave_hd_append_rxdma(spi_slave_hd_slot_t *host, uint8_t *data, 
         return ESP_ERR_INVALID_STATE;
     }
 
-    spicommon_dma_desc_setup_link(hal->rx_cur_desc->desc, data, len, false);
+    spicommon_dma_desc_setup_link(hal->rx_cur_desc->desc, data, len, true);
     hal->rx_cur_desc->arg = arg;
 
     if (!hal->rx_used_desc_cnt) {

@@ -87,7 +87,6 @@ void BTA_AvDisable(void)
 {
     BT_HDR  *p_buf;
 
-    bta_sys_deregister(BTA_ID_AV);
     if ((p_buf = (BT_HDR *) osi_malloc(sizeof(BT_HDR))) != NULL) {
         p_buf->event = BTA_AV_API_DISABLE_EVT;
         bta_sys_sendmsg(p_buf);
@@ -118,8 +117,7 @@ void BTA_AvRegister(tBTA_AV_CHNL chnl, const char *p_service_name, UINT8 app_id,
         p_buf->hdr.layer_specific   = chnl;
         p_buf->hdr.event = BTA_AV_API_REGISTER_EVT;
         if (p_service_name) {
-            BCM_STRNCPY_S(p_buf->p_service_name, p_service_name, BTA_SERVICE_NAME_LEN);
-            p_buf->p_service_name[BTA_SERVICE_NAME_LEN] = '\0';
+            BCM_STRLCPY_S(p_buf->p_service_name, p_service_name, BTA_SERVICE_NAME_LEN + 1);
         } else {
             p_buf->p_service_name[0] = '\0';
         }

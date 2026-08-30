@@ -180,7 +180,10 @@ int esp_tls_conn_destroy(esp_tls_t *tls)
         esp_tls_internal_event_tracker_destroy(tls->error_handle);
 #if CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
         if (tls->client_session) {
+            mbedtls_platform_zeroize(tls->client_session, tls->client_session_len);
             free(tls->client_session);
+            tls->client_session = NULL;
+            tls->client_session_len = 0;
         }
 #endif // CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
         free(tls);
@@ -564,7 +567,7 @@ static int esp_tls_low_level_conn(const char *hostname, int hostlen, int port, c
  */
 esp_err_t esp_tls_plain_tcp_connect(const char *host, int hostlen, int port, const esp_tls_cfg_t *cfg, esp_tls_error_handle_t error_handle, int *sockfd)
 {
-    if (sockfd == NULL || error_handle == NULL) {
+    if (sockfd == NULL || error_handle == NULL || host == NULL || hostlen < 0) {
         return ESP_ERR_INVALID_ARG;
     }
     return tcp_connect(host, hostlen, port, cfg, error_handle, sockfd);
@@ -668,6 +671,10 @@ int esp_tls_conn_http_new_sync(const char *url, const esp_tls_cfg_t *cfg, esp_tl
  */
 int esp_tls_conn_http_new_async(const char *url, const esp_tls_cfg_t *cfg, esp_tls_t *tls)
 {
+    if (!url || !cfg || !tls) {
+        return -1;
+    }
+
     /* Parse URI */
     struct http_parser_url u;
     http_parser_url_init(&u);

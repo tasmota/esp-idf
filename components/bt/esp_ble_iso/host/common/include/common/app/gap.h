@@ -57,6 +57,9 @@ struct bt_le_gap_app_pa_sync_past_param {
     uint8_t adv_phy;
     uint16_t per_adv_itvl;
     uint8_t adv_ca;
+    /* PAST sender, not the advertiser in addr above; conn_handle is resolved
+     * from it on Bluedroid. */
+    struct bt_le_addr src_addr;
     /* ACL conn that delivered the PAST. */
     uint16_t conn_handle;
 };
@@ -94,6 +97,10 @@ struct bt_le_gap_app_security_change_param {
     uint8_t sec_level;
     uint8_t bonded : 1;
     struct bt_le_addr dst;
+    /* Bonded LTK (CSIS SIRK-encryption key K), captured by the adapter; the
+     * safe handler hands it to bt_conn_le_set_ltk. Valid only if ltk_present. */
+    uint8_t ltk[16];
+    uint8_t ltk_present : 1;
 };
 
 struct bt_le_gap_app_identity_resolve_param {
@@ -296,7 +303,9 @@ void bt_le_gap_app_biginfo_event(uint8_t *param);
 
 void bt_le_gap_handle_event(uint8_t *data, size_t data_len);
 
-void bt_le_gap_app_post_event(uint8_t type, void *param);
+void bt_le_gap_event_free(void *data);
+
+void bt_le_gap_app_post_event(uint16_t type, void *param);
 
 #ifdef __cplusplus
 }

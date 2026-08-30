@@ -24,6 +24,10 @@ CORE:  10: init_show_cpu_freq in components/esp_system/startup_funcs.c on BIT(0)
 CORE:  20: init_show_app_info in components/esp_app_format/esp_app_desc.c on BIT(0)
 CORE:  21: init_efuse_show_app_info in components/efuse/src/esp_efuse_startup.c on BIT(0)
 
+# When KASAN is enabled, initialise the KASAN shadow region before the heap allocator.
+# The shadow offset must be set up before the first heap_caps_init hook fires.
+CORE:  98: init_kasan_shadow in components/heap/heap_kasan.c on BIT(0)
+
 # Set the standard stream to non blocking and register the default vfs
 CORE:  99: init_vfs_linux_coop in components/vfs/vfs_linux_default_coop.c on BIT(0)
 
@@ -99,7 +103,7 @@ SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/p
 SECONDARY: 106: sleep_clock_startup_init in components/esp_hw_support/lowpower/port/esp32s31/sleep_clock.c on BIT(0)
 SECONDARY: 106: sleep_clock_icg_startup_init in components/esp_hw_support/port/esp32p4/pmu_sleep_clock_icg.c on BIT(0)
 SECONDARY: 107: sleep_sys_periph_startup_init in components/esp_hw_support/sleep_system_peripheral.c on BIT(0)
-SECONDARY: 108: sleep_power_startup_init in components/esp_hw_support/lowpower/port/esp32h4/sleep_power.c on BIT(0)
+SECONDARY: 108: sleep_power_startup_init in components/esp_hw_support/port/esp32h4/pmu_sleep_power.c on BIT(0)
 
 # app_trace doesn't have init dependencies
 SECONDARY: 115: apptrace_early_init in components/app_trace/app_trace.c on ESP_SYSTEM_INIT_ALL_CORES
@@ -116,6 +120,9 @@ SECONDARY: 140: init_dbg_stubs in components/app_trace/debug_stubs.c on BIT(0)
 # Register NVS Encryption schemes
 SECONDARY: 150: nvs_sec_provider_register_flash_enc_scheme in components/nvs_sec_provider/nvs_sec_provider.c on BIT(0)
 SECONDARY: 151: nvs_sec_provider_register_hmac_scheme in components/nvs_sec_provider/nvs_sec_provider.c on BIT(0)
+
+# esp_riscv_trace doesn't have init dependencies
+SECONDARY: 160: esp_riscv_trace_early_init in components/esp_riscv_trace/src/esp_riscv_trace.c on ESP_SYSTEM_INIT_ALL_CORES
 
 # the rest of the components which are initialized from startup_funcs.c
 # [refactor-todo]: move init calls into respective components

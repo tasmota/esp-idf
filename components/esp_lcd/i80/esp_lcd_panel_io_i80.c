@@ -11,7 +11,6 @@
 #include "hal/cache_ll.h"
 #include "hal/cache_hal.h"
 #include "esp_private/sleep_retention.h"
-#include "esp_sleep.h"
 
 // Use retention link only when the target supports sleep retention is enabled
 #define I80_USE_RETENTION_LINK  (SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
@@ -124,15 +123,15 @@ esp_err_t esp_lcd_new_i80_bus(const esp_lcd_i80_bus_config_t *bus_config, esp_lc
 {
     esp_err_t ret = ESP_OK;
     esp_lcd_i80_bus_t *bus = NULL;
+#if CONFIG_IDF_TARGET_ESP32S31
+    bool core_clk_enabled = false;
+#endif
     ESP_RETURN_ON_FALSE(bus_config && ret_bus, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     // although LCD_CAM can support up to 24 data lines, we restrict users to only use 8 or 16 bit width
     ESP_RETURN_ON_FALSE(bus_config->bus_width == 8 || bus_config->bus_width == 16, ESP_ERR_INVALID_ARG,
                         TAG, "invalid bus width:%d", bus_config->bus_width);
 #if !SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION
     ESP_RETURN_ON_FALSE(bus_config->flags.allow_pd == 0, ESP_ERR_NOT_SUPPORTED, TAG, "register back up is not supported");
-#if SOC_PM_SUPPORT_TOP_PD
-    esp_sleep_pd_config(ESP_PD_DOMAIN_TOP, ESP_PD_OPTION_ON); //IDF-15652
-#endif
 #endif // SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION
 
     // allocate i80 bus memory
@@ -160,11 +159,15 @@ esp_err_t esp_lcd_new_i80_bus(const esp_lcd_i80_bus_config_t *bus_config, esp_lc
         if (ref_count == 0) {
             lcd_ll_enable_bus_clock(bus_id, true);
             lcd_ll_reset_register(bus_id);
+#if CONFIG_IDF_TARGET_ESP32S31
+            lcd_ll_select_core_clk_src(bus_id, LCD_CORE_CLK_SRC_DEFAULT);
+            lcd_ll_set_core_clock_divider(bus_id, 2, 0, 0);
+#endif
         }
     }
 #if I80_USE_RETENTION_LINK
     // no need to acquire mutex, because the bus is exclusive
-    sleep_retention_module_t module_id = soc_i80_lcd_retention_info[bus_id].retention_module;
+    sleep_retention_module_t module_id = lcd_i80_reg_retention_info[bus_id].retention_module;
     sleep_retention_module_init_param_t init_param = {
         .cbs = {
             .create = {
@@ -185,6 +188,10 @@ esp_err_t esp_lcd_new_i80_bus(const esp_lcd_i80_bus_config_t *bus_config, esp_lc
 #endif // I80_USE_RETENTION_LINK
     // initialize HAL layer, so we can call LL APIs later
     lcd_hal_init(&bus->hal, bus_id);
+#if CONFIG_IDF_TARGET_ESP32S31
+    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)LCD_CORE_CLK_SRC_DEFAULT, true), err, TAG, "core clock source enable failed");
+    core_clk_enabled = true;
+#endif
     PERIPH_RCC_ATOMIC() {
         lcd_ll_enable_clock(bus->hal.dev, true);
     }
@@ -268,6 +275,11 @@ err:
             esp_clk_tree_enable_src(bus->clk_src, false);
             bus->clk_src = SOC_MOD_CLK_INVALID;
         }
+#if CONFIG_IDF_TARGET_ESP32S31
+        if (core_clk_enabled) {
+            esp_clk_tree_enable_src((soc_module_clk_t)LCD_CORE_CLK_SRC_DEFAULT, false);
+        }
+#endif
 #if CONFIG_PM_ENABLE
         if (bus->pm_lock) {
             esp_pm_lock_delete(bus->pm_lock);
@@ -291,8 +303,11 @@ esp_err_t esp_lcd_del_i80_bus(esp_lcd_i80_bus_handle_t bus)
         esp_clk_tree_enable_src(bus->clk_src, false);
         bus->clk_src = SOC_MOD_CLK_INVALID;
     }
+#if CONFIG_IDF_TARGET_ESP32S31
+    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)LCD_CORE_CLK_SRC_DEFAULT, false), err, TAG, "core clock source disable failed");
+#endif
 #if I80_USE_RETENTION_LINK
-    const periph_retention_module_t module_id = soc_i80_lcd_retention_info[bus_id].retention_module;
+    const periph_retention_module_t module_id = lcd_i80_reg_retention_info[bus_id].retention_module;
     sleep_retention_module_detach(module_id);
     if (sleep_retention_is_module_created(module_id)) {
         assert(sleep_retention_is_module_inited(module_id));
@@ -490,8 +505,10 @@ static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     esp_lcd_i80_bus_t *bus = next_device->bus;
     lcd_panel_io_i80_t *cur_device = bus->cur_device;
     lcd_i80_trans_descriptor_t *trans_desc = NULL;
-    assert(param_size <= bus->max_transfer_bytes && "parameter bytes too long, enlarge max_transfer_bytes");
-    assert(param_size <= LCD_I80_IO_FORMAT_BUF_SIZE && "format buffer too small, increase LCD_I80_IO_FORMAT_BUF_SIZE");
+    ESP_RETURN_ON_FALSE(param_size <= bus->max_transfer_bytes, ESP_ERR_INVALID_ARG, TAG,
+                        "parameter bytes too long, enlarge max_transfer_bytes");
+    ESP_RETURN_ON_FALSE(param_size <= LCD_I80_IO_FORMAT_BUF_SIZE, ESP_ERR_INVALID_ARG, TAG,
+                        "format buffer too small, increase LCD_I80_IO_FORMAT_BUF_SIZE");
     uint32_t cmd_cycles = next_device->lcd_cmd_bits / bus->bus_width;
     // in case bus_width=16 and cmd_bits=8, we still need 1 cmd_cycle
     if (cmd_cycles * bus->bus_width < next_device->lcd_cmd_bits) {
@@ -526,11 +543,12 @@ static esp_err_t panel_io_i80_tx_param(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     trans_desc->data = (param && param_len) ? bus->format_buffer : NULL;
     trans_desc->data_length = trans_desc->data ? param_len : 4;
     trans_desc->trans_done_cb = NULL; // no callback for parameter transaction
-    size_t buffer_alignment = (trans_desc->data == NULL || esp_ptr_internal(trans_desc->data)) ? bus->int_mem_align : bus->ext_mem_align;
     static uint32_t fake_trigger = 0;
+    void *mount_buffer = trans_desc->data ? (void *)trans_desc->data : &fake_trigger;
+    size_t buffer_alignment = gdma_get_buffer_alignment_constraint(bus->dma_chan, mount_buffer);
     // mount data to DMA links
     gdma_buffer_mount_config_t mount_config = {
-        .buffer = trans_desc->data ? (void *)trans_desc->data : (&fake_trigger),
+        .buffer = mount_buffer,
         .buffer_alignment = buffer_alignment,
         .length = trans_desc->data_length,
         .flags = {
@@ -562,16 +580,8 @@ static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, cons
     lcd_panel_io_i80_t *i80_device = __containerof(io, lcd_panel_io_i80_t, base);
     esp_lcd_i80_bus_t *bus = i80_device->bus;
     lcd_i80_trans_descriptor_t *trans_desc = NULL;
-    assert(color_size <= bus->max_transfer_bytes && "color bytes too long, enlarge max_transfer_bytes");
-    if (esp_ptr_external_ram(color)) {
-        // check alignment
-        ESP_RETURN_ON_FALSE(((uint32_t)color & (bus->ext_mem_align - 1)) == 0, ESP_ERR_INVALID_ARG, TAG, "color address not aligned");
-        ESP_RETURN_ON_FALSE((color_size & (bus->ext_mem_align - 1)) == 0, ESP_ERR_INVALID_ARG, TAG, "color size not aligned");
-    } else {
-        // check alignment
-        ESP_RETURN_ON_FALSE(((uint32_t)color & (bus->int_mem_align - 1)) == 0, ESP_ERR_INVALID_ARG, TAG, "color address not aligned");
-        ESP_RETURN_ON_FALSE((color_size & (bus->int_mem_align - 1)) == 0, ESP_ERR_INVALID_ARG, TAG, "color size not aligned");
-    }
+    ESP_RETURN_ON_FALSE(color_size <= bus->max_transfer_bytes, ESP_ERR_INVALID_ARG, TAG,
+                        "color bytes too long, enlarge max_transfer_bytes");
     if (esp_cache_get_line_size_by_addr(color) > 0) {
         // flush data from cache to the physical memory
         esp_cache_msync((void *)color, color_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
@@ -613,9 +623,9 @@ static esp_err_t lcd_i80_create_sleep_retention_link_cb(void *arg)
 {
     esp_lcd_i80_bus_t *bus = (esp_lcd_i80_bus_t *)arg;
     int bus_id = bus->bus_id;
-    sleep_retention_module_t module_id = soc_i80_lcd_retention_info[bus_id].retention_module;
-    esp_err_t err = sleep_retention_entries_create(soc_i80_lcd_retention_info[bus_id].regdma_entry_array,
-                                                   soc_i80_lcd_retention_info[bus_id].array_size,
+    sleep_retention_module_t module_id = lcd_i80_reg_retention_info[bus_id].retention_module;
+    esp_err_t err = sleep_retention_entries_create(lcd_i80_reg_retention_info[bus_id].regdma_entry_array,
+                                                   lcd_i80_reg_retention_info[bus_id].array_size,
                                                    REGDMA_LINK_PRI_LCDCAM, module_id);
     ESP_RETURN_ON_ERROR(err, TAG, "create retention link failed");
     return ESP_OK;
@@ -624,7 +634,7 @@ static esp_err_t lcd_i80_create_sleep_retention_link_cb(void *arg)
 static void lcd_i80_create_retention_module(esp_lcd_i80_bus_t *bus)
 {
     int bus_id = bus->bus_id;
-    sleep_retention_module_t module_id = soc_i80_lcd_retention_info[bus_id].retention_module;
+    sleep_retention_module_t module_id = lcd_i80_reg_retention_info[bus_id].retention_module;
 
     if (sleep_retention_is_module_inited(module_id) && !sleep_retention_is_module_created(module_id)) {
         if (sleep_retention_module_allocate(module_id) != ESP_OK) {
@@ -648,9 +658,9 @@ static esp_err_t lcd_i80_select_periph_clock(esp_lcd_i80_bus_handle_t bus, lcd_c
     ESP_RETURN_ON_ERROR(esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &src_clk_hz),
                         TAG, "get clock source frequency failed");
     PERIPH_RCC_ATOMIC() {
-        lcd_ll_select_clk_src(bus->hal.dev, clk_src);
+        lcd_ll_select_clk_src(bus->bus_id, clk_src);
         // force to use integer division, as fractional division might lead to clock jitter
-        lcd_ll_set_group_clock_coeff(bus->hal.dev, LCD_PERIPH_CLOCK_PRE_SCALE, 0, 0);
+        lcd_ll_set_group_clock_coeff(bus->bus_id, LCD_PERIPH_CLOCK_PRE_SCALE, 0, 0);
     }
 
     // save the resolution of the i80 bus
@@ -687,7 +697,10 @@ static esp_err_t lcd_i80_init_dma_link(esp_lcd_i80_bus_handle_t bus, const esp_l
         .access_ext_mem = true, // the LCD can carry pixel buffer from the external memory
     };
     ESP_RETURN_ON_ERROR(gdma_config_transfer(bus->dma_chan, &trans_cfg), TAG, "config DMA transfer failed");
-    gdma_get_alignment_constraints(bus->dma_chan, &bus->int_mem_align, &bus->ext_mem_align);
+    gdma_channel_alignment_info_t align_info;
+    gdma_get_channel_alignment_constraints(bus->dma_chan, &align_info);
+    bus->int_mem_align = align_info.int_mem_alignment;
+    bus->ext_mem_align = align_info.ext_enc_mem_alignment;
 
     size_t buffer_alignment = MAX(bus->int_mem_align, bus->ext_mem_align);
     size_t num_dma_nodes = esp_dma_calculate_node_count(bus->max_transfer_bytes, buffer_alignment, LCD_DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
@@ -884,8 +897,10 @@ IRAM_ATTR static void i80_lcd_default_isr_handler(void *args)
                 bus->cur_trans = trans_desc;
                 bus->cur_device = next_device;
                 // mount data to DMA links
+                size_t buffer_alignment = gdma_get_buffer_alignment_constraint(bus->dma_chan, trans_desc->data);
                 gdma_buffer_mount_config_t mount_config = {
                     .buffer = (void *)trans_desc->data,
+                    .buffer_alignment = buffer_alignment,
                     .length = trans_desc->data_length,
                     .flags = {
                         .mark_eof = true,

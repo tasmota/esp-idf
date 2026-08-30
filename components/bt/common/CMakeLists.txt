@@ -66,6 +66,35 @@ function(wrap_uart_log_tx_interface)
     endif()
 endfunction()
 
+# Inject the ESP-IDF build commit into the bt component as a private compile
+# definition (BLE_LOG_IDF_COMMIT), reported later in the BLE Log version info
+# frame. Does nothing when the commit cannot be determined.
+function(register_ble_log_idf_commit)
+    idf_build_get_property(idf_path IDF_PATH)
+    # "git rev-parse" walks up parent dirs; only trust it when the IDF tree
+    # itself is a repo/worktree. Release trees have no .git and must leave
+    # BLE_LOG_IDF_COMMIT undefined instead of picking up an enclosing repo.
+    if(NOT EXISTS "${idf_path}/.git")
+        return()
+    endif()
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+        WORKING_DIRECTORY "${idf_path}"
+        RESULT_VARIABLE ble_log_git_result
+        OUTPUT_VARIABLE ble_log_idf_commit
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    string(LENGTH "${ble_log_idf_commit}" ble_log_idf_commit_len)
+    # Take the first 12 chars of the full hash; --short=N may return a longer
+    # ambiguous abbreviation, so never rely on abbreviated output
+    if(ble_log_git_result EQUAL 0 AND ble_log_idf_commit_len EQUAL 40)
+        string(SUBSTRING "${ble_log_idf_commit}" 0 12 ble_log_idf_commit)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE
+            "BLE_LOG_IDF_COMMIT=\"${ble_log_idf_commit}\"")
+    endif()
+endfunction()
+
 set(bt_common_srcs "" PARENT_SCOPE)
 set(bt_common_include_dirs "" PARENT_SCOPE)
 set(bt_common_priv_include_dirs "" PARENT_SCOPE)
@@ -114,6 +143,7 @@ list(APPEND bt_common_srcs
     "${CMAKE_CURRENT_LIST_DIR}/osi/osi.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/semaphore.c"
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/deprecated/ble_log_spi_out.c"
+    "${CMAKE_CURRENT_LIST_DIR}/osal/src/bt_osal_freertos.c"
 )
 
 list(APPEND bt_common_include_dirs
@@ -124,6 +154,7 @@ list(APPEND bt_common_include_dirs
     "${CMAKE_CURRENT_LIST_DIR}/hci_log/include"
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/include"
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/deprecated/include"
+    "${CMAKE_CURRENT_LIST_DIR}/osal/include"
 )
 
 list(APPEND bt_common_priv_include_dirs
@@ -158,9 +189,17 @@ if(CONFIG_BLE_LOG_ENABLED)
         list(APPEND bt_common_srcs
             "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_dummy.c"
         )
+    elseif(CONFIG_BLE_LOG_PRPH_TEST)
+        list(APPEND bt_common_srcs
+            "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_test.c"
+        )
     elseif(CONFIG_BLE_LOG_PRPH_SPI_MASTER_DMA)
         list(APPEND bt_common_srcs
             "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_spi_master_dma.c"
+        )
+    elseif(CONFIG_BLE_LOG_PRPH_SPI_MASTER_HD)
+        list(APPEND bt_common_srcs
+            "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_spi_master_hd.c"
         )
     elseif(CONFIG_BLE_LOG_PRPH_UART_DMA)
         list(APPEND bt_common_srcs

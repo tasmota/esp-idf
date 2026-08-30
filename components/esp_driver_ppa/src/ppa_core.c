@@ -34,7 +34,7 @@
 #include "hal/color_hal.h"
 #include "hal/color_types.h"
 #include "esp_private/periph_ctrl.h"
-#include "esp_efuse.h"
+#include "esp_private/sleep_retention.h"
 #include "soc/soc_caps.h"
 
 static const char *TAG = "ppa_core";
@@ -54,6 +54,25 @@ const dma2d_trans_on_picked_callback_t ppa_oper_trans_on_picked_func[PPA_OPERATI
     [PPA_OPERATION_BLEND] = ppa_blend_transaction_on_picked,
     [PPA_OPERATION_FILL] = ppa_fill_transaction_on_picked,
 };
+
+/** PPA Power Management Strategy
+ *
+ * SRM and Blending have separate CPU_FREQ_MAX PM locks, and each PM lock is acquired whenever there is PPA operation in process.
+ *
+ * When no PPA operation is in process, sleep can happen, and PPA domain can be powered down if allow_pd is set.
+ * Necessary register context will be saved and restored by sleep retention.
+ */
+
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+static esp_err_t ppa_create_sleep_retention_link_cb(void *arg)
+{
+    sleep_retention_module_t module = ppa_reg_retention_info.module;
+    esp_err_t err = sleep_retention_entries_create(ppa_reg_retention_info.regdma_entry_array,
+                                                   ppa_reg_retention_info.array_size,
+                                                   REGDMA_LINK_PRI_PPA, module);
+    return err;
+}
+#endif
 
 static esp_err_t ppa_engine_acquire(const ppa_engine_config_t *config, ppa_engine_t **ret_engine)
 {
@@ -187,6 +206,40 @@ static esp_err_t ppa_engine_acquire(const ppa_engine_config_t *config, ppa_engin
                 ESP_LOGE(TAG, "install 2D-DMA failed");
                 goto wrap_up;
             }
+
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+            s_platform.flags.allow_pd = config->flags.allow_pd; // Uses the first acquired engine's allow_pd flag as the platform's allow_pd flag
+
+            // Initialize sleep retention module for PPA
+            sleep_retention_module_t module = ppa_reg_retention_info.module;
+            sleep_retention_module_init_param_t init_param = {
+                .cbs = {
+                    .create = {
+                        .handle = ppa_create_sleep_retention_link_cb,
+                        .arg = NULL,
+                    },
+                },
+                .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
+                .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
+            };
+            if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
+                // even though the sleep retention module init failed, PPA driver should still work, so just warning here
+                ESP_LOGW(TAG, "init sleep retention failed, power domain may be turned off during sleep");
+            } else if (s_platform.flags.allow_pd) {
+                if (sleep_retention_module_allocate(module) != ESP_OK) {
+                    ESP_LOGW(TAG, "fail to allocate retention link list");
+                    // don't call sleep_retention_module_deinit here, otherwise PPA peripheral may be powered off during sleep
+                } else {
+                    if (sleep_retention_module_attach(module) != ESP_OK) {
+                        ESP_LOGW(TAG, "attach retention module failed, power domain can't turn off");
+                    }
+                }
+            }
+        } else {
+            if (s_platform.flags.allow_pd != config->flags.allow_pd) {
+                ESP_LOGW(TAG, "allow_pd flag mismatch among clients, will follow flags.allow_pd = %d", s_platform.flags.allow_pd);
+            }
+#endif
         }
     }
 wrap_up:
@@ -247,6 +300,20 @@ static esp_err_t ppa_engine_release(ppa_engine_t *ppa_engine)
     if (!s_platform.srm && !s_platform.blending) {
         assert(s_platform.srm_engine_ref_count == 0 && s_platform.blend_engine_ref_count == 0);
 
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+        sleep_retention_module_t module = ppa_reg_retention_info.module;
+        if (sleep_retention_is_module_attached(module)) {
+            sleep_retention_module_detach(module);
+        }
+        if (sleep_retention_is_module_created(module)) {
+            sleep_retention_module_free(module);
+        }
+        if (sleep_retention_is_module_inited(module)) {
+            sleep_retention_module_deinit(module);
+        }
+        s_platform.flags.allow_pd = false;
+#endif
+
         if (s_platform.dma2d_pool_handle) {
             dma2d_release_pool(s_platform.dma2d_pool_handle); // TODO: check return value. If not ESP_OK, then must be error on other 2D-DMA clients :( Give a warning log?
             s_platform.dma2d_pool_handle = NULL;
@@ -281,18 +348,17 @@ esp_err_t ppa_register_client(const ppa_client_config_t *config, ppa_client_hand
     client->oper_type = config->oper_type;
     client->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
     client->data_burst_length = config->data_burst_length ? config->data_burst_length : PPA_DATA_BURST_LENGTH_128;
-    if (esp_efuse_is_flash_encryption_enabled() && (client->data_burst_length < SOC_MEMSPI_ENCRYPTION_ALIGNMENT)) {
-        ESP_LOGW(TAG, "flash encryption is enabled, but selected data burst length does not meet encryption alignment restriction if accessing external memory, will be automatically adjusted later on");
-    }
 
     if (config->oper_type == PPA_OPERATION_SRM) {
         ppa_engine_config_t engine_config = {
             .engine = PPA_ENGINE_TYPE_SRM,
+            .flags.allow_pd = config->flags.allow_pd,
         };
         ESP_GOTO_ON_ERROR(ppa_engine_acquire(&engine_config, &client->engine), err, TAG, "unable to acquire SRM engine");
     } else if (config->oper_type == PPA_OPERATION_BLEND || config->oper_type == PPA_OPERATION_FILL) {
         ppa_engine_config_t engine_config = {
             .engine = PPA_ENGINE_TYPE_BLEND,
+            .flags.allow_pd = config->flags.allow_pd,
         };
         ESP_GOTO_ON_ERROR(ppa_engine_acquire(&engine_config, &client->engine), err, TAG, "unable to acquire Blending engine");
     }
@@ -550,28 +616,24 @@ bool ppa_check_buffer_alignment(ppa_client_handle_t ppa_client, const void *pic_
         }
     }
 
-    // 2. check with mspi encryption alignment
-    // When flash encryption is enabled, and in/out buffer are in PSRAM (if located in internal RAM, there is no alignment restriction due to encryption):
-    // - The width of the window multiply byte number of one pixel should align to SOC_MEMSPI_ENCRYPTION_ALIGNMENT
-    // - The starting address of every row of the window should align to SOC_MEMSPI_ENCRYPTION_ALIGNMENT
-    // (which also implies the address and size of the in/out buffer will align to SOC_MEMSPI_ENCRYPTION_ALIGNMENT)
-
-    // check pic_width, block_width, block_head
+    // 2. check with DMA2D/MSPI 2D transaction alignment
+    // When MSPI strict alignment is required, and in/out buffer are in PSRAM (if located in internal RAM, there is no alignment restriction):
+    // - The width of the window multiply byte number of one pixel should align to MSPI alignment
+    // - The starting address of every row of the window should align to MSPI alignment
+    // (which also implies the address and size of the in/out buffer will align to MSPI alignment)
     const void *buffer = (is_input) ? ((ppa_in_pic_blk_config_t *)pic_blk_config)->buffer : ((ppa_out_pic_blk_config_t *)pic_blk_config)->buffer;
-    if (esp_efuse_is_flash_encryption_enabled() && !esp_ptr_internal(buffer)) {
+    size_t dma2d_align = dma2d_get_buffer_alignment_constraint(buffer);
+    if (dma2d_align > 1) {
         if (ppa_client->engine->type == PPA_ENGINE_TYPE_SRM) {
-            ESP_LOGE(TAG, "SRM processes by macro blocks, where alignment is uncontrollable, makes it unable to work with flash encrypted if buffer is in external memory");
+            ESP_LOGE(TAG, "SRM processes by macro blocks, where alignment is uncontrollable, makes it unable to work with MSPI strict alignment if buffer is in external memory");
             return false;
         }
         uint32_t pic_width = (is_input) ? ((ppa_in_pic_blk_config_t *)pic_blk_config)->pic_w : ((ppa_out_pic_blk_config_t *)pic_blk_config)->pic_w;
         uint32_t block_offset_x = (is_input) ? ((ppa_in_pic_blk_config_t *)pic_blk_config)->block_offset_x : ((ppa_out_pic_blk_config_t *)pic_blk_config)->block_offset_x;
         esp_color_fourcc_t color_mode = (is_input) ? ((ppa_in_pic_blk_config_t *)pic_blk_config)->cm : ((ppa_out_pic_blk_config_t *)pic_blk_config)->cm;
-        uint32_t pixel_depth_bytes = color_hal_pixel_format_fourcc_get_bit_depth(color_mode) / 8;
-
-        if (((pic_width * pixel_depth_bytes) & (SOC_MEMSPI_ENCRYPTION_ALIGNMENT - 1)) != 0 ||
-                ((block_width * pixel_depth_bytes) & (SOC_MEMSPI_ENCRYPTION_ALIGNMENT - 1)) != 0 ||
-                ((block_offset_x * pixel_depth_bytes) & (SOC_MEMSPI_ENCRYPTION_ALIGNMENT - 1)) != 0) {
-            ESP_LOGE(TAG, "(pic_width/block_width/block_offset_x * pixel_depth_bytes) not aligned to SOC_MEMSPI_ENCRYPTION_ALIGNMENT");
+        uint32_t bit_depth = color_hal_pixel_format_fourcc_get_bit_depth(color_mode);
+        if (!dma2d_check_transaction_alignment_constraint(buffer, pic_width, block_width, block_offset_x, bit_depth)) {
+            ESP_LOGE(TAG, "buffer/pic_width/block_width/block_offset_x does not satisfy DMA2D/MSPI alignment (%zu)", dma2d_align);
             return false;
         }
     }

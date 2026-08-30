@@ -104,6 +104,28 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND c_compile_options "-Wno-old-style-declaration")
 endif()
 
+# TODO IDF-15784: remove in IDF v7.0 ?
+check_c_compiler_flag("-Wunused-but-set-variable=1" compiler_supports_wunused_but_set_variable_eq_1)
+if(compiler_supports_wunused_but_set_variable_eq_1)
+    list(APPEND compile_options "-Wunused-but-set-variable=1")
+endif()
+
+if(CONFIG_COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_UNINITIALIZED)
+    set(compiler_cxx_trivial_auto_var_init "uninitialized")
+elseif(CONFIG_COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_PATTERN)
+    set(compiler_cxx_trivial_auto_var_init "pattern")
+elseif(CONFIG_COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_ZERO)
+    set(compiler_cxx_trivial_auto_var_init "zero")
+endif()
+if(compiler_cxx_trivial_auto_var_init)
+    idf_toolchain_remove_flags(CXX_COMPILE_OPTIONS "-ftrivial-auto-var-init")
+    check_cxx_compiler_flag("-ftrivial-auto-var-init=${compiler_cxx_trivial_auto_var_init}"
+        compiler_supports_ftrivial_auto_var_init)
+    if(compiler_supports_ftrivial_auto_var_init)
+        idf_toolchain_add_flags(CXX_COMPILE_OPTIONS "-ftrivial-auto-var-init=${compiler_cxx_trivial_auto_var_init}")
+    endif()
+endif()
+
 # Clang finds some warnings in IDF code which GCC doesn't.
 # All these warnings should be fixed before Clang is presented
 # as a toolchain choice for users.
@@ -185,6 +207,20 @@ elseif(CONFIG_COMPILER_STACK_CHECK_MODE_ALL)
     list(APPEND compile_options "-fstack-protector-all")
 endif()
 
+if(CONFIG_COMPILER_KASAN)
+    # Only instrument the app build; the bootloader runs before kasan_init_shadow()
+    # is called and does not have the KASAN runtime.
+    if(NOT BOOTLOADER_BUILD)
+        list(APPEND c_compile_options "-fsanitize=kernel-address")
+        list(APPEND cxx_compile_options "-fsanitize=kernel-address")
+        if(NOT CONFIG_KASAN_STACK)
+            list(APPEND c_compile_options "--param" "asan-stack=0")
+            list(APPEND cxx_compile_options "--param" "asan-stack=0")
+        endif()
+        list(APPEND link_options "-fsanitize=kernel-address")
+    endif()
+endif()
+
 if(CONFIG_COMPILER_DUMP_RTL_FILES)
     list(APPEND compile_options "-fdump-rtl-expand")
 endif()
@@ -255,7 +291,31 @@ if(CONFIG_ESP_SYSTEM_USE_FRAME_POINTER)
     endif()
 endif()
 
-list(APPEND link_options "-fno-lto")
+if(CONFIG_COMPILER_LTO_LINKTIME AND NOT BOOTLOADER_BUILD AND NOT ESP_TEE_BUILD)
+    list(APPEND link_options "-flto=auto")
+
+    # LTO generates code at link time, so the -ffunction-sections/-fdata-sections
+    # applied to compile_options doesn't reach it: the LTRANS recompilation takes
+    # its code generation options from the link command line. Without them the
+    # LTO partition is emitted as a single .text/.data, which defeats
+    # -Wl,--gc-sections (it can only drop whole sections) and keeps unreferenced
+    # functions in the image.
+    list(APPEND link_options "-ffunction-sections"
+                             "-fdata-sections")
+
+    if(CONFIG_APP_REPRODUCIBLE_BUILD)
+        # LTO generates code at link time, where the path remapping applied to
+        # compile_options doesn't take effect, so pass it to the linker as well.
+        # -save-temps keeps LTRANS objects out of $TMPDIR, and a pinned random
+        # seed makes LTO bytecode byte-identical. See the commit message for
+        # details.
+        list(APPEND link_options ${prefix_map_compile_options})
+        list(APPEND link_options "-save-temps")
+        list(APPEND compile_options "-frandom-seed=1")
+    endif()
+else()
+    list(APPEND compile_options "-fno-lto")
+endif()
 
 if(CONFIG_IDF_TARGET_LINUX AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
     # Not all versions of the MacOS linker support the -warn_commons flag.
@@ -347,6 +407,27 @@ foreach(component_target ${build_component_targets})
     set(__idf_component_context 0)
 endforeach()
 
+if(CONFIG_COMPILER_LTO_COMPILETIME AND NOT BOOTLOADER_BUILD AND NOT ESP_TEE_BUILD)
+    include("${CMAKE_CURRENT_LIST_DIR}/tools/cmake/lto.cmake")
+    idf_build_get_property(build_components BUILD_COMPONENTS)
+    # Components whose object code is placed by a linker fragment (their own or
+    # another component's) must not be compiled with LTO, otherwise the placement
+    # stops matching. See tools/cmake/lto.cmake for details.
+    __lto_collect_fragment_placed_components(lto_placed_components ${build_components})
+    # For each component, enable LTO unless it has its own linker fragments, is
+    # placed by some fragment, has opted out via NO_LTO, or is not a static library.
+    foreach(component_name ${build_components})
+        idf_component_get_property(ldfragment ${component_name} LDFRAGMENTS)
+        idf_component_get_property(no_lto ${component_name} NO_LTO)
+        idf_component_get_property(component_lib ${component_name} COMPONENT_LIB)
+        get_target_property(type ${component_lib} TYPE)
+        if(NOT ldfragment AND NOT no_lto AND NOT component_name IN_LIST lto_placed_components
+                AND type STREQUAL "STATIC_LIBRARY")
+            target_compile_options(${component_lib} PRIVATE -flto=auto)
+        endif()
+    endforeach()
+endif()
+
 # Run component validation checks after all components have been processed
 # Only run validation for the main project, not subprojects like bootloader
 idf_build_get_property(bootloader_build BOOTLOADER_BUILD)
@@ -354,4 +435,29 @@ idf_build_get_property(esp_tee_build ESP_TEE_BUILD)
 if(NOT bootloader_build AND NOT esp_tee_build)
     include("${CMAKE_CURRENT_LIST_DIR}/tools/cmake/component_validation.cmake")
     __component_validation_run_checks()
+endif()
+
+# KASAN: exclude low-level / hardware-access components from instrumentation.
+# Apply the exclusion after add_subdirectory() so every target already exists.
+# The exclusion set itself is defined in tools/cmake/kasan.cmake and shared with
+# the Build system v2, which applies it in idf_build_library().
+if(CONFIG_COMPILER_KASAN AND NOT BOOTLOADER_BUILD)
+    include("${CMAKE_CURRENT_LIST_DIR}/tools/cmake/kasan.cmake")
+    idf_build_get_property(__kasan_all_components BUILD_COMPONENTS)
+    kasan_filter_excluded_components(__kasan_excluded_components ${__kasan_all_components})
+
+    foreach(__kasan_comp ${__kasan_excluded_components})
+        set(__kasan_lib "__idf_${__kasan_comp}")
+        if(TARGET ${__kasan_lib})
+            get_target_property(__kasan_type ${__kasan_lib} TYPE)
+            if(NOT __kasan_type STREQUAL "INTERFACE_LIBRARY")
+                # Only apply to real (non-INTERFACE) libraries that have source
+                # files. INTERFACE libraries have no sources so there is nothing
+                # to de-instrument, and adding an INTERFACE compile option would
+                # propagate -fno-sanitize to all downstream consumers (including
+                # the application under test).
+                target_compile_options(${__kasan_lib} PRIVATE "-fno-sanitize=kernel-address")
+            endif()
+        endif()
+    endforeach()
 endif()

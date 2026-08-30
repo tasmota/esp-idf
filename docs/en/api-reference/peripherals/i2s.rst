@@ -258,7 +258,7 @@ The public APIs are all channel-level APIs. The channel handle :cpp:type:`i2s_ch
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When the power management is enabled (i.e., :ref:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the source clock of I2S before entering Light-sleep, thus potentially changing the I2S signals and leading to transmitting or receiving invalid data.
+When the power management is enabled (i.e., :menuitem:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the source clock of I2S before entering Light-sleep, thus potentially changing the I2S signals and leading to transmitting or receiving invalid data.
 
 The I2S driver can prevent the system from changing or stopping the source clock by acquiring a power management lock. When the source clock is generated from APB, the lock type will be set to :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_APB_FREQ_MAX` and when the source clock is APLL (if supported), it will be set to :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_NO_LIGHT_SLEEP`. The driver guarantees that the power management lock is acquired when the channel is enabled by :cpp:func:`i2s_channel_enable`. Likewise, the driver releases the lock when the channel is disabled by :cpp:func:`i2s_channel_disable`, which keeps the I2S source clock stable while the channel is running.
 
@@ -313,6 +313,102 @@ To satisfy the high quality audio requirement, following advanced APIs are provi
 - :cpp:func:`i2s_channel_preload_data`: Preloading audio data into the I2S internal cache, enabling the TX channel to immediately send data upon activation, thereby reducing the initial audio output delay.
 - :cpp:func:`i2s_channel_tune_rate`: Dynamically fine-tuning the audio rate at runtime to match the speed of the audio data producer and consumer, thereby preventing the accumulation or shortage of intermediate buffered data that caused by rate mismatches.
 
+.. only:: SOC_I2S_SUPPORTS_TX_SYNC_CNT
+
+    - :cpp:func:`i2s_channel_get_sync_count`: Read the TX synchronization counters through
+      :cpp:type:`i2s_sync_count_t`. When TX FIFO synchronization is supported, ``diff_count`` is also returned.
+      This API can also actively clear the counters through the ``reset`` argument.
+
+.. only:: SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+
+    TX FIFO Synchronization
+    """""""""""""""""""""""
+
+    {IDF_TARGET_NAME} supports I2S TX FIFO synchronization. It can periodically trigger ``I2S_ETM_TASK_SYNC_FIFO`` task through ETM to check the difference between the actual TX FIFO data count and the expected count. This feature is useful when multiple I2S TX ports or an external timing source need to stay synchronized.
+
+    TX FIFO synchronization related APIs include:
+
+    - :cpp:func:`i2s_channel_get_sync_count`: Read the TX synchronization counters through :cpp:type:`i2s_sync_count_t`.
+      When TX FIFO synchronization is supported, ``diff_count`` is also returned as ``I2S_TX_FIFO_CNT - I2S_TX_FIFO_IDEAL_CNT``.
+    - :cpp:func:`i2s_channel_config_tx_fifo_sync`: Configure the expected count, automatic supplement threshold,
+      manual supplement threshold, and hardware supplement mode. It can be called while the TX channel is running,
+      but TX FIFO synchronization must be disabled.
+    - :cpp:func:`i2s_channel_enable_tx_fifo_sync`: Enable or disable TX FIFO synchronization. When enabled,
+      both automatic hardware data supplementation and manual interrupt are activated simultaneously.
+      When disabled, both are deactivated. Enabling TX FIFO synchronization resets the TX FIFO/BCLK synchronization
+      counters. This API must be called after :cpp:func:`i2s_channel_config_tx_fifo_sync`.
+    - :cpp:func:`i2s_channel_register_event_callback`: Register the manual supplement threshold interrupt callback. When
+      ``diff_count`` exceeds the manual supplement threshold, the driver calls this callback in the ISR and provides
+      ``diff_count`` through :cpp:type:`i2s_sync_event_data_t`. Registering the callback only updates the handler;
+      the TX sync interrupt's enable/disable is controlled by :cpp:func:`i2s_channel_enable_tx_fifo_sync`.
+
+    The typical usage steps are:
+
+    1. Create and initialize an I2S TX channel.
+    2. Call :cpp:func:`i2s_channel_config_tx_fifo_sync` to configure :cpp:type:`i2s_tx_fifo_sync_config_t`. ``ideal_cnt`` is the expected number of transmitted data units at each ETM synchronization check. This step can be performed while the TX channel is running, but TX FIFO synchronization must be disabled before reconfiguration. ``auto_suppl_thresh`` is the automatic hardware supplement threshold and must be smaller than ``manual_suppl_thresh``. ``manual_suppl_thresh`` is the threshold for triggering the callback for manual handling. If the difference exceeds the automatic supplement threshold but has not reached the manual supplement threshold, hardware automatically supplements or deletes the corresponding amount of data to synchronize with ``ideal_cnt``.
+    3. To handle severe out-of-sync conditions, call :cpp:func:`i2s_channel_register_event_callback` to register a callback.
+    4. Call :cpp:func:`i2s_channel_enable_tx_fifo_sync` with ``enable`` set to ``true`` to activate both automatic hardware supplementation and manual interrupt simultaneously. This call resets the TX FIFO/BCLK synchronization counters, so the first ETM synchronization check uses a new count window.
+    5. Call :cpp:func:`i2s_new_etm_task` to create the ``I2S_ETM_TASK_SYNC_FIFO`` task, and connect an external ETM event to this task.
+    6. Enable the ETM channel and I2S TX channel, so that ETM events periodically trigger synchronization checks.
+
+    The following example shows how to use a GPTimer alarm event to trigger the I2S TX FIFO synchronization check, and
+    get ``diff_count`` in the manual supplement threshold interrupt:
+
+    .. code-block:: c
+
+        #include "driver/i2s_common.h"
+        #include "driver/i2s_etm.h"
+        #include "driver/gptimer.h"
+        #include "esp_etm.h"
+
+        /* Assume the I2S TX channel, GPTimer, and ETM channel have been created and initialized */
+        i2s_chan_handle_t tx_handle;
+        gptimer_handle_t timer;
+        esp_etm_channel_handle_t etm_channel;
+
+        static bool IRAM_ATTR i2s_tx_sync_callback(i2s_chan_handle_t handle,
+                                                   const i2s_sync_event_data_t *event,
+                                                   void *user_ctx)
+        {
+            // Applications can use event->diff_count to adjust the data source, choose a compensation policy, or report it to upper layers.
+            return false;
+        }
+
+        i2s_tx_fifo_sync_config_t sync_cfg = {
+            .ideal_cnt = 1000,
+            .manual_suppl_thresh = 64,
+            .auto_suppl_thresh = 32,
+            .suppl_mode = I2S_TX_FIFO_SYNC_SUPPL_MODE_LAST_DATA,
+        };
+        i2s_event_callbacks_t cbs = {
+            .on_tx_sync_evt = i2s_tx_sync_callback,
+        };
+        i2s_channel_config_tx_fifo_sync(tx_handle, &sync_cfg);
+        i2s_channel_register_event_callback(tx_handle, &cbs, NULL);
+        i2s_channel_enable_tx_fifo_sync(tx_handle, true);
+
+        i2s_etm_task_config_t i2s_task_cfg = {
+            .task_type = I2S_ETM_TASK_SYNC_FIFO,
+        };
+        esp_etm_task_handle_t i2s_sync_task = NULL;
+        i2s_new_etm_task(tx_handle, &i2s_task_cfg, &i2s_sync_task);
+
+        gptimer_etm_event_config_t timer_event_cfg = {
+            .event_type = GPTIMER_ETM_EVENT_ALARM_MATCH,
+        };
+        esp_etm_event_handle_t timer_event = NULL;
+        gptimer_new_etm_event(timer, &timer_event_cfg, &timer_event);
+
+        esp_etm_channel_connect(etm_channel, timer_event, i2s_sync_task);
+        esp_etm_channel_enable(etm_channel);
+
+    .. note::
+
+        After ``I2S_ETM_TASK_SYNC_FIFO`` is triggered, hardware automatically clears the TX FIFO/BCLK synchronization counters.
+        To avoid a synchronization check using partially updated configuration, call :cpp:func:`i2s_channel_enable_tx_fifo_sync`
+        with ``enable`` set to ``false`` before reconfiguring TX FIFO synchronization. If an ETM event source may still
+        trigger during reconfiguration, disable the ETM channel or pause the event source as needed.
+
 .. _i2s-iram-safe:
 
 IRAM Safe
@@ -320,7 +416,7 @@ IRAM Safe
 
 By default, the I2S interrupt will be deferred when the cache is disabled for reasons like writing/erasing flash. Thus the EOF interrupt will not get executed in time.
 
-To avoid such case in real-time applications, you can enable the Kconfig option :ref:`CONFIG_I2S_ISR_IRAM_SAFE` that:
+To avoid such case in real-time applications, you can enable the Kconfig option :menuitem:`CONFIG_I2S_ISR_IRAM_SAFE` that:
 
 1. Keeps the interrupt being serviced even when the cache is disabled.
 
@@ -336,8 +432,8 @@ All the public I2S APIs are guaranteed to be thread safe by the driver, which me
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2S_ISR_IRAM_SAFE` controls whether the default ISR handler can work when the cache is disabled. See :ref:`i2s-iram-safe` for more information.
-- :ref:`CONFIG_I2S_ENABLE_DEBUG_LOG` is used to enable the debug log output. Enable this option increases the firmware binary size.
+- :menuitem:`CONFIG_I2S_ISR_IRAM_SAFE` controls whether the default ISR handler can work when the cache is disabled. See :ref:`i2s-iram-safe` for more information.
+- :menuitem:`CONFIG_I2S_ENABLE_DEBUG_LOG` is used to enable the debug log output. Enable this option increases the firmware binary size.
 
 Application Example
 -------------------
@@ -349,12 +445,17 @@ Standard TX/RX Usage
 
 - :example:`peripherals/i2s/i2s_codec/i2s_es8311` demonstrates how to use the I2S ES8311 audio codec with {IDF_TARGET_NAME} to play music or echo sounds, featuring high performance and low power multi-bit delta-sigma audio ADC and DAC, with options to customize music and adjust mic gain and volume.
 - :example:`peripherals/i2s/i2s_basic/i2s_std` demonstrates how to use the I2S standard mode in either simplex or full-duplex mode on {IDF_TARGET_NAME}.
+- :example:`peripherals/i2s/mic_recorder` demonstrates how to record audio from an analog microphone connected to an ES8389 codec through the I2S STD interface.
 
 Different slot communication formats can be generated by the following helper macros for standard mode. As described above, there are three formats in standard mode, and their helper macros are:
 
 - :c:macro:`I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_PCM_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_MSB_SLOT_DEFAULT_CONFIG`
+
+.. note::
+
+    The standard mode slot helper macros set :cpp:member:`i2s_std_slot_config_t::ws_width` according to the ``bits_per_sample`` argument. If :cpp:member:`i2s_std_slot_config_t::slot_bit_width` is manually changed after using a helper macro, update :cpp:member:`i2s_std_slot_config_t::ws_width` as needed. For Philips and MSB formats, set ``ws_width`` to the slot bit width to keep the WS duty cycle at 50%. For PCM short format, ``ws_width`` should remain 1 BCLK.
 
 The clock config helper macro is:
 
@@ -704,7 +805,7 @@ Here is the table of the data received in the buffer with different :cpp:member:
     PDM RX Usage
     ^^^^^^^^^^^^
 
-    - :example:`peripherals/i2s/i2s_recorder` demonstrates how to record audio from a digital MEMS microphone using the I2S peripheral in PDM data format and save it to an SD card in ``.wav`` file format on {IDF_TARGET_NAME} development boards.
+    - :example:`peripherals/i2s/mic_recorder` demonstrates how to record audio from either PDM digital MEMS microphones (using the I2S PDM RX mode) or an analog microphone through an ES8389 codec, and streams the recorded PCM data over the console so that the ``.wav`` file can be reconstructed on the host PC.
     - :example:`peripherals/i2s/i2s_basic/i2s_pdm` demonstrates how to use the PDM RX mode on {IDF_TARGET_NAME}, including the necessary hardware setup and configuration.
 
     For PDM mode in RX channel, the slot configuration helper macro are:
@@ -806,6 +907,10 @@ Here is the table of the data received in the buffer with different :cpp:member:
     - :c:macro:`I2S_TDM_PCM_SHORT_SLOT_DEFAULT_CONFIG`
     - :c:macro:`I2S_TDM_PCM_LONG_SLOT_DEFAULT_CONFIG`
 
+    .. note::
+
+        The TDM Philips and MSB slot helper macros use ``I2S_TDM_AUTO_WS_WIDTH`` by default, which sets the WS width to half of the frame width. If :cpp:member:`i2s_tdm_slot_config_t::ws_width` is manually changed, make sure the configured WS width matches the expected timing of the selected format.
+
     The clock config helper macro is:
 
     - :c:macro:`I2S_TDM_CLK_DEFAULT_CONFIG`
@@ -892,6 +997,10 @@ Full-duplex mode registers TX and RX channel in an I2S port at the same time, an
 
 Note that one handle can only stand for one channel. Therefore, it is still necessary to configure the slot and clock for both TX and RX channels one by one.
 
+.. note::
+
+    In full-duplex mode, only one channel can work as the master that generates BCLK and WS. If both paired handles are configured as ``I2S_ROLE_MASTER``, the handle initialized later is automatically switched to ``I2S_ROLE_SLAVE``.
+
 There are two methods to allocate a pair of full-duplex channels:
 
 1. Allocate both TX and RX handles in a single call of :cpp:func:`i2s_new_channel`.
@@ -909,7 +1018,7 @@ There are two methods to allocate a pair of full-duplex channels:
     /* Allocate for TX and RX channel at the same time, then they will work in full-duplex mode */
     i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
 
-    /* Set the configurations for BOTH TWO channels, since TX and RX channel have to be same in full-duplex mode */
+    /* Set the configurations for both channels. BCLK/WS and frame timing must match in full-duplex mode. */
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(32000),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -934,7 +1043,7 @@ There are two methods to allocate a pair of full-duplex channels:
 
     ...
 
-2. Allocate TX and RX handles separately, and initialize them with the same configuration.
+2. Allocate TX and RX handles separately, and initialize them with compatible configurations.
 
 .. code-block:: c
 
@@ -949,7 +1058,7 @@ There are two methods to allocate a pair of full-duplex channels:
     /* Allocate for TX and RX channel separately, they are not full-duplex yet */
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
 
-    /* Set the configurations for BOTH TWO channels, they will constitute in full-duplex mode automatically */
+    /* Set compatible configurations for both channels, then they will constitute in full-duplex mode automatically */
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(32000),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -975,6 +1084,15 @@ There are two methods to allocate a pair of full-duplex channels:
 
     ...
 
+.. only:: SOC_I2S_HW_VERSION_2
+
+    When the TX and RX channels are allocated separately (the second method above), they do not have to be configured exactly the same to constitute full-duplex. The driver lets them share the BCLK and WS lines as long as:
+
+    - both channels use the same valid ``bclk`` and ``ws`` pins;
+    - both channels use the same BCLK/WS inversion settings;
+    - both channels produce the same frame timing, i.e. the same ``sample_rate_hz`` and the same total bits per frame (``total_slot * slot_bit_width``).
+
+    The clock source, external clock frequency (``ext_clk_freq_hz``), and MCLK-related configuration, including the ``mclk`` pin, ``mclk_multiple``, and MCLK inversion setting, are not used as conditions for constituting full-duplex. The slot layout itself may also differ. For example, an STD channel and a TDM channel, or a 2-slot/32-bit channel paired with a 4-slot/16-bit channel, can still constitute full-duplex because the number of bits per frame is the same. Once a pair of full-duplex channels is established, the paired channel handle can be retrieved from :cpp:type:`i2s_chan_info_t`::pair_chan returned by :cpp:func:`i2s_channel_get_info`.
 
 .. only:: SOC_I2S_HW_VERSION_1
 

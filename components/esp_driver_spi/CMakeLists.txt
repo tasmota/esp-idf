@@ -13,6 +13,9 @@ if(CONFIG_SOC_GPSPI_SUPPORTED)
         "src/gpspi/spi_master.c"
         "src/gpspi/spi_slave.c"
     )
+    if(CONFIG_SOC_PAU_SUPPORTED)
+        list(APPEND srcs "src/${target}/spi_retention.c")
+    endif()
 
     if(NOT CONFIG_SOC_GDMA_SUPPORTED)
         list(APPEND srcs "src/gpspi/spi_dma.c")
@@ -27,6 +30,6 @@ idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS ${public_include}
     REQUIRES esp_pm esp_hal_gpspi esp_driver_dma
-    PRIV_REQUIRES esp_timer esp_mm esp_driver_gpio spi_flash esp_psram
+    PRIV_REQUIRES esp_timer esp_mm esp_driver_gpio spi_flash
     LDFRAGMENTS "linker.lf"
 )

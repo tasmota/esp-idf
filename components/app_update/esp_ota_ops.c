@@ -31,12 +31,13 @@
 #include "esp_bootloader_desc.h"
 #include "esp_flash.h"
 #include "esp_private/esp_flash_internal.h" //For dangerous write protection
-#if CONFIG_SECURE_SIGNED_DATA_PARTITION
+#include "esp_private/esp_partition_utils.h"
+#include "esp_macros.h"
+#if CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
 #include "psa/crypto.h"
-#endif // CONFIG_SECURE_SIGNED_DATA_PARTITION
+#endif // CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
 
 #define OTA_SLOT(i) (i & 0x0F)
-#define ALIGN_UP(num, align) (((num) + ((align) - 1)) & ~((align) - 1))
 
 /* Partial_data is word aligned so no reallocation is necessary for encrypted flash write */
 typedef struct ota_ops_entry_ {
@@ -97,7 +98,7 @@ static const esp_partition_t *read_otadata(esp_ota_select_entry_t *two_otadata)
 
     esp_partition_mmap_handle_t ota_data_map;
     const void *result = NULL;
-    esp_err_t err = esp_partition_mmap(otadata_partition, 0, otadata_partition->size, ESP_PARTITION_MMAP_DATA, &result, &ota_data_map);
+    esp_err_t err = esp_partition_mmap(otadata_partition, 0, otadata_partition->size, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, &result, &ota_data_map);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "mmap otadata filed. Err=0x%8x", err);
         return NULL;
@@ -212,7 +213,7 @@ esp_err_t esp_ota_begin(const esp_partition_t *partition, size_t image_size, esp
         if ((image_size == 0) || (image_size == OTA_SIZE_UNKNOWN)) {
             erase_size = partition->size;
         } else {
-            erase_size = ALIGN_UP(image_size, partition->erase_size);
+            erase_size = ESP_ALIGN_UP(image_size, partition->erase_size);
         }
         esp_err_t err = esp_partition_erase_range(partition, 0, erase_size);
         if (err != ESP_OK) {
@@ -257,6 +258,21 @@ esp_err_t esp_ota_resume(const esp_partition_t *partition, const size_t erase_si
     if (partition == running_partition) {
         return ESP_ERR_OTA_PARTITION_CONFLICT;
     }
+
+#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+    // Mirror esp_ota_begin(): refuse to resume an OTA into an app slot while the running
+    // app is still pending verification, otherwise the rollback target could be
+    // overwritten during the unconfirmed window.
+    if (partition->type == ESP_PARTITION_TYPE_APP) {
+        esp_ota_img_states_t ota_state_running_part;
+        if (esp_ota_get_state_partition(running_partition, &ota_state_running_part) == ESP_OK) {
+            if (ota_state_running_part == ESP_OTA_IMG_PENDING_VERIFY) {
+                ESP_LOGE(TAG, "Running app has not confirmed state (ESP_OTA_IMG_PENDING_VERIFY)");
+                return ESP_ERR_OTA_ROLLBACK_INVALID_STATE;
+            }
+        }
+    }
+#endif
 
     // Check if there's already an ongoing OTA operation on this partition
     if (esp_ota_check_partition_conflict(partition)) {
@@ -361,7 +377,10 @@ esp_err_t esp_ota_write(esp_ota_handle_t handle, const void *data, size_t size)
                     }
 
                 } else if (it->partition.final->type == ESP_PARTITION_TYPE_PARTITION_TABLE) {
-                    if (*(uint16_t*)data_bytes != (uint16_t)ESP_PARTITION_MAGIC) {
+                    /* Read the 2-byte magic word only if the caller-supplied buffer is large
+                     * enough; otherwise this would read past a short (e.g. 1-byte) first chunk.
+                     * A too-short chunk is still fully validated later by esp_partition_table_verify(). */
+                    if (size >= sizeof(uint16_t) && *(uint16_t*)data_bytes != (uint16_t)ESP_PARTITION_MAGIC) {
                         ESP_LOGE(TAG, "Partition table image has invalid magic word (expected 0x50AA, saw 0x%04x)", *(uint16_t*)data_bytes);
                         return ESP_ERR_OTA_VALIDATE_FAILED;
                     }
@@ -473,7 +492,7 @@ esp_err_t esp_ota_abort(esp_ota_handle_t handle)
     return ESP_OK;
 }
 
-#if CONFIG_SECURE_SIGNED_DATA_PARTITION
+#if CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
 #define SHA_CHUNK 256
 static esp_err_t ota_calc_partition_bin_sha(const esp_partition_t *partition, uint32_t length, uint8_t out_digest[ESP_SECURE_BOOT_DIGEST_LEN], psa_algorithm_t alg)
 {
@@ -518,11 +537,20 @@ static esp_err_t ota_verify_data_partition_signature(const esp_partition_t *part
     esp_err_t err = ESP_FAIL;
     uint8_t digest[ESP_SECURE_BOOT_DIGEST_LEN] = {0};
 
+    /* The written image must hold at least one sector of data plus the trailing
+     * signature sector. Without this check, a total_written_size below one sector makes
+     * the subtraction below underflow uint32_t (CWE-191), driving the hash/read with a
+     * wild length and offset. Reject undersized (caller-controlled) input up front. */
+    if (total_written_size < (2 * SPI_FLASH_SEC_SIZE)) {
+        ESP_LOGE(TAG, "Written size %lu too small for a signed data partition", (unsigned long)total_written_size);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
     /* Calculate data length by excluding the signature sector from total written size */
     uint32_t data_length = ((total_written_size) & ~((SPI_FLASH_SEC_SIZE) - 1)) - SPI_FLASH_SEC_SIZE;
 
     /* Rounding off data length to the upper 4k boundary for hash calculation */
-    uint32_t padded_length = ALIGN_UP(data_length, SPI_FLASH_SEC_SIZE);
+    uint32_t padded_length = ESP_ALIGN_UP(data_length, SPI_FLASH_SEC_SIZE);
 #if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
     err = ota_calc_partition_bin_sha(partition, padded_length, digest, PSA_ALG_SHA_384);
 #else
@@ -546,7 +574,7 @@ static esp_err_t ota_verify_data_partition_signature(const esp_partition_t *part
     }
     return err;
 }
-#endif // CONFIG_SECURE_SIGNED_DATA_PARTITION
+#endif // CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
 
 static esp_err_t ota_verify_partition(ota_ops_entry_t *ota_ops)
 {
@@ -563,7 +591,7 @@ static esp_err_t ota_verify_partition(ota_ops_entry_t *ota_ops)
     } else if (ota_ops->partition.final->type == ESP_PARTITION_TYPE_PARTITION_TABLE) {
         const esp_partition_info_t *partition_table = NULL;
         esp_partition_mmap_handle_t partition_table_map;
-        ret = esp_partition_mmap(ota_ops->partition.staging, 0, ESP_PARTITION_TABLE_MAX_LEN, ESP_PARTITION_MMAP_DATA, (const void**)&partition_table, &partition_table_map);
+        ret = esp_partition_mmap(ota_ops->partition.staging, 0, ESP_PARTITION_TABLE_MAX_LEN, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, (const void**)&partition_table, &partition_table_map);
         if (ret == ESP_OK) {
             int num_partitions;
             if (esp_partition_table_verify(partition_table, true, &num_partitions) != ESP_OK) {
@@ -573,7 +601,7 @@ static esp_err_t ota_verify_partition(ota_ops_entry_t *ota_ops)
             esp_partition_munmap(partition_table_map);
         }
     }
-#if CONFIG_SECURE_SIGNED_DATA_PARTITION
+#if CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
     else if (ota_ops->partition.final->type == ESP_PARTITION_TYPE_DATA &&
             ota_ops->partition.final->subtype == ESP_PARTITION_SUBTYPE_DATA_UNDEFINED) {
         esp_err_t err = ota_verify_data_partition_signature(ota_ops->partition.staging, ota_ops->wrote_size);
@@ -583,7 +611,7 @@ static esp_err_t ota_verify_partition(ota_ops_entry_t *ota_ops)
         }
         return ESP_OK;
     }
-#endif // CONFIG_SECURE_SIGNED_DATA_PARTITION
+#endif // CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION
     return ret;
 }
 
@@ -901,38 +929,7 @@ const esp_partition_t *esp_ota_get_boot_partition(void)
 
 const esp_partition_t* esp_ota_get_running_partition(void)
 {
-    static const esp_partition_t *curr_partition = NULL;
-
-    /*
-     * Currently running partition is unlikely to change across reset cycle,
-     * so it can be cached here, and avoid lookup on every flash write operation.
-     */
-    if (curr_partition != NULL) {
-        return curr_partition;
-    }
-
-    /* Find the flash address of this exact function. By definition that is part
-       of the currently running firmware. Then find the enclosing partition. */
-    size_t phys_offs = spi_flash_cache2phys(esp_ota_get_running_partition);
-
-    assert (phys_offs != SPI_FLASH_CACHE2PHYS_FAIL); /* indicates cache2phys lookup is buggy */
-
-    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP,
-                                                     ESP_PARTITION_SUBTYPE_ANY,
-                                                     NULL);
-    assert(it != NULL); /* has to be at least one app partition */
-
-    while (it != NULL) {
-        const esp_partition_t *p = esp_partition_get(it);
-        if (p->address <= phys_offs && p->address + p->size > phys_offs) {
-            esp_partition_iterator_release(it);
-            curr_partition = p;
-            return p;
-        }
-        it = esp_partition_next(it);
-    }
-
-    abort(); /* Partition table is invalid or corrupt */
+    return esp_partition_get_running_partition();
 }
 
 

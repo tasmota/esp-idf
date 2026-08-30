@@ -20,12 +20,15 @@
 #include "nimble/profiles/tmas.h"
 #include "nimble/profiles/vcs.h"
 #include "nimble/profiles/has.h"
+#include "nimble/profiles/gmas.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 int bt_le_nimble_audio_init(void);
+
+void bt_le_nimble_audio_deinit(void);
 
 int bt_le_nimble_media_proxy_pl_init(void);
 

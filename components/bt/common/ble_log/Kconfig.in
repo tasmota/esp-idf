@@ -7,6 +7,14 @@ config BLE_LOG_ENABLED
         Enable BT Log Async Output
 
 if BLE_LOG_ENABLED
+    config BLE_LOG_LBM_AUTO_FLUSH
+        bool "Enable automatic BLE Log LBM buffer flush"
+        default n
+        help
+            Periodically flush partially-filled BLE Log LBM transport buffers
+            that remain pending, reducing latency for low-volume or
+            intermittent logging.
+
     config BLE_LOG_TASK_STACK_SIZE
         int "Stack size for BLE Log Task"
         default 1024 if IDF_TARGET_ARCH_RISCV
@@ -135,7 +143,9 @@ if BLE_LOG_ENABLED
         bool "Enable BLE Log Timestamp Synchronization (TS)"
         default n
         help
-            Enable BLE Log TS with external logging module
+            Enable BLE Log TS with external logging module. Synchronization is
+            triggered periodically by an ESP Timer using task dispatch. The
+            timer does not wake the system from light sleep.
 
     if BLE_LOG_TS_ENABLED
         config BLE_LOG_SYNC_IO_NUM
@@ -144,38 +154,6 @@ if BLE_LOG_ENABLED
             default 0
             help
                 GPIO number for TS toggle output
-
-        config BLE_LOG_TS_TRIGGER_TIMEOUT_MS
-            int "Timeout (ms) for Timestamp Synchronization toggle"
-            default 1000
-            help
-                Timeout (ms) for Timestamp Synchronization toggle
-
-        choice BLE_LOG_TS_TRIGGER_CHOICE
-            prompt "BLE Log Timestamp Synchronization trigger choice"
-            default BLE_LOG_TS_TRIGGER_TASK_EVENT
-            help
-                Choose BLE Log Timestamp Synchronization trigger
-
-            config BLE_LOG_TS_TRIGGER_ESP_TIMER
-                bool "BLE Log Timestamp Synchronization trigger - ESP Timer"
-                help
-                    ESP Timer based periodic TS trigger
-
-            config BLE_LOG_TS_TRIGGER_TASK_EVENT
-                bool "BLE Log Timestamp Synchronization trigger - Task Event"
-                help
-                    Task Event based TS trigger (Light Sleep Test Compatibility)
-        endchoice
-
-        config BLE_LOG_TS_TRIGGER_ESP_TIMER_ISR_DISPATCH_METHOD
-            bool "Utilize ISR dispatch method for ESP Timer as Timestamp Synchronization trigger"
-            default n
-            select ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-            select GPIO_CTRL_FUNC_IN_IRAM
-            depends on BLE_LOG_TS_TRIGGER_ESP_TIMER
-            help
-                Utilize ISR dispatch method for ESP Timer as Timestamp Synchronization trigger
     endif
 
     choice BLE_LOG_PRPH_CHOICE
@@ -190,11 +168,24 @@ if BLE_LOG_ENABLED
             help
                 Dummy transport (dump only)
 
+        config BLE_LOG_PRPH_TEST
+            bool "Test only transport"
+            help
+                Test transport that models DMA ownership and optional
+                link-rate backpressure. Selected by BLE Log test apps
+                only; not shown in menuconfig.
+
         config BLE_LOG_PRPH_SPI_MASTER_DMA
             bool "Utilize SPI master DMA driver as transport"
             depends on SOC_GPSPI_SUPPORTED
             help
                 Utilize SPI master DMA driver as transport
+
+        config BLE_LOG_PRPH_SPI_MASTER_HD
+            bool "Utilize SPI master HD DMA protocol as transport"
+            depends on SOC_GPSPI_SUPPORTED && SOC_SPI_SUPPORT_SLAVE_HD_VER2
+            help
+                Utilize SPI master HD DMA protocol as transport
 
         config BLE_LOG_PRPH_UART_DMA
             bool "Utilize UART DMA driver as transport"
@@ -203,24 +194,27 @@ if BLE_LOG_ENABLED
                 Utilize UART DMA driver as transport
     endchoice
 
-    if BLE_LOG_PRPH_SPI_MASTER_DMA
+    if BLE_LOG_PRPH_SPI_MASTER_DMA || BLE_LOG_PRPH_SPI_MASTER_HD
         config BLE_LOG_PRPH_SPI_MASTER_DMA_MOSI_IO_NUM
-            int "GPIO number of MOSI port for SPI master DMA transport"
-            default 0
+            int "GPIO number of MOSI port for SPI master transport (-1: native SPI2 IOMUX)"
+            default -1
             help
-                GPIO number of MOSI port for SPI master DMA transport
+                GPIO number of MOSI port for SPI master transport. Set to -1
+                to use the target's native SPI2 IOMUX pin.
 
         config BLE_LOG_PRPH_SPI_MASTER_DMA_SCLK_IO_NUM
-            int "GPIO number of SCLK port for SPI master DMA transport"
-            default 0
+            int "GPIO number of SCLK port for SPI master transport (-1: native SPI2 IOMUX)"
+            default -1
             help
-                GPIO number of SCLK port for SPI master DMA transport
+                GPIO number of SCLK port for SPI master transport. Set to -1
+                to use the target's native SPI2 IOMUX pin.
 
         config BLE_LOG_PRPH_SPI_MASTER_DMA_CS_IO_NUM
-            int "GPIO number of CS port for SPI master DMA transport"
-            default 0
+            int "GPIO number of CS port for SPI master transport (-1: native SPI2 IOMUX)"
+            default -1
             help
-                GPIO number of CS port for SPI master DMA transport
+                GPIO number of CS port for SPI master transport. Set to -1 to
+                use the target's native SPI2 IOMUX pin.
     endif
 
     if BLE_LOG_PRPH_UART_DMA
@@ -264,6 +258,31 @@ if BLE_LOG_ENABLED
     config BLE_LOG_LBM_LL_TRANS_SIZE
         int
         default 512
+
+    config BLE_LOG_TS_TRIGGER_TIMEOUT_MS
+        int
+        depends on BLE_LOG_TS_ENABLED
+        default 1000
+
+    config BLE_LOG_TS_TRIGGER_CHOICE
+        bool
+        depends on BLE_LOG_TS_ENABLED
+        default y
+
+    config BLE_LOG_TS_TRIGGER_ESP_TIMER
+        bool
+        depends on BLE_LOG_TS_ENABLED
+        default y
+
+    config BLE_LOG_TS_TRIGGER_TASK_EVENT
+        bool
+        depends on BLE_LOG_TS_ENABLED
+        default n
+
+    config BLE_LOG_TS_TRIGGER_ESP_TIMER_ISR_DISPATCH_METHOD
+        bool
+        depends on BLE_LOG_TS_ENABLED
+        default n
 endif
 
 menu "Legacy SPI Log Output (Deprecated - use BT Log Async Output instead)"

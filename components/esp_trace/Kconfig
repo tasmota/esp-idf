@@ -76,12 +76,64 @@ menu "ESP Trace Configuration"
         config ESP_TRACE_USJ_TX_BUFFER_SIZE
             int "TX buffer size"
             default 2048
-            range 256 32768
+            range 2048 32768
             help
                 Size of the TX ring buffer for USB Serial JTAG trace transport.
                 Larger buffer allows more trace data to be queued before blocking.
 
-                Note: Buffer size must be a power of 2.
+                Note: Buffer size must be a power of 2. Minimum is 2048 since
+                smaller buffers overflow easily on the USJ transport.
+
+    endmenu
+
+    menu "Function Tracing"
+        depends on ESP_TRACE_ENABLE
+
+        config ESP_TRACE_FUNCTION_TRACE
+            bool "Enable compiler-instrumented function tracing"
+            default n
+            help
+                Trace when functions are entered and exited.
+
+                When you build a component with the compiler flag
+                -finstrument-functions, the compiler inserts a call at the start
+                and end of every function in that component. These calls go to
+                hooks provided by esp_trace, which forward the events to the
+                active trace encoder (for example SystemView).
+
+                Enabling this option compiles the hook functions and the
+                function-trace runtime into the build. It does not add
+                -finstrument-functions to any code, so on its own it produces no
+                events.
+
+                To trace a component or file, add the GCC function instrumentation flag
+                from that component's CMakeLists.txt. See the Application Level Tracing
+                guide and examples/system/tracing/function_tracing for CMake examples.
+
+                Use the GCC -finstrument-functions-exclude-file-list and
+                -finstrument-functions-exclude-function-list flags to skip
+                specific files or functions.
+
+        config ESP_TRACE_FUNCTION_TRACE_AUTO_START
+            bool "Start function tracing automatically when the host starts recording"
+            depends on ESP_TRACE_FUNCTION_TRACE
+            default y
+            help
+                Controls when function tracing begins recording once a trace
+                session is active.
+
+                When enabled, function tracing follows the encoder's recording
+                state and begins as soon as the host starts the session (for
+                example OpenOCD "mon esp sysview_mcore start"), without an
+                application call.
+
+                When disabled, function-trace events are dropped until the
+                application calls esp_trace_function_trace_start(), even if a host
+                trace session is already recording. esp_trace_function_trace_stop()
+                stops recording again.
+
+                An active trace session (encoder recording) is required in both
+                cases.
 
     endmenu
 
@@ -90,6 +142,7 @@ menu "ESP Trace Configuration"
         prompt "Trace timestamp source"
         default ESP_TRACE_TS_SOURCE_CCOUNT if ESP_SYSTEM_SINGLE_CORE_MODE && !PM_ENABLE && !IDF_TARGET_ESP32C3
         default ESP_TRACE_TS_SOURCE_GPTIMER if !ESP_SYSTEM_SINGLE_CORE_MODE && !PM_ENABLE && !IDF_TARGET_ESP32C3
+        default ESP_TRACE_TS_SOURCE_SYSTIMER if SOC_SYSTIMER_SUPPORTED && (PM_ENABLE || IDF_TARGET_ESP32C3)
         default ESP_TRACE_TS_SOURCE_ESP_TIMER if PM_ENABLE || IDF_TARGET_ESP32C3
         help
             Select the timestamp source for tracing.
@@ -102,9 +155,28 @@ menu "ESP Trace Configuration"
             bool "General Purpose Timer (Timer Group)"
             depends on !PM_ENABLE && !IDF_TARGET_ESP32C3
 
+        config ESP_TRACE_TS_SOURCE_SYSTIMER
+            bool "Systimer raw ticks"
+            depends on SOC_SYSTIMER_SUPPORTED
+            help
+                Read the systimer counter directly. This is the same clock
+                esp_timer uses, without the tick-to-microsecond conversion.
+                Timestamps are in raw ticks (16 MHz on most targets); host
+                tools get the rate from the trace stream.
+
         config ESP_TRACE_TS_SOURCE_ESP_TIMER
             bool "esp_timer high resolution timer"
 
     endchoice
+
+    config ESP_TRACE_OPTIMIZE_SPEED
+        bool "Compile trace hot path for speed (-O2)"
+        depends on ESP_TRACE_ENABLE
+        default y
+        help
+            Compile this component with -O2 regardless of the project-wide
+            optimization level. The per-event trace path (locking, timestamps)
+            runs through this code, so its speed directly contributes to the
+            per-event tracing overhead.
 
 endmenu

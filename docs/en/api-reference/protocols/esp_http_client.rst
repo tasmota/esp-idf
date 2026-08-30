@@ -36,13 +36,18 @@ To allow ESP HTTP client to take full advantage of persistent connections, one s
 Use Secure Element (ATECC608) for TLS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A secure element (ATECC608) can be also used for the underlying TLS connection in the HTTP client connection. Please refer to the **ATECC608A (Secure Element) with ESP-TLS** section in the :doc:`ESP-TLS documentation </api-reference/protocols/esp_tls>` for more details. The secure element support has to be first enabled in menuconfig through :ref:`CONFIG_ESP_TLS_USE_SECURE_ELEMENT`. Then the HTTP client can be configured to use secure element as follows:
+A secure element (ATECC608) can be used for the underlying TLS connection in the HTTP client connection via the PSA Crypto opaque driver interface. Please refer to the **ATECC608A (Secure Element) with ESP-TLS** section in the :doc:`ESP-TLS documentation </api-reference/protocols/esp_tls>` for details on setting up the PSA key. Then configure the HTTP client to use the secure element via the ``client_key`` field in :cpp:type:`esp_http_client_config_t`:
 
 .. code-block:: c
 
+    esp_key_config_t key_config = {
+        .source = ESP_KEY_SOURCE_PSA,
+        .psa.key_id = psa_key_id,  /* obtained via psa_import_key() */
+    };
+
     esp_http_client_config_t cfg = {
-        /* other configurations options */
-        .use_secure_element = true,
+        /* other configuration options */
+        .client_key = &key_config,
     };
 
 .. only:: SOC_ECDSA_SUPPORTED
@@ -66,7 +71,7 @@ A secure element (ATECC608) can be also used for the underlying TLS connection i
 HTTPS Request
 -------------
 
-ESP HTTP client supports SSL connections using **mbedTLS**, with the ``url`` configuration starting with ``https`` scheme or ``transport_type`` set to ``HTTP_TRANSPORT_OVER_SSL``. HTTPS support can be configured via :ref:`CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS` (enabled by default).
+ESP HTTP client supports SSL connections using **mbedTLS**, with the ``url`` configuration starting with ``https`` scheme or ``transport_type`` set to ``HTTP_TRANSPORT_OVER_SSL``. HTTPS support can be configured via :menuitem:`CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS` (enabled by default).
 
 .. note::
 
@@ -142,9 +147,9 @@ Configuration
 
 To enable response header saving, the following Kconfig options must be configured:
 
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_SAVE_RESPONSE_HEADERS`: Enable saving of response headers (disabled by default to conserve memory).
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_MAX_SAVED_RESPONSE_HEADERS`: Maximum number of response headers to save (default: 10).
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_MAX_RESPONSE_HEADER_SIZE`: Maximum size in bytes for both header key and value (default: 128 bytes each).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_SAVE_RESPONSE_HEADERS`: Enable saving of response headers (disabled by default to conserve memory).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_MAX_SAVED_RESPONSE_HEADERS`: Maximum number of response headers to save (default: 10).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_MAX_RESPONSE_HEADER_SIZE`: Maximum size in bytes for both header key and value (default: 128 bytes each).
 
 Usage
 ^^^^^

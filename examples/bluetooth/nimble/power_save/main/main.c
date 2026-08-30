@@ -16,6 +16,7 @@
 #include "console/console.h"
 #include "services/gap/ble_svc_gap.h"
 #include "bleprph.h"
+#include "soc/rtc.h"
 
 #if CONFIG_EXAMPLE_EXTENDED_ADV
 static uint8_t ext_adv_pattern_1[] = {
@@ -183,9 +184,10 @@ bleprph_advertise(void)
     fields.name_is_complete = 1;
 #endif
 
-    fields.uuids16 = (ble_uuid16_t[]) {
+    static const ble_uuid16_t adv_uuids16[] = {
         BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
     };
+    fields.uuids16 = adv_uuids16;
     fields.num_uuids16 = 1;
     fields.uuids16_is_complete = 1;
 
@@ -479,17 +481,21 @@ bleprph_on_reset(int reason)
 static void
 ble_app_set_addr(void)
 {
-    ble_addr_t addr;
+    ble_addr_t addr = {0};
     int rc;
 
     /* generate new non-resolvable private address */
     rc = ble_hs_id_gen_rnd(0, &addr);
-    assert(rc == 0);
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "ble_hs_id_gen_rnd failed; rc=%d\n", rc);
+        return;
+    }
 
     /* set generated address */
     rc = ble_hs_id_set_rnd(addr.val);
-
-    assert(rc == 0);
+    if (rc != 0) {
+        MODLOG_DFLT(ERROR, "ble_hs_id_set_rnd failed; rc=%d\n", rc);
+    }
 }
 #endif
 
@@ -506,8 +512,8 @@ bleprph_on_sync(void)
 #if CONFIG_EXAMPLE_USE_CI_ADDRESS
     if (strlen(CONFIG_EXAMPLE_CI_ADDRESS_OFFSET)) {
         uint8_t addr[6] = {0};
-        uint32_t *offset = (uint32_t *)&addr[1];
-        *offset = atoi(CONFIG_EXAMPLE_CI_ADDRESS_OFFSET);
+        uint32_t offset_val = (uint32_t)atoi(CONFIG_EXAMPLE_CI_ADDRESS_OFFSET);
+        memcpy(&addr[1], &offset_val, sizeof(offset_val));
         addr[5] = 0xC3;
         addr[0] = CONFIG_IDF_FIRMWARE_CHIP_ID;
         rc = ble_hs_id_set_rnd(addr);
@@ -574,7 +580,7 @@ app_main(void)
     // automatic light sleep is enabled if tickless idle support is enabled.
     esp_pm_config_t pm_config = {
             .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-            .min_freq_mhz = CONFIG_XTAL_FREQ,
+            .min_freq_mhz = rtc_clk_xtal_freq_get(),
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
             .light_sleep_enable = true
 #endif

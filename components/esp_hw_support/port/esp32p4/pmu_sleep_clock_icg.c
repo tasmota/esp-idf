@@ -9,6 +9,7 @@
 #include "soc/hp_sys_clkrst_reg.h"
 #include "esp_private/sleep_retention.h"
 #include "esp_private/startup_internal.h"
+#include "pmu_param.h"
 
 ESP_LOG_ATTR_TAG(TAG, "sleep_clock");
 
@@ -166,23 +167,28 @@ ESP_SYSTEM_INIT_FN(sleep_clock_icg_startup_init, SECONDARY, BIT(0), 106)
         }
     }
     if (err == ESP_OK) {
-        PMU_instance()->priv = (void *)&clock_icg_context;
+        pmu_sleep_data_t *data = (pmu_sleep_data_t *)PMU_instance()->priv;
+        data->func[PMU_SLEEP_PRIV_SW_ICG_CLK] = (void *)&clock_icg_context;
     }
     ESP_RETURN_ON_ERROR(err, TAG, "failed to initialize system sleep clock ICG context");
     return ESP_OK;
 }
 
 
-void pmu_sleep_clock_icg_config(void *icg_context, const uint32_t icg_func)
+void pmu_sleep_clock_icg_config(void *data, const uint32_t icg_func)
 {
-    assert(icg_context);
-    pmu_sleep_clock_icg_context_t *clock_icg = (pmu_sleep_clock_icg_context_t *)icg_context;
+    pmu_sleep_data_t *data_ctx = (pmu_sleep_data_t *)data;
+    if (!data_ctx || !data_ctx->func[PMU_SLEEP_PRIV_SW_ICG_CLK]) {
+        return;
+    }
+
+    pmu_sleep_clock_icg_context_t *clock_icg = (pmu_sleep_clock_icg_context_t *)data_ctx->func[PMU_SLEEP_PRIV_SW_ICG_CLK];
     /* Locking is not required here because this function is always invoked
      * within esp_light_sleep_start(), where the necessary lock has already been acquired. */
     if (icg_func & BIT(PMU_ICG_FUNC_ENA_IOMUX)) {
         regdma_link_set_write_wait_content(clock_icg->regdma_desc[28], PERI_CLK_EN(IOMUX), PERI_CLK_MASK(IOMUX));
     }
-    if (icg_func & BIT(PMU_ICG_FUNC_ENA_LEDC)) {
+    if (icg_func & BIT(PMU_ICG_FUNC_ENA_LEDC0)) {
         regdma_link_set_write_wait_content(clock_icg->regdma_desc[24], PERI_CLK_EN(LEDC), PERI_CLK_MASK(LEDC));
     }
     if (icg_func & BIT(PMU_ICG_FUNC_ENA_UART0)) {

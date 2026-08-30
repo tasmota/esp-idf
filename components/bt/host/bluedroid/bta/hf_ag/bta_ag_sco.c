@@ -201,7 +201,10 @@ static void bta_ag_sco_conn_cback(UINT16 sco_idx)
 
     if (handle != 0 && p_scb)
     {
-        BTM_ReadEScoLinkParms(sco_idx, &sco_data);
+        if (BTM_ReadEScoLinkParms(sco_idx, &sco_data) == BTM_MODE_UNSUPPORTED) {
+            APPL_TRACE_WARNING("ESCO link parameters not supported or disabled.");
+            return;
+        }
 
         p_scb->link_type = sco_data.link_type;
         p_scb->tx_interval = sco_data.tx_interval;
@@ -251,10 +254,10 @@ static void bta_ag_sco_disc_cback(UINT16 sco_idx)
 
     APPL_TRACE_DEBUG ("bta_ag_sco_disc_cback(): sco_idx: 0x%x  p_cur_scb: 0x%08x  sco.state: %d", (unsigned int)sco_idx, (unsigned int)bta_ag_cb.sco.p_curr_scb, (unsigned int)bta_ag_cb.sco.state);
 
-    APPL_TRACE_DEBUG ("bta_ag_sco_disc_cback(): scb[0] addr: 0x%08x  in_use: %u  sco_idx: 0x%x  sco state: %u",
-                       (unsigned int) &bta_ag_cb.scb[0], (unsigned int)bta_ag_cb.scb[0].in_use, (unsigned int)bta_ag_cb.scb[0].sco_idx, (unsigned int)bta_ag_cb.scb[0].state);
-    APPL_TRACE_DEBUG ("bta_ag_sco_disc_cback(): scb[1] addr: 0x%08x  in_use: %u  sco_idx: 0x%x  sco state: %u",
-                       (unsigned int) &bta_ag_cb.scb[1], (unsigned int) bta_ag_cb.scb[1].in_use, (unsigned int) bta_ag_cb.scb[1].sco_idx, (unsigned int) bta_ag_cb.scb[1].state);
+    for (int i = 0; i < BTA_AG_NUM_SCB; i++) {
+        APPL_TRACE_DEBUG ("bta_ag_sco_disc_cback(): scb[%d] addr: 0x%08x  in_use: %u  sco_idx: 0x%x  sco state: %u", i,
+                          (unsigned int) &bta_ag_cb.scb[i], (unsigned int)bta_ag_cb.scb[i].in_use, (unsigned int)bta_ag_cb.scb[i].sco_idx, (unsigned int)bta_ag_cb.scb[i].state);
+    }
 
     /* match callback to scb */
     if (bta_ag_cb.sco.p_curr_scb != NULL && bta_ag_cb.sco.p_curr_scb->in_use)
@@ -640,7 +643,7 @@ static void bta_ag_create_sco(tBTA_AG_SCB *p_scb, BOOLEAN is_orig)
         }
         else
         {
-            if(p_scb->retry_with_sco_only){
+            if(p_scb->retry_with_sco_only) {
                 APPL_TRACE_API("retrying with SCO only");
             }
             p_scb->retry_with_sco_only = FALSE;
@@ -846,6 +849,7 @@ static void bta_ag_sco_event(tBTA_AG_SCB *p_scb, UINT8 event)
                     }
                 } else {
                     osi_free(p_buf);
+                    break;
                 }
             } else {
                 osi_free(p_buf);
@@ -1997,9 +2001,10 @@ static void bta_ag_sco_data_send_msbc(tBTA_AG_SCB *p_scb, BT_HDR *p_buf)
                 p_buf3->offset = BTA_AG_BUFF_OFFSET_MIN;
                 p_buf3->len = BTA_AG_SCO_OUT_PKT_LEN_EV3;
                 UINT8 *p_data3 = (UINT8 *)(p_buf3 + 1) + p_buf3->offset;
-                memcpy(p_data3, p_data, BTA_AG_MSBC_FRAME_SIZE - BTA_AG_H2_HEADER_LEN - BTA_AG_SCO_OUT_PKT_LEN_EV3);
-                p_data += BTA_AG_MSBC_FRAME_SIZE - BTA_AG_H2_HEADER_LEN - BTA_AG_SCO_OUT_PKT_LEN_EV3;
-                total_len -= BTA_AG_MSBC_FRAME_SIZE - BTA_AG_H2_HEADER_LEN - BTA_AG_SCO_OUT_PKT_LEN_EV3;
+                UINT16 rem_payload = BTA_AG_MSBC_FRAME_SIZE - (BTA_AG_SCO_OUT_PKT_LEN_EV3 - BTA_AG_H2_HEADER_LEN);
+                memcpy(p_data3, p_data, rem_payload);
+                p_data += rem_payload;
+                total_len -= rem_payload;
                 bta_ag_write_sco_data(p_scb, p_buf2, p_buf3);
             }
         }

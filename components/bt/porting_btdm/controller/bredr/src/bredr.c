@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "sdkconfig.h"
@@ -51,6 +52,7 @@
 
 #include "btdm_osal.h"
 #include "btdm_endian.h"
+#include "btdm_external.h"
 #if CONFIG_BT_SMP_CRYPTO_STACK_MBEDTLS
 #include "psa/crypto.h"
 #endif
@@ -68,7 +70,10 @@
 #define BREDR_P192_COORD_LEN    24U
 #define BREDR_PUB_KEY_LEN_P256  (1U + BREDR_P256_COORD_LEN * 2)
 #define BREDR_PUB_KEY_LEN_P192  (1U + BREDR_P192_COORD_LEN * 2)
-#define BREDR_LOG_TAG       "BREDR_INIT"
+#define BREDR_LOG_TAG           "BREDR_INIT"
+#define BREDR_LOG_BUFFER_SIZE   (256)
+#define BREDR_LOG_LEVEL_PREFIX_LEN  4U  /* "[X] " */
+#define BREDR_LOG_TAG_PREFIX_LEN    4U  /* "%s: " */
 #if CONFIG_BT_SMP_CRYPTO_STACK_MBEDTLS
 static const char *TAG_BREDR_CRYPTO = "bredr_crypto";
 #endif
@@ -84,6 +89,8 @@ typedef struct vhci_host_callback {
 } vhci_host_callback_t;
 
 typedef int (*bredr_ctrl_callback_t)(void);
+
+typedef int (*bredr_log_printf_fn)(const char *fmt, ...);
 
 /* External functions or values
  ************************************************************************
@@ -102,6 +109,7 @@ extern int bredr_controller_init(void *cfg);
 extern void bredr_controller_deinit(void);
 extern int bredr_controller_enable(void);
 extern void bredr_controller_disable(void);
+extern void r_bredr_controller_reset(void);
 extern int bredr_controller_env_init(void *cfg);
 extern void bredr_controller_env_deinit(void);
 extern void bredr_register_setup_callback(bredr_ctrl_callback_t cbk);
@@ -117,8 +125,11 @@ extern int bredr_ctrl_feat_dtm_en(void);
 extern int bredr_ctrl_feat_test_en(void);
 extern int bredr_ctrl_feat_lk_store_en(void);
 extern int bredr_ctrl_feat_coex_en(void);
+extern int bredr_ctrl_feat_sam_en(void);
+extern int bredr_ctrl_feat_mws_en(void);
 
 extern const char *co_orca_get_git_version_str(void);
+extern void r_orca_log_set_printf(bredr_log_printf_fn printf_fn);
 /* Shutdown */
 extern void bredr_controller_shutdown(void);
 
@@ -675,6 +686,22 @@ static int bredr_ctrl_setup_callback(void)
         }
 #endif /* UC_BR_EDR_DTM_EN */
 
+#if UC_BR_EDR_SAM_EN
+        ret = bredr_ctrl_feat_sam_en();
+        if (ret != 0) {
+            ESP_LOGE(BREDR_LOG_TAG, "bredr_ctrl_feat_sam_en failed, ret:%d", ret);
+            break;
+        }
+#endif /* UC_BR_EDR_SAM_EN */
+
+#if UC_BR_EDR_MWS_EN
+        ret = bredr_ctrl_feat_mws_en();
+        if (ret != 0) {
+            ESP_LOGE(BREDR_LOG_TAG, "bredr_ctrl_feat_mws_en failed, ret:%d", ret);
+            break;
+        }
+#endif /* UC_BR_EDR_MWS_EN */
+
 #if CONFIG_SW_COEXIST_ENABLE
         ret = bredr_ctrl_feat_coex_en();
         if (ret != 0) {
@@ -716,12 +743,132 @@ static int bredr_ctrl_ext_dep_callback(void)
     return ret;
 }
 
+static int bredr_log_printf(const char *fmt, ...)
+{
+    if (fmt == NULL) {
+        return -1;
+    }
+
+    char level_ch = 'I';
+    const char *log_fmt = fmt;
+    size_t log_fmt_len = strnlen(fmt, BREDR_LOG_BUFFER_SIZE);
+
+    if (log_fmt_len >= BREDR_LOG_LEVEL_PREFIX_LEN && fmt[0] == '[' && fmt[2] == ']' && fmt[3] == ' ') {
+        level_ch = fmt[1];
+        log_fmt += BREDR_LOG_LEVEL_PREFIX_LEN;
+        log_fmt_len = strnlen(log_fmt, BREDR_LOG_BUFFER_SIZE);
+    }
+
+    va_list ap;
+    va_start(ap, fmt);
+    const char *tag = va_arg(ap, const char *);
+
+    if (log_fmt_len >= BREDR_LOG_TAG_PREFIX_LEN && log_fmt[0] == '%' && log_fmt[1] == 's' && log_fmt[2] == ':' &&
+        log_fmt[3] == ' ') {
+        log_fmt += BREDR_LOG_TAG_PREFIX_LEN;
+    }
+
+    char buf[BREDR_LOG_BUFFER_SIZE];
+    int len = vsnprintf(buf, sizeof(buf), log_fmt, ap);
+    va_end(ap);
+    if (len <= 0) {
+        return len;
+    }
+
+    switch (level_ch) {
+    case 'E': ESP_LOGE(tag, "%s", buf); break;
+    case 'W': ESP_LOGW(tag, "%s", buf); break;
+    case 'D': ESP_LOGD(tag, "%s", buf); break;
+    case 'V': ESP_LOGV(tag, "%s", buf); break;
+    default: ESP_LOGI(tag, "%s", buf); break;
+    }
+
+    return len;
+}
+
+esp_err_t esp_bredr_tx_power_range_get(int8_t *min_power, int8_t *max_power)
+{
+    if (min_power == NULL && max_power == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t pwr_tbl_sz = 0;
+    const int8_t *pwr_tbl = wr_btdm_external_bb_get_tx_pwr_table(&pwr_tbl_sz, TX_PWR_TABLE_MODEM_CFG_BREDR);
+
+    if (pwr_tbl == NULL || pwr_tbl_sz == 0) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    /* The power table is ordered from the lowest to the highest power level */
+    if (min_power != NULL) {
+        *min_power = pwr_tbl[0];
+    }
+    if (max_power != NULL) {
+        *max_power = pwr_tbl[pwr_tbl_sz - 1];
+    }
+
+    return ESP_OK;
+}
+
+/* Check a single configured TX power value against [min_power, max_power]. */
+static bool bredr_check_tx_pwr(const char *name, int8_t value, int8_t min_power, int8_t max_power)
+{
+    if (value < min_power || value > max_power) {
+        ESP_LOGE(BREDR_LOG_TAG, "%s tx power %d dBm out of supported range [%d, %d] dBm", name, value, min_power, max_power);
+        return false;
+    }
+    return true;
+}
+
+/*
+ * Validate the user-configured BR/EDR TX power values against the range actually supported by the chip.
+ * The menuconfig limits only describe the maximum possible range, but the achievable range can be narrower depending on the chip.
+ * Returns ESP_ERR_INVALID_ARG if any configured value is out of range so that controller init can be aborted.
+ */
+static esp_err_t bredr_validate_tx_pwr_cfg(const esp_bt_ctrl_bredr_config_t *bredr_cfg)
+{
+    int8_t min_power = 0;
+    int8_t max_power = 0;
+
+    esp_err_t ret = esp_bredr_tx_power_range_get(&min_power, &max_power);
+    if (ret != ESP_OK) {
+        ESP_LOGE(BREDR_LOG_TAG, "Failed to get TX power range, err 0x%x", ret);
+        return ret;
+    }
+
+    bool valid = true;
+    valid &= bredr_check_tx_pwr("ACL min", bredr_cfg->acl_min_tx_pwr, min_power, max_power);
+    valid &= bredr_check_tx_pwr("ACL max", bredr_cfg->acl_max_tx_pwr, min_power, max_power);
+    valid &= bredr_check_tx_pwr("Page", bredr_cfg->page_tx_pwr, min_power, max_power);
+    valid &= bredr_check_tx_pwr("Page Scan", bredr_cfg->pscan_tx_pwr, min_power, max_power);
+    valid &= bredr_check_tx_pwr("Inquiry Scan", bredr_cfg->iscan_tx_pwr, min_power, max_power);
+#if UC_BR_EDR_APB_EN
+    valid &= bredr_check_tx_pwr("APB", bredr_cfg->apb_tx_pwr, min_power, max_power);
+#endif
+#if UC_BR_EDR_CPB_TX_LINK_NB
+    valid &= bredr_check_tx_pwr("CPB", bredr_cfg->cpb_tx_pwr, min_power, max_power);
+    valid &= bredr_check_tx_pwr("Sync Train", bredr_cfg->strain_tx_pwr, min_power, max_power);
+#endif
+
+    if (bredr_cfg->acl_min_tx_pwr > bredr_cfg->acl_max_tx_pwr) {
+        ESP_LOGE(BREDR_LOG_TAG, "ACL min tx power %d dBm greater than max %d dBm", bredr_cfg->acl_min_tx_pwr, bredr_cfg->acl_max_tx_pwr);
+        valid = false;
+    }
+
+    return valid ? ESP_OK : ESP_ERR_INVALID_ARG;
+}
+
 int esp_bredr_controller_init(esp_bt_controller_config_t *cfg)
 {
     int status;
     esp_err_t err = ESP_OK;
 
     ESP_LOGI(BREDR_LOG_TAG, "BT controller compile version [%s]", co_orca_get_git_version_str());
+
+    err = bredr_validate_tx_pwr_cfg(&cfg->bredr);
+    if (err != ESP_OK) {
+        return err;
+    }
 
     bredr_register_setup_callback(bredr_ctrl_setup_callback);
     bredr_register_ext_dep_callback(bredr_ctrl_ext_dep_callback);
@@ -733,6 +880,8 @@ int esp_bredr_controller_init(esp_bt_controller_config_t *cfg)
     if (status != 0) {
         ESP_LOGE(BREDR_LOG_TAG, "bredr_controller_init failed, status:%d", status);
         err = ESP_ERR_NO_MEM;
+    } else {
+        r_orca_log_set_printf(bredr_log_printf);
     }
 
     return err;
@@ -756,6 +905,13 @@ int bredr_stack_enable(void)
 void bredr_stack_disable(void)
 {
 
+}
+
+int bredr_stack_reset(void)
+{
+    r_bredr_controller_reset();
+
+    return 0;
 }
 
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE

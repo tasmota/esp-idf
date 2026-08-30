@@ -56,8 +56,15 @@ else()
             "system_time.c"
             "stack_check.c"
             "ubsan.c")
+
+    if(CONFIG_COMPILER_KASAN)
+        list(APPEND srcs "kasan.c")
+    endif()
     if(CONFIG_SOC_WDT_SUPPORTED)
         list(APPEND srcs "int_wdt.c")
+        if(CONFIG_SOC_PAU_SUPPORTED)
+            list(APPEND srcs "port/soc/${target}/mwdt_retention.c")
+        endif()
     endif()
     if(CONFIG_SOC_XT_WDT_SUPPORTED)
         list(APPEND srcs "xt_wdt.c")
@@ -92,11 +99,12 @@ else()
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS include
                         PRIV_REQUIRES spi_flash esp_timer esp_mm
-                                      esp_hal_mspi esp_hal_wdt esp_hal_uart esp_hal_clock esp_hal_dma
-                                    # [refactor-todo] requirements due to init code,
-                                    # should be removable once using component init functions
-                                    # link-time registration is used.
-                                    bootloader_support esp_pm esp_usb_cdc_rom_console
+                                      esp_hal_clock esp_hal_mspi esp_hal_wdt esp_hal_debug_assist
+                                      esp_hal_uart esp_hal_dma esp_hal_security
+                                      # [refactor-todo] requirements due to init code,
+                                      # should be removable once using component init functions
+                                      # link-time registration is used.
+                                      bootloader_support esp_pm esp_usb_cdc_rom_console
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 
@@ -110,11 +118,30 @@ else()
         target_link_libraries(${COMPONENT_LIB} INTERFACE "-u start_app_other_cores")
     endif()
 
-    # Disable stack protection in files which are involved in initialization of that feature
-    set_source_files_properties(
-        "startup.c" "stack_check.c" "port/cpu_start.c"
-        PROPERTIES COMPILE_FLAGS
-        -fno-stack-protector)
+    if(CONFIG_COMPILER_KASAN)
+        # Files involved in stack-protector initialisation: disable stack protector.
+        # Also exclude from KASAN: cpu_start.c runs before kasan_init_shadow() and
+        # panic.c / startup.c must not recurse into KASAN during crash handling.
+        set_source_files_properties(
+            "startup.c" "stack_check.c" "port/cpu_start.c"
+            PROPERTIES COMPILE_FLAGS
+            "-fno-stack-protector -fno-sanitize=kernel-address")
+
+        # kasan.c and ubsan.c implement sanitizer runtime stubs – must never be
+        # instrumented themselves (infinite recursion).
+        # panic.c / port/panic_handler.c must not be instrumented to avoid
+        # recursion in the error path.
+        set_source_files_properties(
+            "kasan.c" "ubsan.c" "panic.c" "port/panic_handler.c"
+            PROPERTIES COMPILE_FLAGS
+            "-fno-sanitize=kernel-address")
+    else()
+        # Disable stack protection in files which are involved in initialization of that feature
+        set_source_files_properties(
+            "startup.c" "stack_check.c" "port/cpu_start.c"
+            PROPERTIES COMPILE_FLAGS
+            -fno-stack-protector)
+    endif()
 
     target_linker_script(${COMPONENT_LIB} INTERFACE "ld/${target}/memory.ld.in")
 
@@ -137,22 +164,27 @@ endif()
 # due to -ffunction-sections -Wl,--gc-sections options.
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-u __ubsan_include")
 
+# Force-link the __asan_*_noabort stubs: GCC-instrumented code calls them but
+# the linker cannot see the call sites at GC time, so without explicit -u flags
+# they would be silently dropped (and any -u flag against the file is enough
+# to pull kasan.c in as well).
+if(CONFIG_COMPILER_KASAN)
+    foreach(__kasan_stub
+            __asan_load1_noabort __asan_load2_noabort
+            __asan_load4_noabort __asan_load8_noabort
+            __asan_load16_noabort __asan_loadN_noabort
+            __asan_store1_noabort __asan_store2_noabort
+            __asan_store4_noabort __asan_store8_noabort
+            __asan_store16_noabort __asan_storeN_noabort
+            __asan_handle_no_return)
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-u ${__kasan_stub}")
+    endforeach()
+endif()
+
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_system_include_startup_funcs")
 
 # [refactor-todo] requirements due to init code, should be removable
 # once link-time registration of component init functions is used.
-if(CONFIG_ESP_TRACE_ENABLE)
-    idf_component_optional_requires(PRIVATE esp_trace)
-endif()
-
-if(CONFIG_ESP_COREDUMP_ENABLE)
-    idf_component_optional_requires(PRIVATE espcoredump)
-endif()
-
-# [refactor-todo] requirement from the panic handler,
-# need to introduce panic "event" concept to remove this dependency (IDF-2194)
-idf_component_optional_requires(PRIVATE esp_gdbstub)
-
 if(NOT CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT)
     idf_component_optional_requires(PRIVATE esp_app_format)
 endif()
@@ -163,7 +195,15 @@ endif()
 
 if(NOT BOOTLOADER_BUILD)
     if(CONFIG_SPIRAM)
-        idf_component_optional_requires(PRIVATE esp_psram)
+        if(IDF_BUILD_V2)
+            # esp_psram is not required by any component unconditionally, so nothing else
+            # brings it into the build. Include it here, so that PSRAM support (and its
+            # startup hook) is part of any build which enables CONFIG_SPIRAM.
+            idf_component_include(esp_psram)
+            target_link_libraries(${COMPONENT_TARGET} PRIVATE idf::esp_psram)
+        else()
+            idf_component_optional_requires(PRIVATE esp_psram)
+        endif()
     endif()
 endif()
 

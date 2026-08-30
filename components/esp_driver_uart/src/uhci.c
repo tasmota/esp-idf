@@ -6,7 +6,7 @@
 
 #include <string.h>
 #include <stdint.h>
-#include "esp_intr_alloc.h"
+#include <sys/param.h>
 #if CONFIG_UHCI_ENABLE_DEBUG_LOG
 // The local log level must be defined before including esp_log.h
 // Set the maximum log level for this source file
@@ -14,8 +14,10 @@
 #endif
 #include "sdkconfig.h"
 #include "esp_attr.h"
+#include "esp_macros.h"
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_macros.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
@@ -26,19 +28,18 @@
 #include "hal/uhci_hal.h"
 #include "hal/uhci_ll.h"
 #include "hal/dma_types.h"
-#include "hal/cache_hal.h"
-#include "hal/cache_ll.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/gdma.h"
 #include "esp_private/esp_dma_utils.h"
 #include "esp_private/gdma_link.h"
-#include "esp_private/esp_cache_private.h"
-#include "esp_private/esp_psram_mspi.h"
+#if CONFIG_SPIRAM
+#include "esp_private/mspi_mem_barrier.h"
+#endif
 #include "uhci_private.h"
 #include "esp_memory_utils.h"
 #include "esp_cache.h"
 
-static const char* TAG = "uhci";
+#define TAG "uhci"
 
 typedef struct uhci_platform_t {
     _lock_t mutex;                                      // platform level mutex lock.
@@ -59,11 +60,14 @@ static bool uhci_gdma_tx_callback_eof(gdma_channel_handle_t dma_chan, gdma_event
     BaseType_t do_yield = pdFALSE;
     uhci_controller_handle_t uhci_ctrl = (uhci_controller_handle_t) user_data;
     uhci_transaction_desc_t *trans_desc = NULL;
+    uhci_tx_done_event_data_t evt_data = {0};
     bool need_yield = false;
 
     uhci_tx_fsm_t expected_fsm = UHCI_TX_FSM_RUN;
     if (atomic_compare_exchange_strong(&uhci_ctrl->tx_dir.tx_fsm, &expected_fsm, UHCI_TX_FSM_ENABLE_WAIT)) {
         trans_desc = uhci_ctrl->tx_dir.cur_trans;
+        evt_data.buffer = (uint8_t *)trans_desc->buf_info[0].write_buffer;
+        evt_data.sent_size = trans_desc->total_size;
         xQueueSendFromISR(uhci_ctrl->tx_dir.trans_queues[UHCI_TRANS_QUEUE_COMPLETE], &trans_desc, &do_yield);
         if (do_yield) {
             need_yield = true;
@@ -78,10 +82,6 @@ static bool uhci_gdma_tx_callback_eof(gdma_channel_handle_t dma_chan, gdma_event
 #endif
 
     if (uhci_ctrl->tx_dir.on_tx_trans_done) {
-        uhci_tx_done_event_data_t evt_data = {
-            .buffer = uhci_ctrl->tx_dir.cur_trans->buffer,
-            .sent_size = uhci_ctrl->tx_dir.cur_trans->buffer_size,
-        };
         if (uhci_ctrl->tx_dir.on_tx_trans_done(uhci_ctrl, &evt_data, uhci_ctrl->user_data)) {
             need_yield |= true;
         }
@@ -109,79 +109,83 @@ static bool uhci_gdma_rx_callback_done(gdma_channel_handle_t dma_chan, gdma_even
 {
     bool need_yield = false;
     uhci_controller_handle_t uhci_ctrl = (uhci_controller_handle_t) user_data;
-    bool is_buf_from_psram = esp_ptr_external_ram(uhci_ctrl->rx_dir.buffer_pointers[uhci_ctrl->rx_dir.node_index]);
-    size_t cache_line = uhci_ctrl->rx_dir.cache_line;
-    // If the data is not all received, handle it in not normal_eof block. Otherwise, in eof block.
-    if (!event_data->flags.normal_eof) {
-        size_t rx_size = uhci_ctrl->rx_dir.buffer_size_per_desc_node[uhci_ctrl->rx_dir.node_index];
-        uhci_rx_event_data_t evt_data = {
-            .data = uhci_ctrl->rx_dir.buffer_pointers[uhci_ctrl->rx_dir.node_index],
-            .recv_size = rx_size,
-            .flags.totally_received = false,
-        };
 
-        if (is_buf_from_psram) {
-            esp_psram_mspi_mb();
+    // Prevent any spurious interrupts after EOF.
+    if (atomic_load(&uhci_ctrl->rx_dir.rx_fsm) != UHCI_RX_FSM_RUN) {
+        return false;
+    }
+
+    const bool frame_end = event_data->flags.normal_eof || event_data->flags.abnormal_eof;
+    const bool rx_terminal = frame_end && !uhci_ctrl->rx_dir.continuous;
+    if (rx_terminal) {
+        // An EOF signal does not automatically stop the DMA transfer, so we need to stop it manually.
+        gdma_stop(uhci_ctrl->rx_dir.dma_chan);
+        // stop() cannot prevent already prefetched DMA descriptors from being processed.
+        // A reset() is required to fully halt the DMA engine and eliminate any subsequent spurious interrupts.
+        gdma_reset(uhci_ctrl->rx_dir.dma_chan);
+    }
+
+    const size_t cache_line = uhci_ctrl->rx_dir.cache_line;
+    size_t rx_size, sync_size;
+    if (!frame_end) {
+        rx_size = uhci_ctrl->rx_dir.buffer_size_per_desc_node[uhci_ctrl->rx_dir.node_index];
+        sync_size = rx_size;
+    } else {
+        rx_size = gdma_link_count_buffer_size_till_eof(uhci_ctrl->rx_dir.dma_link, uhci_ctrl->rx_dir.node_index);
+        // Round the invalidate size up to a full cache line. Each node buffer is itself cache-line
+        // aligned and a whole multiple of the cache line, so the extra bytes stay inside this same
+        // node buffer (never a neighbor) and only discard DMA scratch past the frame end.
+        sync_size = ESP_ALIGN_UP(rx_size, cache_line);
+    }
+
+    uhci_rx_event_data_t evt_data = {
+        .data = uhci_ctrl->rx_dir.buffer_pointers[uhci_ctrl->rx_dir.node_index],
+        .recv_size = rx_size,
+        .flags.totally_received = frame_end,
+    };
+
+#if CONFIG_SPIRAM
+    if (esp_ptr_external_ram(evt_data.data)) {
+        esp_psram_mspi_mb();
+    }
+#endif
+
+    // DMA just finished writing the node's buffer. Because the descriptor link is circular,
+    // the same buffer region gets overwritten on every loop. On targets where the buffer is
+    // backed by a cache, the CPU must invalidate the range before reading, otherwise it will
+    // return stale data from a previous loop.
+    if (cache_line > 0) {
+        esp_cache_msync((void *)evt_data.data, sync_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    }
+
+    if (rx_terminal) {
+        // One-shot completion (or abnormal EOF): return to idle so uhci_receive() can re-arm and
+        // the controller can be deleted. Atomically claim the RUN->ENABLE transition; only the
+        // winner releases the PM lock, so a concurrent uhci_stop_receive() (possibly on another
+        // core) cannot double-release the single pm_lock shared with TX.
+        uhci_ctrl->rx_dir.node_index = 0;
+        uhci_rx_fsm_t expected = UHCI_RX_FSM_RUN;
+        if (atomic_compare_exchange_strong(&uhci_ctrl->rx_dir.rx_fsm, &expected, UHCI_RX_FSM_ENABLE)) {
+#if CONFIG_PM_ENABLE
+            // release power manager lock
+            if (uhci_ctrl->pm_lock) {
+                esp_pm_lock_release(uhci_ctrl->pm_lock);
+            }
+#endif
         }
-        // DMA just finished writing the node's buffer. Because the descriptor link is circular,
-        // the same buffer region gets overwritten on every loop. On targets where the buffer is
-        // backed by a cache, the cache is not snooped by DMA, so the CPU must invalidate the range
-        // before reading, otherwise it will return stale data from a previous loop.
-        if (cache_line > 0) {
-            // The per-node buffer base is aligned to cache_line (see uhci_receive), and rx_size here
-            // equals buffer_size_per_desc_node[] which is also a multiple of cache_line.
-            esp_cache_msync((void *)evt_data.data, rx_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-        }
-        if (uhci_ctrl->rx_dir.on_rx_trans_event) {
-            need_yield |= uhci_ctrl->rx_dir.on_rx_trans_event(uhci_ctrl, &evt_data, uhci_ctrl->user_data);
-        }
+    } else {
+        // A filled node (any mode) or a completed frame in continuous mode: advance to the next
+        // node of the circular link and keep the DMA running. In continuous mode the PM lock stays
+        // held until uhci_stop_receive().
         uhci_ctrl->rx_dir.node_index++;
         // Go back to 0 as its a circle descriptor link
         if (uhci_ctrl->rx_dir.node_index >= uhci_ctrl->rx_dir.rx_num_dma_nodes) {
             uhci_ctrl->rx_dir.node_index = 0;
         }
-
-    } else {
-        // eof event
-        size_t rx_size = gdma_link_count_buffer_size_till_eof(uhci_ctrl->rx_dir.dma_link, uhci_ctrl->rx_dir.node_index);
-        uhci_rx_event_data_t evt_data = {
-            .data = uhci_ctrl->rx_dir.buffer_pointers[uhci_ctrl->rx_dir.node_index],
-            .recv_size = rx_size,
-            .flags.totally_received = true,
-        };
-
-        if (is_buf_from_psram) {
-            esp_psram_mspi_mb();
-        }
-#if CONFIG_PM_ENABLE
-        // release power manager lock
-        if (uhci_ctrl->pm_lock) {
-            esp_pm_lock_release(uhci_ctrl->pm_lock);
-        }
-#endif
-        // Same reasoning as the partial branch. rx_size here may not be a multiple of cache_line
-        // because transfer can end mid-buffer on a UART idle EOF, so round up to the next cache
-        // line (esp_cache_msync's M2C direction requires aligned size and doesn't accept the
-        // UNALIGNED flag). The extra bytes still belong to the user buffer so invalidating them
-        // is harmless.
-        if (cache_line > 0) {
-            size_t sync_size = (rx_size + cache_line - 1) & ~(cache_line - 1);
-            esp_cache_msync((void *)evt_data.data, sync_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-        }
-        if (uhci_ctrl->rx_dir.on_rx_trans_event) {
-            need_yield |= uhci_ctrl->rx_dir.on_rx_trans_event(uhci_ctrl, &evt_data, uhci_ctrl->user_data);
-        }
-
-        // Stop the transaction when EOF is detected. In case for length EOF, there is no further more callback to be invoked.
-        gdma_stop(uhci_ctrl->rx_dir.dma_chan);
-        gdma_reset(uhci_ctrl->rx_dir.dma_chan);
-
-        uhci_ctrl->rx_dir.rx_fsm = UHCI_RX_FSM_ENABLE;
-        uhci_ctrl->rx_dir.node_index = 0;
     }
 
-    if (event_data->flags.abnormal_eof) {
-        esp_rom_printf(DRAM_STR("An abnormal eof on uhci detected\n"));
+    if (uhci_ctrl->rx_dir.on_rx_trans_event) {
+        need_yield |= uhci_ctrl->rx_dir.on_rx_trans_event(uhci_ctrl, &evt_data, uhci_ctrl->user_data);
     }
 
     return need_yield;
@@ -212,9 +216,14 @@ static esp_err_t uhci_gdma_initialize(uhci_controller_handle_t uhci_ctrl, const 
     gdma_apply_strategy(uhci_ctrl->tx_dir.dma_chan, &strategy_config);
 
     // create DMA link list
-    gdma_get_alignment_constraints(uhci_ctrl->tx_dir.dma_chan, &uhci_ctrl->tx_dir.int_mem_align, &uhci_ctrl->tx_dir.ext_mem_align);
-    size_t buffer_alignment = UHCI_MAX(uhci_ctrl->tx_dir.int_mem_align, uhci_ctrl->tx_dir.ext_mem_align);
-    size_t num_dma_nodes = esp_dma_calculate_node_count(config->max_transmit_size, buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
+    gdma_channel_alignment_info_t tx_align_info;
+    gdma_get_channel_alignment_constraints(uhci_ctrl->tx_dir.dma_chan, &tx_align_info);
+    size_t buffer_alignment = MAX(tx_align_info.int_mem_alignment, tx_align_info.ext_enc_mem_alignment);
+    // Given that the combined size of all buffers does not exceed `max_transmit_size` and
+    // the number of buffers does not exceed `max_transmit_buffer_count`, a single transfer
+    // requires at most `esp_dma_calculate_node_count(max_transmit_size) + max_transmit_buffer_count - 1` DMA descriptors.
+    size_t extra_multi_buf_nodes = (config->max_transmit_buffer_count > 1) ? (config->max_transmit_buffer_count - 1) : 0;
+    size_t num_dma_nodes = esp_dma_calculate_node_count(config->max_transmit_size, buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE) + extra_multi_buf_nodes;
     gdma_link_list_config_t dma_link_config = {
         .item_alignment = 4,
         .num_items = num_dma_nodes,
@@ -232,17 +241,13 @@ static esp_err_t uhci_gdma_initialize(uhci_controller_handle_t uhci_ctrl, const 
     gdma_connect(uhci_ctrl->rx_dir.dma_chan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UHCI, 0));
     ESP_RETURN_ON_ERROR(gdma_config_transfer(uhci_ctrl->rx_dir.dma_chan, &transfer_cfg), TAG, "Config DMA rx channel transfer failed");
 
-    gdma_get_alignment_constraints(uhci_ctrl->rx_dir.dma_chan, &uhci_ctrl->rx_dir.int_mem_align, &uhci_ctrl->rx_dir.ext_mem_align);
-    buffer_alignment = UHCI_MAX(uhci_ctrl->rx_dir.int_mem_align, uhci_ctrl->rx_dir.ext_mem_align);
+    gdma_channel_alignment_info_t rx_align_info;
+    gdma_get_channel_alignment_constraints(uhci_ctrl->rx_dir.dma_chan, &rx_align_info);
+    buffer_alignment = MAX(rx_align_info.int_mem_alignment, rx_align_info.ext_enc_mem_alignment);
     uhci_ctrl->rx_dir.rx_num_dma_nodes = esp_dma_calculate_node_count(config->max_receive_internal_mem, buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
     dma_link_config.num_items = uhci_ctrl->rx_dir.rx_num_dma_nodes;
     ESP_RETURN_ON_ERROR(gdma_new_link_list(&dma_link_config, &uhci_ctrl->rx_dir.dma_link), TAG, "DMA rx link list alloc failed");
     ESP_LOGD(TAG, "rx_dma node number is %d", uhci_ctrl->rx_dir.rx_num_dma_nodes);
-
-    uhci_ctrl->rx_dir.buffer_size_per_desc_node = heap_caps_calloc(uhci_ctrl->rx_dir.rx_num_dma_nodes, sizeof(*uhci_ctrl->rx_dir.buffer_size_per_desc_node), UHCI_MEM_ALLOC_CAPS);
-    ESP_RETURN_ON_FALSE(uhci_ctrl->rx_dir.buffer_size_per_desc_node, ESP_ERR_NO_MEM, TAG, "no memory for recording buffer size for desc node");
-    uhci_ctrl->rx_dir.buffer_pointers = heap_caps_calloc(uhci_ctrl->rx_dir.rx_num_dma_nodes, sizeof(*uhci_ctrl->rx_dir.buffer_pointers), UHCI_MEM_ALLOC_CAPS);
-    ESP_RETURN_ON_FALSE(uhci_ctrl->rx_dir.buffer_pointers, ESP_ERR_NO_MEM, TAG, "no memory for recording buffer pointers for desc node");
 
     // Register callbacks
     gdma_tx_event_callbacks_t tx_cbk = {
@@ -282,16 +287,24 @@ static esp_err_t uhci_gdma_deinitialize(uhci_controller_handle_t uhci_ctrl)
 static void uhci_do_transmit(uhci_controller_handle_t uhci_ctrl, uhci_transaction_desc_t *trans)
 {
     uhci_ctrl->tx_dir.cur_trans = trans;
-    size_t buffer_alignment = esp_ptr_internal(trans->buffer) ? uhci_ctrl->tx_dir.int_mem_align : uhci_ctrl->tx_dir.ext_mem_align;
-    gdma_buffer_mount_config_t mount_config = {
-        .buffer = trans->buffer,
-        .buffer_alignment = buffer_alignment,
-        .length = trans->buffer_size,
-        .flags = {
-            .mark_eof = true,
-            .mark_final = GDMA_FINAL_LINK_TO_NULL,
-        }
-    };
+    size_t buf_count = trans->buf_info_count;
+    gdma_buffer_mount_config_t *mount_configs = uhci_ctrl->tx_dir.mount_configs;
+
+    for (size_t i = 0; i < buf_count; i++) {
+        bool is_last = (i == buf_count - 1);
+        size_t buffer_alignment = gdma_get_buffer_alignment_constraint(uhci_ctrl->tx_dir.dma_chan, trans->buf_info[i].write_buffer);
+        mount_configs[i] = (gdma_buffer_mount_config_t) {
+            .buffer = (void *)trans->buf_info[i].write_buffer,
+            .buffer_alignment = buffer_alignment,
+            .length = trans->buf_info[i].buffer_size,
+            .flags = {
+                // Only the last buffer segment is marked EOF/final, so the whole set of segments is
+                // seen by UHCI as a single transaction.
+                .mark_eof = is_last,
+                .mark_final = is_last ? GDMA_FINAL_LINK_TO_NULL : GDMA_FINAL_LINK_TO_DEFAULT,
+            }
+        };
+    }
 
 #if CONFIG_PM_ENABLE
     // acquire power manager lock
@@ -300,66 +313,85 @@ static void uhci_do_transmit(uhci_controller_handle_t uhci_ctrl, uhci_transactio
     }
 #endif
 
-    gdma_link_mount_buffers(uhci_ctrl->tx_dir.dma_link, 0, &mount_config, 1, NULL);
+    gdma_link_mount_buffers(uhci_ctrl->tx_dir.dma_link, 0, mount_configs, buf_count, NULL);
     gdma_start(uhci_ctrl->tx_dir.dma_chan, gdma_link_get_head_addr(uhci_ctrl->tx_dir.dma_link));
 }
 
-esp_err_t uhci_receive(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size)
+static esp_err_t uhci_receive_internal(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size, bool continuous)
 {
-    ESP_RETURN_ON_FALSE(uhci_ctrl, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE((read_buffer != NULL), ESP_ERR_INVALID_ARG, TAG, "read buffer null");
+    // Use the ISR-safe check variants: uhci_receive() is documented to be callable from the RX-done
+    // callback (ISR context), where the plain ESP_LOGE-based macros would take the log mutex.
+    ESP_RETURN_ON_FALSE_ISR(uhci_ctrl, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE_ISR(read_buffer != NULL && buffer_size > 0, ESP_ERR_INVALID_ARG, TAG, "read buffer null or buffer size is 0");
 
-    uint32_t mem_cache_line_size = esp_ptr_external_ram(read_buffer) ? uhci_ctrl->ext_mem_cache_line_size : uhci_ctrl->int_mem_cache_line_size;
+    uhci_rx_fsm_t expected_fsm = UHCI_RX_FSM_ENABLE;
+    ESP_RETURN_ON_FALSE_ISR(atomic_compare_exchange_strong(&uhci_ctrl->rx_dir.rx_fsm, &expected_fsm, UHCI_RX_FSM_RUN_WAIT), ESP_ERR_INVALID_STATE, TAG, "controller not in enable state");
+
+    esp_err_t ret = ESP_OK;
 
     // Must take cache line into consideration for C2M operation.
-    uint32_t max_alignment_needed = UHCI_MAX(UHCI_MAX(uhci_ctrl->rx_dir.int_mem_align, uhci_ctrl->rx_dir.ext_mem_align), mem_cache_line_size);
+    const uint32_t mem_cache_line_size = esp_cache_get_line_size_by_addr(read_buffer);
+
+    size_t buffer_alignment = gdma_get_buffer_alignment_constraint(uhci_ctrl->rx_dir.dma_chan, read_buffer);
+    const uint32_t max_alignment_needed = MAX(buffer_alignment, mem_cache_line_size);
+    uhci_ctrl->rx_dir.cache_line = mem_cache_line_size;
 
     // Align the read_buffer pointer to mem_cache_line_size
     if (max_alignment_needed > 0 && (((uintptr_t)read_buffer) & (max_alignment_needed - 1)) != 0) {
         uintptr_t aligned_address = ((uintptr_t)read_buffer + max_alignment_needed - 1) & ~(max_alignment_needed - 1);
         size_t offset = aligned_address - (uintptr_t)read_buffer;
 
-        ESP_RETURN_ON_FALSE(buffer_size > offset, ESP_ERR_INVALID_ARG, TAG, "buffer size too small to align");
+        ESP_GOTO_ON_FALSE_ISR(buffer_size > offset, ESP_ERR_INVALID_ARG, err, TAG, "buffer size too small to align");
 
         read_buffer = (uint8_t *)aligned_address;
         buffer_size -= offset;
     }
 
-    uhci_ctrl->rx_dir.cache_line = mem_cache_line_size;
-    uhci_rx_fsm_t expected_fsm = UHCI_RX_FSM_ENABLE;
-    ESP_RETURN_ON_FALSE(atomic_compare_exchange_strong(&uhci_ctrl->rx_dir.rx_fsm, &expected_fsm, UHCI_RX_FSM_RUN_WAIT), ESP_ERR_INVALID_STATE, TAG, "controller not in enable state");
-
-    size_t node_count = uhci_ctrl->rx_dir.rx_num_dma_nodes;
-
+    const size_t node_count = uhci_ctrl->rx_dir.rx_num_dma_nodes;
     // Initialize the mount configurations for each DMA node, making sure every node is properly aligned.
     size_t usable_size = (max_alignment_needed == 0) ? buffer_size : (buffer_size / max_alignment_needed) * max_alignment_needed;
     size_t base_size = (max_alignment_needed == 0) ? usable_size / node_count : (usable_size / node_count / max_alignment_needed) * max_alignment_needed;
     size_t remaining_size = usable_size - (base_size * node_count);
 
-    gdma_buffer_mount_config_t mount_configs[node_count];
-    memset(mount_configs, 0, node_count * sizeof(gdma_buffer_mount_config_t));
+    {
+        // Reuse the pre-allocated scratch array instead of a VLA: this function may run in ISR
+        // context, where a large node_count on the stack could overflow the small ISR stack.
+        gdma_buffer_mount_config_t *mount_configs = uhci_ctrl->rx_dir.mount_configs;
+        memset(mount_configs, 0, node_count * sizeof(gdma_buffer_mount_config_t));
 
-    for (size_t i = 0; i < node_count; i++) {
-        uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] = base_size;
-        uhci_ctrl->rx_dir.buffer_pointers[i] = read_buffer;
-        size_t buffer_alignment = esp_ptr_internal(read_buffer) ? uhci_ctrl->rx_dir.int_mem_align : uhci_ctrl->rx_dir.ext_mem_align;
-        // Distribute the remaining size to the first few nodes
-        if (remaining_size >= max_alignment_needed) {
-            uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] += max_alignment_needed;
-            remaining_size -= max_alignment_needed;
+        for (size_t i = 0; i < node_count; i++) {
+            uhci_ctrl->rx_dir.buffer_pointers[i] = read_buffer;
+            // Distribute the remaining size to the first few nodes
+            if (remaining_size >= max_alignment_needed) {
+                uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] = base_size + max_alignment_needed;
+                remaining_size -= max_alignment_needed;
+            } else {
+                uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] = base_size;
+            }
+            ESP_GOTO_ON_FALSE_ISR(uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] != 0 && uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] <= DMA_DESCRIPTOR_BUFFER_MAX_SIZE,
+                                  ESP_ERR_INVALID_ARG, err, TAG, "buffer_size is too small or too large");
+
+            buffer_alignment = gdma_get_buffer_alignment_constraint(uhci_ctrl->rx_dir.dma_chan, read_buffer);
+            mount_configs[i] = (gdma_buffer_mount_config_t) {
+                .buffer = read_buffer,
+                .buffer_alignment = buffer_alignment,
+                .length = uhci_ctrl->rx_dir.buffer_size_per_desc_node[i],
+                .flags = {
+                    .mark_final = GDMA_FINAL_LINK_TO_DEFAULT,
+                }
+            };
+            ESP_DRAM_LOGD(TAG, "The DMA node %d has %d byte", i, uhci_ctrl->rx_dir.buffer_size_per_desc_node[i]);
+
+            read_buffer += uhci_ctrl->rx_dir.buffer_size_per_desc_node[i];
         }
 
-        mount_configs[i] = (gdma_buffer_mount_config_t) {
-            .buffer = read_buffer,
-            .buffer_alignment = buffer_alignment,
-            .length = uhci_ctrl->rx_dir.buffer_size_per_desc_node[i],
-            .flags = {
-                .mark_final = GDMA_FINAL_LINK_TO_DEFAULT,
-            }
-        };
-        ESP_LOGD(TAG, "The DMA node %d has %d byte", i, uhci_ctrl->rx_dir.buffer_size_per_desc_node[i]);
-        ESP_RETURN_ON_FALSE(uhci_ctrl->rx_dir.buffer_size_per_desc_node[i] != 0, ESP_ERR_INVALID_STATE, TAG, "Allocate dma node length is 0, please reconfigure the buffer_size");
-        read_buffer += uhci_ctrl->rx_dir.buffer_size_per_desc_node[i];
+        ESP_GOTO_ON_ERROR_ISR(gdma_link_mount_buffers(uhci_ctrl->rx_dir.dma_link, 0, mount_configs, node_count, NULL), err, TAG, "DMA link mount buffers failed");
+
+        // Invalidate cache before DMA starts to ensure no dirty cache lines.
+        // All DMA nodes (mount_configs) share the same contiguous user buffer, so checking mount_configs[0].buffer is sufficient.
+        if (esp_cache_get_line_size_by_addr(mount_configs[0].buffer) > 0) {
+            ESP_GOTO_ON_ERROR_ISR(esp_cache_msync(mount_configs[0].buffer, usable_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C), err, TAG, "cache sync failed");
+        }
     }
 
 #if CONFIG_PM_ENABLE
@@ -369,38 +401,84 @@ esp_err_t uhci_receive(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer,
     }
 #endif
 
-    gdma_link_mount_buffers(uhci_ctrl->rx_dir.dma_link, 0, mount_configs, node_count, NULL);
-
-    // Invalidate cache before DMA starts to ensure no dirty cache lines.
-    // All DMA nodes (mount_configs) share the same contiguous user buffer, so checking mount_configs[0].buffer is sufficient.
-    bool need_cache_sync = esp_ptr_internal(mount_configs[0].buffer) ? (uhci_ctrl->int_mem_cache_line_size > 0) : (uhci_ctrl->ext_mem_cache_line_size > 0);
-    if (need_cache_sync) {
-        ESP_RETURN_ON_ERROR(esp_cache_msync(mount_configs[0].buffer, usable_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C), TAG, "cache sync failed");
-    }
+    uhci_ctrl->rx_dir.continuous = continuous;
+    atomic_store(&uhci_ctrl->rx_dir.rx_fsm, UHCI_RX_FSM_RUN);
 
     gdma_reset(uhci_ctrl->rx_dir.dma_chan);
     gdma_start(uhci_ctrl->rx_dir.dma_chan, gdma_link_get_head_addr(uhci_ctrl->rx_dir.dma_link));
 
-    atomic_store(&uhci_ctrl->rx_dir.rx_fsm, UHCI_RX_FSM_RUN);
+    return ESP_OK;
+err:
+    atomic_store(&uhci_ctrl->rx_dir.rx_fsm, UHCI_RX_FSM_ENABLE);
+    return ret;
+}
+
+esp_err_t uhci_receive(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size)
+{
+    return uhci_receive_internal(uhci_ctrl, read_buffer, buffer_size, false);
+}
+
+esp_err_t uhci_start_receive_continuous(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size)
+{
+    return uhci_receive_internal(uhci_ctrl, read_buffer, buffer_size, true);
+}
+
+esp_err_t uhci_stop_receive(uhci_controller_handle_t uhci_ctrl)
+{
+    ESP_RETURN_ON_FALSE(uhci_ctrl, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+
+    // Atomically claim the RUN->ENABLE transition. If the RX EOF ISR already ended the session
+    // (state is ENABLE) or wins this race, we must not stop the DMA or release the shared PM lock
+    // again, otherwise the single pm_lock (shared with TX) would be double-released.
+    uhci_rx_fsm_t expected = UHCI_RX_FSM_RUN;
+    if (!atomic_compare_exchange_strong(&uhci_ctrl->rx_dir.rx_fsm, &expected, UHCI_RX_FSM_ENABLE)) {
+        // RUN_WAIT means a receive is concurrently being armed (e.g. re-armed from the RX-done ISR).
+        // Report it instead of silently returning ESP_OK, which would let that start win the race and
+        // keep the DMA running after the caller believes it stopped.
+        if (expected == UHCI_RX_FSM_RUN_WAIT) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        return ESP_OK;
+    }
+
+    gdma_stop(uhci_ctrl->rx_dir.dma_chan);
+    gdma_reset(uhci_ctrl->rx_dir.dma_chan);
+    uhci_ctrl->rx_dir.node_index = 0;
+    uhci_ctrl->rx_dir.continuous = false;
+
+#if CONFIG_PM_ENABLE
+    // In continuous mode the PM lock is held for the whole session; release it here.
+    if (uhci_ctrl->pm_lock) {
+        esp_pm_lock_release(uhci_ctrl->pm_lock);
+    }
+#endif
+
     return ESP_OK;
 }
 
-esp_err_t uhci_transmit(uhci_controller_handle_t uhci_ctrl, uint8_t *write_buffer, size_t write_size)
+esp_err_t uhci_multi_buffer_transmit(uhci_controller_handle_t uhci_ctrl, const uhci_transmit_buffer_info_t *buffer_info_array, size_t array_size)
 {
     ESP_RETURN_ON_FALSE(uhci_ctrl, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE((write_buffer != NULL), ESP_ERR_INVALID_ARG, TAG, "write buffer null");
+    ESP_RETURN_ON_FALSE(buffer_info_array && array_size > 0, ESP_ERR_INVALID_ARG, TAG, "invalid buffer info array");
+    ESP_RETURN_ON_FALSE(array_size <= uhci_ctrl->tx_dir.max_buf_count, ESP_ERR_INVALID_ARG, TAG,
+                        "array_size %zu exceeds max_transmit_buffer_count", array_size);
 
-    size_t alignment = 0;
-    size_t cache_line_size = 0;
-    esp_ptr_external_ram(write_buffer) ? (alignment = uhci_ctrl->tx_dir.ext_mem_align, cache_line_size = uhci_ctrl->ext_mem_cache_line_size) : (alignment = uhci_ctrl->tx_dir.int_mem_align, cache_line_size = uhci_ctrl->int_mem_cache_line_size);
+    size_t total_size = 0;
+    for (size_t i = 0; i < array_size; i++) {
+        const uint8_t *write_buffer = buffer_info_array[i].write_buffer;
+        size_t write_size = buffer_info_array[i].buffer_size;
+        ESP_RETURN_ON_FALSE(write_buffer != NULL && write_size > 0, ESP_ERR_INVALID_ARG, TAG, "buffer segment %zu is invalid", i);
 
-    ESP_RETURN_ON_FALSE(((((uintptr_t)write_buffer) & (alignment - 1)) == 0) && (((write_size) & (alignment - 1)) == 0), ESP_ERR_INVALID_ARG,
-                        TAG, "buffer address or size are not %d bytes aligned", alignment);
+        total_size += write_size;
 
-    if (cache_line_size > 0) {
-        // Write back to cache to synchronize the cache before DMA start
-        ESP_RETURN_ON_ERROR(esp_cache_msync((void *)write_buffer, write_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED), TAG, "cache sync failed");
+        if (esp_cache_get_line_size_by_addr(write_buffer) > 0) {
+            // Write back to cache to synchronize the cache before DMA start
+            ESP_RETURN_ON_ERROR(esp_cache_msync((void *)write_buffer, write_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED), TAG, "cache sync failed");
+        }
     }
+
+    ESP_RETURN_ON_FALSE(total_size <= uhci_ctrl->tx_dir.max_transmit_size, ESP_ERR_INVALID_ARG, TAG,
+                        "total transmit size %zu exceeds max_transmit_size %zu", total_size, uhci_ctrl->tx_dir.max_transmit_size);
 
     uhci_transaction_desc_t *t = NULL;
 
@@ -411,9 +489,11 @@ esp_err_t uhci_transmit(uhci_controller_handle_t uhci_ctrl, uint8_t *write_buffe
     }
     ESP_RETURN_ON_FALSE(t, ESP_ERR_INVALID_STATE, TAG, "no free transaction descriptor, please consider increasing trans_queue_depth");
 
-    memset(t, 0, sizeof(uhci_transaction_desc_t));
-    t->buffer = write_buffer;
-    t->buffer_size = write_size;
+    for (size_t i = 0; i < array_size; i++) {
+        t->buf_info[i] = buffer_info_array[i];
+    }
+    t->buf_info_count = array_size;
+    t->total_size = total_size;
 
     ESP_RETURN_ON_FALSE(xQueueSend(uhci_ctrl->tx_dir.trans_queues[UHCI_TRANS_QUEUE_PROGRESS], &t, 0) == pdTRUE, ESP_ERR_NO_MEM, TAG, "uhci tx transaction queue full");
     atomic_fetch_add(&uhci_ctrl->tx_dir.num_trans_inflight, 1);
@@ -431,23 +511,41 @@ esp_err_t uhci_transmit(uhci_controller_handle_t uhci_ctrl, uint8_t *write_buffe
     return ESP_OK;
 }
 
+esp_err_t uhci_transmit(uhci_controller_handle_t uhci_ctrl, uint8_t *write_buffer, size_t write_size)
+{
+    uhci_transmit_buffer_info_t buf_info = {
+        .write_buffer = write_buffer,
+        .buffer_size = write_size,
+    };
+    return uhci_multi_buffer_transmit(uhci_ctrl, &buf_info, 1);
+}
+
 esp_err_t uhci_del_controller(uhci_controller_handle_t uhci_ctrl)
 {
     ESP_RETURN_ON_FALSE(uhci_ctrl, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
 
-    if (uhci_ctrl->rx_dir.rx_fsm != UHCI_RX_FSM_ENABLE) {
+    uhci_rx_fsm_t expected_rx = UHCI_RX_FSM_ENABLE;
+    if (!atomic_compare_exchange_strong(&uhci_ctrl->rx_dir.rx_fsm, &expected_rx, UHCI_RX_FSM_DELETE)) {
         ESP_LOGE(TAG, "RX transaction is not finished, delete controller failed");
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (uhci_ctrl->tx_dir.tx_fsm != UHCI_TX_FSM_ENABLE) {
+    uhci_tx_fsm_t expected_tx = UHCI_TX_FSM_ENABLE;
+    if (!atomic_compare_exchange_strong(&uhci_ctrl->tx_dir.tx_fsm, &expected_tx, UHCI_TX_FSM_DELETE)) {
         ESP_LOGE(TAG, "TX transaction is not finished, delete controller failed");
+        atomic_store(&uhci_ctrl->rx_dir.rx_fsm, UHCI_RX_FSM_ENABLE);  // rollback
         return ESP_ERR_INVALID_STATE;
     }
+
+    // Ensure that all interrupts (GDMA callbacks) have completed and that no further callbacks can be
+    // triggered before releasing the resources.
+    ESP_RETURN_ON_ERROR(uhci_gdma_deinitialize(uhci_ctrl), TAG, "deinitialize uhci dma channel failed");
 
     PERIPH_RCC_ATOMIC() {
         uhci_ll_enable_bus_clock(uhci_ctrl->uhci_num, false);
     }
+
+    uhci_hal_deinit(&uhci_ctrl->hal);
 
     for (int i = 0; i < UHCI_TRANS_QUEUE_MAX; i++) {
         if (uhci_ctrl->tx_dir.trans_queues[i]) {
@@ -459,11 +557,18 @@ esp_err_t uhci_del_controller(uhci_controller_handle_t uhci_ctrl)
         heap_caps_free(uhci_ctrl->tx_dir.trans_desc_pool);
     }
 
+    if (uhci_ctrl->tx_dir.mount_configs) {
+        heap_caps_free(uhci_ctrl->tx_dir.mount_configs);
+    }
+
     if (uhci_ctrl->rx_dir.buffer_size_per_desc_node) {
         free(uhci_ctrl->rx_dir.buffer_size_per_desc_node);
     }
     if (uhci_ctrl->rx_dir.buffer_pointers) {
         free(uhci_ctrl->rx_dir.buffer_pointers);
+    }
+    if (uhci_ctrl->rx_dir.mount_configs) {
+        heap_caps_free(uhci_ctrl->rx_dir.mount_configs);
     }
 
 #if CONFIG_PM_ENABLE
@@ -471,10 +576,6 @@ esp_err_t uhci_del_controller(uhci_controller_handle_t uhci_ctrl)
         ESP_RETURN_ON_ERROR(esp_pm_lock_delete(uhci_ctrl->pm_lock), TAG, "delete rx pm_lock failed");
     }
 #endif
-
-    ESP_RETURN_ON_ERROR(uhci_gdma_deinitialize(uhci_ctrl), TAG, "deinitialize uhci dam channel failed");
-
-    uhci_hal_deinit(&uhci_ctrl->hal);
 
     s_uhci_platform.controller[uhci_ctrl->uhci_num] = NULL;
 
@@ -517,12 +618,19 @@ esp_err_t uhci_new_controller(const uhci_controller_config_t *config, uhci_contr
         ESP_GOTO_ON_FALSE(uhci_ctrl->tx_dir.trans_queues[i], ESP_ERR_NO_MEM, err, TAG, "no mem for transaction queue");
     }
 
-    uhci_ctrl->tx_dir.trans_desc_pool = heap_caps_calloc(config->tx_trans_queue_depth, sizeof(uhci_transaction_desc_t), UHCI_MEM_ALLOC_CAPS);
+    uhci_ctrl->tx_dir.max_buf_count = config->max_transmit_buffer_count > 0 ? config->max_transmit_buffer_count : 1;
+    uhci_ctrl->tx_dir.max_transmit_size = config->max_transmit_size;
+
+    uhci_ctrl->tx_dir.mount_configs = heap_caps_calloc(uhci_ctrl->tx_dir.max_buf_count, sizeof(gdma_buffer_mount_config_t), UHCI_MEM_ALLOC_CAPS);
+    ESP_GOTO_ON_FALSE(uhci_ctrl->tx_dir.mount_configs, ESP_ERR_NO_MEM, err, TAG, "no mem for buffer mount config array");
+
+    size_t desc_elem_size = sizeof(uhci_transaction_desc_t) + uhci_ctrl->tx_dir.max_buf_count * sizeof(uhci_transmit_buffer_info_t);
+    uhci_ctrl->tx_dir.trans_desc_pool = heap_caps_calloc(config->tx_trans_queue_depth, desc_elem_size, UHCI_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(uhci_ctrl->tx_dir.trans_desc_pool, ESP_ERR_NO_MEM, err, TAG, "no mem for transaction desc pool");
     uhci_transaction_desc_t *p_trans_desc = NULL;
 
     for (int i = 0; i < config->tx_trans_queue_depth; i++) {
-        p_trans_desc = &uhci_ctrl->tx_dir.trans_desc_pool[i];
+        p_trans_desc = (uhci_transaction_desc_t *)((uint8_t *)uhci_ctrl->tx_dir.trans_desc_pool + i * desc_elem_size);
         xQueueSend(uhci_ctrl->tx_dir.trans_queues[UHCI_TRANS_QUEUE_READY], &p_trans_desc, 0);
     }
 
@@ -547,21 +655,24 @@ esp_err_t uhci_new_controller(const uhci_controller_config_t *config, uhci_contr
     };
     uhci_ll_set_seper_chr(uhci_ctrl->hal.dev, &seper_chr);
 
-    if (config->rx_eof_flags.idle_eof) {
-        uhci_ll_rx_set_eof_mode(uhci_ctrl->hal.dev, UHCI_RX_IDLE_EOF);
-    }
+    uhci_ll_rx_enable_eof_modes(uhci_ctrl->hal.dev, UHCI_RX_IDLE_EOF, config->rx_eof_flags.idle_eof);
+    uhci_ll_rx_enable_eof_modes(uhci_ctrl->hal.dev, UHCI_RX_LEN_EOF, config->rx_eof_flags.length_eof);
+    uhci_ll_rx_enable_eof_modes(uhci_ctrl->hal.dev, UHCI_RX_BREAK_CHR_EOF, config->rx_eof_flags.rx_brk_eof);
     if (config->rx_eof_flags.length_eof) {
-        uhci_ll_rx_set_eof_mode(uhci_ctrl->hal.dev, UHCI_RX_LEN_EOF);
         uhci_ll_rx_set_packet_threshold(uhci_ctrl->hal.dev, config->max_packet_receive);
     }
-    if (config->rx_eof_flags.rx_brk_eof) {
-        uhci_ll_rx_set_eof_mode(uhci_ctrl->hal.dev, UHCI_RX_BREAK_CHR_EOF);
-    }
-
-    esp_cache_get_alignment(MALLOC_CAP_SPIRAM, &uhci_ctrl->ext_mem_cache_line_size);
-    esp_cache_get_alignment(MALLOC_CAP_INTERNAL, &uhci_ctrl->int_mem_cache_line_size);
 
     ESP_GOTO_ON_ERROR(uhci_gdma_initialize(uhci_ctrl, config), err, TAG, "uhci gdma initialize failed");
+
+    // rx_num_dma_nodes is only known after uhci_gdma_initialize() queried the DMA alignment, so the
+    // per-node RX scratch arrays are allocated here (mirroring how tx_dir.mount_configs is allocated).
+    uhci_ctrl->rx_dir.buffer_size_per_desc_node = heap_caps_calloc(uhci_ctrl->rx_dir.rx_num_dma_nodes, sizeof(*uhci_ctrl->rx_dir.buffer_size_per_desc_node), UHCI_MEM_ALLOC_CAPS);
+    ESP_GOTO_ON_FALSE(uhci_ctrl->rx_dir.buffer_size_per_desc_node, ESP_ERR_NO_MEM, err, TAG, "no memory for recording buffer size for desc node");
+    uhci_ctrl->rx_dir.buffer_pointers = heap_caps_calloc(uhci_ctrl->rx_dir.rx_num_dma_nodes, sizeof(*uhci_ctrl->rx_dir.buffer_pointers), UHCI_MEM_ALLOC_CAPS);
+    ESP_GOTO_ON_FALSE(uhci_ctrl->rx_dir.buffer_pointers, ESP_ERR_NO_MEM, err, TAG, "no memory for recording buffer pointers for desc node");
+    // Pre-allocate the mount config scratch array so uhci_receive() never puts a VLA on the (small) ISR stack.
+    uhci_ctrl->rx_dir.mount_configs = heap_caps_calloc(uhci_ctrl->rx_dir.rx_num_dma_nodes, sizeof(gdma_buffer_mount_config_t), UHCI_MEM_ALLOC_CAPS);
+    ESP_GOTO_ON_FALSE(uhci_ctrl->rx_dir.mount_configs, ESP_ERR_NO_MEM, err, TAG, "no memory for rx buffer mount config array");
 
     *ret_uhci_ctrl = uhci_ctrl;
     return ESP_OK;

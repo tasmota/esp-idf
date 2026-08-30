@@ -27,7 +27,11 @@ typedef struct uhci_controller_t *uhci_controller_handle_t;
  * @brief UHCI TX Done Event Data
  */
 typedef struct {
-    uint8_t *buffer;            /**< Pointer to the which data buffer has been finished the transaction */
+    uint8_t *buffer;            /**< Pointer to the which data buffer has been finished the transaction.
+                                      When the transaction was submitted with more than one discontinuous buffer segment
+                                      (via `uhci_multi_buffer_transmit()`), this only points to the first segment and
+                                      should be treated as an identifying handle for the transaction, not as
+                                      the start of a `sent_size`-byte contiguous region. */
     size_t sent_size;           /**< Size has been sent out */
 } uhci_tx_done_event_data_t;
 
@@ -46,6 +50,8 @@ typedef bool (*uhci_tx_done_callback_t)(uhci_controller_handle_t uhci_ctrl, cons
 
 /**
  * @brief UHCI RX Done Event Data Structure
+ *
+ * @note When an abnormal EOF occurs, `data` will be NULL and `recv_size` will be 0.
  */
 typedef struct {
     const uint8_t *data;           /*!< Pointer to the received data buffer. Data pointed to by this pointer is typically only guaranteed to be readable during the callback. If you need to use it after callback returns, copy it to external buffer first or refer to advanced zero-copy usage. */

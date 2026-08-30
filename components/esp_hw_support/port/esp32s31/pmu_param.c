@@ -36,17 +36,18 @@ ESP_HW_LOG_ATTR_TAG(TAG, "pmu_param");
         .top_pd_en          = 0  \
     }, \
     .clk_power = {            \
+        .xpd_xtalx2    = 0,   \
         .i2c_iso_en    = 0,   \
         .i2c_retention = 0,   \
         .xpd_bb_i2c    = 1,   \
         .xpd_cpll_i2c  = 1,   \
         .xpd_bbpll_i2c = 1,   \
         .xpd_apll_i2c  = 0,   \
-        .xpd_mpll_i2c  = 1,   \
+        .xpd_mpll_i2c  = 0,   \
         .xpd_cpll      = 1,   \
         .xpd_bbpll     = 1,   \
         .xpd_apll      = 0,   \
-        .xpd_mpll      = 1,   \
+        .xpd_mpll      = 0,   \
     }, \
     .xtal = {                 \
         .xpd_xtal      = 1    \
@@ -140,10 +141,11 @@ const pmu_hp_system_power_param_t * pmu_hp_system_power_param_default(pmu_hp_mod
 }
 
 #define PMU_HP_MODEM_CLOCK_CONFIG_DEFAULT() {               \
-    .icg_func.clock[0] = 0xffffffff,                                 \
-    .icg_func.clock[1] = 0xffffffff,                                 \
-    .icg_apb.clock[0] = 0xffffffff,                                  \
-    .icg_apb.clock[1] = 0xffffffff,                                  \
+    .icg_func.clock[0] = 0,                                 \
+    .icg_func.clock[1] = BIT(PMU_ICG_FUNC_ENA_ETM - 32)     \
+                         | BIT(PMU_ICG_FUNC_ENA_BUS - 32),  \
+    .icg_apb.clock[0] = 0,                                  \
+    .icg_apb.clock[1] = 0,                                  \
     .icg_modem.code = PMU_HP_ICG_MODEM_CODE_MODEM,          \
     .sysclk    = {                                          \
         .dig_sysclk_nodiv   = 0,                            \

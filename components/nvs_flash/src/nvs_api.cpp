@@ -85,8 +85,11 @@ static esp_err_t close_handles_and_deinit(const char* part_name)
 
     auto it = find_if(begin(s_nvs_handles), end(s_nvs_handles), belongs_to_part);
 
+    // Same as nvs_close(): unlink first, then delete. Deleting while still linked
+    // UAF-corrupts the intrusive list (hangs host tests).
     while (it != end(s_nvs_handles)) {
         s_nvs_handles.erase(it);
+        delete static_cast<NVSHandleEntry*>(it);
         it = find_if(begin(s_nvs_handles), end(s_nvs_handles), belongs_to_part);
     }
 
@@ -250,8 +253,7 @@ extern "C" esp_err_t nvs_flash_erase_partition(const char *part_name)
 
     // erase the partition
     err = part->erase_range(0, part->get_size());
-
-    // No need to delete the partition here, as it is managed by the NVSPartitionManager.
+    delete part;
     return err;
 }
 
@@ -296,6 +298,10 @@ static esp_err_t nvs_find_ns_handle(nvs_handle_t c_handle, NVSHandleSimple** han
 
 extern "C" esp_err_t nvs_open_from_partition(const char *part_name, const char* namespace_name, nvs_open_mode_t open_mode, nvs_handle_t *out_handle)
 {
+    if (out_handle == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     esp_err_t lock_result = Lock::init();
     if (lock_result != ESP_OK) {
         return lock_result;

@@ -5,6 +5,7 @@
 import ipaddress
 import logging
 import os
+import random
 import re
 import socket
 import struct
@@ -259,11 +260,20 @@ def ot_ping(
     return tx_count, rx_count
 
 
-def ping_and_check(dut: IdfDut, target: str, tx_total: int = 10, timeout: int = 6, pass_rate: float = 0.8) -> None:
+def ping_and_check(
+    dut: IdfDut,
+    target: str,
+    tx_total: int = 10,
+    timeout: int = 6,
+    pass_rate: float = 0.8,
+    size: int = 10,
+    size_range: tuple[int, int] | None = None,
+) -> None:
     tx_count = 0
     rx_count = 0
     for _ in range(tx_total):
-        tx, rx = ot_ping(dut, target, timeout=timeout, count=1, size=10, interval=6)
+        ping_size = random.randint(*size_range) if size_range else size
+        tx, rx = ot_ping(dut, target, timeout=timeout, count=1, size=ping_size, interval=6)
         tx_count += tx
         rx_count += rx
 
@@ -809,9 +819,25 @@ def execute_command(dut: IdfDut, command: str, prefix: str = 'ot ') -> None:
 
 def get_output_string(dut: IdfDut, command: str, wait_time: int) -> str:
     execute_command(dut, command)
-    tmp = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
+    output = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
     clean_buffer(dut)
-    return str(tmp)
+    if isinstance(output, bytes):
+        return output.decode('utf-8', errors='replace')
+    return str(output)
+
+
+def escape_ot_cli_arg(value: str) -> str:
+    return value.replace('\\', '\\\\').replace(' ', '\\ ')
+
+
+def parse_dns_browse_instance(browse_output: str, port: str = '12347') -> str:
+    normalized = re.sub(r'\r\n?', '\n', browse_output)
+    match = re.search(
+        r'DNS browse response for [^\n]+\n+([^\n]+)\n+\s+Port:' + re.escape(port),
+        normalized,
+    )
+    assert match, f'no service instance with Port:{port} in browse output: {browse_output}'
+    return match.group(1).strip()
 
 
 def wait_for_host_network(host: str = '8.8.8.8', retries: int = 6, interval: int = 10) -> None:

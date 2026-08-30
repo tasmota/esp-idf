@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -178,6 +178,8 @@ typedef enum {
     ETH_CMD_S_ALL_MULTICAST,          /*!< Set receive all multicast */
     ETH_CMD_ADD_MAC_FILTER,           /*!< Add MAC filter */
     ETH_CMD_DEL_MAC_FILTER,           /*!< Delete MAC filter */
+    ETH_CMD_S_PHY_MASTER_MODE,        /*!< Set PHY master mode */
+    ETH_CMD_G_PHY_MASTER_MODE,        /*!< Get PHY master mode */
 
     ETH_CMD_CUSTOM_MAC_CMDS = ETH_CMD_CUSTOM_MAC_CMDS_OFFSET, // Offset for start of MAC custom commands
     ETH_CMD_CUSTOM_PHY_CMDS = ETH_CMD_CUSTOM_PHY_CMDS_OFFSET, // Offset for start of PHY custom commands
@@ -322,6 +324,8 @@ esp_err_t esp_eth_transmit(esp_eth_handle_t hdl, void *buf, size_t length);
 /**
  * @brief Extended Transmit with variable number of arguments
  *
+ * @deprecated Use esp_eth_transmit_ctrl_bufs() instead.
+ *
  * @note Typical intended use case of this function is to assemble Ethernet frame from multiple input buffers
  *       at lower layer of the driver (MAC layer) to avoid unnecessary buffer reallocation and copy.
  *
@@ -335,12 +339,13 @@ esp_err_t esp_eth_transmit(esp_eth_handle_t hdl, void *buf, size_t length);
  *       - ESP_ERR_TIMEOUT: transmit frame buffer failed because HW was not get available in predefined period
  *       - ESP_FAIL: transmit frame buffer failed because some other error occurred
  */
-esp_err_t esp_eth_transmit_ctrl_vargs(esp_eth_handle_t hdl, void *ctrl, uint32_t argc, ...);
+esp_err_t esp_eth_transmit_ctrl_vargs(esp_eth_handle_t hdl, void *ctrl, uint32_t argc, ...)
+__attribute__((deprecated("Use esp_eth_transmit_ctrl_bufs() instead")));
 
 /**
 * @brief Wrapper over Extended Transmit function to ensure backward compatibility.
 *
-* @note For new implementations, it is recommended to use `esp_eth_transmit_ctrl_vargs()` directly.
+* @note For new implementations, it is recommended to use `esp_eth_transmit_ctrl_bufs()` directly.
 *
 * @param[in] eth_hdl handle of Ethernet driver
 * @param[in] argc number variable arguments
@@ -352,6 +357,25 @@ esp_err_t esp_eth_transmit_ctrl_vargs(esp_eth_handle_t hdl, void *ctrl, uint32_t
 *       - ESP_FAIL: transmit frame buffer failed because some other error occurred
 */
 #define esp_eth_transmit_vargs(eth_hdl, argc, ...) esp_eth_transmit_ctrl_vargs(eth_hdl, NULL, (argc) * 2, ##__VA_ARGS__)
+
+/**
+ * @brief Extended transmit from scatter-gather buffer descriptors.
+ *
+ * @note Typical intended use case is to assemble an Ethernet frame from multiple
+ *       input buffers at the MAC layer to avoid unnecessary buffer reallocation
+ *       and copy.
+ *
+ * @param hdl       handle of Ethernet driver
+ * @param ctrl      optional transmit control structure (MAC specific), set to NULL when not required
+ * @param bufs      array of buffer descriptors comprising the frame
+ * @param buf_count number of valid entries in @a bufs
+ * @return
+ *       - ESP_OK: transmit successful
+ *       - ESP_ERR_INVALID_STATE: invalid driver state (e.i., driver is not started)
+ *       - ESP_ERR_TIMEOUT: transmit frame buffer failed because HW was not get available in predefined period
+ *       - ESP_FAIL: transmit frame buffer failed because some other error occurred
+ */
+esp_err_t esp_eth_transmit_ctrl_bufs(esp_eth_handle_t hdl, void *ctrl, const esp_eth_buf_desc_t *bufs, size_t buf_count);
 
 /**
 * @brief Misc IO function of Ethernet driver
@@ -383,9 +407,14 @@ esp_err_t esp_eth_transmit_ctrl_vargs(esp_eth_handle_t hdl, void *ctrl, uint32_t
 *                            Preconditions: Ethernet driver needs to be stopped and auto-negotiation disabled.
 * @li @c ETH_CMD_G_DUPLEX_MODE gets current Ethernet link duplex mode.  @c data argument is pointer to memory of eth_duplex_t datatype to which the duplex mode is to be stored.
 * @li @c ETH_CMD_S_PHY_LOOPBACK sets/resets PHY to/from loopback mode. @c data argument is pointer to memory of bool datatype from which the configuration option is read.
+* @li @c ETH_CMD_READ_PHY_REG reads PHY register. @c data argument is pointer to @c esp_eth_phy_reg_rw_data_t containing register address and pointer to store read value.
+* @li @c ETH_CMD_WRITE_PHY_REG writes PHY register. @c data argument is pointer to @c esp_eth_phy_reg_rw_data_t containing register address and pointer to value to write.
 * @li @c ETH_CMD_S_ALL_MULTICAST sets/resets Ethernet interface to/from receive all multicast mode. @c data argument is pointer to memory of bool datatype from which the configuration option is read.
 * @li @c ETH_CMD_ADD_MAC_FILTER adds a MAC address to the MAC filter. @c data argument is pointer to MAC address buffer with expected size of 6 bytes.
 * @li @c ETH_CMD_DEL_MAC_FILTER deletes a MAC address from the MAC filter. @c data argument is pointer to MAC address buffer with expected size of 6 bytes.
+* @li @c ETH_CMD_S_PHY_MASTER_MODE sets PHY master/slave mode for 1000BASE-T. @c data argument is pointer to memory of bool datatype from which the configuration option is read (true = master, false = slave).
+*                           Preconditions: Ethernet driver needs to be stopped. Required before forcing 1000 Mbps speed when auto-negotiation is disabled.
+* @li @c ETH_CMD_G_PHY_MASTER_MODE gets PHY master/slave mode for 1000BASE-T. @c data argument is pointer to memory of bool datatype to which the current configuration is to be stored (true = master, false = slave).
 *
 * @li Note that additional control commands may be available for specific MAC or PHY chips. Please consult specific MAC or PHY documentation or driver code.
 */

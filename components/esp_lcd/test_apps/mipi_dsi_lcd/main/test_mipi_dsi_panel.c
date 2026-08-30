@@ -18,9 +18,7 @@
 #include "esp_lcd_ek79007.h"
 #include "driver/ppa.h"
 #include "esp_efuse.h"
-
-#define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-#define ALIGN_DOWN(num, align)  ((num) & ~((align) - 1))
+#include "esp_macros.h"
 
 TEST_CASE("MIPI DSI Pattern Generator (EK79007)", "[mipi_dsi]")
 {
@@ -251,17 +249,17 @@ TEST_CASE("MIPI DSI use DMA2D (EK79007)", "[mipi_dsi]")
     size_t src_y_start = 50;
     // If flash encryption is enabled, the buffer address and size must be aligned to SOC_MEMSPI_ENCRYPTION_ALIGNMENT.
     if (esp_efuse_is_flash_encryption_enabled()) {
-        test_block_size = ALIGN_DOWN(test_block_size, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
+        test_block_size = ESP_ALIGN_DOWN(test_block_size, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
         start_alignment = SOC_MEMSPI_ENCRYPTION_ALIGNMENT;
-        src_x_start = ALIGN_DOWN(src_x_start, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
-        src_y_start = ALIGN_DOWN(src_y_start, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
+        src_x_start = ESP_ALIGN_DOWN(src_x_start, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
+        src_y_start = ESP_ALIGN_DOWN(src_y_start, SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
     }
 
     printf("Add Built-in DMA2D draw bitmap hook\r\n");
     TEST_ESP_OK(esp_lcd_dpi_panel_enable_dma2d(mipi_dpi_panel));
     for (int i = 0; i < 100; i++) {
-        int x_start = ALIGN_DOWN(rand() % (MIPI_DSI_LCD_H_RES - test_block_size), start_alignment);
-        int y_start = ALIGN_DOWN(rand() % (MIPI_DSI_LCD_V_RES - test_block_size), start_alignment);
+        int x_start = ESP_ALIGN_DOWN(rand() % (MIPI_DSI_LCD_H_RES - test_block_size), start_alignment);
+        int y_start = ESP_ALIGN_DOWN(rand() % (MIPI_DSI_LCD_V_RES - test_block_size), start_alignment);
         uint8_t color_byte = rand() & 0xFF;
         memset(img, color_byte, TEST_IMG_SIZE / 2);
         color_byte = rand() & 0xFF;
@@ -292,7 +290,6 @@ typedef struct {
 
 typedef struct {
     uint32_t count;
-    SemaphoreHandle_t draw_sem;
 } test_dpi_panel_color_trans_done_callback_ctx_t;
 
 IRAM_ATTR static bool test_ppa_srm_trans_done_callback(ppa_client_handle_t ppa_client, ppa_event_data_t *edata, void *user_ctx)
@@ -305,6 +302,12 @@ IRAM_ATTR static bool test_ppa_srm_trans_done_callback(ppa_client_handle_t ppa_c
         if (hook_data->on_hook_end(hook_ctx->panel)) {
             need_yield = true;
         }
+    }
+
+    BaseType_t task_woken = pdFALSE;
+    xSemaphoreGiveFromISR(hook_ctx->draw_sem, &task_woken);
+    if (task_woken == pdTRUE) {
+        need_yield = true;
     }
 
     return need_yield;
@@ -353,11 +356,9 @@ static esp_err_t test_draw_bitmap_hook_ppa(esp_lcd_panel_handle_t panel, const e
 
 IRAM_ATTR static bool test_dpi_panel_color_trans_done_count_callback(esp_lcd_panel_handle_t panel, esp_lcd_dpi_panel_event_data_t *edata, void *user_ctx)
 {
-    BaseType_t task_woken = pdFALSE;
     test_dpi_panel_color_trans_done_callback_ctx_t *color_trans_done_ctx = (test_dpi_panel_color_trans_done_callback_ctx_t *)user_ctx;
     color_trans_done_ctx->count++;
-    xSemaphoreGiveFromISR(color_trans_done_ctx->draw_sem, &task_woken);
-    return task_woken == pdTRUE;
+    return false;
 }
 
 TEST_CASE("MIPI DSI use PPA (EK79007)", "[mipi_dsi]")
@@ -437,7 +438,6 @@ TEST_CASE("MIPI DSI use PPA (EK79007)", "[mipi_dsi]")
     };
 
     test_dpi_panel_color_trans_done_callback_ctx_t color_trans_done_ctx = {
-        .draw_sem = draw_sem,
         .count = 0,
     };
     TEST_ESP_OK(esp_lcd_dpi_panel_register_event_callbacks(mipi_dpi_panel, &cbs, &color_trans_done_ctx));
@@ -463,6 +463,7 @@ TEST_CASE("MIPI DSI use PPA (EK79007)", "[mipi_dsi]")
                                      img, 200, 200, 0, 0, 200, 200);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+    xSemaphoreTake(draw_sem, portMAX_DELAY);
     TEST_ASSERT_EQUAL_INT(100, color_trans_done_ctx.count);
 
     hooks.draw_bitmap_hook = NULL;
@@ -472,7 +473,7 @@ TEST_CASE("MIPI DSI use PPA (EK79007)", "[mipi_dsi]")
     TEST_ESP_OK(esp_lcd_panel_del(mipi_dpi_panel));
     TEST_ESP_OK(esp_lcd_panel_io_del(mipi_dbi_io));
     TEST_ESP_OK(esp_lcd_del_dsi_bus(mipi_dsi_bus));
-    vSemaphoreDelete(draw_sem);
+    vSemaphoreDeleteWithCaps(draw_sem);
     free(img);
 
     test_bsp_disable_dsi_phy_power();

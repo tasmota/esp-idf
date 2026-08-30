@@ -10,8 +10,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "esp_bit_defs.h"
 #include "esp_err.h"
 #include "esp_blockdev.h"
+#include "esp_attr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,13 +28,19 @@ extern "C" {
 typedef struct esp_flash_t esp_flash_t;
 /** @endcond */
 
+
 /**
- * @brief Enumeration which specifies memory space requested in an mmap call
+ * @brief Flags for @ref esp_partition_mmap() calls
  */
 typedef enum {
-    ESP_PARTITION_MMAP_DATA,    /**< map to data memory (Vaddr0), allows byte-aligned access, (4 MB total - only for esp32) */
-    ESP_PARTITION_MMAP_INST,    /**< map to instruction memory (Vaddr1-3), allows only 4-byte-aligned access, (11 MB total - only for esp32) */
-} esp_partition_mmap_memory_t;
+    ESP_PARTITION_MMAP_DATA = 0,            /**< map to data memory (Vaddr0), allows byte-aligned access, (4 MB total - only for esp32) */
+    ESP_PARTITION_MMAP_INST = BIT(0),       /**< map to instruction memory (Vaddr1-3), allows only 4-byte-aligned access, (11 MB total - only for esp32) */
+    //Enum above are also used in the ROM, don't change the value.
+    ESP_PARTITION_MMAP_BLOCKS_WRITE = BIT(1),   /**< Blocks flash erasing/writing until unmap to avoid the cache disabling. See SPI_FLASH_MMAP_FLAG_BLOCKS_WRITE. */
+} esp_partition_mmap_flag_t;
+
+/** Deprecated type. */
+#define esp_partition_mmap_memory_t _Pragma("GCC warning \"'esp_partition_mmap_memory_t' enum is deprecated.\"") esp_partition_mmap_flag_t
 
 /**
  * @brief Opaque handle for memory region obtained from esp_partition_mmap.
@@ -477,19 +485,25 @@ esp_err_t esp_partition_erase_range(const esp_partition_t* partition,
  * To release mapped memory, pass handle returned via out_handle argument to
  * esp_partition_munmap function.
  *
+ * If there is any mapped region while SPI Flash is being erased or programmed, the cache will be disabled and the
+ * system will be suspended by default. (for more info see SPI flash docs about cache disabling. It will decrease the
+ * performance of the system when it's possible for the cache to be kept enabled (for example, when XIP on PSRAM).
+ * Please specify @ref ESP_PARTITION_MMAP_BLOCKS_WRITE flag to block flash erasing/writing APIs until this region is
+ * unmapped. See SPI_FLASH_MMAP_FLAG_BLOCKS_WRITE for more details.
+ *
  * @param partition Pointer to partition structure obtained using
  *                  esp_partition_find_first or esp_partition_get.
  *                  Must be non-NULL.
  * @param offset Offset from the beginning of partition where mapping should start.
  * @param size Size of the area to be mapped.
- * @param memory  Memory space where the region should be mapped
+ * @param flags  Flags of the mapping, including address space where the region should be mapped (data or instruction)
  * @param out_ptr  Output, pointer to the mapped memory region
  * @param out_handle  Output, handle which should be used for esp_partition_munmap call
  *
  * @return ESP_OK, if successful
  */
 esp_err_t esp_partition_mmap(const esp_partition_t* partition, size_t offset, size_t size,
-                             esp_partition_mmap_memory_t memory,
+                             esp_partition_mmap_flag_t flags,
                              const void** out_ptr, esp_partition_mmap_handle_t* out_handle);
 
 /**
@@ -521,6 +535,10 @@ void esp_partition_munmap(esp_partition_mmap_handle_t handle);
  *          - ESP_ERR_NO_MEM: Cannot allocate memory for sha256 operation.
  *          - ESP_ERR_IMAGE_INVALID: App partition doesn't contain a valid app image.
  *          - ESP_FAIL: An allocation error occurred.
+ *
+ * @note Requires the esp_image_verify component in the build (apps using OTA get
+ *       it through app_update). Calling it without that component fails at link
+ *       time with an undefined reference.
  */
 esp_err_t esp_partition_get_sha256(const esp_partition_t* partition, uint8_t* sha_256);
 
@@ -662,5 +680,7 @@ esp_err_t esp_partition_ptr_get_blockdev(const esp_partition_t *partition, esp_b
 #ifdef __cplusplus
 }
 #endif
+
+FLAG_ATTR(esp_partition_mmap_flag_t)
 
 #endif /* __ESP_PARTITION_H__ */

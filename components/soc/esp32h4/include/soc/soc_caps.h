@@ -66,7 +66,7 @@
 #define SOC_I2C_SUPPORTED               1
 #define SOC_RNG_SUPPORTED               1
 #define SOC_SYSTIMER_SUPPORTED          1
-// #define SOC_SUPPORT_COEXISTENCE         1    // TODO: [ESP32H4] IDF-12251 IDF-12252 IDF-12253
+#define SOC_SUPPORT_COEXISTENCE         1
 #define SOC_AES_SUPPORTED               1
 #define SOC_SHA_SUPPORTED               1
 #define SOC_HMAC_SUPPORTED              1
@@ -76,6 +76,7 @@
 #define SOC_SECURE_BOOT_SUPPORTED       0
 #define SOC_BOD_SUPPORTED               1
 // #define SOC_APM_SUPPORTED               1    // TODO: [ESP32H4] IDF-12256
+#define SOC_RISCV_TRACE_SUPPORTED       1
 #define SOC_PMU_SUPPORTED               1    // TODO: [ESP32H4] IDF-12286
 #define SOC_PAU_SUPPORTED               1
 #define SOC_RTC_TIMER_SUPPORTED         1
@@ -118,7 +119,6 @@
 #define SOC_ADC_MONITOR_SUPPORTED               1
 #define SOC_ADC_DMA_SUPPORTED                   1
 #define SOC_ADC_PERIPH_NUM                      (1U)
-#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (5)
 #define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
@@ -367,6 +367,7 @@
 #define SOC_SPI_PERIPH_NUM                  3
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE         64
 #define SOC_SPI_SUPPORT_SLAVE_HD_VER2       1
+#define SOC_SPI_SUPPORT_SLEEP_RETENTION     1
 
 /*-------------------------- SPI MEM CAPS ---------------------------------------*/
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
@@ -467,7 +468,6 @@
 
 /*-------------------------- EXTERNAL COEXISTENCE CAPS -------------------------------------*/
 #define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE ADVANCED EXTERNAL COEXISTENCE CAPS */
-#define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
@@ -494,6 +494,7 @@
 // #define MAC_SUPPORT_PMU_MODEM_STATE     SOC_PM_SUPPORT_PMU_MODEM_STATE
 
 #define SOC_PM_SUPPORT_PMU_CLK_ICG          (1)
+#define SOC_PM_SUPPORT_PMU_RETENTION_CLK_ICG   (1)
 #define SOC_PM_SUPPORT_MODEM_CLOCK_DOMAIN_ICG      (1)
 
 #define SOC_PM_CPU_RETENTION_BY_SW          (1)
@@ -510,6 +511,7 @@
 #define SOC_PM_MODEM_LOCK_CLK_WORKAROUND    (1) // In ESP32H4, the modem lock will lock the xtalx2, bbpll and other xpd state during modem2active.
 
 #define SOC_PM_FLASH_KEEP_POWER_IN_LSLP     (1)  /*!<Keep flash on in light sleep to reduce wake latency*/
+#define SOC_PM_SUPPORT_BUS_CLK_AUTO_GATE    (1)  /*!<Support hardware auto clock gating for system bus*/
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
@@ -563,6 +565,15 @@
 /*-------------------------- USB CAPS ----------------------------------------*/
 #define SOC_USB_OTG_PERIPH_NUM          (1U)
 #define SOC_USB_FSLS_PHY_NUM            (1U)
+
+/*------------------------------------- DEBUG CAPS -------------------------------------*/
+#define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
+
+/*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_HAS_CONFIG_REG              (1) /*!< Has the encoder config register */
+#define SOC_RISCV_TRACE_AHB_CONFIGURABLE            (1) /*!< AHB write master is configurable */
+#define SOC_RISCV_TRACE_FILTER_SUPPORTED            (1) /*!< Has the filter unit */
+#define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
 
 /*---------------------------------- ASRC CAPS ----------------------------------*/
 #define SOC_ASRC_SUPPORTED (1)

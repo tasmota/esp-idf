@@ -17,7 +17,6 @@ from pytest_embedded_idf.utils import soc_filtered_targets
 @idf_parametrize(
     'target', soc_filtered_targets('SOC_GPSPI_SUPPORTED == 1 and IDF_TARGET not in ["esp32c5"]'), indirect=['target']
 )
-@pytest.mark.temp_skip_ci(targets=['esp32h4'], reason='cannot pass')  # TODO: IDF-15615
 def test_master_single_dev(case_tester) -> None:  # type: ignore
     for case in case_tester.test_menu:
         if 'test_env' in case.attributes:
@@ -87,4 +86,4 @@ def test_master_esp_flash(case_tester) -> None:  # type: ignore
 )
 @idf_parametrize('target', ['supported_targets'], indirect=['target'])
 def test_master_multi_dev(case_tester) -> None:  # type: ignore
-    case_tester.run_all_multi_dev_cases(reset=True)
+    case_tester.run_all_multi_dev_cases(reset=True, timeout=30)

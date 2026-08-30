@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,8 +11,8 @@
 #include "ble_log_ts.h"
 
 /* VARIABLE */
-BLE_LOG_STATIC bool ts_inited = false;
-BLE_LOG_STATIC ble_log_ts_info_t *ts_info = NULL;
+BLE_LOG_STATIC BLE_LOG_DRAM_ATTR bool ts_inited = false;
+BLE_LOG_STATIC BLE_LOG_DRAM_ATTR ble_log_ts_info_t *ts_info = NULL;
 
 /* INTERFACE */
 bool ble_log_ts_init(void)
@@ -25,7 +25,7 @@ bool ble_log_ts_init(void)
     gpio_config_t sync_io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = BIT(CONFIG_BLE_LOG_SYNC_IO_NUM),
+        .pin_bit_mask = BIT64(CONFIG_BLE_LOG_SYNC_IO_NUM),
     };
     if (gpio_config(&sync_io_conf) != ESP_OK) {
         goto exit;
@@ -61,9 +61,6 @@ void ble_log_ts_deinit(void)
     gpio_reset_pin(CONFIG_BLE_LOG_SYNC_IO_NUM);
 }
 
-#if CONFIG_BLE_LOG_TS_TRIGGER_ESP_TIMER_ISR_DISPATCH_METHOD
-BLE_LOG_IRAM_ATTR
-#endif /* CONFIG_BLE_LOG_TS_TRIGGER_ESP_TIMER_ISR_DISPATCH_METHOD */
 void ble_log_ts_info_update(ble_log_ts_info_t **info)
 {
     if (!ts_inited) {

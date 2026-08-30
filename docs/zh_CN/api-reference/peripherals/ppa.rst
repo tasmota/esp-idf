@@ -175,7 +175,9 @@ PPA 操作作用于输入图片的目标块。因此，完成一次 PPA 事务�
 应用示例
 ^^^^^^^^^
 
-* :example:`peripherals/ppa/ppa_rgb_lcd` - 使用 RGB LCD 显示屏的 PPA 示例。首先，该示例所使用的图像会被放大、逆时针旋转后复原、镜像后复原、缩小。其次，该图像将与一个透明度较低的全红图像叠加，`ESP32` 字样将被色键移除。最后，会在 `ESP32` 周围填充一个框。
+* :example:`peripherals/ppa/ppa_transform` - PPA transform 图像处理示例。嵌入的 RGB565 图像会经过 SRM 变换和 fill 边框处理，然后以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
+* :example:`peripherals/ppa/ppa_color_key` - PPA blend color key 示例。示例先在软件中生成居中的 RGB888 glow 前景，然后在嵌入式 RGB565 图片上演示两种 blend 效果：一种是通过 blend color key 将命中的红色 `ESP32` 文本像素替换为 glow，另一种是在保留命中文本的同时，将 glow 混合到非 key 区域。两种结果都会以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
+* :example:`peripherals/ppa/ppa_freetype` - PPA FreeType 图标合成示例。示例使用 `espressif/freetype` 组件将 Font Awesome 图标的 Unicode 码点（两行，每行三个）栅格化为小的逐字形 A8 透明度掩码，然后通过 PPA blend 引擎以固定图标颜色将每个字形合成到软件生成的渐变背景上。最终合成后的 RGB565 帧会以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
 
 API 参考
 --------

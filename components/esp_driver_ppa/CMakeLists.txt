@@ -7,17 +7,23 @@ if(CONFIG_SOC_PPA_SUPPORTED)
                      "src/ppa_srm.c"
                      "src/ppa_blend.c"
                      "src/ppa_fill.c")
+    if(CONFIG_SOC_PAU_SUPPORTED)
+        list(APPEND srcs "${target}/ppa_retention.c")
+    endif()
 endif()
 
 if(${target} STREQUAL "linux")
+    set(requires "")
     set(priv_requires "")
 else()
+    set(requires esp_hal_ppa)
     set(priv_requires esp_mm esp_pm esp_driver_dma efuse)
 endif()
 
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${public_include}
-                       REQUIRES esp_hal_ppa
+                       PRIV_INCLUDE_DIRS "src"
+                       REQUIRES "${requires}"
                        PRIV_REQUIRES "${priv_requires}"
                       )

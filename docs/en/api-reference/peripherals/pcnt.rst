@@ -110,7 +110,7 @@ If a previously created PCNT channel is no longer needed, it is recommended to r
 
 .. note::
 
-    In PCNT, the GPIOs involved can be reconfigured for pull-up or pull-down after initializing PCNT using functions such as :cpp:func:`gpio_pullup_en` and :cpp:func:`gpio_pullup_dis`.
+    The PCNT driver does not configure internal pull-up or pull-down resistors for the edge or level signal GPIOs. If your signal source needs a defined idle level, configure the GPIO pull mode explicitly with functions such as :cpp:func:`gpio_set_pull_mode`, :cpp:func:`gpio_pullup_en`, and :cpp:func:`gpio_pullup_dis`.
 
 .. _pcnt-setup-channel-actions:
 
@@ -256,8 +256,12 @@ This function should be called when the unit is in the init state. Otherwise, it
 
     The PCNT unit can receive a clear signal from the GPIO. The parameters that can be configured for the clear signal are listed in :cpp:type:`pcnt_clear_signal_config_t`:
 
-        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` specify the GPIO numbers used by **clear** signal. The default active level is high, and the input mode is pull-down enabled.
-        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` is used to decide whether to invert the input signal before it going into PCNT hardware. The invert is done by GPIO matrix instead of PCNT hardware. The input mode is pull-up enabled when the input signal is inverted.
+        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` specifies the GPIO number used by the **clear** signal. The default active level is high.
+        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` is used to decide whether to invert the input signal before it goes into PCNT hardware. The inversion is done by the GPIO matrix instead of PCNT hardware.
+
+    .. note::
+
+        The PCNT driver does not configure internal pull-up or pull-down resistors for the clear signal GPIO. If the clear signal requires a defined idle level, configure the GPIO pull mode explicitly with GPIO APIs.
 
     This signal acts in the same way as calling :cpp:func:`pcnt_unit_clear_count`, but is not subject to software latency, and is suitable for use in situations with low latency requirements. Also please note, the flip frequency of this signal can not be too high.
 
@@ -342,7 +346,7 @@ The internal hardware counter will be cleared to zero automatically when it reac
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When power management is enabled (i.e., :ref:`CONFIG_PM_ENABLE` is on), the system adjusts the APB frequency before entering light sleep, which can cause the PCNT glitch filter to misinterpret valid signals as noise.
+When power management is enabled (i.e., :menuitem:`CONFIG_PM_ENABLE` is on), the system adjusts the APB frequency before entering light sleep, which can cause the PCNT glitch filter to misinterpret valid signals as noise.
 
 To prevent this, the driver can acquire a power management lock of type :cpp:enumerator:`ESP_PM_APB_FREQ_MAX`, ensuring the APB frequency remains constant. This lock is acquired when the PCNT unit is enabled via :cpp:func:`pcnt_unit_enable` and released when the unit is disabled via :cpp:func:`pcnt_unit_disable`.
 
@@ -353,7 +357,7 @@ IRAM Safe
 
 By default, the PCNT interrupt will be deferred when the Cache is disabled for reasons like writing/erasing Flash. Thus the alarm interrupt will not get executed in time, which is not expected in a real-time application.
 
-There is a Kconfig option :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
+There is a Kconfig option :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
 
 1. Enables the interrupt being serviced even when cache is disabled
 2. Places all functions that used by the ISR into IRAM [2]_
@@ -361,7 +365,7 @@ There is a Kconfig option :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
 
 This allows the interrupt to run while the cache is disabled but comes at the cost of increased IRAM consumption.
 
-There is another Kconfig option :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` that can put commonly used IO control functions into IRAM as well. So that these functions can also be executable when the cache is disabled. These IO control functions are as follows:
+There is another Kconfig option :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` that can put commonly used IO control functions into IRAM as well. So that these functions can also be executable when the cache is disabled. These IO control functions are as follows:
 
 - :cpp:func:`pcnt_unit_start`
 - :cpp:func:`pcnt_unit_stop`
@@ -389,9 +393,9 @@ Other functions that take the :cpp:type:`pcnt_unit_handle_t` and :cpp:type:`pcnt
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` controls where to place the PCNT control functions (IRAM or Flash), see :ref:`pcnt-iram-safe` for more information.
-- :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see :ref:`pcnt-iram-safe` for more information.
-- :ref:`CONFIG_PCNT_ENABLE_DEBUG_LOG` is used to enabled the debug log output. Enabling this option increases the firmware binary size.
+- :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` controls where to place the PCNT control functions (IRAM or Flash), see :ref:`pcnt-iram-safe` for more information.
+- :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see :ref:`pcnt-iram-safe` for more information.
+- :menuitem:`CONFIG_PCNT_ENABLE_DEBUG_LOG` is used to enabled the debug log output. Enabling this option increases the firmware binary size.
 
 Application Examples
 --------------------

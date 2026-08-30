@@ -32,6 +32,7 @@ repos:
             .*.yuv|
             .*.rgb|
             .*.gray|
+            .*.ppm|
             .*COPYING.*|
             docs/sphinx-known-warnings\.txt
           )$
@@ -42,12 +43,15 @@ repos:
         args: ['-f=lf']
         exclude: *whitespace_excludes
       - id: double-quote-string-fixer
+      # '--branch' is passed explicitly because the hook otherwise falls back to
+      # protecting 'master' and 'main', which would fail these checks for reasons
+      # unrelated to their names. An empty value never matches a branch name.
       - id: no-commit-to-branch
         name: Do not use more than one slash in the branch name
-        args: ['--pattern', '^[^/]*/[^/]*/']
+        args: ['--branch', '', '--pattern', '^[^/]*/[^/]*/']
       - id: no-commit-to-branch
         name: Do not use uppercase letters in the branch name
-        args: ['--pattern', '^[^A-Z]*[A-Z]']
+        args: ['--branch', '', '--pattern', '^[^A-Z]*[A-Z]']
   - repo: https://github.com/codespell-project/codespell
     rev: v2.3.0
     hooks:
@@ -99,6 +103,7 @@ repos:
           - 'types-setuptools'
           - 'types-PyYAML'
           - 'types-requests'
+          - 'esp-pylib>=1.1.0' # required for log.die() type narrowing
         exclude: >
           (?x)^(
               .*_pb2.py
@@ -166,14 +171,6 @@ repos:
         language: python
         always_run: true
         require_serial: true
-      - id: gitlab-yaml-linter
-        name: Check gitlab yaml files
-        entry: tools/ci/gitlab_yaml_linter.py
-        language: python
-        files: '\.gitlab-ci\.yml|\.gitlab/ci/.+\.yml|\.gitmodules'
-        pass_filenames: false
-        additional_dependencies:
-          - PyYAML == 5.3.1
       - id: check-wifi-remote-api
         name: Check wifi-remote API generation
         description: Runs generate_and_check.py and fails if any generated files differ from the index.
@@ -232,11 +229,6 @@ repos:
       name: shellcheck dash (export.sh)
       args: ['--shell', 'dash', '-x']
       files: 'export.sh'
-  - repo: https://github.com/espressif/esp-pwsh-check
-    rev: v1.0.1
-    hooks:
-    - id: check-powershell-scripts
-      stages: [manual]
   - repo: https://github.com/espressif/esp-idf-sbom.git
     rev: v0.13.0
     hooks:
@@ -258,3 +250,5 @@ repos:
     hooks:
       - id: check-tests-missing-config
         files: 'pytest_.*\.py$|sdkconfig(\..*)?$|\.idf_build_apps\.toml$|\.idf_ci\.toml$'
+        additional_dependencies:
+          - 'esp-pylib[cli]'

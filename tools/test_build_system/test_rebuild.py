@@ -139,6 +139,14 @@ def test_rebuild_linker(idf_py: IdfPyFunc) -> None:
     (idf_path / 'components/esp_system/ld/esp32/memory.ld.in').touch()
     rebuild_and_check(idf_py, APP_BINS, BOOTLOADER_BINS + PARTITION_BIN)
 
+    logging.info('Updating an included ld file should preprocess the scripts and re-link only the app')
+    (idf_path / 'components/esp_system/ld/ld.common').touch()
+    preprocessed_scripts = [
+        'build/esp-idf/esp_system/ld/memory.ld',
+        'build/esp-idf/esp_system/ld/sections.ld.in',
+    ]
+    rebuild_and_check(idf_py, APP_BINS + preprocessed_scripts, BOOTLOADER_BINS + PARTITION_BIN)
+
     logging.info('Updating fragment file should only re-link the app')
     (idf_path / 'components/esp_common/common.lf').touch()
     rebuild_and_check(idf_py, APP_BINS, BOOTLOADER_BINS + PARTITION_BIN)
@@ -173,6 +181,38 @@ def test_rebuild_ldgen_fingerprint(idf_py: IdfPyFunc, test_app_copy: Path) -> No
     (idf_path / 'components/esp_common/common.lf').touch()
     result = idf_py('build')
     assert skip_msg not in result.stdout, f'unexpected {skip_msg!r} in build output after fragment change'
+
+
+@pytest.mark.usefixtures('idf_copy')
+def test_rebuild_ldgen_template_change(idf_py: IdfPyFunc, test_app_copy: Path, request: pytest.FixtureRequest) -> None:
+    """Verify that a change to the linker script template reaches the generated
+    script. ldgen copies everything outside the mapping placeholders from the
+    template into its output verbatim, so the template is an input in its own
+    right and must not be hidden behind the fingerprint skip.
+    """
+    skip_msg = 'Skipping linker script generation, section names unchanged'
+    idf_path = Path(os.environ['IDF_PATH'])
+    template = idf_path / 'components/esp_system/ld/esp32/sections.ld.in'
+    # Build System v1 writes sections.ld. Build System v2 names the output
+    # per-library (library_<project> for idf_project_default) so multi-library
+    # builds do not clash.
+    if request.config.getoption('buildv2', False):
+        generated = Path('build/esp-idf/esp_system/ld/sections.ld_library_build_test_app')
+    else:
+        generated = Path('build/esp-idf/esp_system/ld/sections.ld')
+    # An absolute symbol assignment: it is copied through to the generated
+    # script and does not depend on anything else in the build.
+    probe = '_ldgen_template_probe'
+
+    logging.info('initial build')
+    idf_py('build')
+
+    logging.info('adding a symbol to the template leaves section names and fragment files unchanged')
+    with open(template, 'a') as f:
+        f.write(f'\n{probe} = 0x3ff00abc;\n')
+    result = idf_py('build')
+    assert skip_msg not in result.stdout, f'unexpected {skip_msg!r} in build output after template change'
+    assert probe in generated.read_text(), 'template change did not reach the generated linker script'
 
 
 def test_rebuild_ldgen_lf_cache(idf_py: IdfPyFunc, test_app_copy: Path) -> None:

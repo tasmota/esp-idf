@@ -14,6 +14,10 @@ This example demonstrates how to use semihosting VFS driver with ESP32. Example 
 5. Opens text file on the host.
 6. Reads the file and prints its content on stdout.
 
+## When to use this example
+
+- You want the device to read/write files on the *host* PC through the debugger (semihosting), e.g. for logging or test data, without on-device storage.
+
 ## How to use example
 
 ### Hardware and tools required
@@ -72,8 +76,6 @@ openocd -c "set ESP_SEMIHOST_BASEDIR %IDF_PATH%/examples/storage/semihost_vfs/da
 ```
 
 The above command will set `ESP_SEMIHOST_BASEDIR` variable to `examples/storage/semihost_vfs/data` subdirectory of ESP-IDF. With that, it is not necessary to run OpenOCD from that specific directory.
-
-> Note: This feature is not available for RISC-V based SoCs (ESP32-C3, ESP32-H2). To set the semihosting base directory, change into the required directory before running `openocd` command.
 
 ## Example output
 

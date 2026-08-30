@@ -9,6 +9,9 @@ if(CONFIG_SOC_JPEG_CODEC_SUPPORTED)
                     "jpeg_common.c"
                     "jpeg_param.c"
         )
+    if(CONFIG_SOC_PAU_SUPPORTED)
+        list(APPEND srcs "${target}/jpeg_retention.c")
+    endif()
     if(CONFIG_SOC_JPEG_DECODE_SUPPORTED)
         list(APPEND srcs
                         "jpeg_parse_marker.c"
@@ -23,15 +26,17 @@ if(CONFIG_SOC_JPEG_CODEC_SUPPORTED)
     endif()
 endif()
 
-set(requires esp_hal_jpeg)
 if(${target} STREQUAL "linux")
+    set(requires "")
     set(priv_requires "")
 else()
+    set(requires esp_hal_jpeg)
     set(priv_requires esp_mm esp_pm esp_psram esp_driver_dma)
 endif()
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${public_include}
+                       PRIV_INCLUDE_DIRS "."
                        PRIV_REQUIRES "${priv_requires}"
                        REQUIRES "${requires}"
                       )

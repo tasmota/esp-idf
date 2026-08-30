@@ -42,6 +42,9 @@
 /* Flag passed to retransmit_i_frames() when all packets should be retransmitted */
 #define L2C_FCR_RETX_ALL_PKTS   0xFF
 
+/* Offset reserved in front of a reassembled SDU, the minimal offset required by OBEX */
+#define L2C_FCR_RX_SDU_OFFSET   4
+
 #if BT_TRACE_VERBOSE == TRUE
 static char *SAR_types[] = { "Unsegmented", "Start", "End", "Continuation" };
 static char *SUP_types[] = { "RR", "REJ", "RNR", "SREJ" };
@@ -256,7 +259,8 @@ void l2c_fcr_cleanup (tL2C_CCB *p_ccb)
 #if (L2CAP_ERTM_STATS == TRUE)
     if ( (p_ccb->local_cid >= L2CAP_BASE_APPL_CID) && (p_ccb->peer_cfg.fcr.mode == L2CAP_FCR_ERTM_MODE) ) {
         UINT32  dur = osi_time_get_os_boottime_ms() - p_ccb->fcrb.connect_tick_count;
-        char    *p_str = (char *)osi_malloc(120);
+        UINT32 str_len = 120;
+        char    *p_str = (char *)osi_malloc(str_len);
         UINT16  i;
         UINT32  throughput_avg, ack_delay_avg, ack_q_count_avg;
 
@@ -270,14 +274,14 @@ void l2c_fcr_cleanup (tL2C_CCB *p_ccb)
         BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_GKI | TRACE_ORG_GKI , TRACE_TYPE_GENERIC,
                  "max_held_acks:%08u, in_cfg.fcr.tx_win_sz:%08u", p_ccb->fcrb.max_held_acks, p_ccb->peer_cfg.fcr.tx_win_sz );
         if (p_str) {
-            sprintf(p_str, "Sent Pkts:%08u Bytes:%10u(%06u/sec) RR:%08u REJ:%08u RNR:%08u SREJ:%08u",
+            snprintf(p_str, str_len, "Sent Pkts:%08u Bytes:%10u(%06u/sec) RR:%08u REJ:%08u RNR:%08u SREJ:%08u",
                     p_ccb->fcrb.ertm_pkt_counts[0], p_ccb->fcrb.ertm_byte_counts[0],
                     (dur >= 10 ? (p_ccb->fcrb.ertm_byte_counts[0] * 100) / (dur / 10) : 0),
                     p_ccb->fcrb.s_frames_sent[0], p_ccb->fcrb.s_frames_sent[1], p_ccb->fcrb.s_frames_sent[2], p_ccb->fcrb.s_frames_sent[3]);
 
             BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_GKI | TRACE_ORG_GKI , TRACE_TYPE_GENERIC, "%s", p_str);
 
-            sprintf(p_str, "Rcvd Pkts:%08u Bytes:%10u(%06u/sec) RR:%08u REJ:%08u RNR:%08u SREJ:%08u",
+            snprintf(p_str, str_len, "Rcvd Pkts:%08u Bytes:%10u(%06u/sec) RR:%08u REJ:%08u RNR:%08u SREJ:%08u",
                     p_ccb->fcrb.ertm_pkt_counts[1], p_ccb->fcrb.ertm_byte_counts[1],
                     (dur >= 10 ? (p_ccb->fcrb.ertm_byte_counts[1] * 100) / (dur / 10) : 0),
                     p_ccb->fcrb.s_frames_rcvd[0], p_ccb->fcrb.s_frames_rcvd[1], p_ccb->fcrb.s_frames_rcvd[2], p_ccb->fcrb.s_frames_rcvd[3]);
@@ -295,7 +299,7 @@ void l2c_fcr_cleanup (tL2C_CCB *p_ccb)
                     continue;
                 }
 
-                sprintf(p_str, "[%02u] throughput: %5u, ack_delay avg:%3u, min:%3u, max:%3u, ack_q_count avg:%3u, min:%3u, max:%3u",
+                snprintf(p_str, str_len, "[%02u] throughput: %5u, ack_delay avg:%3u, min:%3u, max:%3u, ack_q_count avg:%3u, min:%3u, max:%3u",
                         i, p_ccb->fcrb.throughput[i],
                         p_ccb->fcrb.ack_delay_avg[i], p_ccb->fcrb.ack_delay_min[i], p_ccb->fcrb.ack_delay_max[i],
                         p_ccb->fcrb.ack_q_count_avg[i], p_ccb->fcrb.ack_q_count_min[i], p_ccb->fcrb.ack_q_count_max[i] );
@@ -343,7 +347,7 @@ BT_HDR *l2c_fcr_clone_buf (BT_HDR *p_buf, UINT16 new_offset, UINT16 no_of_bytes)
      * NOTE: We allocate extra L2CAP_FCS_LEN octets, in case we need to put
      * the FCS (Frame Check Sequence) at the end of the buffer.
      */
-    uint16_t buf_size = no_of_bytes + sizeof(BT_HDR) + new_offset + L2CAP_FCS_LEN;
+    UINT32 buf_size = no_of_bytes + sizeof(BT_HDR) + new_offset + L2CAP_FCS_LEN;
 #if (L2CAP_ERTM_STATS == TRUE)
     /*
      * NOTE: If L2CAP_ERTM_STATS is enabled, we need 4 extra octets at the
@@ -351,6 +355,11 @@ BT_HDR *l2c_fcr_clone_buf (BT_HDR *p_buf, UINT16 new_offset, UINT16 no_of_bytes)
      */
     buf_size += sizeof(uint32_t);
 #endif
+    if (buf_size > L2CAP_MAX_BUF_SIZE) {
+        L2CAP_TRACE_ERROR ("l2c_fcr_clone_buf() buf_size invalid");
+        return NULL;
+    }
+
     BT_HDR *p_buf2 = (BT_HDR *)osi_malloc(buf_size);
     if (!p_buf2) {
         L2CAP_TRACE_ERROR ("l2c_fcr_clone_buf() malloc failed");
@@ -372,7 +381,7 @@ BT_HDR *l2c_fcr_clone_buf (BT_HDR *p_buf, UINT16 new_offset, UINT16 no_of_bytes)
 **
 ** Description      This function checks if the CCB is flow controlled by peer.
 **
-** Returns          The control word
+** Returns          TRUE if the CCB is flow controlled by peer, FALSE otherwise
 **
 *******************************************************************************/
 BOOLEAN l2c_fcr_is_flow_controlled (tL2C_CCB *p_ccb)
@@ -532,7 +541,11 @@ void l2c_fcr_send_S_frame (tL2C_CCB *p_ccb, UINT16 function_code, UINT16 pf_bit)
     ctrl_word |= (p_ccb->fcrb.next_seq_expected << L2CAP_FCR_REQ_SEQ_BITS_SHIFT);
     ctrl_word |= pf_bit;
 
-    if ((p_buf = (BT_HDR *)osi_malloc(L2CAP_CMD_BUF_SIZE)) != NULL) {
+    /* An S-frame carries no payload: HCI preamble, L2CAP header, control word and FCS */
+    UINT16 s_frame_buf_size = sizeof(BT_HDR) + HCI_DATA_PREAMBLE_SIZE + L2CAP_PKT_OVERHEAD
+                              + L2CAP_FCR_OVERHEAD + L2CAP_FCS_LEN;
+
+    if ((p_buf = (BT_HDR *)osi_malloc(s_frame_buf_size)) != NULL) {
         p_buf->offset = HCI_DATA_PREAMBLE_SIZE;
         p_buf->len    = L2CAP_PKT_OVERHEAD + L2CAP_FCR_OVERHEAD;
 
@@ -1344,11 +1357,12 @@ static BOOLEAN do_sar_reassembly (tL2C_CCB *p_ccb, BT_HDR *p_buf, UINT16 ctrl_wo
             if (p_fcrb->rx_sdu_len > p_ccb->max_rx_mtu) {
                 L2CAP_TRACE_WARNING ("SAR - SDU len: %u  larger than MTU: %u", p_fcrb->rx_sdu_len, p_ccb->max_rx_mtu);
                 packet_ok = FALSE;
-            } else if ((p_fcrb->p_rx_sdu = (BT_HDR *)osi_malloc(L2CAP_MAX_BUF_SIZE)) == NULL) {
+            } else if ((p_fcrb->p_rx_sdu = (BT_HDR *)osi_malloc(sizeof(BT_HDR) + L2C_FCR_RX_SDU_OFFSET
+                                                                + p_fcrb->rx_sdu_len)) == NULL) {
                 L2CAP_TRACE_ERROR ("SAR - no buffer for SDU start user_rx_buf_size:%d", p_ccb->ertm_info.user_rx_buf_size);
                 packet_ok = FALSE;
             } else {
-                p_fcrb->p_rx_sdu->offset = 4; /* this is the minimal offset required by OBX to process incoming packets */
+                p_fcrb->p_rx_sdu->offset = L2C_FCR_RX_SDU_OFFSET;
                 p_fcrb->p_rx_sdu->len    = 0;
             }
         }
@@ -1452,6 +1466,8 @@ static BOOLEAN retransmit_i_frames (tL2C_CCB *p_ccb, UINT8 tx_seq)
                 if (tx_seq == buf_seq) {
                     break;
                 }
+
+                p_buf = NULL;
             }
         }
 

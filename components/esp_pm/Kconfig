@@ -78,6 +78,20 @@ menu "Power Management"
             This feature is intended to be used when lower power consumption is needed
             while there is enough place in IRAM to place source code.
 
+    config PM_TICKLESS_IDLE_WAITI
+        bool "Enable tickless idle without entering light sleep"
+        depends on PM_ENABLE
+        depends on FREERTOS_USE_TICKLESS_IDLE
+        depends on FREERTOS_SYSTICK_USES_SYSTIMER
+        depends on SOC_RTC_TIMER_SUPPORTED
+        default n
+        help
+            When enabled, tickless idle also applies when the system does not enter
+            light sleep. This includes DFS-only configurations (light sleep disabled),
+            and cases where light sleep is enabled but not taken (for example when
+            blocked by ESP_PM_NO_LIGHT_SLEEP or other PM locks). This can reduce idle
+            power consumption in those situations.
+
     config PM_SLP_DISABLE_GPIO
         bool "Disable all GPIO when chip at sleep"
         depends on FREERTOS_USE_TICKLESS_IDLE
@@ -310,5 +324,26 @@ menu "Power Management"
         help
             Configure the delay time between waking up PSRAM halfsleep mode and the first access to PSRAM.
             Refer to the tXHS parameter in datasheet of the used PSRAM to configure this option.
+
+    config PM_SLEEP_CLK_ICG_ENABLE
+        bool "Enable clock gating control during light sleep"
+        depends on SOC_PM_SLEEP_CLK_ICG_USE_REGDMA
+        default y
+        help
+            Enable clock gating for digital peripherals in Light Sleep mode.
+            Some digital peripherals require their functional clocks to
+            remain enabled during sleep. The Sleep Clock ICG selectively
+            ungates the clock tree for these peripherals, allowing their
+            hardware logic to continue running during Light Sleep, while
+            keeping all other peripheral clocks gated to minimize sleep
+            power consumption.
+
+    config PM_SKIP_MODEM_TO_ACTIVE_ANALOG_WAIT
+        bool
+        depends on SOC_PM_SUPPORT_PMU_MODEM_STATE
+        default n
+        help
+            If enabled, the analog wait time when waking up from modem to active state will be skipped.
+            This will reduce the wakeup time.
 
 endmenu # "Power Management"

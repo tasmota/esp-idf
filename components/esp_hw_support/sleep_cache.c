@@ -32,6 +32,9 @@ void sleep_cache_suspend(void)
         // fully check the access to external memory, writeback & invalidate is needed here.
         Cache_WriteBack_Invalidate_All(CACHE_MAP_MASK);
 #endif
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
+        esp_cpu_branch_prediction_disable();
+#endif
         spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
     }
 }
@@ -43,39 +46,28 @@ void sleep_cache_resume(void)
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
         spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
+        esp_cpu_branch_prediction_enable();
+#endif
     }
 }
 
-#if !CONFIG_SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && CONFIG_SPIRAM
+#if SOC_PM_CPU_RETENTION_BY_SW && !SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE && CONFIG_SPIRAM
+#if CONFIG_IDF_TARGET_ESP32S31
+#define DCACHE_WRITEBACK_MAP CACHE_MAP_L1_DCACHE
+#else
+#define DCACHE_WRITEBACK_MAP
+#endif
 void sleep_cache_safe_writeback(uint32_t sleep_flags)
 {
-#if CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP && !SOC_PM_CACHE_RETENTION_BY_PAU && SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN
-#if SOC_PMU_SUPPORTED
-    /* When SPIRAM is using, we need to use Cache_WriteBack_All to protect SPIRAM data
-        because the cache powers down when we power down the CPU */
     if (sleep_flags & PMU_SLEEP_PD_CPU) {
         if (s_cache_suspend_cnt) {
             spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
         }
-        Cache_WriteBack_All();
+        Cache_WriteBack_All(DCACHE_WRITEBACK_MAP);
         if (s_cache_suspend_cnt) {
             spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
         }
     }
-#else
-    (void)sleep_flags;
-#endif
-#elif CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP && SOC_PM_CACHE_RETENTION_BY_PAU
-    (void)sleep_flags;
-    if (s_cache_suspend_cnt) {
-        spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
-    }
-    Cache_WriteBack_All(CACHE_MAP_L1_DCACHE);
-    if (s_cache_suspend_cnt) {
-        spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
-    }
-#else
-    (void)sleep_flags;
-#endif
 }
 #endif

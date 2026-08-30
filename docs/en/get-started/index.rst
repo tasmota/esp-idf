@@ -43,6 +43,19 @@ Introduction
     * USB OTG interface
     * USB Serial/JTAG Controller
 
+.. only:: esp32s31
+
+    * Wi-Fi 6 (2.4 GHz band)
+    * Bluetooth® 5.4 (LE)
+    * Bluetooth® Classic
+    * 802.15.4 Thread/Zigbee
+    * High performance dual-core 32-bit RISC-V processor
+    * Multiple peripherals
+    * Built-in security hardware
+    * USB 2.0 High-Speed OTG interface
+    * USB Serial/JTAG Controller
+    * Ethernet MAC interface
+
 .. only:: esp32c3
 
     * Wi-Fi (2.4 GHz band)
@@ -106,6 +119,9 @@ Introduction
 
     Powered by 40 nm technology, {IDF_TARGET_NAME} offers excellent power efficiency, security, and reliability, making it suitable for a wide range of application scenarios and power consumption requirements.
 
+    .. important::
+
+        {IDF_TARGET_NAME} does not include built-in Wi-Fi or Bluetooth. To use Wi-Fi or Bluetooth, connect an external wireless SoC such as ESP32-C5 or ESP32-C6. For details, see :doc:`../api-guides/wifi-expansion`.
 
 .. only:: not esp32p4
 
@@ -169,6 +185,14 @@ If you have one of {IDF_TARGET_NAME} official development boards listed below, y
         ESP-VoCat <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp-vocat/index.html>
         ESP-DualKey <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp-dualkey/index.html>
 
+.. only:: esp32s31
+
+    .. toctree::
+        :maxdepth: 1
+
+        ESP32-S31-Function-CoreBoard-1 <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s31/esp32-s31-function-coreboard-1/index.html>
+        ESP32-S31-Korvo-1 <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s31/esp32-s31-korvo-1/index.html>
+
 .. only:: esp32c2
 
     .. toctree::
@@ -223,6 +247,24 @@ To start using ESP-IDF on **{IDF_TARGET_NAME}**, you need the following software
     :align: center
     :alt: Development of applications for {IDF_TARGET_NAME}
     :figclass: align-center
+
+
+Workflow Overview
+=================
+
+Getting started with ESP-IDF involves two main phases:
+
+1. **Setup** — installing prerequisites and ESP-IDF (see `Installation`_)
+2. **Develop** — creating, configuring, building, flashing, and monitoring your project (see `Build Your First Project`_)
+
+If you are unsure where to start, see :doc:`workflow-overview` for a visual overview of the full workflow.
+
+.. toctree::
+    :maxdepth: 1
+    :hidden:
+
+    workflow-overview
+
 
 .. _get-started-step-by-step:
 .. _get-started-how-to-get-esp-idf:
@@ -289,43 +331,10 @@ Uninstall ESP-IDF
 
 To uninstall ESP-IDF and related tools installed via EIM, you can use either the graphical user interface (GUI) or the command line interface (CLI).
 
-Uninstall Using EIM GUI
-~~~~~~~~~~~~~~~~~~~~~~~
+.. toctree::
+    :maxdepth: 1
 
-Launch the ESP-IDF Installation Manager. Under ``Manage Installations``, click ``Open Dashboard``.
-
-.. figure:: ../../_static/get-started-eim-gui.png
-    :align: center
-    :alt: Open Dashboard in EIM GUI
-    :figclass: align-center
-
-    Open Dashboard in EIM GUI
-
-To remove a specific ESP-IDF version, click the ``Remove`` button under the version you want to remove.
-
-To remove all ESP-IDF versions, click ``Purge All`` button at the bottom of the page.
-
-.. figure:: ../../_static/get-started-eim-gui-uninstall.png
-    :align: center
-    :alt: Uninstall ESP-IDF in EIM GUI
-    :figclass: align-center
-
-    Uninstall ESP-IDF in EIM GUI
-
-Uninstall Using EIM CLI
-~~~~~~~~~~~~~~~~~~~~~~~
-
-To remove a specific ESP-IDF version, for example v5.4.2, run the following command in your terminal:
-
-.. code-block:: bash
-
-    eim remove v5.4.2
-
-To remove all ESP-IDF versions, run the following command in your terminal:
-
-.. code-block:: bash
-
-    eim purge
+    uninstall
 
 
 Related Documents

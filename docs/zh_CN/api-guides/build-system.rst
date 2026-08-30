@@ -77,7 +77,13 @@ idf.py
 
 没有必要多次运行 ``cmake``。第一次构建后，往后每次只需运行 ``ninja`` 即可。如果项目需要重新配置，``ninja`` 会自动重新调用 ``cmake``。
 
-使用 Ninja 生成器配合 ``idf.py`` 时，可以通过设置环境变量 ``IDF_PY_BUILD_JOBS`` 来限制并行构建任务数。例如：
+使用 ``idf.py`` 时，可以通过 ``-j``/``--jobs`` 选项来控制传递给底层构建工具（Ninja 或 Make）的并行构建任务数。例如：
+
+.. code-block:: bash
+
+    idf.py -j 6 build
+
+也可以通过设置环境变量 ``IDF_PY_BUILD_JOBS`` 来指定该值，当未提供 ``-j``/``--jobs`` 时，该环境变量将作为默认值使用：
 
 .. code-block:: bash
 
@@ -428,7 +434,7 @@ ESP-IDF 在搜索所有待构建的组件时，会按照以下优先级搜索组
 - ``IDF_TARGET``：项目的硬件目标名称。
 - ``PROJECT_VER``：项目版本号。
 
-  * 如果设置 :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` 选项，将会使用 :ref:`CONFIG_APP_PROJECT_VER` 的值。
+  * 如果设置 :menuitem:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` 选项，将会使用 :menuitem:`CONFIG_APP_PROJECT_VER` 的值。
   * 或者，如果在项目 CMakeLists.txt 文件中设置了 ``PROJECT_VER`` 变量，则该变量值可以使用。
   * 或者，如果 ``PROJECT_DIR/version.txt`` 文件存在，其内容会用作 ``PROJECT_VER`` 的值。
   * 或者，如果在 CMakeLists.txt 文件中将 ``VERSION`` 参数传递给 ``project()`` 调用，形式为 ``project(... VERSION x.y.z.w )``，那么 ``VERSION`` 参数将用作为 ``PROJECT_VER`` 的值。``VERSION`` 参数必须符合 `cmake 标准 <https://cmake.org/cmake/help/v3.22/command/project.html>`_。
@@ -1033,6 +1039,10 @@ CMake 文件可以使用 ``IDF_TARGET`` 变量来获取当前的硬件目标。
 
 并将这行代码放在项目 CMakeLists.txt 的 ``project()`` 命令之后，修改 ``myproject.elf`` 为你自己的项目名。如果最后一个参数是 ``TEXT``，那么构建系统会嵌入以 null 结尾的字符串，如果最后一个参数被设置为 ``BINARY``，则将文件内容按照原样嵌入。
 
+可选的 ``ALIGN`` 参数用于将嵌入数据的起始符号对齐到指定的正整数 2 的幂。例如，将二进制数据按 16 字节对齐::
+
+  target_add_binary_data(myproject.elf "main/data.bin" BINARY ALIGN 16)
+
 有关使用此技术的示例，请查看 file_serving 示例 :example_file:`protocols/http_server/file_serving/main/CMakeLists.txt` 中的 main 组件，两个文件会在编译时加载并链接到固件中。
 
 .. highlight:: cmake
@@ -1330,7 +1340,7 @@ ESP-IDF 提供了一个模板 CMake 项目，可以基于此轻松创建应用�
 
 .. only:: esp32
 
-   .. note:: IDF 构建系统只能为其构建的源文件设置编译器标志。当使用外部 CMakeLists.txt 文件并启用 PSRAM 时，记得在 C 编译器参数中添加 ``mfix-esp32-psram-cache-issue``。参见:ref:`CONFIG_SPIRAM_CACHE_WORKAROUND` 了解更多信息。
+   .. note:: IDF 构建系统只能为其构建的源文件设置编译器标志。当使用外部 CMakeLists.txt 文件并启用 PSRAM 时，记得在 C 编译器参数中添加 ``mfix-esp32-psram-cache-issue``。参见:menuitem:`CONFIG_SPIRAM_CACHE_WORKAROUND` 了解更多信息。
 
 
 .. _cmake_buildsystem_api:

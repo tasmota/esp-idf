@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -14,15 +14,13 @@
 #include "esp_private/periph_ctrl.h"
 #include "esp_pm.h"
 #include "sdkconfig.h"
+#include "driver/uhci.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct uhci_controller_t uhci_controller_t;
-
-#define UHCI_ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-#define UHCI_MAX(a, b) (((a)>(b))?(a):(b))
 
 #define UHCI_PM_LOCK_NAME_LEN_MAX              16
 
@@ -33,8 +31,9 @@ typedef struct uhci_controller_t uhci_controller_t;
 #endif
 
 typedef struct {
-    void *buffer;               // buffer for saving the received symbols
-    size_t buffer_size;         // size of the buffer, in bytes
+    size_t total_size;                      // sum of all buffer segment sizes in this transaction, in bytes
+    size_t buf_info_count;                  // number of valid entries in buf_info actually used by the current transaction
+    uhci_transmit_buffer_info_t buf_info[]; // flexible array member, storage for this transaction's buffer segments. Its capacity is tx_dir.max_buf_count.
 } uhci_transaction_desc_t;
 
 typedef enum {
@@ -42,6 +41,7 @@ typedef enum {
     UHCI_TX_FSM_ENABLE,      /**< FSM is enabling the UHCI system. */
     UHCI_TX_FSM_RUN_WAIT,    /**< FSM is waiting to transition to the running state. */
     UHCI_TX_FSM_RUN,         /**< FSM is in the running state, actively handling UHCI operations. */
+    UHCI_TX_FSM_DELETE,      /**< FSM is claimed by uhci_del_controller() for teardown, no new transaction is accepted. */
 } uhci_tx_fsm_t;
 
 typedef enum {
@@ -56,6 +56,7 @@ typedef enum {
     UHCI_RX_FSM_ENABLE,      /**< FSM is enabling the UHCI system. */
     UHCI_RX_FSM_RUN_WAIT,    /**< FSM is waiting to transition to the running state. */
     UHCI_RX_FSM_RUN,         /**< FSM is in the running state, actively handling UHCI operations. */
+    UHCI_RX_FSM_DELETE,      /**< FSM is claimed by uhci_del_controller() for teardown, no new transaction is accepted. */
 } uhci_rx_fsm_t;
 
 typedef struct {
@@ -66,9 +67,10 @@ typedef struct {
     uhci_transaction_desc_t *cur_trans;                 // pointer to current transaction
     QueueHandle_t trans_queues[UHCI_TRANS_QUEUE_MAX];   // transaction queue
     _Atomic uhci_tx_fsm_t tx_fsm;                       // channel life cycle specific FSM
-    size_t int_mem_align;                               // Alignment for internal memory
-    size_t ext_mem_align;                               // Alignment for external memory
     atomic_int num_trans_inflight;                      // Indicates the number of transactions that are undergoing but not recycled to ready_queue
+    size_t max_transmit_size;                           // per-transaction max total size in bytes, from config->max_transmit_size; the DMA node pool is sized for this
+    size_t max_buf_count;                               // per-transaction max buffer segment count, from config->max_transmit_buffer_count (at least 1)
+    gdma_buffer_mount_config_t *mount_configs;          // scratch array (capacity max_buf_count) reused by every transmit to mount buffer segments; avoids a VLA in ISR context
 } uhci_tx_dir;
 
 typedef struct {
@@ -80,9 +82,9 @@ typedef struct {
     uint8_t **buffer_pointers;                          // Pointer for saving buffer pointer
     _Atomic uhci_rx_fsm_t rx_fsm;                       // channel life cycle specific FSM
     size_t cache_line;                                  // cache line size need to be aligned up.
-    size_t int_mem_align;                               // Alignment for internal memory
-    size_t ext_mem_align;                               // Alignment for external memory
     size_t rx_num_dma_nodes;                            // rx dma number nodes
+    gdma_buffer_mount_config_t *mount_configs;          // scratch array (capacity rx_num_dma_nodes) reused by every receive to mount buffer segments; avoids a VLA in ISR context
+    bool continuous;                                    // continuous mode: keep DMA running across EOFs instead of stopping
 } uhci_rx_dir;
 
 struct uhci_controller_t {
@@ -91,8 +93,6 @@ struct uhci_controller_t {
     uhci_tx_dir tx_dir;                                 // tx direction structure
     uhci_rx_dir rx_dir;                                 // rx direction structure
     void *user_data;                                    // user data
-    size_t int_mem_cache_line_size;                     // internal memory cache line size
-    size_t ext_mem_cache_line_size;                     // external memory cache line size
 #if CONFIG_PM_ENABLE
     esp_pm_lock_handle_t pm_lock;                       // power management lock
     char pm_lock_name[UHCI_PM_LOCK_NAME_LEN_MAX];       // pm lock name

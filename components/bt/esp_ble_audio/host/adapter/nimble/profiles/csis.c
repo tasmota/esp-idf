@@ -28,6 +28,7 @@
 #include "nimble/server.h"
 
 #include "common/host.h"
+#include "common/audio_attr.h"
 
 #include "../../../lib/include/audio.h"
 
@@ -35,44 +36,62 @@ LOG_MODULE_REGISTER(LEA_CSIS, CONFIG_BT_ISO_LOG_LEVEL);
 
 #define CSIS_SVC_COUNT      CONFIG_BT_CSIP_SET_MEMBER_MAX_INSTANCE_COUNT
 
-#define CSIS_CHR_COUNT      (4 + 1)
+#define CSIS_CHR_COUNT      (5 + 1)
 
 #if CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE
 #define CSIS_CHR_FLAGS_SIRK \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC)
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC)
 #else /* CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE */
 #define CSIS_CHR_FLAGS_SIRK \
     (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
 #endif /* CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE */
 
+#if CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE
 #define CSIS_CHR_FLAGS_SET_SIZE \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC)
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC)
+#else /* CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE */
+#define CSIS_CHR_FLAGS_SET_SIZE \
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE */
 
 #define CSIS_CHR_FLAGS_SET_LOCK \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_WRITE | \
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC | \
      BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_WRITE_ENC)
 
 #define CSIS_CHR_FLAGS_RANK \
     (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
+
+#if CONFIG_BT_CSIP_SET_MEMBER_SET_NAME_NOTIFIABLE
+#define CSIS_CHR_FLAGS_SET_NAME \
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC)
+#else /* CONFIG_BT_CSIP_SET_MEMBER_SET_NAME_NOTIFIABLE */
+#define CSIS_CHR_FLAGS_SET_NAME \
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SET_NAME_NOTIFIABLE */
 
 static const ble_uuid16_t csis_uuid_svc = BLE_UUID16_INIT(BT_UUID_CSIS_VAL);
 static const ble_uuid16_t csis_uuid_sirk = BLE_UUID16_INIT(BT_UUID_CSIS_SIRK_VAL);
 static const ble_uuid16_t csis_uuid_set_size = BLE_UUID16_INIT(BT_UUID_CSIS_SET_SIZE_VAL);
 static const ble_uuid16_t csis_uuid_set_lock = BLE_UUID16_INIT(BT_UUID_CSIS_SET_LOCK_VAL);
 static const ble_uuid16_t csis_uuid_rank = BLE_UUID16_INIT(BT_UUID_CSIS_RANK_VAL);
+static const ble_uuid16_t csis_uuid_set_name = BLE_UUID16_INIT(BT_UUID_CSIS_SET_NAME_VAL);
 
-static struct csis_inst {
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct csis_inst {
     struct bt_gatt_service *svc_p;
     uint16_t sirk_handle;
     uint16_t set_size_handle;
     uint16_t set_lock_handle;
     uint16_t rank_handle;
+    uint16_t set_name_handle;
 } csis_insts[CSIS_SVC_COUNT];
 
-static uint8_t csis_svc_count;
+static BT_AUDIO_EXT_RAM_BSS_ATTR uint8_t csis_svc_count;
+
+static BT_AUDIO_EXT_RAM_BSS_ATTR uint8_t csis_reg_count;
+static BT_AUDIO_EXT_RAM_BSS_ATTR bool csis_registered;
 
 /* Extra one for terminating the CSIS service array */
-static struct ble_gatt_svc_def gatt_svc_csis[CSIS_SVC_COUNT + 1];
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct ble_gatt_svc_def gatt_svc_csis[CSIS_SVC_COUNT + 1];
 
 struct ble_gatt_svc_def *cas_get_included_csis(void *csis_svc_p)
 {
@@ -108,7 +127,7 @@ static int csis_svc_check(void)
         struct ble_gatt_svc_def *csis = &gatt_svc_csis[i];
         struct bt_gatt_service *svc = csis_insts[i].svc_p;
 
-        assert(svc);
+        BT_LE_ASSERT(svc);
 
         for (const struct ble_gatt_chr_def *chr = csis->characteristics;
                 chr && chr->uuid; chr++) {
@@ -119,7 +138,7 @@ static int csis_svc_check(void)
             for (size_t j = 0; j < svc->attr_count; j++) {
                 uuid = (const struct bt_uuid_16 *)(svc->attrs + j)->uuid;
 
-                if (uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
+                if (uuid && uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
                         uuid->val == check->value) {
                     chr_found = true;
                     break;
@@ -138,34 +157,70 @@ static int csis_svc_check(void)
 
 int bt_le_nimble_csis_attr_handle_set(void)
 {
-    struct bt_gatt_attr *attr;
     uint16_t start_handle = 0;
-    uint16_t end_handle = 0;
 
     LOG_DBG("[N]CsisAttrHdlSet[%u]", csis_svc_count);
 
     for (size_t i = 0; i < csis_svc_count; i++) {
-        assert(csis_insts[i].svc_p);
+        struct bt_gatt_service *zsvc = csis_insts[i].svc_p;
 
-        assert(csis_insts[i].sirk_handle >= 2);
-        start_handle = csis_insts[i].sirk_handle - 2;    /* server attr handle & char def handle */
-        end_handle = csis_insts[i].rank_handle;          /* no cccd for chr Set Member Rank */
+        BT_LE_ASSERT(zsvc);
 
-        LOG_DBG("[N]CsisInst[%u][%u][%u][%u]",
-                i, start_handle, end_handle, csis_insts[i].svc_p->attr_count);
-
-        for (size_t j = 0; j < csis_insts[i].svc_p->attr_count; j++) {
-            (csis_insts[i].svc_p->attrs + j)->handle = start_handle + j;
+        /* Zero means no registration round ever covered this instance, so it is
+         * absent from the ATT database and there is no range to anchor. Happens
+         * when CSIS is first registered after the boot's ble_gatts_start(). */
+        if (csis_insts[i].sirk_handle < 2) {
+            LOG_ERR("[N]CsisNoAttrHdl[%u]", i);
+            return -1;
         }
 
-        /* Last attribute in CSIS */
-        attr = csis_insts[i].svc_p->attrs + csis_insts[i].svc_p->attr_count - 1;
+        /* SIRK is always the first characteristic, so its value handle anchors the range. */
+        start_handle = csis_insts[i].sirk_handle - 2;    /* server attr handle & char def handle */
 
-        if (attr->handle != end_handle) {
-            LOG_ERR("[N]CsisMismatchAttrHdl[%u][%u][%u][%u][%u]",
-                    i, start_handle, end_handle, attr->handle,
-                    csis_insts[i].svc_p->attr_count);
-            return -1;
+        LOG_DBG("[N]CsisInst[%u][%u][%u]", i, start_handle, zsvc->attr_count);
+
+        for (size_t j = 0; j < zsvc->attr_count; j++) {
+            (zsvc->attrs + j)->handle = start_handle + j;
+        }
+
+        /* Cross-check the last characteristic value against the handle NimBLE assigned, to
+         * catch divergence between the lib's attribute layout and NimBLE's registration. The
+         * last characteristic is no longer necessarily Rank, as optional ones may be absent.
+         */
+        for (size_t j = zsvc->attr_count; j-- > 0;) {
+            const struct bt_uuid_16 *uuid = (const struct bt_uuid_16 *)(zsvc->attrs + j)->uuid;
+            uint16_t chr_handle = 0;
+
+            if (!uuid || uuid->uuid.type != BT_UUID_TYPE_16) {
+                continue;
+            }
+
+            switch (uuid->val) {
+            case BT_UUID_CSIS_SIRK_VAL:
+                chr_handle = csis_insts[i].sirk_handle;
+                break;
+            case BT_UUID_CSIS_SET_SIZE_VAL:
+                chr_handle = csis_insts[i].set_size_handle;
+                break;
+            case BT_UUID_CSIS_SET_LOCK_VAL:
+                chr_handle = csis_insts[i].set_lock_handle;
+                break;
+            case BT_UUID_CSIS_RANK_VAL:
+                chr_handle = csis_insts[i].rank_handle;
+                break;
+            case BT_UUID_CSIS_SET_NAME_VAL:
+                chr_handle = csis_insts[i].set_name_handle;
+                break;
+            default:
+                continue;
+            }
+
+            if ((zsvc->attrs + j)->handle != chr_handle) {
+                LOG_ERR("[N]CsisMismatchAttrHdl[%u][%u][%u]",
+                        i, (zsvc->attrs + j)->handle, chr_handle);
+                return -1;
+            }
+            break;
         }
     }
 
@@ -189,44 +244,75 @@ static inline void csis_chr_init(struct ble_gatt_chr_def *chr,
 }
 
 static void csis_svc_init(struct csis_inst *inst,
-                          struct ble_gatt_svc_def *svc)
+                          struct ble_gatt_svc_def *svc,
+                          const struct bt_gatt_service *zsvc)
 {
+    size_t chr_cnt = 0U;
+
     LOG_DBG("[N]CsisSvcInit");
 
     svc->type = BLE_GATT_SVC_TYPE_PRIMARY;
     svc->uuid = &csis_uuid_svc.u;
     svc->includes = NULL;
 
-    svc->characteristics = calloc(CSIS_CHR_COUNT, sizeof(struct ble_gatt_chr_def));
-    assert(svc->characteristics);
+    svc->characteristics = bt_le_ext_calloc(CSIS_CHR_COUNT, sizeof(struct ble_gatt_chr_def));
+    BT_LE_ASSERT(svc->characteristics);
 
-    /* Characteristic - Set Identity Resolving Key */
-    csis_chr_init((void *)&svc->characteristics[0],
-                  &csis_uuid_sirk,
-                  &inst->sirk_handle,
-                  CSIS_CHR_FLAGS_SIRK);
+    /* Build the NimBLE characteristics from the ones actually present in the Zephyr
+     * service. Optional characteristics (set size, lock, rank) may be absent depending
+     * on the registration parameters, so the layout is data-driven rather than fixed.
+     */
+    for (size_t i = 0; i < zsvc->attr_count; i++) {
+        const struct bt_uuid_16 *uuid = (const struct bt_uuid_16 *)zsvc->attrs[i].uuid;
 
-    /* Characteristic - Coordinated Set Size */
-    csis_chr_init((void *)&svc->characteristics[1],
-                  &csis_uuid_set_size,
-                  &inst->set_size_handle,
-                  CSIS_CHR_FLAGS_SET_SIZE);
+        if (!uuid || uuid->uuid.type != BT_UUID_TYPE_16) {
+            continue;
+        }
 
-    /* Characteristic - Set Member Lock */
-    csis_chr_init((void *)&svc->characteristics[2],
-                  &csis_uuid_set_lock,
-                  &inst->set_lock_handle,
-                  CSIS_CHR_FLAGS_SET_LOCK);
+        switch (uuid->val) {
+        case BT_UUID_CSIS_SIRK_VAL:
+            csis_chr_init((void *)&svc->characteristics[chr_cnt++], &csis_uuid_sirk,
+                          &inst->sirk_handle, CSIS_CHR_FLAGS_SIRK);
+            break;
+        case BT_UUID_CSIS_SET_SIZE_VAL:
+            csis_chr_init((void *)&svc->characteristics[chr_cnt++], &csis_uuid_set_size,
+                          &inst->set_size_handle, CSIS_CHR_FLAGS_SET_SIZE);
+            break;
+        case BT_UUID_CSIS_SET_LOCK_VAL:
+            csis_chr_init((void *)&svc->characteristics[chr_cnt++], &csis_uuid_set_lock,
+                          &inst->set_lock_handle, CSIS_CHR_FLAGS_SET_LOCK);
+            break;
+        case BT_UUID_CSIS_RANK_VAL:
+            csis_chr_init((void *)&svc->characteristics[chr_cnt++], &csis_uuid_rank,
+                          &inst->rank_handle, CSIS_CHR_FLAGS_RANK);
+            break;
+        case BT_UUID_CSIS_SET_NAME_VAL:
+            csis_chr_init((void *)&svc->characteristics[chr_cnt++], &csis_uuid_set_name,
+                          &inst->set_name_handle, CSIS_CHR_FLAGS_SET_NAME);
+            break;
+        default:
+            break;
+        }
+    }
 
-    /* Characteristic - Set Member Rank */
-    csis_chr_init((void *)&svc->characteristics[3],
-                  &csis_uuid_rank,
-                  &inst->rank_handle,
-                  CSIS_CHR_FLAGS_RANK);
+    /* svc->characteristics has CSIS_CHR_COUNT (= 5 + 1) slots: up to 5 real chars plus
+     * a trailing zeroed slot that NimBLE requires as the NULL-uuid array terminator.
+     * chr_cnt is the real-char count written via [chr_cnt++], so it must stay strictly
+     * below CSIS_CHR_COUNT — chr_cnt == CSIS_CHR_COUNT means a write already clobbered
+     * the terminator slot. Trips if the switch matches a 6th char: a new CSIS case added
+     * without bumping the (5 + 1), or a duplicate UUID in the Zephyr service table.
+     */
+    BT_LE_ASSERT(chr_cnt < CSIS_CHR_COUNT);
+}
+
+void bt_le_nimble_csis_state_reset(void)
+{
+    csis_svc_count = 0;
 }
 
 int bt_le_nimble_csis_init(void *svc, uint8_t count)
 {
+    bool csis_added = false;
     int rc;
 
     LOG_DBG("[N]CsisInit[%u]", count);
@@ -236,12 +322,28 @@ int bt_le_nimble_csis_init(void *svc, uint8_t count)
         return -1;
     }
 
+    /* The attribute table is built by the boot's single ble_gatts_start(), so a
+     * different instance count now needs a table this boot cannot produce. Fail
+     * here, not later on a handle NimBLE never assigned. */
+    if (csis_registered && count != csis_reg_count) {
+        LOG_ERR("[N]CsisCountChanged[%u][%u]", csis_reg_count, count);
+        return -1;
+    }
+
     csis_svc_count = count;
 
+    /* Refreshed every cycle: the lib frees and reallocates its service objects,
+     * while the NimBLE defs below are built once and stay in the database. */
     for (size_t i = 0; i < csis_svc_count; i++) {
-        csis_svc_init(&csis_insts[i], &gatt_svc_csis[i]);
-
         csis_insts[i].svc_p = ((struct bt_gatt_service **)svc)[i];
+    }
+
+    if (csis_registered) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < csis_svc_count; i++) {
+        csis_svc_init(&csis_insts[i], &gatt_svc_csis[i], csis_insts[i].svc_p);
     }
 
     rc = ble_gatts_count_cfg(gatt_svc_csis);
@@ -255,19 +357,36 @@ int bt_le_nimble_csis_init(void *svc, uint8_t count)
         LOG_ERR("[N]CsisAddSvcsFail[%d]", rc);
         goto free;
     }
+    csis_added = true;
 
     rc = csis_svc_check();
     if (rc) {
         goto free;
     }
 
+    csis_reg_count = count;
+    csis_registered = true;
+
     return 0;
 
 free:
-    for (size_t i = 0; i < csis_svc_count; i++) {
-        free((void *)gatt_svc_csis[i].characteristics);
-        gatt_svc_csis[i].characteristics = NULL;
+    /* Once ble_gatts_add_svcs() succeeds NimBLE keeps the svc_def pointer and
+     * offers no per-service unregister, so an added service must be leaked
+     * rather than freed into a dangling entry of its global list. */
+    if (!csis_added) {
+        for (size_t i = 0; i < csis_svc_count; i++) {
+            free((void *)gatt_svc_csis[i].characteristics);
+            gatt_svc_csis[i].characteristics = NULL;
+        }
     }
     csis_svc_count = 0;
     return rc;
+}
+
+int bt_le_nimble_csis_deinit(void *csis_svc)
+{
+    ARG_UNUSED(csis_svc);
+
+    LOG_DBG("[N]CsisDeinit");
+    return 0;
 }

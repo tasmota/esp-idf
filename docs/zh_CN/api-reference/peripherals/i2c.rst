@@ -101,7 +101,7 @@ I2C 主机总线需要 :cpp:type:`i2c_master_bus_config_t` 指定的配置：
 I2C 主机设备需要 :cpp:type:`i2c_device_config_t` 指定的配置：
 
 - :cpp:member:`i2c_device_config_t::dev_addr_length` 配置从机设备的地址位长度，可从枚举 :cpp:enumerator:`I2C_ADDR_BIT_LEN_7` 或 :cpp:enumerator:`I2C_ADDR_BIT_LEN_10` （如果支持）中进行选择。
-- :cpp:member:`i2c_device_config_t::device_address` 设置 I2C 设备原始地址，请直接将设备地址解析到此成员。例如，若设备地址为 0x28，则将 0x28 解析到 :cpp:member:`i2c_device_config_t::device_address`，不要带写入或读取位。
+- :cpp:member:`i2c_device_config_t::device_address` 设置 I2C 设备原始地址，请直接将设备地址解析到此成员。对于使用 7 位地址的设备，请使用 **7 位** 地址，不要使用带读/写位的 8 位地址。
 - :cpp:member:`i2c_device_config_t::scl_speed_hz` 设置此设备的 SCL 线频率。
 - :cpp:member:`i2c_device_config_t::scl_wait_us` 设置 SCL 等待时间（以微秒为单位）。通常此值较大，因为从机延伸时间会很长（甚至可能延伸到 12 ms）。设置为 ``0`` 表示使用默认的寄存器值。
 
@@ -625,7 +625,7 @@ I2C 从机事件回调函数列表见 :cpp:type:`i2c_slave_event_callbacks_t`。
 
 .. only:: SOC_I2C_SUPPORT_APB
 
-    启用电源管理（即打开 :ref:`CONFIG_PM_ENABLE`），系统会在进入 Light-sleep 模式前调整或暂停 I2C FIFO 的时钟源，这可能会导致 I2C 信号改变，传输或接收到无效数据。
+    启用电源管理（即打开 :menuitem:`CONFIG_PM_ENABLE`），系统会在进入 Light-sleep 模式前调整或暂停 I2C FIFO 的时钟源，这可能会导致 I2C 信号改变，传输或接收到无效数据。
 
     但驱动程序可以通过获取 :cpp:enumerator:`ESP_PM_APB_FREQ_MAX` 类型的电源管理锁来防止系统改变 APB 频率。每当用户创建一个以 :cpp:enumerator:`I2C_CLK_SRC_APB` 为时钟源的 I2C 总线，驱动程序将在开始 I2C 操作时获取电源管理锁，并在结束 I2C 操作时自动释放锁。
 
@@ -644,7 +644,7 @@ IRAM 安全
 
 默认情况下，若 cache 因写入或擦除 flash 等原因而被禁用时，将推迟 I2C 中断。此时事件回调函数将无法按时执行，会影响实时应用的系统响应。
 
-Kconfig 选项 :ref:`CONFIG_I2C_ISR_IRAM_SAFE` 能够做到以下几点：
+Kconfig 选项 :menuitem:`CONFIG_I2C_ISR_IRAM_SAFE` 能够做到以下几点：
 
 1. 即使 cache 被禁用，I2C 中断依旧正常运行。
 2. 将 ISR 使用的所有函数放入 IRAM 中。
@@ -678,8 +678,8 @@ I2C 从机操作函数也通过总线操作信号保证线程安全。
 Kconfig 选项
 ^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2C_ISR_IRAM_SAFE` 将在 cache 被禁用时控制默认的 ISR 处理程序正常工作，详情请参阅 :ref:`i2c-iram-safe`。
-- :ref:`CONFIG_I2C_ENABLE_DEBUG_LOG` 可启用调试日志，但会增加固件二进制文件大小。
+- :menuitem:`CONFIG_I2C_ISR_IRAM_SAFE` 将在 cache 被禁用时控制默认的 ISR 处理程序正常工作，详情请参阅 :ref:`i2c-iram-safe`。
+- :menuitem:`CONFIG_I2C_ENABLE_DEBUG_LOG` 可启用调试日志，但会增加固件二进制文件大小。
 
 应用示例
 --------

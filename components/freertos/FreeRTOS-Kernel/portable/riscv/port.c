@@ -35,6 +35,7 @@
  *----------------------------------------------------------------------*/
 
 #include "sdkconfig.h"
+#include <stdbool.h>
 #include <string.h>
 #include "soc/soc_caps.h"
 #include "soc/periph_defs.h"
@@ -48,6 +49,7 @@
 #include "esp_private/crosscore_int.h"
 #include "hal/crosscore_int_ll.h"
 #include "esp_attr.h"
+#include "esp_compiler.h"
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_log.h"
@@ -56,6 +58,7 @@
 #include "portmacro.h"
 #include "port_systick.h"
 #include "esp_memory_utils.h"
+#include "esp_macros.h"
 #if CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER
 #include "esp_timer.h"
 #endif
@@ -97,6 +100,9 @@ _Static_assert(offsetof( StaticTask_t, pxDummy8 ) == PORT_OFFSET_PX_END_OF_STACK
 volatile UBaseType_t port_xSchedulerRunning[portNUM_PROCESSORS] = {0}; // Indicates whether scheduler is running on a per-core basis
 volatile UBaseType_t port_uxInterruptNesting[portNUM_PROCESSORS] = {0};  // Interrupt nesting level. Increased/decreased in portasm.c
 volatile UBaseType_t port_uxCriticalNesting[portNUM_PROCESSORS] = {0};
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+volatile bool port_xThreadSafeClaimed = false;
+#endif
 volatile UBaseType_t port_uxOldInterruptState[portNUM_PROCESSORS] = {0};
 volatile UBaseType_t xPortSwitchFlag[portNUM_PROCESSORS] = {0};
 volatile UBaseType_t port_uxCoreStartupDone[portNUM_PROCESSORS] = {0};  // Indicates whether the core has completed its startup sequence
@@ -156,6 +162,9 @@ BaseType_t xPortStartScheduler(void)
     BaseType_t coreID = xPortGetCoreID();
     port_uxInterruptNesting[coreID] = 0;
     port_uxCriticalNesting[coreID] = 0;
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    port_xThreadSafeClaimed = false;
+#endif
     port_xSchedulerRunning[coreID] = 0;
     port_uxCoreStartupDone[coreID] = 0;
 
@@ -170,8 +179,8 @@ BaseType_t xPortStartScheduler(void)
     /* Setup the hardware to generate the tick. */
     vPortSetupTimer();
 
-    esprv_int_set_threshold(RVHAL_INTR_ENABLE_THRESH); /* set global interrupt masking level */
     rv_utils_intr_global_enable();
+    esprv_int_set_threshold(RVHAL_INTR_ENABLE_THRESH); /* set global interrupt masking level */
 
     vPortYield();
 
@@ -187,13 +196,7 @@ void vPortEndScheduler(void)
 
 // ------------------------ Stack --------------------------
 
-/**
- * @brief Align stack pointer in a downward growing stack
- *
- * This macro is used to round a stack pointer downwards to the nearest n-byte boundary, where n is a power of 2.
- * This macro is generally used when allocating aligned areas on a downward growing stack.
- */
-#define STACKPTR_ALIGN_DOWN(n, ptr)     ((ptr) & (~((n)-1)))
+
 
 /**
  * @brief Allocate and initialize GCC TLS area
@@ -237,11 +240,11 @@ FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackTLS(UBaseType_t uxStackPointer, u
     extern char _thread_local_bss_start, _thread_local_bss_end;
     const uint32_t tls_data_size = (uint32_t)&_thread_local_data_end - (uint32_t)&_thread_local_data_start;
     const uint32_t tls_bss_size = (uint32_t)&_thread_local_bss_end - (uint32_t)&_thread_local_bss_start;
-    const uint32_t tls_area_size = ALIGNUP(16, tls_data_size + tls_bss_size);
+    const uint32_t tls_area_size = ESP_ALIGN_UP(tls_data_size + tls_bss_size, 16);
     // TODO: check that TLS area fits the stack
 
     // Allocate space for the TLS area on the stack. The area must be aligned to 16-bytes
-    uxStackPointer = STACKPTR_ALIGN_DOWN(16, uxStackPointer - (UBaseType_t)tls_area_size);
+    uxStackPointer = ESP_ALIGN_DOWN(uxStackPointer - (UBaseType_t)tls_area_size, 16);
     // Initialize the TLS data with the initialization values of each TLS variable
     memcpy((void *)uxStackPointer, &_thread_local_data_start, tls_data_size);
     // Initialize the TLS bss with zeroes
@@ -277,7 +280,7 @@ static void vPortTaskWrapper(TaskFunction_t pxCode, void *pvParameters)
  */
 FORCE_INLINE_ATTR RvCoprocSaveArea* pxRetrieveCoprocSaveAreaFromStackPointer(UBaseType_t pxTopOfStack)
 {
-    return (RvCoprocSaveArea*) STACKPTR_ALIGN_DOWN(16, pxTopOfStack - sizeof(RvCoprocSaveArea));
+    return (RvCoprocSaveArea*) ESP_ALIGN_DOWN(pxTopOfStack - sizeof(RvCoprocSaveArea), 16);
 }
 
 /**
@@ -352,7 +355,7 @@ FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackFrame(UBaseType_t uxStackPointer,
     - The stack frame must be allocated to a 16-byte aligned address.
     - We use RV_STK_FRMSZ as it rounds up the total size to a multiple of 16.
     */
-    uxStackPointer = STACKPTR_ALIGN_DOWN(16, uxStackPointer - RV_STK_FRMSZ);
+    uxStackPointer = ESP_ALIGN_DOWN(uxStackPointer - RV_STK_FRMSZ, 16);
 
     // Clear the entire interrupt stack frame
     RvExcFrame *frame = (RvExcFrame *)uxStackPointer;
@@ -525,6 +528,11 @@ void vPortClearInterruptMaskFromISR(UBaseType_t prev_int_level)
 #if (configNUM_CORES > 1)
 BaseType_t __attribute__((optimize("-O3"))) xPortEnterCriticalTimeout(portMUX_TYPE *mux, BaseType_t timeout)
 {
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    if (unlikely(port_xThreadSafeClaimed)) {
+        return pdPASS;
+    }
+#endif
     /* Interrupts may already be disabled (if this function is called in nested
      * manner). However, there's no atomic operation that will allow us to check,
      * thus we have to disable interrupts again anyways.
@@ -534,13 +542,17 @@ BaseType_t __attribute__((optimize("-O3"))) xPortEnterCriticalTimeout(portMUX_TY
      * saved level can be restored on the last call to exit the critical.
      */
     BaseType_t xOldInterruptLevel = portSET_INTERRUPT_MASK_FROM_ISR();
-    if (!spinlock_acquire(mux, timeout)) {
+    /* Interrupts are masked, so the core id is stable. Read it once and reuse it for
+     * both the spinlock owner id and the per-core critical nesting state. Interrupts
+     * stay masked for the whole critical section (to the same level the spinlock would
+     * use), so the spinlock does not need to disable them again. */
+    BaseType_t coreID = xPortGetCoreID();
+    if (!spinlock_acquire_impl(mux, timeout, spinlock_owner_id_for_core(coreID))) {
         //Timed out attempting to get spinlock. Restore previous interrupt level and return
         portCLEAR_INTERRUPT_MASK_FROM_ISR(xOldInterruptLevel);
         return pdFAIL;
     }
     //Spinlock acquired. Increment the critical nesting count.
-    BaseType_t coreID = xPortGetCoreID();
     BaseType_t newNesting = port_uxCriticalNesting[coreID] + 1;
     port_uxCriticalNesting[coreID] = newNesting;
     //If this is the first entry to a critical section. Save the old interrupt level.
@@ -552,12 +564,20 @@ BaseType_t __attribute__((optimize("-O3"))) xPortEnterCriticalTimeout(portMUX_TY
 
 void __attribute__((optimize("-O3"))) vPortExitCriticalMultiCore(portMUX_TYPE *mux)
 {
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    if (unlikely(port_xThreadSafeClaimed)) {
+        return;
+    }
+#endif
     /* This function may be called in a nested manner. Therefore, we only need
      * to re-enable interrupts if this is the last call to exit the critical. We
      * can use the nesting count to determine whether this is the last exit call.
      */
-    spinlock_release(mux);
+    /* Interrupts remain disabled for the whole critical section, so the core id is
+     * stable and the spinlock does not need to mask them again. Read the core id
+     * once and reuse it for both the release owner id and the per-core nesting state. */
     BaseType_t coreID = xPortGetCoreID();
+    spinlock_release_impl(mux, spinlock_owner_id_for_core(coreID));
     BaseType_t nesting = port_uxCriticalNesting[coreID];
 
     /* Critical section nesting count must never be negative */
@@ -599,12 +619,33 @@ void vPortExitCriticalCompliance(portMUX_TYPE *mux)
 }
 #endif /* (configNUM_CORES > 1) */
 
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+void xPortThreadSafeClaim(void)
+{
+    configASSERT(!xPortCanYield());
+    configASSERT(!port_xThreadSafeClaimed);
+    port_xThreadSafeClaimed = true;
+}
+
+void xPortThreadSafeDisclaim(void)
+{
+    configASSERT(!xPortCanYield());
+    configASSERT(port_xThreadSafeClaimed);
+    port_xThreadSafeClaimed = false;
+}
+#endif /* CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM */
+
 void vPortEnterCritical(void)
 {
 #if (configNUM_CORES > 1)
         esp_rom_printf("vPortEnterCritical(void) is not supported on multi-core targets. Please use vPortEnterCriticalMultiCore(portMUX_TYPE *mux) instead.\n");
         abort();
 #endif /* (configNUM_CORES > 1) */
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    if (unlikely(port_xThreadSafeClaimed)) {
+        return;
+    }
+#endif
     BaseType_t state = portSET_INTERRUPT_MASK_FROM_ISR();
     port_uxCriticalNesting[0]++;
 
@@ -619,6 +660,11 @@ void vPortExitCritical(void)
         esp_rom_printf("vPortExitCritical(void) is not supported on multi-core targets. Please use vPortExitCriticalMultiCore(portMUX_TYPE *mux) instead.\n");
         abort();
 #endif /* (configNUM_CORES > 1) */
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    if (unlikely(port_xThreadSafeClaimed)) {
+        return;
+    }
+#endif
 
     /* Critical section nesting count must never be negative */
     configASSERT( port_uxCriticalNesting[0] > 0 );

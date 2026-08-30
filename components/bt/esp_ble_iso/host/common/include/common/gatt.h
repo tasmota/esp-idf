@@ -50,6 +50,7 @@ struct bt_le_gattc_discover_event {
 struct bt_le_gattc_disc_cmpl_event {
     uint8_t  status;
     uint16_t conn_handle;
+    uint16_t conn_id;
 };
 
 struct bt_le_gatts_subscribe_event {
@@ -65,6 +66,7 @@ struct bt_le_gatts_subscribe_event {
 struct bt_le_gattc_notify_rx_event {
     bool     is_notify;
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t attr_handle;
     uint16_t len;
     uint8_t *value;
@@ -73,8 +75,12 @@ struct bt_le_gattc_notify_rx_event {
 struct bt_le_gatts_notify_tx_event {
     bool     is_notify;
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t attr_handle;
-    uint8_t  status;
+    /* int, not uint8_t: NimBLE reports BLE_HS_ERR_ATT_BASE(0x100)+att_code for a
+     * failed indication; uint8_t truncates 0x10e -> 0x0e == BLE_HS_EDONE (success),
+     * masking the failure as confirmation. */
+    int      status;
 };
 
 /* Bluedroid-side adapter events. NimBLE produces ACL connect/disconnect via
@@ -90,29 +96,34 @@ struct bt_le_addr_simple {
 
 struct bt_le_gattc_connect_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint8_t  role;
     struct bt_le_addr_simple peer;
 };
 
 struct bt_le_gattc_disconnect_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint8_t  reason;
 };
 
 struct bt_le_gattc_open_event {
     uint8_t  status;
     uint16_t conn_handle;
+    uint16_t conn_id;
 };
 
 struct bt_le_gattc_mtu_event {
     uint8_t  status;
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t mtu;
 };
 
 struct bt_le_gattc_read_chrc_event {
     uint8_t  status;
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t attr_handle;
     uint16_t len;
     uint8_t  *value;
@@ -121,28 +132,33 @@ struct bt_le_gattc_read_chrc_event {
 struct bt_le_gattc_write_chrc_event {
     uint8_t  status;
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t attr_handle;
     uint16_t offset;
 };
 
 struct bt_le_gatts_connect_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint8_t  role;
     struct bt_le_addr_simple peer;
 };
 
 struct bt_le_gatts_disconnect_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint8_t  reason;
 };
 
 struct bt_le_gatts_mtu_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint16_t mtu;
 };
 
 struct bt_le_gatts_read_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint32_t trans_id;
     uint8_t  peer[6];
     uint16_t attr_handle;
@@ -153,6 +169,7 @@ struct bt_le_gatts_read_event {
 
 struct bt_le_gatts_write_event {
     uint16_t conn_handle;
+    uint16_t conn_id;
     uint32_t trans_id;
     uint8_t  peer[6];
     uint16_t attr_handle;
@@ -161,6 +178,13 @@ struct bt_le_gatts_write_event {
     bool     need_rsp;
     uint16_t len;
     uint8_t  *value;
+};
+
+struct bt_le_gatts_exec_write_event {
+    uint16_t conn_handle;
+    uint16_t conn_id;
+    uint32_t trans_id;
+    bool     exec;          /* true = execute the queued long write, false = cancel */
 };
 
 struct bt_le_gatt_event_param {
@@ -186,6 +210,7 @@ struct bt_le_gatt_event_param {
         struct bt_le_gatts_mtu_event        gatts_mtu;
         struct bt_le_gatts_read_event       gatts_read;
         struct bt_le_gatts_write_event      gatts_write;
+        struct bt_le_gatts_exec_write_event gatts_exec_write;
     };
 };
 
@@ -209,6 +234,7 @@ enum {
     BT_LE_GATTS_MTU_EVENT,
     BT_LE_GATTS_READ_EVENT,
     BT_LE_GATTS_WRITE_EVENT,
+    BT_LE_GATTS_EXEC_WRITE_EVENT,
 
     BT_LE_GATT_EVENT_MAX,
 };
@@ -253,7 +279,7 @@ struct notify_data {
 struct bt_gatt_attr *bt_gatts_find_attr_by_handle(uint16_t handle);
 
 bool bt_gatts_find_attr_by_uuid(struct notify_data *found,
-                                   const struct bt_uuid *uuid);
+                                const struct bt_uuid *uuid);
 
 int bt_gatts_sub_changed(uint16_t conn_handle,
                          uint16_t ccc_handle,
@@ -267,7 +293,11 @@ struct gattc_sub *bt_gattc_sub_find(struct bt_conn *conn);
 
 void bt_le_acl_conn_disconnected_gatt_listener(uint16_t conn_handle);
 
+void bt_le_acl_conn_bond_deleted_gatt_listener(uint8_t id, const bt_addr_le_t *peer);
+
 void bt_le_gatt_handle_event(uint8_t *data, size_t data_len);
+
+void bt_le_gatt_event_free(void *data);
 
 #ifdef __cplusplus
 }

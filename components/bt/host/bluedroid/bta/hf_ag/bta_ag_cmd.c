@@ -696,7 +696,7 @@ static tBTA_AG_PEER_CODEC bta_ag_parse_bac(tBTA_AG_SCB *p_scb, char *p_s)
 
             default:
                 APPL_TRACE_ERROR("Unknown Codec UUID(%d) received", uuid_codec);
-                return BTA_AG_CODEC_NONE;
+                break;
         }
         if (cont) {
             p_s = p + 1;
@@ -746,7 +746,7 @@ static void bta_ag_process_unat_res(char *unat_result)
             trim_data[j] = '\0';
         }
         str_leng = str_leng - 4;
-        BCM_STRNCPY_S(unat_result, trim_data, BTA_AG_AT_MAX_LEN);
+        BCM_STRLCPY_S(unat_result, trim_data, BTA_AG_AT_MAX_LEN + 1);
         i = 0;
         j = 0;
         if (str_leng < 4) {
@@ -827,8 +827,7 @@ void bta_ag_at_hsp_cback(tBTA_AG_SCB *p_scb, UINT16 cmd, UINT8 arg_type,
     val.hdr.handle = bta_ag_scb_to_idx(p_scb);
     val.hdr.app_id = p_scb->app_id;
     val.num = (UINT16) int_arg;
-    BCM_STRNCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN);
-    val.str[BTA_AG_AT_MAX_LEN] = '\0';
+    BCM_STRLCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN + 1);
     /* call callback with event */
     if (bta_ag_cb.p_cback) {
         (*bta_ag_cb.p_cback)(bta_ag_hsp_cb_evt[cmd], (tBTA_AG *) &val);
@@ -867,8 +866,7 @@ void bta_ag_at_hfp_cback(tBTA_AG_SCB *p_scb, UINT16 cmd, UINT8 arg_type,
     val.hdr.app_id = p_scb->app_id;
     val.num = int_arg;
     bdcpy(val.bd_addr, p_scb->peer_addr);
-    BCM_STRNCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN);
-    val.str[BTA_AG_AT_MAX_LEN] = '\0';
+    BCM_STRLCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN + 1);
     event = bta_ag_hfp_cb_evt[cmd];
 
     switch (cmd)
@@ -917,13 +915,16 @@ void bta_ag_at_hfp_cback(tBTA_AG_SCB *p_scb, UINT16 cmd, UINT8 arg_type,
                 val.value = BTA_AG_HF_DIAL_NUM;
             }
             if (event != 0) {
-                while ((val.str[dst] = p_arg[src]) != '\0') {
+                while (dst < BTA_AG_AT_MAX_LEN && (val.str[dst] = p_arg[src]) != '\0') {
                     if (val.str[dst] == ';') {
                         val.str[dst] = '\0';
                         break;
                     }
                     src++;
                     dst++;
+                }
+                if (dst >= BTA_AG_AT_MAX_LEN) {
+                    val.str[BTA_AG_AT_MAX_LEN] = '\0';
                 }
             }
             break;
@@ -1269,8 +1270,7 @@ void bta_ag_at_err_cback(tBTA_AG_SCB *p_scb, BOOLEAN unknown, char *p_arg)
         val.hdr.handle = bta_ag_scb_to_idx(p_scb);
         val.hdr.app_id = p_scb->app_id;
         val.num = 0;
-        BCM_STRNCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN);
-        val.str[BTA_AG_AT_MAX_LEN] = '\0';
+        BCM_STRLCPY_S(val.str, p_arg, BTA_AG_AT_MAX_LEN + 1);
         if (bta_ag_cb.p_cback) {
             (*bta_ag_cb.p_cback)(BTA_AG_AT_UNAT_EVT, (tBTA_AG *) &val);
         }

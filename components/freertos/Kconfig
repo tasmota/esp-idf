@@ -331,6 +331,10 @@ menu "FreeRTOS"
                 when no tasks need to run. To skip unnecessary wake-up initialize a timer with the
                 "skip_unhandled_events" option as true.
 
+                While the OS tick interrupt is suppressed during tickless idle, tick hooks are not invoked
+                for those suppressed ticks. This applies to esp_register_freertos_tick_hook() callbacks and
+                to configUSE_TICK_HOOK.
+
                 If disabled, automatic light sleep support will be disabled.
 
         config FREERTOS_IDLE_TIME_BEFORE_SLEEP
@@ -565,6 +569,21 @@ menu "FreeRTOS"
             help
                 If enabled, context of port*_CRITICAL calls (ISR or Non-ISR) would be checked to be in compliance with
                 Vanilla FreeRTOS. e.g Calling port*_CRITICAL from ISR context would cause assert failure
+
+        config FREERTOS_PORT_THREAD_SAFE_CLAIM
+            bool "Enable xPortThreadSafeClaim/xPortThreadSafeDisclaim APIs"
+            default y if SOC_BRANCH_PREDICTOR_SUPPORTED
+            default n
+            help
+                Enables the xPortThreadSafeClaim() and xPortThreadSafeDisclaim() APIs, which allow a caller to
+                declare that it has already ensured thread safety (e.g. by disabling interrupts and stalling all
+                other cores), causing subsequent vPortEnterCritical/vPortExitCritical calls to become no-ops for
+                the duration of the claim.
+
+                This feature adds a branch check to every port-layer critical-section enter/exit path. On chips
+                with a hardware branch predictor (SOC_BRANCH_PREDICTOR_SUPPORTED) the branch is predicted-not-taken
+                and has negligible overhead. On older chips without a branch predictor the branch has a measurable
+                per-critical-section cost, so this option defaults to disabled.
 
     endmenu # Port
 

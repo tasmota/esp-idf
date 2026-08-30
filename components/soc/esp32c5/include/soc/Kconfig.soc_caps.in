@@ -257,7 +257,7 @@ config SOC_RNG_SUPPORTED
 
 config SOC_KEY_MANAGER_SUPPORTED
     bool
-    default y
+    default n
 
 config SOC_HUK_SUPPORTED
     bool
@@ -304,6 +304,10 @@ config SOC_BITSCRAMBLER_SUPPORTED
     default y
 
 config SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED
+    bool
+    default y
+
+config SOC_RISCV_TRACE_SUPPORTED
     bool
     default y
 
@@ -475,6 +479,10 @@ config SOC_CPU_HAS_LOCKUP_RESET
     bool
     default y
 
+config SOC_CPU_HAS_ZC_EXTENSIONS
+    bool
+    default y
+
 config SOC_CPU_ZCMP_WORKAROUND
     bool
     default y
@@ -518,10 +526,6 @@ config SOC_GDMA_SUPPORT_SLEEP_RETENTION
 config SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION
     bool
     default y
-
-config SOC_GDMA_EXT_MEM_ENC_ALIGNMENT
-    int
-    default 16
 
 config SOC_GPIO_PORT
     int
@@ -1299,10 +1303,6 @@ config SOC_EXTERNAL_COEX_ADVANCE
     bool
     default y
 
-config SOC_EXTERNAL_COEX_LEADER_TX_LINE
-    bool
-    default n
-
 config SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH
     int
     default 12
@@ -1371,7 +1371,15 @@ config SOC_PM_SUPPORT_RTC_PERIPH_PD
     bool
     default y
 
+config SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+    bool
+    default y
+
 config SOC_PM_SUPPORT_PMU_MODEM_STATE
+    bool
+    default y
+
+config SOC_PM_REGDMA_MODEM_LINK_PROTECT
     bool
     default y
 
@@ -1407,10 +1415,6 @@ config SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE
     bool
     default y
 
-config SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC
-    int
-    default 4
-
 config SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
     bool
     default y
@@ -1419,13 +1423,17 @@ config SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
     bool
     default y
 
+config SOC_PM_PAU_REGDMA_LINK_IDX_PHY
+    int
+    default 4
+
 config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
     bool
     default y
 
 config SOC_PM_RETENTION_MODULE_NUM
     int
-    default 32
+    default 40
 
 config SOC_PM_FLASH_KEEP_POWER_IN_LSLP
     bool
@@ -1587,6 +1595,10 @@ config SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT
     bool
     default y
 
+config SOC_DEBUG_HAVE_OCD_STUB_BINS
+    bool
+    default y
+
 config SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR
     bool
     default y
@@ -1610,3 +1622,19 @@ config SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
 config SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED
     bool
     default y
+
+config SOC_RISCV_TRACE_HAS_CONFIG_REG
+    bool
+    default y
+
+config SOC_RISCV_TRACE_AHB_CONFIGURABLE
+    bool
+    default y
+
+config SOC_RISCV_TRACE_FILTER_SUPPORTED
+    bool
+    default y
+
+config SOC_RISCV_TRACE_PRIV_WIDTH
+    int
+    default 1

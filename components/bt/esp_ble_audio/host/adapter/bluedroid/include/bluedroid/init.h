@@ -19,6 +19,7 @@
 #include "bluedroid/profiles/pacs.h"
 #include "bluedroid/profiles/tbs.h"
 #include "bluedroid/profiles/tmas.h"
+#include "bluedroid/profiles/gmas.h"
 #include "bluedroid/profiles/vcs.h"
 #include "bluedroid/profiles/has.h"
 
@@ -27,6 +28,8 @@ extern "C" {
 #endif
 
 int bt_le_bluedroid_audio_init(void);
+
+void bt_le_bluedroid_audio_deinit(void);
 
 int bt_le_bluedroid_media_proxy_pl_init(void);
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,10 +11,9 @@
 #include "unity.h"
 #include "esp_private/dw_gdma.h"
 #include "hal/dw_gdma_ll.h"
-#include "hal/efuse_hal.h"
 #include "esp_cache.h"
 #include "esp_private/esp_cache_private.h"
-#include "esp_efuse.h"
+#include "esp_private/esp_mspi_align.h"
 
 TEST_CASE("DW_GDMA channel allocation", "[DW_GDMA]")
 {
@@ -98,17 +97,17 @@ TEST_CASE("DW_GDMA M2M Test: Contiguous Mode", "[DW_GDMA]")
     dw_gdma_block_transfer_config_t transfer_config = {
         .src = {
             .addr = (uint32_t)src_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .dst = {
             .addr = (uint32_t)dst_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .size = 256,
     };
@@ -190,17 +189,17 @@ TEST_CASE("DW_GDMA M2M Test: Reload Mode", "[DW_GDMA]")
     dw_gdma_block_transfer_config_t transfer_config = {
         .src = {
             .addr = (uint32_t)src_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .dst = {
             .addr = (uint32_t)dst_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .size = 256,
     };
@@ -306,17 +305,17 @@ TEST_CASE("DW_GDMA M2M Test: Shadow Mode", "[DW_GDMA]")
     dw_gdma_block_transfer_config_t transfer_config = {
         .src = {
             .addr = (uint32_t)src_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .dst = {
             .addr = (uint32_t)dst_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .size = 256,
     };
@@ -441,17 +440,17 @@ TEST_CASE("DW_GDMA M2M Test: Link-List Mode", "[DW_GDMA]")
     dw_gdma_block_transfer_config_t transfer_config = {
         .src = {
             .addr = (uint32_t)src_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .dst = {
             .addr = (uint32_t)dst_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 0,
+            .burst_size = 4,
+            .axi_burst_len = 0,
         },
         .size = 128,
     };
@@ -542,8 +541,8 @@ TEST_CASE("DW_GDMA M2M Test: memory set with fixed address", "[DW_GDMA]")
     size_t int_mem_alignment = 0;
     TEST_ESP_OK(esp_cache_get_alignment(MALLOC_CAP_SPIRAM, &ext_mem_alignment));
     TEST_ESP_OK(esp_cache_get_alignment(0, &int_mem_alignment));
-    if (esp_efuse_is_flash_encryption_enabled()) {
-        TEST_PASS_MESSAGE("Flash encryption is enabled, skip this test");
+    if (esp_mspi_get_alignment(NULL) > 1) {
+        TEST_PASS_MESSAGE("MSPI strict alignment required (Flash Encryption / PSRAM ECC), skip this test");
     }
     uint8_t *src_buf = heap_caps_aligned_calloc(ext_mem_alignment, 1, 256, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint8_t *dst_buf = heap_caps_aligned_calloc(int_mem_alignment, 1, 256, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -578,17 +577,17 @@ TEST_CASE("DW_GDMA M2M Test: memory set with fixed address", "[DW_GDMA]")
     dw_gdma_block_transfer_config_t transfer_config = {
         .src = {
             .addr = (uint32_t)src_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_FIXED,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_FIXED,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 1, // Note for ESP32P4, if the buffer is in PSRAM and the burst mode is fixed, we can't set the burst length larger than 1
+            .burst_size = 4,
+            .axi_burst_len = 1, // Note for ESP32P4, if the buffer is in PSRAM and the address increment mode is fixed, we can't set the AXI burst length larger than 1
         },
         .dst = {
             .addr = (uint32_t)dst_buf,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
             .width = DW_GDMA_TRANS_WIDTH_8,
-            .burst_items = 4,
-            .burst_len = 1,
+            .burst_size = 4,
+            .axi_burst_len = 1,
         },
         .size = 256,
     };

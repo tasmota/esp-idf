@@ -50,8 +50,8 @@ ESP-TLS provides multiple options for TLS server verification on the client side
         * ``cacert_bytes`` - the size of the CA certificate in bytes.
     * **use_global_ca_store**: The ``global_ca_store`` can be initialized and set at once. Then it can be used to verify the server for all the ESP-TLS connections which have set ``use_global_ca_store = true`` in their respective :cpp:type:`esp_tls_cfg_t` structure. See the API Reference section below for information regarding different APIs used for initializing and setting up the ``global_ca_store``.
     * **crt_bundle_attach**: The ESP x509 Certificate Bundle API provides an easy way to include a bundle of custom x509 root certificates for TLS server verification. More details can be found at :doc:`ESP x509 Certificate Bundle </api-reference/protocols/esp_crt_bundle>`.
-    * **psk_hint_key**: To use pre-shared keys for server verification, :ref:`CONFIG_ESP_TLS_PSK_VERIFICATION` should be enabled in the ESP-TLS menuconfig. Then the pointer to the PSK hint and key should be provided to the :cpp:type:`esp_tls_cfg_t` structure. The ESP-TLS will use the PSK for server verification only when no other option regarding server verification is selected.
-    * **skip server verification**: This is an insecure option provided in the ESP-TLS for testing purposes. The option can be set by enabling :ref:`CONFIG_ESP_TLS_INSECURE` and :ref:`CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY` in the ESP-TLS menuconfig. When this option is enabled the ESP-TLS will skip server verification by default when no other options for server verification are selected in the :cpp:type:`esp_tls_cfg_t` structure.
+    * **psk_hint_key**: To use pre-shared keys for server verification, :menuitem:`CONFIG_ESP_TLS_PSK_VERIFICATION` should be enabled in the ESP-TLS menuconfig. Then the pointer to the PSK hint and key should be provided to the :cpp:type:`esp_tls_cfg_t` structure. The ESP-TLS will use the PSK for server verification only when no other option regarding server verification is selected.
+    * **skip server verification**: This is an insecure option provided in the ESP-TLS for testing purposes. The option can be set by enabling :menuitem:`CONFIG_ESP_TLS_INSECURE` and :menuitem:`CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY` in the ESP-TLS menuconfig. When this option is enabled the ESP-TLS will skip server verification by default when no other options for server verification are selected in the :cpp:type:`esp_tls_cfg_t` structure.
 
       .. warning::
 
@@ -83,7 +83,7 @@ Example:
 ESP-TLS Server Cert Selection Hook
 ----------------------------------
 
-The ESP-TLS component provides an option to set the server certification selection hook when using the MbedTLS stack. This provides an ability to configure and use a certificate selection callback during server handshake. The callback helps to select a certificate to present to the client based on the TLS extensions supplied in the client hello message, such as ALPN and SNI. To enable this feature, please enable  :ref:`CONFIG_ESP_TLS_SERVER_CERT_SELECT_HOOK` in the ESP-TLS menuconfig.
+The ESP-TLS component provides an option to set the server certification selection hook when using the MbedTLS stack. This provides an ability to configure and use a certificate selection callback during server handshake. The callback helps to select a certificate to present to the client based on the TLS extensions supplied in the client hello message, such as ALPN and SNI. To enable this feature, please enable  :menuitem:`CONFIG_ESP_TLS_SERVER_CERT_SELECT_HOOK` in the ESP-TLS menuconfig.
 
 The certificate selection callback can be configured in the :cpp:type:`esp_tls_cfg_t` structure as follows:
 
@@ -204,26 +204,28 @@ To use a custom TLS stack in your project, follow these steps:
     * For detailed function signatures and requirements, see :component_file:`esp-tls/esp_tls_custom_stack.h`.
 
 
+.. _atecc608a-with-esp-tls:
+
 ATECC608A (Secure Element) with ESP-TLS
 --------------------------------------------------
 
-ESP-TLS provides support for using ATECC608A cryptoauth chip with ESP32 series of SoCs. The use of ATECC608A is supported only when ESP-TLS is used with MbedTLS as its underlying SSL/TLS stack. ESP-TLS uses MbedTLS as its underlying TLS/SSL stack by default unless changed manually.
+ESP-TLS provides support for using ATECC608A cryptoauth chip with ESP32 series of SoCs via the PSA Crypto opaque driver interface. The use of ATECC608A is supported only when ESP-TLS is used with MbedTLS as its underlying SSL/TLS stack. ESP-TLS uses MbedTLS as its underlying TLS/SSL stack by default unless changed manually.
 
 .. note::
 
     ATECC608A chip interfaced to ESP32 series must be already configured. For details, please refer to `esp_cryptoauth_utility <https://github.com/espressif/esp-cryptoauthlib/blob/master/esp_cryptoauth_utility/README.md#esp_cryptoauth_utility>`_.
 
-To enable the secure element support, and use it in your project for TLS connection, you have to follow the below steps:
+To enable the secure element support, and use it in your project for TLS connection, follow the steps below:
 
-1) Add `esp-cryptoauthlib <https://github.com/espressif/esp-cryptoauthlib>`_ in your project, for details please refer `how to use esp-cryptoauthlib with ESP-IDF <https://github.com/espressif/esp-cryptoauthlib#how-to-use-esp-cryptoauthlib-with-esp-idf>`_.
+1) Add `esp-cryptoauthlib <https://github.com/espressif/esp-cryptoauthlib>`_ as a dependency in your project. For details, please refer to `how to use esp-cryptoauthlib with ESP-IDF <https://github.com/espressif/esp-cryptoauthlib#how-to-use-esp-cryptoauthlib-with-esp-idf>`_.
 
-2) Enable the menuconfig option :ref:`CONFIG_ESP_TLS_USE_SECURE_ELEMENT`:
+2) Enable the menuconfig option :menuitem:`CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED`:
 
    .. code-block:: none
 
-       menuconfig > Component config > ESP-TLS > Use Secure Element (ATECC608A) with ESP-TLS
+       menuconfig > Component config > mbedTLS > Enable secure element hardware support
 
-3) Select type of ATECC608A chip with following option:
+3) Select the type of ATECC608A chip:
 
    .. code-block:: none
 
@@ -231,13 +233,45 @@ To enable the secure element support, and use it in your project for TLS connect
 
    To know more about different types of ATECC608A chips and how to obtain the type of ATECC608A connected to your ESP module, please visit `ATECC608A chip type <https://github.com/espressif/esp-cryptoauthlib/blob/master/esp_cryptoauth_utility/README.md#find-type-of-atecc608a-chip-connected-to-esp32-wroom32-se>`_.
 
-4) Enable the use of ATECC608A in ESP-TLS by providing the following config option in :cpp:type:`esp_tls_cfg_t`:
+4) Import the ATECC608A key and configure ESP-TLS to use it via :cpp:type:`esp_key_config_t`:
 
    .. code-block:: c
 
+       #include "psa/crypto.h"
+       #include "psa_crypto_driver_secure_element.h"
+       #include "psa_crypto_driver_secure_element_contexts.h"
+       #include "esp_key_config.h"
+
+       /* Import ATECC608A key reference into PSA */
+       psa_key_attributes_t key_attr = PSA_KEY_ATTRIBUTES_INIT;
+       psa_set_key_lifetime(&key_attr, PSA_KEY_LIFETIME_SECURE_ELEMENT_VOLATILE);
+       psa_set_key_usage_flags(&key_attr, PSA_KEY_USAGE_SIGN_HASH);
+       psa_set_key_algorithm(&key_attr, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
+       psa_set_key_type(&key_attr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
+       psa_set_key_bits(&key_attr, 256);
+
+       secure_element_opaque_key_t opaque_key = {
+           .slot_id = 0,  /* Private key slot on ATECC608A */
+       };
+
+       psa_key_id_t psa_key_id;
+       psa_status_t status = psa_import_key(&key_attr, (const uint8_t *)&opaque_key,
+                                            sizeof(opaque_key), &psa_key_id);
+       if (status != PSA_SUCCESS) {
+           /* Handle error - typically means the SE callbacks are not registered
+            * or the attributes are invalid. */
+           return;
+       }
+
+       /* Configure ESP-TLS to use the PSA key */
+       esp_key_config_t key_config = {
+           .source = ESP_KEY_SOURCE_PSA,
+           .psa.key_id = psa_key_id,
+       };
+
        esp_tls_cfg_t cfg = {
-           /* other configurations options */
-           .use_secure_element = true,
+           /* other configuration options */
+           .client_key = &key_config,
        };
 
 .. only:: SOC_DIG_SIGN_SUPPORTED
@@ -309,7 +343,7 @@ The mechanism for session resumption differs slightly between TLS versions:
 
 To enable and use client session tickets:
 
-1. Enable the Kconfig option :ref:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`.
+1. Enable the Kconfig option :menuitem:`CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS`.
 2. After a successful TLS connection (and handshake completion), retrieve the session ticket using :cpp:func:`esp_tls_get_client_session`.
 
     * **For TLS 1.3**: Since session tickets can arrive from the server at any point after the handshake, an application might need to call :cpp:func:`esp_tls_get_client_session` periodically or after specific application-level exchanges if it wants to ensure it has the most recent ticket. Each new ticket received and processed by the TLS stack supersedes the previous one for future resumption attempts.

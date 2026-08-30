@@ -52,8 +52,9 @@ UHCI 控制器需要通过 :cpp:type:`uhci_controller_config_t` 进行配置。
     uhci_controller_config_t uhci_cfg = {
         .uart_port = EX_UART_NUM,                 // 将指定 UART 端口连接到 UHCI 硬件
         .tx_trans_queue_depth = 30,               // 发送队列的队列深度
-        .max_receive_internal_mem = 10 * 1024,    // 内部接收内存大小，更多信息请参考 API 注释。
-        .max_transmit_size = 10 * 1024,           // 单次传输的最大传输量，单位是字节
+        .max_receive_internal_mem = 10 * 1024,    // uhci_receive() 期望的最大缓冲区大小，同时决定 RX DMA 描述符链长度。对于较大的传输，建议将该值配置为至少会分配两个描述符，以便进行乒乓操作。
+        .max_transmit_size = 10 * 1024,           // 一次传输事务中的最大总字节数（包含该次传入的所有缓冲区）
+        .max_transmit_buffer_count = 1,           // 一次传输事务中的最大缓冲区数量。设为 0 或 1 表示只使用单缓冲区传输。
         .dma_burst_size = 32,                     // 突发传输大小
         .rx_eof_flags.idle_eof = 1,               // 结束帧的条件，用户可以选择 `idle_eof`, `rx_brk_eof` 和 `length_eof`, 关于更多信息请参考 API 注释.
     };
@@ -112,6 +113,30 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
     // 等待所有传输完成
     ESP_ERROR_CHECK(uhci_wait_all_tx_transaction_done(uhci_ctrl, -1));
 
+如果待发送的数据分散在多个独立的缓冲区中，可以使用 :cpp:func:`uhci_multi_buffer_transmit` 将它们作为一次事务发送，而无需先拷贝到一块连续的缓冲区中。各缓冲区段通过一个 :cpp:type:`uhci_transmit_buffer_info_t` 数组描述，并按给定顺序作为一条连续的 UART 数据流发送（在内部，这些段会被组装成一条 DMA 链表，只有最后一段被标记为事务结束）。要使用该功能，需要在创建控制器时把 :cpp:member:`uhci_controller_config_t::max_transmit_buffer_count` 设为你在单次调用中打算发送的最大段数。
+
+需要满足以下约束：
+
+- ``array_size`` 不得超过 :cpp:member:`uhci_controller_config_t::max_transmit_buffer_count`。
+- 所有缓冲区的总字节数不得超过 :cpp:member:`uhci_controller_config_t::max_transmit_size`。
+- 与 :cpp:func:`uhci_transmit` 一样，每个缓冲区段在传输完成前都必须保持有效。
+
+.. code:: c
+
+    uint8_t header[8];
+    uint8_t payload[DATA_LENGTH];
+    // ... 填充 header 和 payload ...
+    uhci_transmit_buffer_info_t buffer_info[] = {
+        { .write_buffer = header,  .buffer_size = sizeof(header) },
+        { .write_buffer = payload, .buffer_size = sizeof(payload) },
+    };
+    ESP_ERROR_CHECK(uhci_multi_buffer_transmit(uhci_ctrl, buffer_info, 2));
+    ESP_ERROR_CHECK(uhci_wait_all_tx_transaction_done(uhci_ctrl, -1));
+
+.. note::
+
+    当通过 :cpp:func:`uhci_multi_buffer_transmit` 提交的事务包含多个段时，“传输完成”回调中的 :cpp:member:`uhci_tx_done_event_data_t::buffer` 只指向第一个段，应把它当作该事务的标识句柄，而不是一段长度为 ``sent_size`` 字节的连续内存的起始地址。:cpp:member:`uhci_tx_done_event_data_t::sent_size` 是所有段大小之和。
+
 启动 UHCI 接收
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -165,15 +190,39 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
         }
     }
 
-在 API :cpp:func:`uhci_receive` 接口中，参数 ``read_buffer`` 是用户必须提供的缓冲区，参数 ``buffer_size`` 表示用户提供的缓冲区大小。在 UHCI 控制器的配置结构中，参数 :cpp:member:`uhci_controller_config_t::max_receive_internal_mem` 指定了内部 DMA 工作空间的期望大小。软件将根据此工作空间大小分配一定数量的 DMA 节点，这些节点形成一个循环链表。
+在 API :cpp:func:`uhci_receive` 接口中，参数 ``read_buffer`` 是用户必须提供的缓冲区，参数 ``buffer_size`` 表示用户提供的缓冲区大小。``buffer_size`` 一般不得超过 :cpp:member:`uhci_controller_config_t::max_receive_internal_mem`。
 
-当一个节点被填满，但接收尚未完成时，将触发 :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` 事件，且 :cpp:member:`uhci_rx_event_data_t::flags::totally_received` 的值为 0。 当所有数据接收完成时，该事件将再次被触发，并且 :cpp:member:`uhci_rx_event_data_t::flags::totally_received` 的值为 1。
+当一个节点被填满，但接收尚未完成时，将触发 :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` 事件，且 :cpp:member:`uhci_rx_event_data_t::flags::totally_received` 的值为 0。当所有数据接收完成时，该事件将再次被触发，并且 :cpp:member:`uhci_rx_event_data_t::flags::totally_received` 的值为 1。
 
 此机制允许用户使用相对较小的缓冲区实现连续且快速的接收，而无需分配与接收总数据量相等大小的缓冲区。
 
 .. note::
 
     在接收完成之前，:cpp:func:`uhci_receive` 的参数 ``read_buffer`` 不可被释放。
+
+连续接收
+^^^^^^^^
+
+:cpp:func:`uhci_receive` 是一次性 (one-shot) 接口：它在接收完一帧后便会停止 DMA，需要重新调用才能接收下一帧，而在这个重新装载的间隙里可能会丢失到来的数据。若需要持续接收数据流，请改用 :cpp:func:`uhci_start_receive_continuous`。它会让 GDMA 跨越 EOF 持续运行，接收过程不会中断，因此帧与帧之间不会丢数据。
+
+传入的 ``read_buffer`` 会被拆分到各个 DMA 节点上，并作为环形缓冲区循环使用：每接收完一帧（例如 UART idle 或 length EOF），都会通过 :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` 回调交付，且 :cpp:member:`uhci_rx_event_data_t::flags::totally_received` 置为 1；而某个节点填满但整帧尚未结束时，则以该标志为 0 交付。回调直接给出指向环形缓冲区内部的指针（零拷贝），因此应用必须在 DMA 绕回并覆盖数据之前将其消费掉。请根据预期的吞吐量与消费延迟来确定缓冲区大小；驱动不提供溢出保护。
+
+调用 :cpp:func:`uhci_stop_receive` 可结束本次接收会话，并使控制器回到空闲状态，之后便可重新装载或删除控制器。
+
+.. code:: c
+
+    // 注册回调并启动连续接收。
+    ESP_ERROR_CHECK(uhci_register_event_callbacks(uhci_ctrl, &uhci_cbs, ctx));
+    ESP_ERROR_CHECK(uhci_start_receive_continuous(uhci_ctrl, pdata, buffer_size));
+
+    // ... 消费通过 on_rx_trans_event 交付的各帧数据 ...
+
+    // 在释放 pdata 或删除控制器之前，先停止接收会话。
+    ESP_ERROR_CHECK(uhci_stop_receive(uhci_ctrl));
+
+.. note::
+
+    :cpp:func:`uhci_start_receive_continuous` 的参数 ``read_buffer`` 必须保持有效，直到 :cpp:func:`uhci_stop_receive` 返回。
 
 卸载 UHCI 控制器
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -192,7 +241,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
 关于低功耗
 ^^^^^^^^^^^^^^^^
 
-当启用电源管理时（即开启 :ref:`CONFIG_PM_ENABLE`），系统在进入睡眠前可能会调整或禁用时钟源。因此，UHCI 内部的 FIFO 可能无法正常工作。
+当启用电源管理时（即开启 :menuitem:`CONFIG_PM_ENABLE`），系统在进入睡眠前可能会调整或禁用时钟源。因此，UHCI 内部的 FIFO 可能无法正常工作。
 
 通过创建电源管理锁，驱动程序可以避免上述问题. 驱动会根据不同的时钟源设置锁的类型. 驱动程序将在 :cpp:func:`uhci_receive` 或 :cpp:func:`uhci_transmit` 中获取锁，并在事务完成中断中释放锁。这意味着，这两个函数之间的任何 UHCI 事务都能保证正常稳定运行。
 
@@ -201,7 +250,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
 
 默认情况下，当由于写入或擦除主 Flash 导致缓存被禁用时，UHCI 所依赖的中断会被延迟. 因此，事务完成中断可能无法及时处理，这在实时应用中是不可接受的。更糟糕的是，当 UHCI 事务依赖 **乒乓** 中断来连续编码或复制 UHCI 缓冲区时，延迟的中断可能会导致不可预测的结果。
 
-通过启用 Kconfig 选项 :ref:`CONFIG_UHCI_ISR_CACHE_SAFE`，可实现以下功能：
+通过启用 Kconfig 选项 :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE`，可实现以下功能：
 
 1. 即使缓存被禁用，中断也能被及时处理。
 2. 将 ISR 使用的所有函数放入 IRAM [1]_
@@ -216,7 +265,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
 
 **请注意以下数据仅供参考，不同芯片型号可能会有所不同.**
 
-启用 :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` 时的资源消耗：
+启用 :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE` 时的资源消耗：
 
 .. list-table:: 资源消耗
     :widths: 10 10 10 10 10 10 10 10 10
@@ -241,7 +290,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
       - 175
       - 175
 
-禁用 :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` 时的资源消耗：
+禁用 :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE` 时的资源消耗：
 
 .. list-table:: 资源消耗
     :widths: 10 10 10 10 10 10 10 10 10 10
@@ -271,7 +320,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
 关于性能
 ^^^^^^^^
 
-为了提升中断处理的实时响应能力， UHCI 驱动提供了 :ref:`CONFIG_UHCI_ISR_HANDLER_IN_IRAM` 选项。启用该选项后，中断处理程序将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令时可能出现的缓存丢失带来的延迟。
+为了提升中断处理的实时响应能力， UHCI 驱动提供了 :menuitem:`CONFIG_UHCI_ISR_HANDLER_IN_IRAM` 选项。启用该选项后，中断处理程序将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令时可能出现的缓存丢失带来的延迟。
 
 .. note::
 
@@ -285,7 +334,7 @@ RX 事件数据在 :cpp:type:`uhci_rx_event_data_t` 中定义：
 其他 Kconfig 选项
 ^^^^^^^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_UHCI_ENABLE_DEBUG_LOG` 选项允许强制启用 UHCI 驱动的所有调试日志，无论全局日志级别设置如何。启用此选项可以帮助开发人员在调试过程中获取更详细的日志信息，从而更容易定位和解决问题，但会增加固件二进制文件的大小。
+- :menuitem:`CONFIG_UHCI_ENABLE_DEBUG_LOG` 选项允许强制启用 UHCI 驱动的所有调试日志，无论全局日志级别设置如何。启用此选项可以帮助开发人员在调试过程中获取更详细的日志信息，从而更容易定位和解决问题，但会增加固件二进制文件的大小。
 
 应用示例
 --------------------

@@ -7,6 +7,8 @@ include(utilities)
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 include(component_validation)
+# Shared with the Build system v1: single definition of the KASAN exclusion set.
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/kasan.cmake)
 
 #[[api
 .. cmakev2:function:: idf_build_set_property
@@ -39,7 +41,12 @@ function(idf_build_set_property property value)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
     if("${property}" STREQUAL MINIMAL_BUILD)
-        idf_warn("Build property 'MINIMAL_BUILD' is obsolete and will be ignored")
+        # TODO: Remove this MINIMAL_BUILD compatibility block once CMake v1 is fully deprecated.
+        # V1 compatibility shims may still set MINIMAL_BUILD; warn only for native CMake v2 projects.
+        idf_build_get_property(_v1_compat __V1_COMPAT_SHIM)
+        if(NOT _v1_compat)
+            idf_warn("Build property 'MINIMAL_BUILD' is obsolete and will be ignored")
+        endif()
     endif()
 
     set(append)
@@ -83,7 +90,12 @@ function(idf_build_get_property variable property)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
     if("${property}" STREQUAL BUILD_COMPONENTS)
-        idf_die("Build property 'BUILD_COMPONENTS' is not supported")
+        # BUILD_COMPONENTS is populated by the Build system v1 compatibility
+        # shim; reject only when running as a native Build system v2 project.
+        idf_build_get_property(_v1_compat __V1_COMPAT_SHIM)
+        if(NOT _v1_compat)
+            idf_die("Build property 'BUILD_COMPONENTS' is not supported")
+        endif()
     endif()
 
     set(genexpr)
@@ -288,7 +300,77 @@ function(__dump_library_properties libraries)
     endforeach()
 endfunction()
 
+function(__idf_build_link_whole_archive target scope library)
+    idf_build_get_property(linker_type LINKER_TYPE)
+    if(linker_type STREQUAL "GNU")
+        set(link_option "SHELL:-Wl,--whole-archive $<TARGET_FILE:${library}> -Wl,--no-whole-archive")
+    elseif(linker_type STREQUAL "Darwin")
+        set(link_option "SHELL:-Wl,-force_load $<TARGET_FILE:${library}>")
+    elseif(linker_type STREQUAL "ULP_FSM")
+        set(link_option "SHELL:--whole-archive $<TARGET_FILE:${library}> --no-whole-archive")
+    else()
+        target_link_libraries(${target} ${scope} ${library})
+        return()
+    endif()
+
+    # ARGN may contain BEFORE to place the archive ahead of existing link options.
+    # Also link the target normally so CMake tracks its build and relink dependencies.
+    target_link_options(${target} ${ARGN} ${scope} "${link_option}")
+    target_link_libraries(${target} ${scope} ${library})
+endfunction()
+
 #[[
+    __kasan_exclude_components(<library>)
+
+    Compile the low-level components linked to ``library`` without Kernel
+    Address Sanitizer instrumentation.
+
+    The exclusion set is defined once in ``tools/cmake/kasan.cmake`` and shared
+    with the Build system v1. Called from ``idf_build_library`` once
+    LIBRARY_COMPONENTS_LINKED is populated, so every component target already
+    exists and ``-fno-sanitize`` is appended after the global ``-fsanitize``
+    added while the component was processed, which is what makes it win.
+
+    A subproject that opted out of instrumentation altogether by setting the
+    SET_COMPILER_KASAN build property to NO never had ``-fsanitize`` applied, so
+    there is nothing to undo and this is a no-op there.
+#]]
+function(__kasan_exclude_components library)
+    idf_build_get_property(set_compiler_kasan SET_COMPILER_KASAN)
+    if(NOT DEFINED set_compiler_kasan OR set_compiler_kasan STREQUAL "")
+        set(set_compiler_kasan YES)
+    endif()
+    if(NOT CONFIG_COMPILER_KASAN OR NOT set_compiler_kasan)
+        return()
+    endif()
+
+    idf_library_get_property(components_linked "${library}" LIBRARY_COMPONENTS_LINKED)
+    kasan_filter_excluded_components(excluded ${components_linked})
+
+    foreach(component_name IN LISTS excluded)
+        idf_component_get_property(component_real_target "${component_name}" COMPONENT_REAL_TARGET)
+        idf_component_get_property(component_real_target_type "${component_name}" COMPONENT_REAL_TARGET_TYPE)
+
+        # Components that created no target, and INTERFACE libraries, have no
+        # sources to de-instrument. Adding an INTERFACE compile option would
+        # also propagate -fno-sanitize to every consumer, including the
+        # application under test.
+        if(NOT component_real_target OR "${component_real_target}" STREQUAL "NOTFOUND")
+            continue()
+        endif()
+        if(NOT "${component_real_target_type}" STREQUAL "STATIC_LIBRARY")
+            continue()
+        endif()
+
+        # idf_build_library may run more than once per configure. Appending the
+        # option again is harmless: CMake de-duplicates compile options, and
+        # every copy lands after the global -fsanitize added while the component
+        # was processed, so the surviving one still wins.
+        target_compile_options("${component_real_target}" PRIVATE "-fno-sanitize=kernel-address")
+    endforeach()
+endfunction()
+
+#[[api
 .. cmakev2:function:: idf_build_library
 
     .. code-block:: cmake
@@ -350,17 +432,33 @@ function(idf_build_library library)
     idf_build_get_property(include_directories INCLUDE_DIRECTORIES GENERATOR_EXPRESSION)
     target_include_directories("${library}" INTERFACE "${include_directories}")
 
-    # Add link options.
-    idf_build_get_property(link_options LINK_OPTIONS)
+    # Add link options. Read as a generator expression so that link options a
+    # component appends to the LINK_OPTIONS build property while it is processed
+    # below are included, not only those set before this point.
+    idf_build_get_property(link_options LINK_OPTIONS GENERATOR_EXPRESSION)
     target_link_options(${library} INTERFACE "${link_options}")
 
     # Include the requested components and link their interface targets to the
     # library.
+    #
+    # On the GNU linker, bracket the component interface list with
+    # --start-group/--end-group so the linker re-scans archives until all
+    # symbols resolve. Required when the archive defining a __wrap_*
+    # implementation is encountered after the archive consuming the wrapped
+    # symbol on the link line; without group iteration the wrap symbol is
+    # unresolved.
+    idf_build_get_property(linker_type LINKER_TYPE)
+    if("${linker_type}" STREQUAL "GNU")
+        target_link_libraries("${library}" INTERFACE "-Wl,--start-group")
+    endif()
     foreach(component_name IN LISTS ARG_COMPONENTS)
         idf_component_include("${component_name}")
         idf_component_get_property(component_interface "${component_name}" COMPONENT_INTERFACE)
         target_link_libraries("${library}" INTERFACE "${component_interface}")
     endforeach()
+    if("${linker_type}" STREQUAL "GNU")
+        target_link_libraries("${library}" INTERFACE "-Wl,--end-group")
+    endif()
 
     # Process optional requirements in DEFERRED mode only (no-op in IMMEDIATE or when unset).
     idf_build_get_property(opt_req_mode IDF_COMPONENT_OPTIONAL_REQUIRES_MODE)
@@ -389,6 +487,13 @@ function(idf_build_library library)
         idf_library_set_property("${library}" LIBRARY_COMPONENTS_LINKED "${component_name}" APPEND)
         idf_library_set_property("${library}" LIBRARY_COMPONENT_INTERFACES_LINKED "${component_interface}" APPEND)
     endforeach()
+
+    # Kernel Address Sanitizer (CONFIG_COMPILER_KASAN): de-instrument the
+    # low-level components. Applied here, once the set of components linked to
+    # the library is known and every component target already exists, so that
+    # -fno-sanitize lands after the global -fsanitize added while the component
+    # was processed and therefore wins.
+    __kasan_exclude_components("${library}")
 
     # Collect linker fragment files from all components linked to the library
     # interface and store them in the __LDGEN_FRAGMENT_FILES files. This
@@ -454,8 +559,33 @@ function(idf_build_library library)
     string(MAKE_C_IDENTIFIER "_${library}" suffix)
 
     idf_library_get_property(component_interfaces_linked "${library}" LIBRARY_COMPONENT_INTERFACES_LINKED)
+
+    # Build -I arguments for the public include dirs of every component in the
+    # linked closure. These are appended to every linker-script preprocess so a
+    # template can #include any component header (e.g. the ULP memory layout
+    # including soc/soc.h) without the component having to know about it.
+    # INCLUDE_DIRS is stored relative to each component's COMPONENT_DIR.
+    set(component_include_flags "")
+    foreach(ci IN LISTS component_interfaces_linked)
+        idf_component_get_property(ci_dir "${ci}" COMPONENT_DIR)
+        idf_component_get_property(ci_includes "${ci}" INCLUDE_DIRS)
+        foreach(ci_include IN LISTS ci_includes)
+            get_filename_component(ci_include_abs "${ci_include}" ABSOLUTE BASE_DIR "${ci_dir}")
+            # Quote the path: the preprocessor invocation splits CFLAGS with
+            # separate_arguments(UNIX_COMMAND), so unquoted paths containing
+            # spaces would fall apart.
+            string(APPEND component_include_flags " -I\"${ci_include_abs}\"")
+        endforeach()
+    endforeach()
+
+    # Linker scripts marked MEMORY (the memory-layout base for the link) are
+    # emitted as -T before the rest, so section-placement scripts from any
+    # component can reference their MEMORY regions and REGION_ALIASes. Collect
+    # across all components into two ordered lists and emit memory ones first.
+    set(memory_scripts "")
+    set(other_scripts "")
+
     foreach(component_interface IN LISTS component_interfaces_linked)
-        set(scripts)
         idf_component_get_property(component_dir "${component_interface}" COMPONENT_DIR)
         idf_component_get_property(component_build_dir "${component_interface}" COMPONENT_BUILD_DIR)
         idf_component_get_property(preprocessed "${component_interface}" __LINKER_SCRIPTS_PREPROCESSED)
@@ -464,6 +594,9 @@ function(idf_build_library library)
         idf_component_get_property(scripts_static "${component_interface}" LINKER_SCRIPTS)
         __get_absolute_paths(PATHS "${scripts_static}" BASE_DIR "${component_dir}" OUTPUT scripts_static_abs)
         foreach(script IN LISTS scripts_static_abs)
+            __linker_script_key("${script}" script_key)
+            idf_component_get_property(script_is_memory "${component_interface}"
+                                       "LINKER_SCRIPT_MEMORY_${script_key}")
             if(script MATCHES "\\.in$")
                 # If the linker script file name ends with the ".in" extension,
                 # preprocess it with the C preprocessor.
@@ -473,27 +606,37 @@ function(idf_build_library library)
 
                 if(NOT preprocessed)
                     file(MAKE_DIRECTORY "${component_build_dir}/ld")
-                    __preprocess_linker_script("${script}" "${script_out}")
+                    idf_component_get_property(script_flags "${component_interface}"
+                                               "LINKER_SCRIPT_FLAGS_${script_key}")
+                    __preprocess_linker_script("${script}" "${script_out}"
+                                               "${script_flags}" "${component_include_flags}")
                     # Add a custom target for the preprocessed script.
                     add_custom_target(${script_target} DEPENDS "${script_out}")
                 endif()
                 # Add dependency for the library interface to ensure the script is
                 # generated before linking.
                 add_dependencies("${library}" ${script_target})
-                list(APPEND scripts "${script_out}")
+                set(emit_script "${script_out}")
             else()
-                list(APPEND scripts "${script}")
+                set(emit_script "${script}")
+            endif()
+            if(script_is_memory)
+                list(APPEND memory_scripts "${emit_script}")
+            else()
+                list(APPEND other_scripts "${emit_script}")
             endif()
         endforeach()
 
-        # Generate linker scripts from templates.
-        # LINKER_SCRIPTS_TEMPLATE and LINKER_SCRIPTS_GENERATED are parallel
-        # lists. The first holds the template linker script path, and the
-        # second holds the generated linker script path.
+        # Generate linker scripts from templates. The generated output path and
+        # the optional preprocessor flags for each template are stored as
+        # component properties keyed by the template, so no second list has to
+        # stay index-aligned with LINKER_SCRIPTS_TEMPLATE.
         idf_component_get_property(template_scripts "${component_interface}" LINKER_SCRIPTS_TEMPLATE)
-        idf_component_get_property(generated_scripts "${component_interface}" LINKER_SCRIPTS_GENERATED)
 
-        foreach(template script IN ZIP_LISTS template_scripts generated_scripts)
+        foreach(template IN LISTS template_scripts)
+            __linker_script_key("${template}" template_key)
+            idf_component_get_property(script "${component_interface}"
+                                       "LINKER_SCRIPT_GENERATED_${template_key}")
             if(template MATCHES "\\.in$")
                 # If the linker script file name ends with the ".in" extension,
                 # preprocess it with the C preprocessor.
@@ -501,7 +644,10 @@ function(idf_build_library library)
                 set(template_out "${component_build_dir}/ld/${template_name}")
                 if(NOT preprocessed)
                     file(MAKE_DIRECTORY "${component_build_dir}/ld")
-                    __preprocess_linker_script("${template}" "${template_out}")
+                    idf_component_get_property(template_flags "${component_interface}"
+                                               "LINKER_SCRIPT_FLAGS_${template_key}")
+                    __preprocess_linker_script("${template}" "${template_out}"
+                                               "${template_flags}" "${component_include_flags}")
                 endif()
                 set(template "${template_out}")
             endif()
@@ -510,7 +656,13 @@ function(idf_build_library library)
                                      TEMPLATE "${template}"
                                      SUFFIX "${suffix}"
                                      OUTPUT "${script}")
-            list(APPEND scripts "${script}")
+            idf_component_get_property(template_is_memory "${component_interface}"
+                                       "LINKER_SCRIPT_MEMORY_${template_key}")
+            if(template_is_memory)
+                list(APPEND memory_scripts "${script}")
+            else()
+                list(APPEND other_scripts "${script}")
+            endif()
             # Add a custom target for the generated script and include it as a
             # dependency for the library interface to ensure the script is
             # generated before linking.
@@ -526,28 +678,36 @@ function(idf_build_library library)
         # property to indicate that the linker scripts have already been
         # preprocessed.
         idf_component_set_property("${component_interface}" __LINKER_SCRIPTS_PREPROCESSED YES)
+    endforeach()
 
-        # Finally, add all preprocessed and ldgen-generated linker scripts to
-        # the library interface.
-        foreach(script IN LISTS scripts)
-            get_filename_component(script_dir "${script}" DIRECTORY)
-            get_filename_component(script_name "${script}" NAME)
-            # Add linker script directory to the linker search path.
-            target_link_directories("${library}" INTERFACE "${script_dir}")
-            # Add linker script to link. Regarding the usage of SHELL, see
-            # https://cmake.org/cmake/help/latest/command/target_link_options.html#option-de-duplication
-            target_link_options("${library}" INTERFACE "SHELL:-T ${script_name}")
-            # Add the linker script as a dependency to ensure the executable is
-            # re-linked if the script changes.
-            set_property(TARGET "${library}" APPEND PROPERTY INTERFACE_LINK_DEPENDS "${script}")
-        endforeach()
+    # Emit the collected linker scripts as -T on the library interface, with
+    # memory-layout scripts first so their MEMORY regions and REGION_ALIASes are
+    # seen before any section-placement script references them.
+    foreach(script IN LISTS memory_scripts other_scripts)
+        get_filename_component(script_dir "${script}" DIRECTORY)
+        # Add the linker script directory to the linker search path so INCLUDE
+        # directives inside a script can resolve sibling scripts by name.
+        target_link_directories("${library}" INTERFACE "${script_dir}")
+        # Add the linker script to the link by absolute path. Passing the full
+        # path (rather than a bare name resolved via -L) keeps this working for
+        # direct linker drivers such as the ULP FSM esp32ulp-elf-ld link, where
+        # the -L search directories follow the -T options on the command line
+        # and GNU ld therefore does not use them to locate the -T script.
+        # Regarding the usage of SHELL, see
+        # https://cmake.org/cmake/help/latest/command/target_link_options.html#option-de-duplication
+        # Quote the path: SHELL: strings are re-split on spaces, so an unquoted
+        # path containing spaces would fall apart.
+        target_link_options("${library}" INTERFACE "SHELL:-T \"${script}\"")
+        # Add the linker script as a dependency to ensure the executable is
+        # re-linked if the script changes.
+        set_property(TARGET "${library}" APPEND PROPERTY INTERFACE_LINK_DEPENDS "${script}")
     endforeach()
 
     # Validate components linked to this library
     __component_validation_run_checks(LIBRARY "${library}")
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_executable
 
     .. code-block:: cmake
@@ -606,21 +766,43 @@ function(idf_build_executable executable)
         set(ARG_SUFFIX ".elf")
     endif()
 
+    get_property(enabled_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    if(C IN_LIST enabled_languages)
+        set(stub_language C)
+        set(stub_extension c)
+    elseif(CXX IN_LIST enabled_languages)
+        set(stub_language CXX)
+        set(stub_extension c)
+    elseif(ASM IN_LIST enabled_languages)
+        set(stub_language ASM)
+        set(stub_extension S)
+    else()
+        message(FATAL_ERROR "idf_build_executable() requires C, CXX, or ASM to be enabled.")
+    endif()
+
     idf_build_get_property(build_dir BUILD_DIR)
 
     set(library "library_${executable}")
     idf_build_library(${library} COMPONENTS "${ARG_COMPONENTS}")
 
-    set(executable_src ${CMAKE_BINARY_DIR}/executable_${executable}.c)
+    set(executable_src ${CMAKE_BINARY_DIR}/executable_${executable}.${stub_extension})
     if(NOT EXISTS "${executable_src}")
         file(TOUCH "${executable_src}")
     endif()
+    if(stub_language STREQUAL "CXX")
+        set_source_files_properties("${executable_src}" PROPERTIES LANGUAGE CXX)
+    endif()
+
     add_executable(${executable} "${executable_src}")
 
     set_target_properties(${executable} PROPERTIES OUTPUT_NAME ${ARG_NAME})
 
     if(ARG_SUFFIX)
         set_target_properties(${executable} PROPERTIES SUFFIX ${ARG_SUFFIX})
+    endif()
+
+    if(NOT stub_language STREQUAL "C")
+        set_target_properties(${executable} PROPERTIES LINKER_LANGUAGE ${stub_language})
     endif()
 
     target_link_libraries(${executable} PRIVATE ${library})
@@ -747,7 +929,7 @@ function(__get_components_metadata)
     set(${ARG_OUTPUT} "${components_json}" PARENT_SCOPE)
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_generate_metadata
 
     .. code-block:: cmake
@@ -906,7 +1088,7 @@ function(idf_build_generate_metadata)
     endif()
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_binary
 
     .. code-block:: cmake
@@ -1133,7 +1315,7 @@ function(idf_sign_binary binary)
     set_target_properties(${ARG_TARGET} PROPERTIES EXECUTABLE_TARGET ${executable})
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_flash_binary
 
     .. code-block:: cmake
@@ -1214,7 +1396,7 @@ function(idf_flash_binary binary)
     endif()
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_check_binary_size
 
     .. code-block:: cmake

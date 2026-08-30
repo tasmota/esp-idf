@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -93,6 +93,8 @@ The driver of FIFOs works as below:
 #endif
 #include "driver/gpio.h"
 #include "driver/sdio_slave.h"
+
+#define SDIO_SLAVE_DMA_DESC_MAX_BUF_SIZE_ALIGNED_DOWN  (SDIO_SLAVE_LL_DMA_DESC_MAX_BUF_SIZE & ~0x3U)
 
 #define SDIO_SLAVE_CHECK(res, str, ret_val) do { if(!(res)){\
     SDIO_SLAVE_LOGE("%s", str);\
@@ -353,15 +355,7 @@ esp_err_t sdio_slave_initialize(sdio_slave_config_t *config)
     r = init_context(config);
     SDIO_SLAVE_CHECK(r == ESP_OK, "context initialization failed", r);
 
-    r = esp_intr_alloc_intrstatus(
-            ETS_SLC0_INTR_SOURCE,
-            flags,
-            (uint32_t)sdio_slave_hal_get_intr_status_reg(context.hal),
-            sdio_slave_ll_intr_status_mask,
-            sdio_intr,
-            NULL,
-            &intr_handle
-        );
+    r = esp_intr_alloc(ETS_SLC0_INTR_SOURCE, flags, sdio_intr, NULL, &intr_handle);
     SDIO_SLAVE_CHECK(r == ESP_OK, "interrupt allocation failed", r);
     context.intr_handle = intr_handle;
 
@@ -611,7 +605,8 @@ static void sdio_intr_send(void *arg)
 
 esp_err_t sdio_slave_send_queue(uint8_t *addr, size_t len, void *arg, uint32_t wait)
 {
-    SDIO_SLAVE_CHECK(len > 0 && len <= 4092, "length out of range: (0, 4092]", ESP_ERR_INVALID_ARG);
+    SDIO_SLAVE_CHECK(len > 0 && len <= SDIO_SLAVE_DMA_DESC_MAX_BUF_SIZE_ALIGNED_DOWN,
+                     "length out of range for a single DMA descriptor", ESP_ERR_INVALID_ARG);
     SDIO_SLAVE_CHECK(esp_ptr_dma_capable(addr) && (uint32_t)addr % 4 == 0, "buffer to send should be DMA capable and 32-bit aligned",
                      ESP_ERR_INVALID_ARG);
 

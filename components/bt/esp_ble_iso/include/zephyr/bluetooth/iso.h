@@ -182,8 +182,6 @@ extern "C" {
 enum bt_iso_state {
     /** Channel disconnected */
     BT_ISO_STATE_DISCONNECTED,
-    /** Channel is pending ACL encryption before connecting */
-    BT_ISO_STATE_ENCRYPT_PENDING,
     /** Channel in connecting state */
     BT_ISO_STATE_CONNECTING,
     /** Channel ready for upper layer traffic on it */
@@ -213,17 +211,6 @@ struct bt_iso_chan {
     struct bt_iso_chan_qos *qos;
     /** Channel state */
     enum bt_iso_state state;
-    /**
-     * @brief The required security level of the channel
-     *
-     * This value can be set as the central before connecting a CIS
-     * with bt_iso_chan_connect().
-     * The value is overwritten to @ref bt_iso_server::sec_level for the
-     * peripheral once a channel has been accepted.
-     *
-     * Only available when @kconfig{CONFIG_BT_SMP} is enabled.
-     */
-    bt_security_t required_sec_level;
     /** @internal Node used internally by the stack */
     sys_snode_t node;
 };
@@ -784,13 +771,6 @@ struct bt_iso_accept_info {
 /** @brief ISO Server structure. */
 struct bt_iso_server {
     /**
-     * @brief Required minimum security level.
-     *
-     * Only available when @kconfig{CONFIG_BT_SMP} is enabled.
-     */
-    bt_security_t sec_level;
-
-    /**
      * @brief Server accept callback
      *
      * This callback is called whenever a new incoming connection requires authorization.
@@ -1314,6 +1294,8 @@ int bt_iso_big_terminate_safe(struct bt_iso_big *big);
  *
  * @return 0 in case of success or negative value in case of error.
  */
+int bt_iso_big_sync(struct bt_le_per_adv_sync *sync, struct bt_iso_big_sync_param *param,
+                    struct bt_iso_big **out_big);
 int bt_iso_big_sync_safe(struct bt_le_per_adv_sync *sync, struct bt_iso_big_sync_param *param,
                          struct bt_iso_big **out_big);
 

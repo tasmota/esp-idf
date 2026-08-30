@@ -11,6 +11,7 @@
 #include "hal/color_hal.h"
 #include "driver/gpio.h"
 #include "esp_cache.h"
+#include "esp_macros.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/esp_cache_private.h"
 #include "esp_private/gpio.h"
@@ -45,8 +46,6 @@
 #define CAM_DVP_DATA_SIG_NUM    0                           /*!< Default value */
 #endif
 
-#define ALIGN_UP_BY(num, align) ((align) == 0 ? (num) : (((num) + ((align) - 1)) & ~((align) - 1)))
-
 #define DVP_CAM_CONFIG_INPUT_PIN(pin, sig, inv)                     \
 {                                                                   \
     if (pin != GPIO_NUM_NC) {                                       \
@@ -66,6 +65,7 @@ typedef struct dvp_platform {
 
 static dvp_platform_t s_platform;
 static const char *TAG = "dvp_cam";
+static soc_module_clk_t s_dvp_clk_src[CAP_DVP_PERIPH_NUM];
 
 /**
  * @brief Claim DVP controller
@@ -230,7 +230,7 @@ static uint32_t IRAM_ATTR esp_cam_ctlr_dvp_get_recved_size(esp_cam_ctlr_dvp_cam_
     uint32_t recv_buffer_size;
 
     if (ctlr->pic_format_jpeg) {
-        recv_buffer_size = ALIGN_UP_BY(MIN(dma_recv_size, ctlr->fb_size_in_bytes), 64);
+        recv_buffer_size = ESP_ALIGN_UP(MIN(dma_recv_size, ctlr->fb_size_in_bytes), 64);
     } else {
         recv_buffer_size = ctlr->fb_size_in_bytes;
     }
@@ -346,14 +346,23 @@ esp_err_t esp_cam_ctlr_dvp_init(int ctlr_id, cam_clock_source_t clk_src, const e
         esp_rom_gpio_connect_out_signal(pin->xclk_io, cam_periph_signals.buses[ctlr_id].clk_sig, false, false);
     }
 
+#if CONFIG_IDF_TARGET_ESP32S31
+    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)CAM_CORE_CLK_SRC_DEFAULT, true));
+#endif
+
     PERIPH_RCC_ACQUIRE_ATOMIC(cam_periph_signals.buses[ctlr_id].module, ref_count) {
         if (ref_count == 0) {
             cam_ll_enable_bus_clock(ctlr_id, true);
             cam_ll_reset_register(ctlr_id);
+#if CONFIG_IDF_TARGET_ESP32S31
+            cam_ll_select_core_clk_src(ctlr_id, CAM_CORE_CLK_SRC_DEFAULT);
+            cam_ll_set_core_clock_divider(ctlr_id, 2, 0, 0);
+#endif
         }
     }
 
     ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true));
+    s_dvp_clk_src[ctlr_id] = (soc_module_clk_t)clk_src;
     PERIPH_RCC_ATOMIC() {
         cam_ll_enable_clk(ctlr_id, true);
         cam_ll_select_clk_src(ctlr_id, clk_src);
@@ -457,6 +466,15 @@ esp_err_t esp_cam_ctlr_dvp_deinit(int ctlr_id)
             cam_ll_enable_bus_clock(ctlr_id, false);
         }
     }
+
+    if (s_dvp_clk_src[ctlr_id]) {
+        esp_clk_tree_enable_src(s_dvp_clk_src[ctlr_id], false);
+        s_dvp_clk_src[ctlr_id] = 0;
+    }
+
+#if CONFIG_IDF_TARGET_ESP32S31
+    esp_clk_tree_enable_src((soc_module_clk_t)CAM_CORE_CLK_SRC_DEFAULT, false);
+#endif
 
     return ESP_OK;
 }
@@ -861,7 +879,9 @@ esp_err_t esp_cam_new_dvp_ctlr(const esp_cam_ctlr_dvp_config_t *config, esp_cam_
     ESP_GOTO_ON_ERROR(s_dvp_claim_ctlr(config->ctlr_id, ctlr), fail1, TAG, "no available DVP controller");
 
     ESP_LOGD(TAG, "alignment: 0x%x\n", alignment_size);
-    fb_size_in_bytes = ALIGN_UP_BY(fb_size_in_bytes, alignment_size);
+    if (alignment_size) {
+        fb_size_in_bytes = ESP_ALIGN_UP(fb_size_in_bytes, alignment_size);
+    }
     if (!config->bk_buffer_dis) {
         ctlr->backup_buffer = heap_caps_aligned_alloc(alignment_size, fb_size_in_bytes, DVP_CAM_BK_BUFFER_ALLOC_CAPS);
         ESP_GOTO_ON_FALSE(ctlr->backup_buffer, ESP_ERR_NO_MEM, fail2, TAG, "no mem for DVP backup buffer");

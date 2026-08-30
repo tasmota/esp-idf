@@ -431,6 +431,13 @@ typedef struct httpd_req {
     bool ignore_sess_ctx_changes;
 } httpd_req_t;
 
+#if CONFIG_HTTPD_WS_SUPPORT
+/* Forward declaration of the WebSocket frame type. The full definition appears
+ * later in this header; only a pointer to it is needed here so that httpd_uri_t
+ * can carry an optional WebSocket control-frame handler. */
+typedef struct httpd_ws_frame httpd_ws_frame_t;
+#endif
+
 /**
  * @brief Structure for URI handler
  */
@@ -481,6 +488,23 @@ typedef struct httpd_uri {
      */
     esp_err_t (*ws_post_handshake_cb)(httpd_req_t *req);
 #endif /* CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT */
+
+    /**
+     * Optional dedicated handler for WebSocket control frames (PING, PONG, CLOSE).
+     *
+     * Only takes effect when handle_ws_control_frames is true. When set, control
+     * frames are delivered to this handler instead of the data handler. The server
+     * has already received the frame (passed via the read-only frame argument), and
+     * after this handler returns the server performs the protocol reply itself
+     * (PONG for PING, CLOSE for CLOSE). The frame and its payload are owned by the
+     * server and are only valid for the duration of the call; the handler must not
+     * free or retain them. If left NULL, control frames continue to be delivered to
+     * the data handler (unchanged behavior).
+     *
+     * Placed at the end of the struct to keep positional initialization of existing
+     * fields backward compatible.
+     */
+    esp_err_t (*ws_control_handler)(httpd_req_t *req, const httpd_ws_frame_t *frame);
 #endif /* CONFIG_HTTPD_WS_SUPPORT */
 } httpd_uri_t;
 
@@ -1008,6 +1032,33 @@ size_t httpd_req_get_hdr_value_len(httpd_req_t *r, const char *field);
 esp_err_t httpd_req_get_hdr_value_str(httpd_req_t *r, const char *field, char *val, size_t val_size);
 
 /**
+ * @brief   Similar to httpd_req_get_hdr_value_str() but avoids the string copy
+ *
+ * @note
+ *  - This API is meant to be used with std::string_view or similar
+ *  - The returned pointer references the header value kept in the request's
+ *    internal scratch buffer. It is NULL-terminated; val_len is provided for
+ *    convenience (e.g. constructing a std::string_view without a strlen()).
+ *  - This API is supposed to be called only from the context of
+ *    a URI handler where httpd_req_t* request pointer is valid.
+ *  - The returned pointer must only be used within the URI handler and not
+ *    after, since it will lead to use after free errors. In particular, once
+ *    httpd_resp_send() is called all request headers are purged.
+ *
+ * @param[in]  r        The request being responded to
+ * @param[in]  field    The field to be searched in the header
+ * @param[out] val      Pointer to a pointer that will be updated to the value string
+ * @param[out] val_len  Pointer to a length that will be updated with the value length
+ *
+ * @return
+ *  - ESP_OK : Field found; *val points to the value string and *val_len holds its length
+ *  - ESP_ERR_NOT_FOUND          : Key not found
+ *  - ESP_ERR_INVALID_ARG        : Null arguments
+ *  - ESP_ERR_HTTPD_INVALID_REQ  : Invalid HTTP request pointer
+ */
+esp_err_t httpd_req_get_hdr_value_str_ptr(httpd_req_t *r, const char *field, const char **val, size_t *val_len);
+
+/**
  * @brief   Get Query string length from the request URL
  *
  * @note    This API is supposed to be called only from the context of
@@ -1052,6 +1103,36 @@ size_t httpd_req_get_url_query_len(httpd_req_t *r);
  *  - ESP_ERR_HTTPD_RESULT_TRUNC : Query string truncated
  */
 esp_err_t httpd_req_get_url_query_str(httpd_req_t *r, char *buf, size_t buf_len);
+
+/**
+ * @brief   Similar to httpd_req_get_url_query_str() but avoids the string copy
+ *
+ * @note
+ *  - This API is meant to be used with std::string_view or similar
+ *  - Presently, the user can fetch the full URL query string, but decoding
+ *    will have to be performed by the user. Request headers can be read using
+ *    httpd_req_get_hdr_value_str() to know the 'Content-Type' (eg. Content-Type:
+ *    application/x-www-form-urlencoded) and then the appropriate decoding
+ *    algorithm needs to be applied.
+ *  - This API is supposed to be called only from the context of
+ *    a URI handler where httpd_req_t* request pointer is valid
+ *  - The byte range between buf and buf_len should only be used within
+ *    the URI handler and not after since it will lead to use after free
+ *    errors
+ *
+ * @param[in]  r         The request being responded to
+ * @param[out] buf       Pointer to a pointer that should be updated to the beginning of
+ *                       the query string within the request URL
+ * @param[out] buf_len   Pointer to a length that will be updated with the query length
+ *
+ * @return
+ *  - ESP_OK : Query found; *buf points to the query string and *buf_len holds its length
+ *  - ESP_FAIL                   : uri is empty
+ *  - ESP_ERR_NOT_FOUND          : Query not found
+ *  - ESP_ERR_INVALID_ARG        : Null arguments
+ *  - ESP_ERR_HTTPD_INVALID_REQ  : Invalid HTTP request pointer
+ */
+esp_err_t httpd_req_get_url_query_str_ptr(httpd_req_t *r, const char **buf, size_t *buf_len);
 
 /**
  * @brief   Helper function to get a URL query tag from a query
@@ -1729,12 +1810,12 @@ esp_err_t httpd_queue_work(httpd_handle_t handle, httpd_work_fn_t work, void *ar
  * @note Please refer to RFC6455 Section 5.4 for more details
  */
 typedef enum {
-    HTTPD_WS_TYPE_CONTINUE   = 0x0,
-    HTTPD_WS_TYPE_TEXT       = 0x1,
-    HTTPD_WS_TYPE_BINARY     = 0x2,
-    HTTPD_WS_TYPE_CLOSE      = 0x8,
-    HTTPD_WS_TYPE_PING       = 0x9,
-    HTTPD_WS_TYPE_PONG       = 0xA
+    HTTPD_WS_TYPE_CONTINUE        = 0x0,
+    HTTPD_WS_TYPE_TEXT            = 0x1,
+    HTTPD_WS_TYPE_BINARY          = 0x2,
+    HTTPD_WS_TYPE_CLOSE           = 0x8,
+    HTTPD_WS_TYPE_PING            = 0x9,
+    HTTPD_WS_TYPE_PONG            = 0xA,
 } httpd_ws_type_t;
 
 /**

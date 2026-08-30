@@ -596,6 +596,7 @@ esp_err_t spi_bus_remove_device(spi_device_handle_t handle)
     //catch design errors and aren't meant to be triggered during normal operation.
     SPI_CHECK(uxQueueMessagesWaiting(handle->trans_queue) == 0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
     SPI_CHECK(handle->host->cur_cs == DEV_NUM_MAX || handle->host->device[handle->host->cur_cs] != handle, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(handle->host->device_acquiring_lock != handle, "Device has acquired the bus", ESP_ERR_INVALID_STATE);
     if (handle->ret_queue) {
         SPI_CHECK(uxQueueMessagesWaiting(handle->ret_queue) == 0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
     }
@@ -648,6 +649,17 @@ int spi_get_actual_clock(int fapb, int hz, int duty_cycle)
     return spi_hal_master_cal_clock(fapb, hz, duty_cycle);
 }
 
+static SPI_MASTER_ISR_ATTR bool s_spi_clock_need_reconfig(spi_device_t *dev, spi_trans_priv_t *trans_buf)
+{
+    if (!trans_buf) {
+        return false;
+    }
+    if (dev->hal_dev.timing_conf.use_ddr_clk != !!(trans_buf->trans->flags & SPI_TRANS_DDRCLK)) {
+        return true;
+    }
+    return ((trans_buf->trans->override_freq_hz > 0) && (dev->hal_dev.timing_conf.expect_freq != trans_buf->trans->override_freq_hz));
+}
+
 // Setup the device-specified configuration registers. Called every time a new
 // transaction is to be sent, but only apply new configurations when the device
 // changes or timing change is required.
@@ -658,21 +670,31 @@ static SPI_MASTER_ISR_ATTR void spi_setup_device(spi_device_t *dev, spi_trans_pr
     spi_hal_dev_config_t *hal_dev = &(dev->hal_dev);
 
     bool clock_changed = false;
-    // check if timing config update is required
-    if (trans_buf && (trans_buf->trans->override_freq_hz > 0) && (hal_dev->timing_conf.expect_freq != trans_buf->trans->override_freq_hz)) {
+    if (s_spi_clock_need_reconfig(dev, trans_buf)) {    // check if timing config update is required
+        const bool want_ddr = !!(trans_buf->trans->flags & SPI_TRANS_DDRCLK);
+        uint32_t target_freq = trans_buf->trans->override_freq_hz ? trans_buf->trans->override_freq_hz : dev->cfg.clock_speed_hz;
         spi_hal_timing_param_t timing_param = {
-            .expected_freq = trans_buf->trans->override_freq_hz,
+            .use_ddr_clk = want_ddr,
+            .expected_freq = target_freq,
             .clk_src_hz = dev->hal_dev.timing_conf.source_real_freq,
             .duty_cycle = dev->cfg.duty_cycle_pos,
             .input_delay_ns = dev->cfg.input_delay_ns,
             .half_duplex = dev->hal_dev.half_duplex,
+            .no_compensate = dev->hal_dev.no_compensate,
             .use_gpio = !(dev->host->bus_attr->flags & SPICOMMON_BUSFLAG_IOMUX_PINS),
         };
 
-        if ((trans_buf->trans->override_freq_hz <= SPI_PERIPH_SRC_FREQ_MAX) && (ESP_OK == spi_hal_cal_clock_conf(&timing_param, &dev->hal_dev.timing_conf))) {
+        if ((target_freq <= SPI_PERIPH_SRC_FREQ_MAX) && (ESP_OK == spi_hal_cal_clock_conf(&timing_param, &dev->hal_dev.timing_conf))) {
             clock_changed = true;
         } else {
-            ESP_EARLY_LOGW(SPI_TAG, "assigned override_freq_hz %d not supported", trans_buf->trans->override_freq_hz);
+            // Keep previous timing_conf; clarify why reconfig failed.
+            if (want_ddr != !!dev->hal_dev.timing_conf.use_ddr_clk) {
+                ESP_EARLY_LOGW(SPI_TAG, "failed to switch to %s at %lu Hz, keep previous clock config",
+                               want_ddr ? "DDR" : "SDR", (unsigned long)target_freq);
+            } else {
+                ESP_EARLY_LOGW(SPI_TAG, "failed to apply override_freq_hz %lu, keep previous frequency",
+                               (unsigned long)target_freq);
+            }
         }
     }
 
@@ -736,7 +758,7 @@ static void SPI_MASTER_ISR_ATTR s_spi_dma_prepare_data(spi_host_t *host, spi_hal
     const spi_dma_ctx_t *dma_ctx = host->dma_ctx;
 
     if (trans->rcv_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_rx, trans->rcv_buffer, ((trans->rx_bitlen + 7) / 8), true);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, trans->rcv_buffer, ((trans->rx_bitlen + 7) / 8), true);
 
         spi_dma_reset(dma_ctx->rx_dma_chan);
         spi_hal_hw_prepare_rx(hal->hw);
@@ -750,7 +772,7 @@ static void SPI_MASTER_ISR_ATTR s_spi_dma_prepare_data(spi_host_t *host, spi_hal
     }
 #endif
     if (trans->send_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_tx, trans->send_buffer, (trans->tx_bitlen + 7) / 8, false);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, trans->send_buffer, (trans->tx_bitlen + 7) / 8, false);
 
         spi_dma_reset(dma_ctx->tx_dma_chan);
         spi_hal_hw_prepare_tx(hal->hw);
@@ -1116,6 +1138,9 @@ static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handl
     SPI_CHECK(!((trans_desc->flags & SPI_TRANS_MODE_OCT) && (handle->cfg.flags & SPI_DEVICE_3WIRE)), "Incompatible when setting to both Octal mode and 3-wire-mode", ESP_ERR_INVALID_ARG);
     SPI_CHECK(!((trans_desc->flags & SPI_TRANS_MODE_OCT) && !is_half_duplex), "Incompatible when setting to both Octal mode and half duplex mode", ESP_ERR_INVALID_ARG);
 #endif
+#if !SOC_SPI_SUPPORT_DDR_CLOCK
+    SPI_CHECK(!(trans_desc->flags & SPI_TRANS_DDRCLK), "DDRCLK is not supported on this chip", ESP_ERR_NOT_SUPPORTED);
+#endif
     SPI_CHECK(!((trans_desc->flags & (SPI_TRANS_MODE_DIO | SPI_TRANS_MODE_QIO)) && (handle->cfg.flags & SPI_DEVICE_3WIRE)), "Incompatible when setting to both multi-line mode and 3-wire-mode", ESP_ERR_INVALID_ARG);
     SPI_CHECK(!((trans_desc->flags & (SPI_TRANS_MODE_DIO | SPI_TRANS_MODE_QIO)) && !is_half_duplex), "Incompatible when setting to both multi-line mode and half duplex mode", ESP_ERR_INVALID_ARG);
 #ifdef CONFIG_IDF_TARGET_ESP32
@@ -1164,7 +1189,7 @@ static SPI_MASTER_ISR_ATTR void uninstall_priv_desc(spi_trans_priv_t* trans_buf)
 
     // copy data from temporary DMA-capable buffer back to trans_desc buffer and free the temporary one.
     void *orig_rx_buffer = (trans_desc->flags & SPI_TRANS_USE_RXDATA) ? trans_desc->rx_data : trans_desc->rx_buffer;
-    if (trans_buf->buffer_to_rcv != orig_rx_buffer) {
+    if (trans_buf->buffer_to_rcv && trans_buf->buffer_to_rcv != orig_rx_buffer) {
         memcpy(orig_rx_buffer, trans_buf->buffer_to_rcv, (trans_desc->rxlength + 7) / 8);
         free(trans_buf->buffer_to_rcv);
     }

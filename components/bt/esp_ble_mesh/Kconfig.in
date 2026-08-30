@@ -864,7 +864,7 @@ if BLE_MESH
 
     config BLE_MESH_IVU_RECOVERY_IVI
         bool "Recovery the IV index when the latest whole IV update procedure is missed"
-        default n
+        default y
         help
             According to Section 3.10.5 of Mesh Specification v1.0.1.
             If a node in Normal Operation receives a Secure Network beacon with an IV index
@@ -1874,6 +1874,15 @@ if BLE_MESH
                 bool "Support for Device Distribution Client model"
                 help
                     Enable the Device Distribution Client model
+
+            if BLE_MESH_DFD_CLI
+                config BLE_MESH_DFD_CLI_SRV_TARGETS_MAX
+                    int "Number of DFD SRVs can be accepted"
+                    default 3
+                    range 1 100
+                    help
+                        The maximum number of DFD SRVs that can be accepted.
+            endif
 
             config BLE_MESH_DFD_SRV
                 bool "Support for Firmware Distribution Server model"

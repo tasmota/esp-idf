@@ -27,10 +27,29 @@ if(EXISTS ${PROJECT_EXTRA_COMPONENTS})
 endif()
 
 if(IGNORE_EXTRA_COMPONENT)
-    # Prefix all entries of the list with ${PROJECT_EXTRA_COMPONENTS} absolute path
-    list(TRANSFORM IGNORE_EXTRA_COMPONENT
-         PREPEND "${PROJECT_EXTRA_COMPONENTS}/"
-         OUTPUT_VARIABLE EXTRA_COMPONENT_EXCLUDE_DIRS)
+    foreach(extra_component_dir ${EXTRA_COMPONENT_DIRS})
+        # Strip trailing slash so get_filename_component(NAME) returns the
+        # component name rather than an empty string.
+        string(REGEX REPLACE "/+$" "" extra_component_dir "${extra_component_dir}")
+        if(EXISTS "${extra_component_dir}/CMakeLists.txt")
+            # BOOTLOADER_EXTRA_COMPONENT_DIRS may point directly to a single component.
+            get_filename_component(component "${extra_component_dir}" NAME)
+            if(component AND ${component} IN_LIST IGNORE_EXTRA_COMPONENT)
+                list(APPEND EXTRA_COMPONENT_EXCLUDE_DIRS "${extra_component_dir}")
+            endif()
+        else()
+            # BOOTLOADER_EXTRA_COMPONENT_DIRS may also point to a directory containing
+            # multiple component directories.
+            file(GLOB proj_components RELATIVE ${extra_component_dir} ${extra_component_dir}/*)
+            foreach(component ${proj_components})
+                # Only directories are considered components.
+                if(IS_DIRECTORY "${extra_component_dir}/${component}"
+                   AND ${component} IN_LIST IGNORE_EXTRA_COMPONENT)
+                    list(APPEND EXTRA_COMPONENT_EXCLUDE_DIRS "${extra_component_dir}/${component}")
+                endif()
+            endforeach()
+        endif()
+    endforeach()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -39,6 +58,9 @@ endif()
 include("${IDF_PATH}/tools/cmakev2/idf.cmake")
 
 project(bootloader C CXX ASM)
+
+# Suppress warning: "Manually-specified variables were not used by the project: SECURE_BOOT_SIGNING_KEY"
+set(_ignore_signing_key "${SECURE_BOOT_SIGNING_KEY}")
 
 # ---------------------------------------------------------------------------
 # Bootloader-specific build properties set before project initialization
@@ -70,6 +92,14 @@ idf_build_set_property(IDF_COMPONENT_OPTIONAL_REQUIRES_MODE DEFERRED)
 # (CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_*) set below, not the app-level
 # CONFIG_COMPILER_OPTIMIZATION_* defaults.
 idf_build_set_property(SET_COMPILER_OPTIMIZATION NO)
+# The bootloader relies on linker-script section placement matched by object
+# file name, which LTO does not preserve, so it must never be compiled or linked
+# with LTO regardless of the application's CONFIG_COMPILER_LTO_* options.
+idf_build_set_property(SET_COMPILER_LTO NO)
+# The bootloader runs before kasan_init_shadow() and carries no sanitizer
+# runtime, so it must never be instrumented regardless of the application's
+# CONFIG_COMPILER_KASAN option.
+idf_build_set_property(SET_COMPILER_KASAN NO)
 
 # Perform internal IDF project initialisation
 idf_project_init()

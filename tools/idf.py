@@ -39,6 +39,7 @@ import python_version_checker  # noqa: E402
 
 try:
     import idf_py_actions.help_custom_targets_skip as _help_custom_targets
+    from esp_pylib.logger import log
     from idf_py_actions.errors import FatalError
     from idf_py_actions.tools import PROG
     from idf_py_actions.tools import SHELL_COMPLETE_RUN
@@ -48,10 +49,12 @@ try:
     from idf_py_actions.tools import get_target
     from idf_py_actions.tools import idf_version_from_cmake
     from idf_py_actions.tools import merge_action_lists
-    from idf_py_actions.tools import print_warning
+    from rich.markup import escape
 
     if os.getenv('IDF_COMPONENT_MANAGER') != '0':
         from idf_component_manager import idf_extensions
+        from idf_component_tools.errors import FatalError as ComponentManagerFatalError
+        from idf_component_tools.root_managed_components import RootManagedComponentsStateManager
 except ImportError as e:
     print(
         (
@@ -95,13 +98,15 @@ def check_environment() -> list:
     if 'IDF_PATH' in os.environ:
         set_idf_path = os.path.realpath(os.environ['IDF_PATH'])
         if set_idf_path != detected_idf_path:
-            print_warning(
-                f'WARNING: IDF_PATH environment variable is set to {set_idf_path}'
-                f' but {PROG} path indicates IDF directory {detected_idf_path}. '
-                'Using the environment variable directory, but results may be unexpected...'
+            log.warn(
+                escape(
+                    f'IDF_PATH environment variable is set to {set_idf_path}'
+                    f' but {PROG} path indicates IDF directory {detected_idf_path}. '
+                    'Using the environment variable directory, but results may be unexpected...'
+                )
             )
     else:
-        print_warning(f'Setting IDF_PATH environment variable: {detected_idf_path}')
+        log.note(escape(f'Setting IDF_PATH environment variable: {detected_idf_path}'))
         os.environ['IDF_PATH'] = detected_idf_path
 
     try:
@@ -126,7 +131,7 @@ def check_environment() -> list:
 
         checks_output.append(out.decode('utf-8', 'ignore').strip())
     except subprocess.CalledProcessError as e:
-        print_warning(e.output.decode('utf-8', 'ignore'), stream=sys.stderr)
+        log.print(escape(e.output.decode('utf-8', 'ignore')), file=sys.stderr, soft_wrap=True)
         debug_print_idf_version()
         raise SystemExit(1)
 
@@ -135,12 +140,14 @@ def check_environment() -> list:
     try:
         python_venv_path = os.environ['IDF_PYTHON_ENV_PATH']
         if python_venv_path and not sys.executable.startswith(python_venv_path):
-            print_warning(
-                f'WARNING: Python interpreter "{sys.executable}" used to start idf.py'
-                f' is not from installed venv "{python_venv_path}"'
+            log.warn(
+                escape(
+                    f'Python interpreter "{sys.executable}" used to start idf.py'
+                    f' is not from installed venv "{python_venv_path}"'
+                )
             )
     except KeyError:
-        print_warning('WARNING: The IDF_PYTHON_ENV_PATH is missing in environmental variables!')
+        log.warn('The IDF_PYTHON_ENV_PATH is missing in environmental variables!')
 
     return checks_output
 
@@ -246,10 +253,10 @@ def init_cli(verbose_output: list | None = None) -> Any:
             deprecation = Deprecation(option.deprecated)
             if deprecation.exit_with_error:
                 error = deprecation.full_message(f'Option "{option.name}"')
-                raise FatalError(f'Error: {error}')
+                raise FatalError(error)
             else:
                 error = deprecation.full_message(f'Option "{option.name}"')
-                print_warning(f'Warning: {error}')
+                log.warn(escape(error))
 
     class Task:
         def __init__(
@@ -354,9 +361,9 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 message = deprecation.full_message(f'Command "{self.name}"')
 
                 if deprecation.exit_with_error:
-                    raise FatalError(f'Error: {message}')
+                    raise FatalError(message)
                 else:
-                    print_warning(f'Warning: {message}')
+                    log.warn(escape(message))
 
                 self.deprecated = False  # disable Click's built-in deprecation handling
 
@@ -656,11 +663,11 @@ def init_cli(verbose_output: list | None = None) -> Any:
             # print a closing message of some kind,
             # except if any of the following actions were requested
             if any(t in str(actions) for t in ('flash', 'dfu', 'uf2', 'uf2-app', 'qemu', 'sbom-create')):
-                print('Done')
+                log.print('Done')
                 return
 
             if not os.path.exists(os.path.join(args.build_dir, 'flasher_args.json')):
-                print('Done')
+                log.print('Done')
                 return
 
             # Otherwise, if we built any binaries print a message about
@@ -678,7 +685,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                     if key not in flasher_args:
                         # This is the case for 'idf.py bootloader'
                         # if Secure Boot is on, need to follow manual flashing steps
-                        print(f'\n{title} build complete.')
+                        log.print(f'\n{title} build complete.')
                         return
                     cmd = ''
                     if key == 'bootloader':  # bootloader needs --flash-mode, etc to be passed in
@@ -696,13 +703,13 @@ def init_cli(verbose_output: list | None = None) -> Any:
                         cmd += o + ' ' + flasher_path(f) + ' '
 
                 flash_target = 'flash' if key == 'project' else f'{key}-flash'
-                print(f'{os.linesep}{title} build complete. To flash, run:')
-                print(f' idf.py {flash_target}')
+                log.print(f'{os.linesep}{title} build complete. To flash, run:')
+                log.print(f' idf.py {flash_target}')
                 if args.port:
-                    print('or')
-                    print(f' idf.py -p {args.port} {flash_target}')
-                print('or')
-                print(f' idf.py -p PORT {flash_target}')
+                    log.print('or')
+                    log.print(escape(f' idf.py -p {args.port} {flash_target}'))
+                log.print('or')
+                log.print(f' idf.py -p PORT {flash_target}')
 
                 esptool_cmd = [
                     'python -m esptool',
@@ -720,12 +727,12 @@ def init_cli(verbose_output: list | None = None) -> Any:
 
                 esptool_cmd += ['write-flash']
 
-                print('or')
-                print(' {}'.format(' '.join(esptool_cmd + [cmd.strip()])))
+                log.print('or')
+                log.print(escape(' {}'.format(' '.join(esptool_cmd + [cmd.strip()]))))
 
                 if os.path.exists(os.path.join(args.build_dir, 'flash_args')):
-                    print(f'or from the "{args.build_dir}" directory')
-                    print(' {}'.format(' '.join(esptool_cmd + ['"@flash_args"'])))
+                    log.print(escape(f'or from the "{args.build_dir}" directory'))
+                    log.print(escape(' {}'.format(' '.join(esptool_cmd + ['"@flash_args"']))))
 
             if 'all' in actions or 'build' in actions:
                 print_flashing_message('Project', 'project')
@@ -746,11 +753,11 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 [item for item, count in Counter(task.name for task in tasks).items() if count > 1]
             )
             if dupplicated_tasks:
-                print('----------------------------------------------------------------------------------------')
+                log.print('----------------------------------------------------------------------------------------')
                 dupes = ', '.join(f'"{t}"' for t in dupplicated_tasks)
 
-                print_warning(
-                    f'WARNING: {"Commands" if len(dupplicated_tasks) > 1 else "Command"} {dupes} '
+                log.warn(
+                    f'{"Commands" if len(dupplicated_tasks) > 1 else "Command"} {dupes} '
                     f'{"are" if len(dupplicated_tasks) > 1 else "is"} '
                     'found in the list of commands more than once. '
                     'Only first occurrence will be executed.'
@@ -813,9 +820,11 @@ def init_cli(verbose_output: list | None = None) -> Any:
                         # Otherwise invoke it with default set of options
                         # and put to the front of the list of unprocessed tasks
                         else:
-                            print(
-                                f'Adding "{task.name}"\'s dependency "{dep}" '
-                                'to list of commands with default set of options.'
+                            log.print(
+                                escape(
+                                    f'Adding "{task.name}"\'s dependency "{dep}" '
+                                    'to list of commands with default set of options.'
+                                )
                             )
                             dep_task = ctx.invoke(ctx.command.get_command(ctx, dep))
 
@@ -921,7 +930,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                     if r.returncode == 0:
                         add_from_help_text((r.stdout or '') + (r.stderr or ''))
                 except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-                    print_warning(f'Failed querying Ninja custom targets with "ninja -t targets all": {exc}')
+                    log.warn(escape(f'Failed querying Ninja custom targets with "ninja -t targets all": {exc}'))
                     pass
 
                 # If ``ninja -t`` produced nothing we could parse (empty output, different format, etc.),
@@ -938,7 +947,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                                     if _help_custom_targets.should_list_custom_target(n, defined):
                                         found.add(n)
                     except OSError as exc:
-                        print_warning(f'Failed reading Ninja file {ninja_file} for custom targets: {exc}')
+                        log.warn(escape(f'Failed reading Ninja file {ninja_file} for custom targets: {exc}'))
                         pass
 
             if not found and configure_ready_for_cmake_help():
@@ -954,7 +963,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                     if r.returncode == 0:
                         add_from_help_text((r.stdout or '') + (r.stderr or ''))
                 except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-                    print_warning(f'Failed querying CMake custom targets with "cmake --build --target help": {exc}')
+                    log.warn(escape(f'Failed querying CMake custom targets with "cmake --build --target help": {exc}'))
                     pass
 
             return [(n, '') for n in sorted(found, key=str.lower)]
@@ -985,10 +994,10 @@ def init_cli(verbose_output: list | None = None) -> Any:
             if hasattr(ext_module, 'action_extensions'):
                 return ext_module.action_extensions
             else:
-                print_warning(f"Warning: Extension {ext_file} has no attribute 'action_extensions'")
+                log.warn(escape(f"Extension {ext_file} has no attribute 'action_extensions'"))
 
         except (ImportError, SyntaxError) as e:
-            print_warning(f'Warning: Failed to import extension {ext_file}: {e}')
+            log.warn(escape(f'Failed to import extension {ext_file}: {e}'))
 
         return None
 
@@ -1003,21 +1012,25 @@ def init_cli(verbose_output: list | None = None) -> Any:
         for ep in eps:
             if ep.value in eps_declarative_values:
                 conflicting_names = [e.name for e in eps if e.value == ep.value]
-                print_warning(
-                    f"Warning: Entry point's declarative value [extension_file_name:method_name] "
-                    f'name collision detected for - {ep.value}. The same {ep.value} is used by '
-                    f'{conflicting_names} entry points. To ensure successful loading, please use'
-                    ' a different extension file name or method name for the entry point.'
+                log.warn(
+                    escape(
+                        f"Entry point's declarative value [extension_file_name:method_name] "
+                        f'name collision detected for - {ep.value}. The same {ep.value} is used by '
+                        f'{conflicting_names} entry points. To ensure successful loading, please use'
+                        ' a different extension file name or method name for the entry point.'
+                    )
                 )
                 # Remove any already loaded extensions with conflicting names
                 extensions[:] = [ext for ext in extensions if ext[0] not in conflicting_names]
                 continue
 
             if ep.value == 'idf_ext:action_extensions':
-                print_warning(
-                    f'Entry point "{ep.name}" has declarative value "{ep.value}". For external components, '
-                    'it is recommended to use name like <<COMPONENT_NAME>>_ext:action_extensions, '
-                    "so it does not interfere with the project's idf_ext.py file."
+                log.warn(
+                    escape(
+                        f'Entry point "{ep.name}" has declarative value "{ep.value}". For external components, '
+                        'it is recommended to use name like <<COMPONENT_NAME>>_ext:action_extensions, '
+                        "so it does not interfere with the project's idf_ext.py file."
+                    )
                 )
 
             eps_declarative_values.append(ep.value)
@@ -1025,7 +1038,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 extension_func = ep.load()
                 extensions.append((ep.name, extension_func))
             except Exception as e:
-                print_warning(f'Warning: Failed to load entry point extension "{ep.name}": {e}')
+                log.warn(escape(f'Failed to load entry point extension "{ep.name}": {e}'))
 
         return extensions
 
@@ -1084,27 +1097,52 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 ):
                     result.add(comp.name)
         except (ImportError, OSError, LockError) as e:
-            print_warning(
-                'WARNING: Could not verify source of external components. '
-                f'No extensions (idf_ext.py) from managed components will be loaded. ({e})'
+            log.warn(
+                escape(
+                    'Could not verify source of external components. '
+                    f'No extensions (idf_ext.py) from managed components will be loaded. ({e})'
+                )
             )
 
         return result
 
-    def _resolve_idf_managed_lock_path() -> str | None:
-        """Return path to dependencies.lock for IDF-managed components, or None if unavailable."""
+    def _get_trusted_names_from_root_state(state_path: str) -> set[str]:
+        """Return component names from the trusted root-managed inventory."""
+        if state_path in _trusted_names_cache:
+            return _trusted_names_cache[state_path]
+        result: set[str] = set()
+        _trusted_names_cache[state_path] = result
+
+        if not os.path.isfile(state_path) or os.getenv('IDF_COMPONENT_MANAGER') == '0':
+            return result
+
+        try:
+            state = RootManagedComponentsStateManager(state_path).load()
+            result.update(state.components)
+        except (OSError, ComponentManagerFatalError) as e:
+            log.warn(
+                escape(
+                    'Could not verify source of external components. '
+                    f'No extensions (idf_ext.py) from managed components will be loaded. ({e})'
+                )
+            )
+
+        return result
+
+    def _resolve_idf_managed_state_dir() -> str | None:
+        """Return the state directory for IDF-managed components, or None if unavailable."""
         idf_tools_path = os.environ.get('IDF_TOOLS_PATH') or os.path.expanduser(os.path.join('~', '.espressif'))
         ver = idf_version_from_cmake()  # returns e.g. 'v6.1.0', or None on failure
         if not ver:
             return None
         ver_str = ver.lstrip('v')  # '6.1.0'
-        return os.path.join(idf_tools_path, 'root_managed_components', f'idf{ver_str}', 'dependencies.lock')
+        return os.path.join(idf_tools_path, 'root_managed_components', f'idf{ver_str}')
 
     def _is_component_trusted(
         comp_name: str,
         source: str | None,
     ) -> bool:
-        """True iff this component is from a trusted source (IDF, project, or Espressif component from ESP-registry)."""
+        """Return whether a component may provide an idf.py extension."""
         if source in ('idf_components', 'project_components', 'project_extra_components'):
             return True
         if source == 'project_managed_components':
@@ -1112,11 +1150,14 @@ def init_cli(verbose_output: list | None = None) -> Any:
             lock_key = comp_name.replace('__', '/', 1) if '__' in comp_name else comp_name
             return lock_key in _get_trusted_names_from_lock(os.path.join(project_dir, 'dependencies.lock'))
         if source == 'idf_managed_components':
-            lock_path = _resolve_idf_managed_lock_path()
-            if lock_path is None:
+            state_dir = _resolve_idf_managed_state_dir()
+            if state_dir is None:
                 return False
             lock_key = comp_name.replace('__', '/', 1) if '__' in comp_name else comp_name
-            return lock_key in _get_trusted_names_from_lock(lock_path)
+            root_state_path = os.path.join(state_dir, 'root_components.lock')
+            if os.path.isfile(root_state_path):
+                return lock_key in _get_trusted_names_from_root_state(root_state_path)
+            return lock_key in _get_trusted_names_from_lock(os.path.join(state_dir, 'dependencies.lock'))
         return False
 
     def _build_rich_help_command_groups(
@@ -1174,7 +1215,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
     extensions = []
     for directory in extension_dirs:
         if directory and not os.path.exists(directory):
-            print_warning(f"WARNING: Directory with idf.py extensions doesn't exist:\n\t{directory}")
+            log.warn(escape(f"Directory with idf.py extensions doesn't exist:\n\t{directory}"))
             continue
 
         sys.path.append(directory)
@@ -1198,7 +1239,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
         try:
             all_actions = merge_action_lists(all_actions, extension.action_extensions(all_actions, project_dir))
         except AttributeError:
-            print_warning(f'WARNING: Cannot load idf.py extension "{name}"')
+            log.warn(escape(f'Cannot load idf.py extension "{name}"'))
 
     component_idf_ext_dirs = []
     # Get trusted component directories with idf extensions that participate in the build
@@ -1210,7 +1251,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
             with open(project_description_json_file, encoding='utf-8') as f:
                 project_desc = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            print_warning(f'Warning: Failed to read component info from project_description.json: {e}')
+            log.warn(escape(f'Failed to read component info from project_description.json: {e}'))
     if project_desc is not None:
         build_component_info = project_desc.get('build_component_info', {})
         all_component_info = project_desc.get('all_component_info', {})
@@ -1230,9 +1271,9 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 if _is_component_trusted(comp_name, source):
                     component_idf_ext_dirs.append(comp_dir)
                 else:
-                    print_warning(
-                        f'WARNING: Not loading component extension from untrusted source '
-                        f'"{_path_relative_to_project(comp_dir, project_dir)}". '
+                    log.warn(
+                        f'Not loading component extension from untrusted source '
+                        f'"{escape(_path_relative_to_project(comp_dir, project_dir))}". '
                         'Only extensions from trusted sources are loaded. Run '
                         '"idf.py docs -sp api-guides/tools/idf-py.html#extending-idf-py" '
                         'for the list of trusted sources. Set IDF_EXTENSION_ALLOW_UNTRUSTED=1 to load all.'
@@ -1247,7 +1288,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
                 custom_actions = extension_func(all_actions, project_dir)
                 all_actions = merge_action_lists(all_actions, custom_actions=custom_actions)
             except Exception as e:
-                print_warning(f'WARNING: Cannot load directory extension from "{ext_dir}": {e}')
+                log.warn(escape(f'Cannot load directory extension from "{ext_dir}": {e}'))
             else:
                 panel_cmds = sorted(n for n in custom_actions.get('actions') or {} if n != 'fallback')
                 if panel_cmds:
@@ -1256,7 +1297,9 @@ def init_cli(verbose_output: list | None = None) -> Any:
                     )
                     external_help_panels.append((panel_title, panel_cmds))
                 if ext_dir != project_dir:
-                    print(f'INFO: Loaded component extension from "{_path_relative_to_project(ext_dir, project_dir)}"')
+                    log.note(
+                        escape(f'Loaded component extension from "{_path_relative_to_project(ext_dir, project_dir)}"')
+                    )
 
     # Load extensions from Python entry points
     entry_point_extensions = load_cli_extensions_from_entry_points()
@@ -1265,7 +1308,7 @@ def init_cli(verbose_output: list | None = None) -> Any:
             custom_actions = extension_func(all_actions, project_dir)
             all_actions = merge_action_lists(all_actions, custom_actions=custom_actions)
         except Exception as e:
-            print_warning(f'WARNING: Cannot load entry point extension "{ep_name}": {e}')
+            log.warn(escape(f'Cannot load entry point extension "{ep_name}": {e}'))
         else:
             panel_cmds = sorted(n for n in (custom_actions.get('actions') or {}) if n != 'fallback')
             if panel_cmds:
@@ -1287,6 +1330,12 @@ def init_cli(verbose_output: list | None = None) -> Any:
 
 
 def main(argv: list[Any] | None = None) -> None:
+    # Forward uncaught exceptions to the IDE WebSocket (no-op unless ESP_IDE_WS is set and the
+    # esp-pylib[ide] extra is installed). Imported lazily to keep top-level imports minimal.
+    from esp_pylib.excepthook import install_exception_reporting
+
+    install_exception_reporting()
+
     # Check the environment only when idf.py is invoked regularly from command line.
     checks_output = None if SHELL_COMPLETE_RUN else check_environment()
 
@@ -1294,7 +1343,7 @@ def main(argv: list[Any] | None = None) -> None:
     try:
         os.getcwd()
     except FileNotFoundError as e:
-        raise FatalError(f'ERROR: {e}. Working directory cannot be established. Check its existence.')
+        raise FatalError(f'{e}. Working directory cannot be established. Check its existence.')
 
     try:
         cli = init_cli(verbose_output=checks_output)
@@ -1353,7 +1402,7 @@ def expand_file_arguments(argv: list[Any]) -> list[Any]:
     argv = expand_args(argv, os.getcwd(), [])
 
     if expanded:
-        print(f'Running: idf.py {" ".join(argv)}')
+        log.print(escape(f'Running: idf.py {" ".join(argv)}'))
 
     return argv
 
@@ -1442,7 +1491,7 @@ def _find_usable_locale() -> str | None:
             if str(locale_name).lower().replace(' ', '-') in lcl_alias_name:
                 # user preferred language has Unicode encoding (highest priority -1)
                 if str(locale_name).lower().startswith(('tr', 'az', 'lt', 'kk')):
-                    print_warning(
+                    log.warn(
                         f'Your locale "{locale_name}" has potential issues with case conversion for ASCII characters'
                     )
                     continue
@@ -1473,9 +1522,9 @@ def _find_usable_locale() -> str | None:
 if __name__ == '__main__':
     try:
         if 'MSYSTEM' in os.environ:
-            print_warning(
+            log.warn(
                 'MSys/Mingw is no longer supported. Please follow the getting started guide of the '
-                'documentation in order to set up a suitiable environment, or continue at your own risk.'
+                'documentation in order to set up a suitable environment, or continue at your own risk.'
             )
         elif os.name == 'posix' and not _valid_unicode_config():
             # Trying to find best Unicode locale available on the system and restart python with
@@ -1484,7 +1533,7 @@ if __name__ == '__main__':
             # Unset LC_ALL if it exists, as it takes precedence over LC_CTYPE
             # This prevents infinite loops when LC_ALL is set to a non-Unicode locale
             if best_locale:
-                print_warning(
+                log.warn(
                     'Your environment is not configured to handle Unicode characters.'
                     ' Environment variable LC_CTYPE is temporary set to '
                     f'{best_locale} (found on the system) for Unicode support.'
@@ -1497,7 +1546,7 @@ if __name__ == '__main__':
                 raise SystemExit(ret)
 
         elif os.name == 'nt' and not _windows_unicode_satisfactory():
-            print_warning(
+            log.warn(
                 'Your environment is not configured to handle Unicode characters.\n'
                 '\n'
                 'Recommended fix (persistent):\n'
@@ -1517,5 +1566,4 @@ if __name__ == '__main__':
             main()
 
     except FatalError as e:
-        print(e, file=sys.stderr)
-        sys.exit(2)
+        log.die(escape(str(e)), exit_code=2)

@@ -17,7 +17,6 @@
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
 #include "esp_rom_sys.h"
-#include "soc/lldesc.h"
 #include "soc/soc_caps.h"
 #include "soc/spi_periph.h"
 #include "soc/soc_memory_layout.h"
@@ -413,7 +412,7 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_uninstall_priv_trans(spi_host_device_t 
         if (trans->tx_buffer && (trans->tx_buffer != priv_trans->tx_buffer)) {
             free(priv_trans->tx_buffer);
         }
-        if (trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
+        if (priv_trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
             size_t compatible_len = trans->rx_length ? trans->rx_length : trans->length;
             memcpy(trans->rx_buffer, priv_trans->rx_buffer, (MIN(compatible_len, trans->trans_len) + 7) / 8);
             free(priv_trans->rx_buffer);
@@ -460,6 +459,7 @@ esp_err_t SPI_SLAVE_ATTR spi_slave_queue_trans(spi_host_device_t host, const spi
 
     r = xQueueSend(spihost[host]->trans_queue, (void *)&priv_trans, ticks_to_wait);
     if (!r) {
+        spi_slave_uninstall_priv_trans(host, &priv_trans);
         return ESP_ERR_TIMEOUT;
     }
     esp_intr_enable(spihost[host]->intr);
@@ -601,14 +601,14 @@ esp_err_t SPI_SLAVE_ATTR spi_slave_transmit(spi_host_device_t host, spi_slave_tr
 static void SPI_SLAVE_ISR_ATTR s_spi_slave_dma_prepare_data(spi_dma_ctx_t *dma_ctx, spi_slave_hal_context_t *hal)
 {
     if (hal->rx_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_rx, hal->rx_buffer, (hal->rx_bitlen + 7) / 8, true);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, hal->rx_buffer, (hal->rx_bitlen + 7) / 8, true);
 
         spi_dma_reset(dma_ctx->rx_dma_chan);
         spi_slave_hal_hw_prepare_rx(hal->hw);
         spi_dma_start(dma_ctx->rx_dma_chan, dma_ctx->dmadesc_rx);
     }
     if (hal->tx_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_tx, hal->tx_buffer, (hal->tx_bitlen + 7) / 8, false);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, hal->tx_buffer, (hal->tx_bitlen + 7) / 8, false);
 
         spi_dma_reset(dma_ctx->tx_dma_chan);
         spi_slave_hal_hw_prepare_tx(hal->hw);

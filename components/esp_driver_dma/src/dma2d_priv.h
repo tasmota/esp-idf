@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <sys/queue.h>
+#include <stdatomic.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_intr_alloc.h"
@@ -16,6 +17,7 @@
 #include "hal/dma2d_hal.h"
 #include "hal/dma2d_ll.h"
 #include "esp_private/dma2d.h"
+#include "soc/regdma.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +46,7 @@ struct dma2d_trans_s {
     TAILQ_ENTRY(dma2d_trans_s) entry;     // Link entry
     const dma2d_trans_config_t *desc;     // Pointer to the structure containing all configuration items of a transaction
     dma2d_channel_handle_t rx_chan;       // Pointer to the RX channel handle that will be used to do the transaction
+    _Atomic bool started;                 // False after the transaction's channels are picked (ownership published) until its `on_job_picked` (which configures/starts the hardware) has returned, then true. `dma2d_force_end` must wait for this to become true before tearing the channels down, otherwise it would race the in-progress start.
 };
 
 struct dma2d_group_t {
@@ -88,6 +91,18 @@ struct dma2d_rx_channel_t {
     dma2d_event_callback_t on_desc_empty;      // RX desc empty callback, trigger when buffer on dma is not sufficient.
     uint32_t bundled_tx_channel_mask;          // Bit mask indicating the TX channels together with the RX channel to do the transaction
 };
+
+#if SOC_PAU_SUPPORTED
+#include "soc/retention_periph_defs.h"
+
+typedef struct {
+    const periph_retention_module_t module;
+    const regdma_entries_config_t *regdma_entry_array;
+    uint32_t array_size;
+} dma2d_retention_desc_t;
+
+extern const dma2d_retention_desc_t dma2d_reg_retention_info;
+#endif // SOC_PAU_SUPPORTED
 
 #ifdef __cplusplus
 }

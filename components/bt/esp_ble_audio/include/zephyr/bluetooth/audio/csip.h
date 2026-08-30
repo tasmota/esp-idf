@@ -56,10 +56,13 @@ extern "C" {
 #define BT_CSIP_READ_SIRK_REQ_RSP_OOB_ONLY      0x03
 
 /** Size of the Set Identification Resolving Key (SIRK) */
-#define BT_CSIP_SIRK_SIZE 16
+#define BT_CSIP_SIRK_SIZE                       16
 
 /** Size of the Resolvable Set Identifier (RSI) */
 #define BT_CSIP_RSI_SIZE                        6
+
+/** Maximum length of the Coordinated Set Name (CSIS v1.1), a 0-128 octet UTF-8 string */
+#define BT_CSIP_SET_NAME_MAX_LEN                128
 
 /* Coordinate Set Identification Service Error codes */
 /** Service is already locked */
@@ -83,7 +86,10 @@ extern "C" {
  */
 #define BT_CSIP_DATA_RSI(_rsi) BT_DATA(BT_DATA_CSIS_RSI, _rsi, BT_CSIP_RSI_SIZE)
 
-/** @brief Opaque Coordinated Set Identification Service instance. */
+/**
+ * @struct bt_csip_set_member_svc_inst
+ * @brief Opaque Coordinated Set Identification Service instance.
+ */
 struct bt_csip_set_member_svc_inst;
 
 /** Callback structure for the Coordinated Set Identification Service */
@@ -128,6 +134,17 @@ struct bt_csip_set_member_register_param {
      * If set to 0, the set size characteristic won't be initialized.
      */
     uint8_t set_size;
+
+    /**
+     * @brief Coordinated Set Name (CSIS v1.1), a 0-128 octet UTF-8 string.
+     *
+     * If @ref set_name_len is 0, the Coordinated Set Name characteristic
+     * won't be initialized.
+     */
+    uint8_t set_name[BT_CSIP_SET_NAME_MAX_LEN];
+
+    /** Length in octets of @ref set_name. */
+    uint8_t set_name_len;
 
     /**
      * @brief The unique Set Identity Resolving Key (SIRK)
@@ -224,6 +241,8 @@ int bt_csip_set_member_sirk_safe(struct bt_csip_set_member_svc_inst *svc_inst,
  * It is important to note that a set cannot have multiple devices with the same rank in a set,
  * and it is up to the caller of this function to ensure that.
  * Similarly, it is important that the size is updated on all devices in the set at the same time.
+ * The rank of a device cannot be modified on its own, and a new rank can only be set if the @p size
+ * is different from the current set size.
  *
  * If @kconfig{CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE} is enabled, this will also send a
  * notification to all connected or bonded clients.
@@ -234,11 +253,29 @@ int bt_csip_set_member_sirk_safe(struct bt_csip_set_member_svc_inst *svc_inst,
  *
  * @retval -EINVAL @p svc_inst is NULL, @p size is less than 1, @p rank is less than 1 or higher
  *                 than @p size for a lockable @p svc_inst.
- * @retval -EALREADY @p size and @p rank are already the provided values.
+ * @retval -EALREADY @p size is already set.
  * @retval 0 Success.
  */
 int bt_csip_set_member_set_size_and_rank_safe(struct bt_csip_set_member_svc_inst *svc_inst, uint8_t size,
                                               uint8_t rank);
+
+/**
+ * @brief Set the Coordinated Set Name (CSIS v1.1) of a service instance.
+ *
+ * If @kconfig{CONFIG_BT_CSIP_SET_MEMBER_SET_NAME_NOTIFIABLE} is enabled, this also notifies
+ * subscribed clients (the first ATT_MTU-3 octets if the name is longer).
+ *
+ * @param svc_inst The service instance.
+ * @param name The new name (UTF-8). May be NULL only if @p len is 0.
+ * @param len Length of @p name in octets (0 to @ref BT_CSIP_SET_NAME_MAX_LEN).
+ *
+ * @retval -EINVAL @p svc_inst is NULL, @p len exceeds BT_CSIP_SET_NAME_MAX_LEN, or @p name is
+ *                 NULL with a non-zero @p len.
+ * @retval -EALREADY The name is already set to this value.
+ * @retval 0 Success.
+ */
+int bt_csip_set_member_set_name_safe(struct bt_csip_set_member_svc_inst *svc_inst,
+                                     const uint8_t *name, uint8_t len);
 
 /** Struct to hold information about a service instance */
 struct bt_csip_set_member_set_info {

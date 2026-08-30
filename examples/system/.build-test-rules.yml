@@ -1,20 +1,5 @@
 # Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
 
-examples/system/app_trace_basic:
-  disable_test:
-    - if: IDF_TARGET == "esp32h21"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32h4"
-      temporary: true
-      reason: not supported yet #TODO: OCD-1137
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: not support yet   #TODO: OCD-1290
-  depends_components:
-    - esp_trace
-    - app_trace
-
 examples/system/base_mac_address:
   depends_components:
     - *common_components
@@ -52,34 +37,22 @@ examples/system/efuse:
     - bootloader_support
 
 examples/system/esp_event/default_event_loop:
+  enable:
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET == "linux"
   depends_components:
     - esp_event
 
 examples/system/esp_event/user_event_loops:
+  enable:
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET == "linux"
   depends_components:
     - esp_event
 
 examples/system/esp_timer:
+  enable:
+    - if: INCLUDE_DEFAULT == 1 or IDF_TARGET == "linux"
   depends_components:
     - esp_timer
-
-examples/system/esp_trace:
-  disable:
-    - if: SOC_USB_SERIAL_JTAG_SUPPORTED != 1
-      reason: example transport is USB Serial JTAG
-  disable_test:
-    - if: IDF_TARGET == "esp32h21"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32h4"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: lack of runners
-  depends_components:
-    - esp_trace
-    - freertos
 
 examples/system/eventfd:
   disable:
@@ -94,21 +67,6 @@ examples/system/flash_suspend:
     - if: IDF_TARGET == "esp32c3"
       temporary: true
       reason: the other targets are not tested yet
-
-examples/system/gcov:
-  disable_test:
-    - if: IDF_TARGET == "esp32h21"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32h4"
-      temporary: true
-      reason: not supported yet #TODO: OCD-1138
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: not support yet   #TODO: OCD-1291
-  depends_components:
-    - esp_trace
-    - app_trace
 
 examples/system/heap_task_tracking:
   disable:
@@ -199,6 +157,8 @@ examples/system/ota/partitions_ota:
     - if: CONFIG_NAME == "recovery_bootloader" and SOC_RECOVERY_BOOTLOADER_SUPPORTED != 1
       temporary: true
       reason: disabled for targets that do not support recovery bootloader
+    - if: CONFIG_NAME == "on_update_no_sb_rsa" and SOC_SECURE_BOOT_V2_RSA != 1
+      reason: Secure Boot V2 with RSA signatures is not supported.
   disable_test:
     - if: IDF_TARGET not in ["esp32", "esp32c3", "esp32s3"]
       temporary: true
@@ -224,6 +184,7 @@ examples/system/ota/simple_ota_example:
       temporary: true
       reason: not supported yet
     - if: CONFIG_NAME == "spiram" and SOC_SPIRAM_SUPPORTED != 1
+    - if: CONFIG_NAME == "xip_psram" and SOC_SPIRAM_XIP_SUPPORTED != 1
     - if: CONFIG_NAME == "on_update_no_sb_ecdsa_p256" and SOC_SECURE_BOOT_V2_ECC != 1
       reason: Secure Boot V2 with ECDSA signatures is not supported.
     - if: CONFIG_NAME == "on_update_no_sb_ecdsa_p384" and SOC_ECDSA_SUPPORT_CURVE_P384 != 1
@@ -259,16 +220,14 @@ examples/system/perfmon:
     - xtensa
 
 examples/system/pthread:
-  disable:
-    - if: IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")
-      reason: no target specific functionality, testing on a single target is sufficient
+  enable:
+    - if: IDF_TARGET in ["esp32", "esp32c3", "linux"]
   depends_components:
     - pthread
 
 examples/system/rt_mqueue:
-  disable_test:
-    - if: IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")
-      reason: no target specific functionality, testing on a single target is sufficient
+  enable:
+    - if: IDF_TARGET in ["esp32", "esp32c3", "linux"]
   depends_components:
     - rt
 
@@ -280,37 +239,6 @@ examples/system/select:
     - *common_components
     - vfs
 
-examples/system/sysview_tracing:
-  disable:
-    - if: SOC_GPTIMER_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32h21"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: not support yet   #TODO: OCD-1289
-  depends_components:
-    - esp_trace
-    - app_trace
-
-examples/system/sysview_tracing_heap_log:
-  disable:
-    - if: SOC_GPTIMER_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32h21"
-      temporary: true
-      reason: lack of runners
-    - if: IDF_TARGET == "esp32h4"
-      temporary: true
-      reason: not supported yet #TODO: OCD-1136
-    - if: IDF_TARGET == "esp32s31"
-      temporary: true
-      reason: not support yet   #TODO: OCD-1289
-  depends_components:
-    - esp_trace
-    - app_trace
-
 examples/system/task_watchdog:
   disable:
     - if: IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")
@@ -319,9 +247,8 @@ examples/system/task_watchdog:
     - esp_system
 
 examples/system/unit_test/:
-  disable:
-    - if: IDF_TARGET != "esp32" and (NIGHTLY_RUN != "1" or IDF_TARGET == "linux")
-      reason: no target specific functionality, testing on a single target is sufficient
+  enable:
+    - if: IDF_TARGET in ["esp32", "esp32c3", "linux"]
   depends_components:
     - unity
 

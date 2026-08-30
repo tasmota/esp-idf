@@ -253,7 +253,7 @@ void ESP_SYSTEM_IRAM_ATTR call_start_cpu1(void)
     esp_cpu_intr_set_mtvt_addr(&_mtvt_table);
 #endif
 #if SOC_CPU_SUPPORT_WFE
-    rv_utils_disable_wfe_mode();
+    esp_cpu_disable_wfe_mode();
 #endif
     ets_set_appcpu_boot_addr(0);
 
@@ -265,6 +265,9 @@ void ESP_SYSTEM_IRAM_ATTR call_start_cpu1(void)
 #elif !CONFIG_ESP_CONSOLE_USB_CDC
     esp_rom_install_uart_printf();
     esp_rom_output_set_as_console(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
+#if CONFIG_ESP_CONSOLE_UART_CUSTOM
+    esp_rom_output_switch_buffer(CONFIG_ESP_CONSOLE_UART_NUM);
+#endif
 #endif
 
     cpu_utility_ll_enable_debug(1);
@@ -401,6 +404,18 @@ void IRAM_ATTR do_multicore_settings(void)
 FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
 {
 #ifdef __riscv
+    // Configure the global pointer register.
+    // This must be the first thing the IDF app does on RISC-V, as any other
+    // piece of code could be relaxed by the linker to access something relative
+    // to __global_pointer$. With KASAN enabled, even calls like
+    // esp_cpu_dbgr_is_attached() are instrumented and may emit gp-relative
+    // loads, so gp must be set up before any C function call.
+    __asm__ __volatile__(
+        ".option push\n"
+        ".option norelax\n"
+        "la gp, __global_pointer$\n"
+        ".option pop"
+    );
     if (esp_cpu_dbgr_is_attached()) {
         /* Let debugger some time to detect that target started, halt it, enable ebreaks and resume.
            500ms should be enough. */
@@ -408,15 +423,6 @@ FORCE_INLINE_ATTR IRAM_ATTR void init_cpu(void)
             esp_rom_delay_us(100000);
         }
     }
-    // Configure the global pointer register
-    // (This should be the first thing IDF app does, as any other piece of code could be
-    // relaxed by the linker to access something relative to __global_pointer$)
-    __asm__ __volatile__(
-        ".option push\n"
-        ".option norelax\n"
-        "la gp, __global_pointer$\n"
-        ".option pop"
-    );
 #endif
 
     /* NOTE: When ESP-TEE is enabled, this sets up the callback function
@@ -657,7 +663,7 @@ MSPI_INIT_ATTR void mspi_init(void)
 #if CONFIG_SPIRAM_BOOT_HW_INIT
     if (esp_psram_chip_init() != ESP_OK) {
 #if CONFIG_SPIRAM_IGNORE_NOTFOUND
-        ESP_DRAM_LOGE(TAG, "Failed to init external RAM; continuing without it.");
+        ESP_DRAM_LOGW(TAG, "Failed to init external RAM; continuing without it.");
 #else
         ESP_DRAM_LOGE(TAG, "Failed to init external RAM!");
         abort();

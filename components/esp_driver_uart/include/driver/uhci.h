@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -19,8 +19,9 @@ extern "C" {
 typedef struct {
     uart_port_t uart_port;                                /*!< UART port that connect to UHCI controller */
     size_t tx_trans_queue_depth;                          /*!< Depth of internal transfer queue, increase this value can support more transfers pending in the background */
-    size_t max_transmit_size;                             /*!< Maximum transfer size in one transaction, in bytes. This decides the number of DMA nodes will be used for each transaction */
-    size_t max_receive_internal_mem;                      /*!< Internal DMA usage memory. Each DMA node can point to a maximum of x bytes (depends on chip). This value determines the number of DMA nodes used for each transaction. When your transfer size is large enough, it is recommended to set this value greater than x to facilitate efficient ping-pong operations, such as 2 * x. */
+    size_t max_transmit_size;                             /*!< Maximum transfer size in one transaction, in bytes. Note that this is the total size of all buffers combined */
+    size_t max_transmit_buffer_count;                     /*!< Maximum number of buffers that can be transmitted together in one transaction, via `uhci_multi_buffer_transmit()`. Set to 0 or 1 if only single-buffer transmit (`uhci_transmit()`) is needed. */
+    size_t max_receive_internal_mem;                      /*!< Expected maximum buffer size for uhci_receive(). This value determines the number of descriptors in the receive DMA chain. Each DMA descriptor can reference a buffer of up to X bytes (depending on the chip). For large transfers, at least two descriptors are recommended for ping-pong operation. */
     size_t dma_burst_size;                                /*!< DMA burst size, in bytes. Set to 0 to disable data burst. Otherwise, use a power of 2. */
     size_t max_packet_receive;                            /*!< Max receive size, auto stop receiving after reach this value, only valid when `length_eof` set true */
 
@@ -38,6 +39,14 @@ typedef struct {
     uhci_rx_event_callback_t on_rx_trans_event;           /*!< Callback function for handling the completion of a reception. */
     uhci_tx_done_callback_t on_tx_trans_done;             /*!< Callback function for handling the completion of a transmission. */
 } uhci_event_callbacks_t;
+
+/**
+ * @brief One buffer segment used by `uhci_multi_buffer_transmit()`
+ */
+typedef struct {
+    const uint8_t *write_buffer; /*!< Pointer to this buffer segment. Must remain valid until the transmission is complete. */
+    size_t buffer_size;          /*!< Size of this buffer segment, in bytes */
+} uhci_transmit_buffer_info_t;
 
 /**
  * @brief Create and initialize a new UHCI controller.
@@ -70,17 +79,62 @@ esp_err_t uhci_new_controller(const uhci_controller_config_t *config, uhci_contr
  *                            `uhci_new_controller()`.
  * @param[out] read_buffer    Pointer to the buffer where the received data will be stored.
  *                            The buffer must be pre-allocated by the caller.
- * @param[in] buffer_size     The size of read buffer.
+ * @param[in] buffer_size     The size of read buffer. Should generally not exceed `uhci_controller_config_t.max_receive_internal_mem`.
  *
  * @note The function is non-blocking, it just mounts the user buffer to the DMA.
  * The return from the function doesn't mean a finished receive. You need to register corresponding
  * callback function to get notification.
  *
+ * @note This function can be called from the RX-done callback (i.e. ISR context), e.g. to re-arm
+ * reception with a new buffer and minimize the RX gap. To call it while the cache is disabled,
+ * enable CONFIG_UHCI_RECV_FUNC_IN_IRAM so this function is placed in IRAM.
+ *
  * @return
- * - `ESP_OK`: Data successfully received and written to the buffer.
- * - `ESP_ERR_INVALID_ARG`: Invalid arguments (e.g., null buffer or invalid controller handle).
+ * - `ESP_OK`: The driver is ready for data reception.
+ * - `ESP_ERR_INVALID_STATE`: The controller is not in enable state.
+ * - `ESP_ERR_INVALID_ARG`: Invalid arguments (e.g., invalid controller handle, null buffer, invalid buffer size).
  */
 esp_err_t uhci_receive(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size);
+
+/**
+ * @brief Start the receive continuously.
+ *
+ * Unlike `uhci_receive()` (which stops the DMA after one frame and must be re-armed), this keeps
+ * the GDMA running across EOFs. `read_buffer` is split across the DMA nodes and used as a circular
+ * ring: each finished frame (UART idle/length EOF) is delivered through the registered
+ * `on_rx_trans_event` callback with `flags.totally_received = true`, and the following frame lands
+ * in the next buffer without any re-arm. Call `uhci_stop_receive()` to end the session.
+ *
+ * @param[in] uhci_ctrl   Handle to the UHCI controller.
+ * @param[in] read_buffer Caller-provided storage buffer to receive into. Must stay valid until `uhci_stop_receive()`.
+ * @param[in] buffer_size The size of the storage buffer, in bytes.
+ *
+ * @note The callback delivers a pointer into the storage buffer (zero-copy). The application must
+ * consume the data before the DMA wraps around and overwrites it, so size the storage buffer for the
+ * expected throughput and consumer latency. Overrun protection is not provided in this version.
+ *
+ * @return
+ * - `ESP_OK`: Continuous reception started.
+ * - `ESP_ERR_INVALID_ARG`: Invalid arguments (e.g., null buffer or invalid controller handle).
+ * - `ESP_ERR_INVALID_STATE`: A reception is already in progress.
+ */
+esp_err_t uhci_start_receive_continuous(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer, size_t buffer_size);
+
+/**
+ * @brief Stop an ongoing reception.
+ *
+ * Stops the RX DMA and returns the controller to the idle state so it can be re-armed with
+ * `uhci_receive()` / `uhci_start_receive_continuous()` or deleted with `uhci_del_controller()`. Mainly
+ * used to end a `uhci_start_receive_continuous()` session; it is a no-op if no reception is in progress.
+ *
+ * @param[in] uhci_ctrl Handle to the UHCI controller.
+ *
+ * @return
+ * - `ESP_OK`: Reception stopped (or already idle).
+ * - `ESP_ERR_INVALID_ARG`: The provided `uhci_ctrl` handle is invalid or null.
+ * - `ESP_ERR_INVALID_STATE`: A reception is concurrently being armed; retry after it completes.
+ */
+esp_err_t uhci_stop_receive(uhci_controller_handle_t uhci_ctrl);
 
 /**
  * @brief Transmit data using the UHCI controller.
@@ -93,15 +147,42 @@ esp_err_t uhci_receive(uhci_controller_handle_t uhci_ctrl, uint8_t *read_buffer,
  * @param[in] write_buffer  Pointer to the buffer containing the data to be transmitted.
  *                          The buffer must remain valid until the transmission is complete.
  * @param[in] write_size    The number of bytes to transmit from the buffer.
+ *                          Must not exceed `uhci_controller_config_t.max_transmit_size`.
  *
  * @note The function is an non-blocking api, which means this function will return immediately. You can
  * get corresponding event from callbacks.
  *
  * @return
  * - `ESP_OK`: Data successfully queued for transmission.
- * - `ESP_ERR_INVALID_ARG`: Invalid arguments (e.g., null buffer, invalid handle, or zero `write_size`).
+ * - `ESP_ERR_INVALID_ARG`: Invalid arguments (e.g., null buffer, invalid handle, zero `write_size`, or
+ *   `write_size` exceeds `max_transmit_size`).
+ * - `ESP_ERR_INVALID_STATE`: No free transaction descriptor available.
  */
 esp_err_t uhci_transmit(uhci_controller_handle_t uhci_ctrl, uint8_t *write_buffer, size_t write_size);
+
+/**
+ * @brief Transmit several discontinuous buffers as a single UHCI transaction
+ *
+ * Unlike `uhci_transmit()`, this accepts an array of buffer segments instead of a single
+ * contiguous buffer. For `array_size > 1`, the buffers are assembled into one DMA link list in
+ * the given order (only the last segment is marked EOF).
+ *
+ * @note All buffer segments must remain valid until the transmission is complete (same contract as
+ * `uhci_transmit()`).
+ *
+ * @param[in] uhci_ctrl Handle to the UHCI controller, which was previously created using
+ *                      `uhci_new_controller()`.
+ * @param[in] buffer_info_array Array of buffer segments to transmit, in order. The combined size of
+ *                              all buffers must not exceed `uhci_controller_config_t.max_transmit_size`.
+ * @param[in] array_size Number of entries in `buffer_info_array`. Must not exceed `max_transmit_buffer_count`.
+ *
+ * @return
+ * - `ESP_OK`: Data successfully queued for transmission.
+ * - `ESP_ERR_INVALID_ARG`: Invalid arguments, `array_size` exceeds `max_transmit_buffer_count`, or the
+ *   combined size of all buffers exceeds `max_transmit_size`.
+ * - `ESP_ERR_INVALID_STATE`: No free transaction descriptor available.
+ */
+esp_err_t uhci_multi_buffer_transmit(uhci_controller_handle_t uhci_ctrl, const uhci_transmit_buffer_info_t *buffer_info_array, size_t array_size);
 
 /**
  * @brief Uninstall the UHCI (UART Host Controller Interface) driver and release resources.

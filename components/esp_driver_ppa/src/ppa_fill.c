@@ -74,8 +74,9 @@ bool ppa_fill_transaction_on_picked(uint32_t num_chans, const dma2d_trans_channe
     dma2d_start(dma2d_rx_chan);
 
     // Configure PPA Blending engine
-    ppa_ll_blend_configure_filling_block(platform->hal.dev, fill_trans_desc->out.fill_cm, (void *)&fill_trans_desc->fill_color_val, fill_trans_desc->fill_block_w, fill_trans_desc->fill_block_h);
+    ppa_ll_blend_configure_filling_block_color(platform->hal.dev, fill_trans_desc->out.fill_cm, (void *)&fill_trans_desc->fill_color_val);
     ppa_ll_blend_set_tx_color_mode(platform->hal.dev, fill_trans_desc->out.fill_cm);
+    ppa_ll_blend_set_block_size(platform->hal.dev, fill_trans_desc->fill_block_w, fill_trans_desc->fill_block_h);
 
     ppa_ll_blend_start(platform->hal.dev, PPA_LL_BLEND_TRANS_MODE_FILL);
 
@@ -91,6 +92,8 @@ esp_err_t ppa_do_fill(ppa_client_handle_t ppa_client, const ppa_fill_oper_config
     // out_buffer ptr cannot in flash region
     ESP_RETURN_ON_FALSE(esp_ptr_internal(config->out.buffer) || esp_ptr_external_ram(config->out.buffer), ESP_ERR_INVALID_ARG, TAG, "invalid out.buffer addr");
     ESP_RETURN_ON_FALSE(ppa_ll_blend_is_color_mode_supported((ppa_blend_color_mode_t)config->out.fill_cm), ESP_ERR_INVALID_ARG, TAG, "unsupported color mode");
+    ESP_RETURN_ON_FALSE(config->out.pic_w <= DMA2D_LL_DESC_2D_FIELD_MAX && config->out.pic_h <= DMA2D_LL_DESC_2D_FIELD_MAX,
+                        ESP_ERR_INVALID_ARG, TAG, "dimension exceeds DMA2D descriptor field limit");
     // For YUV420 output: in desc, ha/hb/va/vb/x/y must be even number
     // For YUV422 output: in desc, ha/hb/x must be even number
     // if (config->out.fill_cm == PPA_FILL_COLOR_MODE_YUV420) {
@@ -103,9 +106,12 @@ esp_err_t ppa_do_fill(ppa_client_handle_t ppa_client, const ppa_fill_oper_config
                             ESP_ERR_INVALID_ARG, TAG, "YUV422 output does not support odd w/offset_x");
     }
     uint32_t out_pixel_depth = color_hal_pixel_format_fourcc_get_bit_depth((esp_color_fourcc_t)config->out.fill_cm);
-    uint32_t out_pic_len = config->out.pic_w * config->out.pic_h * out_pixel_depth / 8;
+    uint32_t out_pic_len = (uint32_t)((uint64_t)config->out.pic_w * config->out.pic_h * out_pixel_depth / 8);
     ESP_RETURN_ON_FALSE(out_pic_len <= config->out.buffer_size, ESP_ERR_INVALID_ARG, TAG, "out.pic_w/h mismatch with out.buffer_size");
-    ESP_RETURN_ON_FALSE(config->fill_block_w <= (config->out.pic_w - config->out.block_offset_x) &&
+    ESP_RETURN_ON_FALSE(config->fill_block_w > 0 && config->fill_block_h > 0 &&
+                        config->out.block_offset_x < config->out.pic_w &&
+                        config->fill_block_w <= (config->out.pic_w - config->out.block_offset_x) &&
+                        config->out.block_offset_y < config->out.pic_h &&
                         config->fill_block_h <= (config->out.pic_h - config->out.block_offset_y),
                         ESP_ERR_INVALID_ARG, TAG, "block does not fit in the out pic");
 
@@ -118,9 +124,9 @@ esp_err_t ppa_do_fill(ppa_client_handle_t ppa_client, const ppa_fill_oper_config
     // Write back and invalidate buffer extended window (alignment not necessary on C2M direction, but alignment strict on M2C direction)
     size_t out_buf_alignment = esp_ptr_external_ram(config->out.buffer) ? ppa_client->engine->platform->ext_mem_align : ppa_client->engine->platform->int_mem_align;
     if (out_buf_alignment > 0) {
-        uint32_t out_ext_window = (uint32_t)config->out.buffer + config->out.block_offset_y * config->out.pic_w * out_pixel_depth / 8;
+        uint32_t out_ext_window = (uint32_t)config->out.buffer + (uint32_t)((uint64_t)config->out.block_offset_y * config->out.pic_w * out_pixel_depth / 8);
         uint32_t out_ext_window_aligned = PPA_ALIGN_DOWN(out_ext_window, out_buf_alignment);
-        uint32_t out_ext_window_len = config->out.pic_w * config->fill_block_h * out_pixel_depth / 8;
+        uint32_t out_ext_window_len = (uint32_t)((uint64_t)config->out.pic_w * config->fill_block_h * out_pixel_depth / 8);
         esp_cache_msync((void *)out_ext_window_aligned, PPA_ALIGN_UP(out_ext_window_len + (out_ext_window - out_ext_window_aligned), out_buf_alignment), ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE);
     }
 

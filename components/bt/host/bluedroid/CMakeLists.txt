@@ -66,6 +66,7 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/api/esp_sdp_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/api/esp_l2cap_bt_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/api/esp_pbac_api.c"
+    "${CMAKE_CURRENT_LIST_DIR}/api/esp_pan_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/ar/bta_ar.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/av/bta_av_aact.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/av/bta_av_act.c"
@@ -134,6 +135,10 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/bta/pba/bta_pba_client_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/pba/bta_pba_client_main.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/pba/bta_pba_client_sdp.c"
+    "${CMAKE_CURRENT_LIST_DIR}/bta/pan/bta_pan_act.c"
+    "${CMAKE_CURRENT_LIST_DIR}/bta/pan/bta_pan_api.c"
+    "${CMAKE_CURRENT_LIST_DIR}/bta/pan/bta_pan_ci.c"
+    "${CMAKE_CURRENT_LIST_DIR}/bta/pan/bta_pan_main.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/sdp/bta_sdp.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/sdp/bta_sdp_act.c"
     "${CMAKE_CURRENT_LIST_DIR}/bta/sdp/bta_sdp_api.c"
@@ -180,6 +185,8 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/sdp/btc_sdp.c"
     "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/l2cap/btc_l2cap.c"
     "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/pba/btc_pba_client.c"
+    "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/pan/bta_pan_co.c"
+    "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/pan/btc_pan.c"
     "${CMAKE_CURRENT_LIST_DIR}/device/bdaddr.c"
     "${CMAKE_CURRENT_LIST_DIR}/device/controller.c"
     "${CMAKE_CURRENT_LIST_DIR}/device/interop.c"
@@ -215,6 +222,9 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/stack/avrc/avrc_pars_tg.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/avrc/avrc_sdp.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/avrc/avrc_utils.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/bnep/bnep_api.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/bnep/bnep_main.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/bnep/bnep_utils.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/hid/hidd_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/hid/hidd_conn.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/hid/hidh_api.c"
@@ -272,6 +282,9 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/stack/obex/obex_main.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/obex/obex_tl_l2cap.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/obex/obex_tl_rfcomm.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/pan/pan_api.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/pan/pan_main.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/pan/pan_utils.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/rfcomm/port_api.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/rfcomm/port_rfc.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/rfcomm/port_utils.c"
@@ -314,11 +327,37 @@ if(CONFIG_BT_BLE_FEAT_ISO_EN)
     )
 endif()
 
+if(CONFIG_BT_BLE_L2CAP_COC_ENABLED)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/stack/l2cap/l2c_ble_le_coc.c"
+        "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/ble_l2cap/btc_ble_l2cap.c"
+        "${CMAKE_CURRENT_LIST_DIR}/api/esp_ble_l2cap_api.c"
+    )
+endif()
+
+if(CONFIG_BT_BLE_L2CAP_ENHANCED_COC)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/stack/l2cap/l2c_ble_ecfc.c"
+    )
+endif()
+
+if(CONFIG_BT_BLE_EATT_ENABLE)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/stack/gatt/gatt_eatt.c"
+    )
+endif()
+
 if(CONFIG_BT_BLE_FEAT_CTE_EN)
     list(APPEND bluedroid_host_srcs
         "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_ble_cte.c"
         "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/cte/btc_ble_cte.c"
         "${CMAKE_CURRENT_LIST_DIR}/api/esp_ble_cte_api.c"
+    )
+endif()
+
+if(CONFIG_BT_BLE_PERIPH_PSEUDO_ADDR_BOND)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_ble_pseudo.c"
     )
 endif()
 
@@ -343,6 +382,7 @@ list(APPEND bluedroid_host_priv_include_dirs
     ${CMAKE_CURRENT_LIST_DIR}/bta/hh/include
     ${CMAKE_CURRENT_LIST_DIR}/bta/jv/include
     ${CMAKE_CURRENT_LIST_DIR}/bta/pba/include
+    ${CMAKE_CURRENT_LIST_DIR}/bta/pan
     ${CMAKE_CURRENT_LIST_DIR}/bta/sdp/include
     ${CMAKE_CURRENT_LIST_DIR}/bta/sys/include
     ${CMAKE_CURRENT_LIST_DIR}/device/include
@@ -365,6 +405,8 @@ list(APPEND bluedroid_host_priv_include_dirs
     ${CMAKE_CURRENT_LIST_DIR}/stack/rfcomm/include
     ${CMAKE_CURRENT_LIST_DIR}/stack/obex/include
     ${CMAKE_CURRENT_LIST_DIR}/stack/goep/include
+    ${CMAKE_CURRENT_LIST_DIR}/stack/bnep/include
+    ${CMAKE_CURRENT_LIST_DIR}/stack/pan/include
     ${CMAKE_CURRENT_LIST_DIR}/stack/include
     ${CMAKE_CURRENT_LIST_DIR}/common/include
     ${CMAKE_CURRENT_LIST_DIR}/config/include

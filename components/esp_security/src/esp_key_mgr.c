@@ -20,7 +20,6 @@
 #include "hal/huk_hal.h"
 #include "rom/key_mgr.h"
 
-#if SOC_KEY_MANAGER_SUPPORTED
 static const char *TAG = "esp_key_mgr";
 
 ESP_STATIC_ASSERT(sizeof(esp_key_mgr_key_recovery_info_t) == sizeof(struct huk_key_block), "Size of esp_key_mgr_key_recovery_info_t should match huk_key_block (from ROM)");
@@ -539,18 +538,18 @@ static esp_err_t key_mgr_recover_key(key_recovery_config_t *config)
         key_mgr_hal_set_xts_aes_key_len(key_type, key_len);
     }
 
-    key_mgr_hal_set_key_purpose(config->key_purpose);
-
-    key_mgr_hal_start();
-
-    key_mgr_wait_for_state(ESP_KEY_MGR_STATE_LOAD);
-
     uint8_t key_recovery_info_index = config->multi_stage_deployment ? 1 : 0;
 
     if (!check_key_info_validity(&config->key_recovery_info->key_info[key_recovery_info_index])) {
         ESP_LOGE(TAG, "Key info not valid");
         return ESP_FAIL;
     }
+
+    key_mgr_hal_set_key_purpose(config->key_purpose);
+
+    key_mgr_hal_start();
+
+    key_mgr_wait_for_state(ESP_KEY_MGR_STATE_LOAD);
 
     key_mgr_hal_write_assist_info(config->key_recovery_info->key_info[key_recovery_info_index].info, KEY_MGR_KEY_RECOVERY_INFO_SIZE);
     key_mgr_hal_continue();
@@ -562,6 +561,8 @@ static esp_err_t key_mgr_recover_key(key_recovery_config_t *config)
     if (!multi_stage_deployment_key_purpose(config->key_purpose)) {
         if (!key_mgr_hal_is_key_deployment_valid(key_type, key_len)) {
             ESP_LOGD(TAG, "Key deployment is not valid");
+            key_mgr_hal_continue();
+            key_mgr_wait_for_state(ESP_KEY_MGR_STATE_IDLE);
             return ESP_FAIL;
         }
     }
@@ -1070,4 +1071,3 @@ cleanup:
     esp_key_mgr_release_hardware(true);
     return esp_ret;
 }
-#endif

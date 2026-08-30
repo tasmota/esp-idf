@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -12,7 +12,6 @@
 inline static void format_addr(char *addr_str, uint8_t addr[]);
 static void print_conn_desc(struct ble_gap_conn_desc *desc);
 static void start_advertising(void);
-static void set_random_addr(void);
 static int gap_event_handler(struct ble_gap_event *event, void *arg);
 
 /* Private variables */
@@ -52,24 +51,12 @@ static void print_conn_desc(struct ble_gap_conn_desc *desc) {
              desc->sec_state.bonded);
 }
 
-static void set_random_addr(void) {
-    /* Local variables */
-    int rc = 0;
-    ble_addr_t addr;
-
-    /* Generate new non-resolvable private address */
-    rc = ble_hs_id_gen_rnd(0, &addr);
-    assert(rc == 0);
-
-    /* Set address */
-    rc = ble_hs_id_set_rnd(addr.val);
-    assert(rc == 0);
-}
-
 static void start_advertising(void) {
     /* Local variables */
     int rc = 0;
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     const char *name;
+#endif
     struct ble_hs_adv_fields adv_fields = {0};
     struct ble_hs_adv_fields rsp_fields = {0};
     struct ble_gap_adv_params adv_params = {0};
@@ -77,11 +64,16 @@ static void start_advertising(void) {
     /* Set advertising flags */
     adv_fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
 
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     /* Set device name */
     name = ble_svc_gap_device_name();
+    if (name == NULL) {
+        name = DEVICE_NAME;
+    }
     adv_fields.name = (uint8_t *)name;
     adv_fields.name_len = strlen(name);
     adv_fields.name_is_complete = 1;
+#endif
 
     /* Set device tx power */
     adv_fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
@@ -200,6 +192,9 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         /* A connection was terminated, print connection descriptor */
         ESP_LOGI(TAG, "disconnected from peer; reason=%d",
                  event->disconnect.reason);
+
+        /* Reset heart rate subscription state */
+        gatt_svr_reset_heart_rate_subscription();
 
         /* Restart advertising */
         start_advertising();
@@ -324,8 +319,9 @@ void adv_init(void) {
     int rc = 0;
     char addr_str[18] = {0};
 
-    /* Make sure we have proper BT identity address set */
-    set_random_addr();
+    /* Make sure we have proper BT identity address set.
+     * ble_hs_util_ensure_addr(1) safely generates a random address only if
+     * one is not already set, avoiding conflicts on re-sync events. */
     rc = ble_hs_util_ensure_addr(1);
     if (rc != 0) {
         ESP_LOGE(TAG, "device does not have any available bt address!");
@@ -372,6 +368,7 @@ int gap_init(void) {
     /* Local variables */
     int rc = 0;
 
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     /* Call NimBLE GAP initialization API */
     ble_svc_gap_init();
 
@@ -382,5 +379,6 @@ int gap_init(void) {
                  DEVICE_NAME, rc);
         return rc;
     }
+#endif
     return rc;
 }

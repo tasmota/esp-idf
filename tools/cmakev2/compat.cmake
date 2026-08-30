@@ -165,6 +165,25 @@ endfunction()
         ``linkerscript`` template. The ``linkerscript`` is processed with ldgen
         to produce the ``output``.
 
+    *FLAGS[in,opt]*
+
+        Explicit preprocessor flags for the linker script(s) registered by this
+        call, for example ``-D`` defines or extra ``-I`` include directories.
+        When given, they replace the default parent-dir==target include
+        heuristic while a ``.in`` script or template is preprocessed.
+        ``-I<config_dir>`` and the linked components' include directories are
+        always added regardless. Applies to every ``scriptfile`` in the same
+        call.
+
+    *MEMORY[opt]*
+
+        Marks the script(s) as the memory-layout base for the link. Such
+        scripts are emitted as ``-T`` before all other linker scripts, so that
+        section-placement scripts from other components can reference their
+        ``MEMORY`` regions and ``REGION_ALIAS`` names. Needed when the memory
+        layout lives in a different component than the section scripts that
+        depend on it.
+
     This function adds one or more linker scripts to the specified component
     target, incorporating the linker script into the linking process.
 
@@ -174,25 +193,82 @@ endfunction()
     with the ``PROCESS`` option, it is logical to provide only a single
     ``scriptfile`` as a template.
 #]]
-function(target_linker_script target deptype scriptfiles)
+function(target_linker_script target deptype)
     # The linker script files, templates, and their output filenames are stored
     # only as component properties. The script files are generated and added to
     # the library link interface in the idf_build_library function.
-    set(options)
-    set(one_value PROCESS)
+    set(options MEMORY)
+    set(one_value PROCESS FLAGS)
     set(multi_value)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
+    set(scriptfiles ${ARG_UNPARSED_ARGUMENTS})
+    if(NOT scriptfiles)
+        message(FATAL_ERROR "target_linker_script requires at least one linker script file")
+    endif()
     foreach(scriptfile ${scriptfiles})
         get_filename_component(scriptfile "${scriptfile}" ABSOLUTE)
         idf_msg("Adding linker script ${scriptfile}")
+        __linker_script_key("${scriptfile}" script_key)
         if(ARG_PROCESS)
             get_filename_component(output "${ARG_PROCESS}" ABSOLUTE)
             idf_component_set_property("${target}" LINKER_SCRIPTS_TEMPLATE "${scriptfile}" APPEND)
-            idf_component_set_property("${target}" LINKER_SCRIPTS_GENERATED "${output}" APPEND)
+            # Key the generated output path by the template instead of keeping a
+            # second list index-aligned with LINKER_SCRIPTS_TEMPLATE.
+            idf_component_set_property("${target}" "LINKER_SCRIPT_GENERATED_${script_key}" "${output}")
         else()
-            idf_component_set_property("${target}" LINKER_SCRIPTS ${scriptfile} APPEND)
+            idf_component_set_property("${target}" LINKER_SCRIPTS "${scriptfile}" APPEND)
+        endif()
+        # Memory-layout scripts are emitted before other scripts in the link,
+        # so section-placement scripts can reference their MEMORY regions.
+        if(ARG_MEMORY)
+            idf_component_set_property("${target}" "LINKER_SCRIPT_MEMORY_${script_key}" TRUE)
+        endif()
+        # Per-script preprocessor flags, consumed by __preprocess_linker_script
+        # when a ".in" script or template is built. The "__DEFAULT__" sentinel
+        # means FLAGS was not given (use the parent-dir==target heuristic); any
+        # other value, including empty, means FLAGS was given and replaces it.
+        # This distinguishes "not given" from "given empty", which the property
+        # value alone cannot (both would read back as empty).
+        if(DEFINED ARG_FLAGS)
+            idf_component_set_property("${target}" "LINKER_SCRIPT_FLAGS_${script_key}" "${ARG_FLAGS}")
+        else()
+            idf_component_set_property("${target}" "LINKER_SCRIPT_FLAGS_${script_key}" "__DEFAULT__")
         endif()
     endforeach()
+endfunction()
+
+function(__idf_component_link_optional_requirement component target link_type req_interface output)
+    # Config-only cmakev1 components are represented by INTERFACE libraries.
+    # CMake cannot apply PRIVATE links to an INTERFACE library, so optional
+    # private requirements are ignored for those components.
+    idf_component_get_property(component_target_type "${component}" COMPONENT_REAL_TARGET_TYPE)
+    if("${component_target_type}" STREQUAL "INTERFACE_LIBRARY")
+        if("${link_type}" STREQUAL "PRIVATE")
+            set(${output} FALSE PARENT_SCOPE)
+            return()
+        endif()
+        target_link_libraries("${target}" INTERFACE "${req_interface}")
+    else()
+        target_link_libraries("${target}" "${link_type}" "${req_interface}")
+    endif()
+
+    if("${link_type}" STREQUAL "PRIVATE")
+        set(req_type PRIV_REQUIRES)
+    elseif("${link_type}" STREQUAL "PUBLIC" OR "${link_type}" STREQUAL "INTERFACE")
+        set(req_type REQUIRES)
+    else()
+        set(req_type "")
+    endif()
+
+    if(req_type)
+        idf_component_get_property(req_name "${req_interface}" COMPONENT_NAME)
+        idf_component_get_property(existing "${component}" ${req_type})
+        if(NOT "${req_name}" IN_LIST existing)
+            idf_component_set_property("${component}" ${req_type} "${req_name}" APPEND)
+        endif()
+    endif()
+
+    set(${output} TRUE PARENT_SCOPE)
 endfunction()
 
 #[[
@@ -269,22 +345,10 @@ function(__idf_component_process_optional_requires)
             endif()
 
             # Link the caller's real target to the requirement's interface target.
-            target_link_libraries("${caller_target}" "${link_type}" "${req_interface}")
-
-            # Update the caller's REQUIRES or PRIV_REQUIRES property.
-            idf_component_get_property(req_name "${req_interface}" COMPONENT_NAME)
-            if("${link_type}" STREQUAL "PRIVATE")
-                idf_component_get_property(existing "${caller_interface}" PRIV_REQUIRES)
-                if(NOT "${req_name}" IN_LIST existing)
-                    idf_component_set_property("${caller_interface}" PRIV_REQUIRES
-                                               "${req_name}" APPEND)
-                endif()
-            elseif("${link_type}" STREQUAL "PUBLIC" OR "${link_type}" STREQUAL "INTERFACE")
-                idf_component_get_property(existing "${caller_interface}" REQUIRES)
-                if(NOT "${req_name}" IN_LIST existing)
-                    idf_component_set_property("${caller_interface}" REQUIRES
-                                               "${req_name}" APPEND)
-                endif()
+            __idf_component_link_optional_requirement("${caller_interface}" "${caller_target}"
+                                                      "${link_type}" "${req_interface}" linked)
+            if(NOT linked)
+                continue()
             endif()
 
             # Mark this pair as done so it is not processed again for subsequent
@@ -372,24 +436,8 @@ function(idf_component_optional_requires type)
             endif()
             idf_component_include("${req}")
 
-            if("${type}" STREQUAL "PRIVATE")
-                set(req_type PRIV_REQUIRES)
-            elseif("${type}" STREQUAL "PUBLIC")
-                set(req_type REQUIRES)
-            else()
-                set(req_type "")
-            endif()
-
-            if(req_type)
-                idf_component_get_property(req_name "${req_interface}" COMPONENT_NAME)
-                idf_component_get_property(target_reqs "${COMPONENT_NAME}" ${req_type})
-                if(NOT "${req_name}" IN_LIST target_reqs)
-                    idf_component_set_property("${COMPONENT_NAME}" ${req_type} "${req_name}" APPEND)
-                    target_link_libraries(${COMPONENT_TARGET} ${type} ${req_interface})
-                endif()
-            else()
-                target_link_libraries(${COMPONENT_TARGET} ${type} ${req_interface})
-            endif()
+            __idf_component_link_optional_requirement("${COMPONENT_NAME}" "${COMPONENT_TARGET}"
+                                                      "${type}" "${req_interface}" linked)
         endforeach()
     endif()
 endfunction()
@@ -425,6 +473,14 @@ function(__init_common_components)
     # component.
     if(explicit_requires_common)
         set(requires_common "${explicit_requires_common}")
+        # Auto-append the target's arch component when the app overrides
+        # common-requires without it. Lets G0-style apps (which set the property
+        # before project() to a restricted list) avoid hand-rolling a
+        # target -> arch map pre-project, since IDF_TARGET_ARCH isn't known
+        # until after sdkconfig is included. Empty on linux -> no append.
+        if(idf_target_arch AND NOT idf_target_arch IN_LIST requires_common)
+            list(APPEND requires_common "${idf_target_arch}")
+        endif()
 
     elseif("${idf_target}" STREQUAL "linux")
         set(requires_common freertos esp_hw_support heap log soc hal esp_rom esp_common esp_system linux
@@ -450,6 +506,89 @@ function(__init_common_components)
     endforeach()
 
     idf_build_set_property(__COMMON_COMPONENTS_INITIALIZED YES)
+endfunction()
+
+#[[api
+.. cmakev2:function:: idf_component_mock
+
+    .. code-block:: cmake
+
+        idf_component_mock([INCLUDE_DIRS <dir>...]
+                           [MOCK_HEADER_FILES <file>...]
+                           [REQUIRES <component>...]
+                           [MOCK_SUBDIR <subdir>])
+
+    *INCLUDE_DIRS[in,opt]*
+
+        Include directories for the header files provided in MOCK_HEADER_FILES.
+
+    *MOCK_HEADER_FILES[in,opt]*
+
+        Header files from which CMock generates mock implementations.
+
+    *REQUIRES[in,opt]*
+
+        Additional components required by the mock component.
+
+    *MOCK_SUBDIR[in,opt]*
+
+        Subdirectory under the mocks output where generated files are placed.
+
+    Create a mock component using CMock and register it with the build system.
+    This is a compatibility shim matching the v1 ``idf_component_mock``
+    function in ``tools/cmake/component.cmake``.  It generates Mock*.c and
+    Mock*.h files from the given headers using Ruby + CMock, then delegates to
+    ``idf_component_register`` so the mock participates in normal dependency
+    resolution.
+#]]
+function(idf_component_mock)
+    set(options)
+    set(single_value MOCK_SUBDIR)
+    set(multi_value MOCK_HEADER_FILES INCLUDE_DIRS REQUIRES)
+    cmake_parse_arguments(_ "${options}" "${single_value}" "${multi_value}" ${ARGN})
+
+    list(APPEND __REQUIRES "cmock")
+
+    set(MOCK_GENERATED_HEADERS "")
+    set(MOCK_GENERATED_SRCS "")
+    set(IDF_PATH $ENV{IDF_PATH})
+    set(CMOCK_DIR "${IDF_PATH}/components/cmock/CMock")
+    set(MOCK_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    list(APPEND __INCLUDE_DIRS "${MOCK_GEN_DIR}/mocks")
+
+    foreach(header_file ${__MOCK_HEADER_FILES})
+        get_filename_component(file_without_dir ${header_file} NAME_WE)
+        if("${__MOCK_SUBDIR}" STREQUAL "")
+            list(APPEND MOCK_GENERATED_HEADERS "${MOCK_GEN_DIR}/mocks/Mock${file_without_dir}.h")
+            list(APPEND MOCK_GENERATED_SRCS "${MOCK_GEN_DIR}/mocks/Mock${file_without_dir}.c")
+        else()
+            list(APPEND MOCK_GENERATED_HEADERS "${MOCK_GEN_DIR}/mocks/${__MOCK_SUBDIR}/Mock${file_without_dir}.h")
+            list(APPEND MOCK_GENERATED_SRCS "${MOCK_GEN_DIR}/mocks/${__MOCK_SUBDIR}/Mock${file_without_dir}.c")
+        endif()
+    endforeach()
+
+    file(MAKE_DIRECTORY "${MOCK_GEN_DIR}/mocks")
+
+    idf_component_register(SRCS "${MOCK_GENERATED_SRCS}"
+                        INCLUDE_DIRS ${__INCLUDE_DIRS}
+                        REQUIRES ${__REQUIRES})
+
+    set(COMPONENT_LIB ${COMPONENT_LIB} PARENT_SCOPE)
+    add_custom_command(
+        OUTPUT ruby_found SYMBOLIC
+        COMMAND "ruby" "-v"
+        COMMENT "Try to find ruby. If this fails, you need to install ruby"
+    )
+
+    add_custom_command(
+        OUTPUT ${MOCK_GENERATED_SRCS} ${MOCK_GENERATED_HEADERS}
+        DEPENDS ruby_found
+        COMMAND ${CMAKE_COMMAND} -E env "UNITY_DIR=${IDF_PATH}/components/unity/unity"
+            ruby
+            ${CMOCK_DIR}/lib/cmock.rb
+            -o${CMAKE_CURRENT_SOURCE_DIR}/mock/mock_config.yaml
+            ${__MOCK_HEADER_FILES}
+    )
 endfunction()
 
 #[[api
@@ -609,7 +748,10 @@ function(idf_component_register)
             target_include_directories("${COMPONENT_TARGET}" PRIVATE "${include_dir}")
         endforeach()
 
-        set_target_properties(${COMPONENT_TARGET} PROPERTIES OUTPUT_NAME ${COMPONENT_NAME} LINKER_LANGUAGE C)
+        __idf_component_get_linker_language(component_linker_language)
+        set_target_properties(${COMPONENT_TARGET} PROPERTIES
+                              OUTPUT_NAME ${COMPONENT_NAME}
+                              LINKER_LANGUAGE ${component_linker_language})
 
         set(component_type LIBRARY)
 
@@ -642,6 +784,47 @@ function(idf_component_register)
         target_link_libraries("${COMPONENT_TARGET}" PRIVATE "${req_interface}")
     endforeach()
 
+    # Special treatment for 'main' component is only applied when the project
+    # was entered through the Build system v1 compatibility shim. Native
+    # Build system v2 projects with no REQUIRES on main should remain the
+    # author-declared dependency set rooted at main; forcing every discovered
+    # component into main's link graph in that case contradicts the Build
+    # system v2 contract that the dependency graph is what the author writes.
+    idf_build_get_property(v1_compat_shim __V1_COMPAT_SHIM)
+    if(v1_compat_shim AND COMPONENT_NAME STREQUAL "main"
+       AND NOT ARG_REQUIRES AND NOT ARG_PRIV_REQUIRES)
+        idf_component_get_property(component_source "${COMPONENT_NAME}" COMPONENT_SOURCE)
+        if(component_source STREQUAL "project_components")
+            idf_build_get_property(shim_components __SHIM_COMPONENTS)
+            if(shim_components)
+                # The project explicitly restricted COMPONENTS=<list>. Honor
+                # the restriction literally — do not pull every discovered
+                # component into main's link graph, even when the user's list
+                # collapses to just "main". Apps that need additional
+                # components must enumerate them in COMPONENTS or main's
+                # REQUIRES.
+                set(all_components ${shim_components})
+            else()
+                idf_build_get_property(all_components COMPONENTS_DISCOVERED)
+            endif()
+            list(REMOVE_ITEM all_components "main")
+            # Common components are already linked via link_libraries()
+            idf_build_get_property(common_components __COMPONENT_REQUIRES_COMMON)
+            if(common_components)
+                list(REMOVE_ITEM all_components ${common_components})
+            endif()
+            foreach(req IN LISTS all_components)
+                idf_component_include("${req}")
+                idf_component_get_property(req_interface "${req}" COMPONENT_INTERFACE)
+                if(${component_type} STREQUAL LIBRARY)
+                    target_link_libraries("${COMPONENT_TARGET}" PUBLIC "${req_interface}")
+                else()
+                    target_link_libraries("${COMPONENT_TARGET}" INTERFACE "${req_interface}")
+                endif()
+            endforeach()
+        endif()
+    endif()
+
     # Signal to idf_component_include that this component was included via the
     # backward compatible idf_component_register function.
     idf_component_set_property("${COMPONENT_NAME}" COMPONENT_FORMAT CMAKEV1)
@@ -661,10 +844,40 @@ function(idf_component_register)
     # Embedded files are managed in the idf_component_include function.
     idf_component_set_property("${COMPONENT_NAME}" EMBED_FILES "${ARG_EMBED_FILES}")
     idf_component_set_property("${COMPONENT_NAME}" EMBED_TXTFILES "${ARG_EMBED_TXTFILES}")
-    idf_component_set_property("${COMPONENT_NAME}" REQUIRES "${ARG_REQUIRES}")
-    idf_component_set_property("${COMPONENT_NAME}" PRIV_REQUIRES "${ARG_PRIV_REQUIRES}")
+    # The component manager's dependency injection runs before this component's
+    # CMakeLists.txt is evaluated (see idf_component_include() in
+    # component.cmake), and writes the manifest-derived names into both the
+    # MANAGED_* properties and the regular REQUIRES / PRIV_REQUIRES properties.
+    # The latter must not be overwritten by the component's own register call,
+    # else the manifest-derived transitive deps disappear from the build. Union
+    # the two so the persisted property is what the component author wrote
+    # PLUS what the manifest contributed.
+    idf_component_get_property(__existing_requires "${COMPONENT_NAME}" REQUIRES)
+    idf_component_get_property(__existing_priv_requires "${COMPONENT_NAME}" PRIV_REQUIRES)
+    set(__merged_requires "${ARG_REQUIRES}")
+    set(__merged_priv_requires "${ARG_PRIV_REQUIRES}")
+    foreach(__r IN LISTS __existing_requires)
+        if(__r AND NOT __r IN_LIST __merged_requires)
+            list(APPEND __merged_requires "${__r}")
+        endif()
+    endforeach()
+    foreach(__r IN LISTS __existing_priv_requires)
+        if(__r AND NOT __r IN_LIST __merged_priv_requires)
+            list(APPEND __merged_priv_requires "${__r}")
+        endif()
+    endforeach()
+    idf_component_set_property("${COMPONENT_NAME}" REQUIRES "${__merged_requires}")
+    idf_component_set_property("${COMPONENT_NAME}" PRIV_REQUIRES "${__merged_priv_requires}")
     idf_component_set_property("${COMPONENT_NAME}" REQUIRED_IDF_TARGETS "${ARG_REQUIRED_IDF_TARGETS}")
     idf_component_set_property("${COMPONENT_NAME}" COMPONENT_TYPE "${component_type}")
+    idf_component_set_property("${COMPONENT_NAME}" COMPONENT_REAL_TARGET "${COMPONENT_TARGET}")
+    # Optional requirements need to know whether the backward-compatible
+    # component target is STATIC or INTERFACE before deciding how to link it.
+    if("${component_type}" STREQUAL "CONFIG_ONLY")
+        idf_component_set_property("${COMPONENT_NAME}" COMPONENT_REAL_TARGET_TYPE INTERFACE_LIBRARY)
+    else()
+        idf_component_set_property("${COMPONENT_NAME}" COMPONENT_REAL_TARGET_TYPE STATIC_LIBRARY)
+    endif()
 endfunction()
 
 #[[
@@ -732,6 +945,7 @@ endmacro()
         Source of the component. One of:
 
         * ``idf_components``
+        * ``idf_managed_components``
         * ``project_managed_components``
         * ``project_extra_components``
         * ``project_components``
@@ -775,4 +989,28 @@ function(idf_build_component component_dir)
     __init_component(DIRECTORY "${component_dir}"
                      PREFIX "${component_prefix}"
                      SOURCE "${component_source}")
+endfunction()
+
+#[[
+    __import_sdkconfig_as_build_properties()
+
+    Mirror every CONFIG_* symbol from the generated sdkconfig.cmake onto the
+    build-properties target so that the
+    `idf_build_get_property(var CONFIG_FOO)` idiom keeps working under the
+    compatibility shim. Called from kconfig.cmake::__generate_sdkconfig after
+    each kconfgen run.
+#]]
+function(__import_sdkconfig_as_build_properties)
+    idf_build_get_property(sdkconfig_cmake __SDKCONFIG_CMAKE)
+    if(NOT sdkconfig_cmake OR NOT EXISTS "${sdkconfig_cmake}")
+        return()
+    endif()
+    include("${sdkconfig_cmake}")
+    if(NOT DEFINED CONFIGS_LIST)
+        return()
+    endif()
+    idf_build_set_property(__CONFIG_VARIABLES "${CONFIGS_LIST}")
+    foreach(config IN LISTS CONFIGS_LIST)
+        idf_build_set_property("${config}" "${${config}}")
+    endforeach()
 endfunction()

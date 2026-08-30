@@ -153,6 +153,13 @@ config BT_SPP_ENABLED
     help
         This enables the Serial Port Profile
 
+config BT_PAN_ENABLED
+    bool "PAN (Personal Area Networking)"
+    depends on BT_CLASSIC_ENABLED
+    default n
+    help
+        This enables the Personal Area Networking Profile
+
 config BT_L2CAP_ENABLED
     bool "BT L2CAP"
     depends on BT_CLASSIC_ENABLED
@@ -500,6 +507,127 @@ config BT_BLE_SMP_BOND_NVS_FLASH
     help
         This select can save SMP bonding keys to nvs flash
 
+config BT_BLE_SMP_HARDENED_REPAIRING
+    bool "Reject re-pairing that weakens an existing bond"
+    depends on BT_BLE_SMP_ENABLE
+    default y
+    help
+        Controls whether a peer that is already bonded may replace that bond with a
+        weaker one.
+
+        Enabled: when a bond already exists for the peer, a new pairing procedure is
+        refused if it would end up with less MITM protection, without Secure Connections
+        while the stored bond used it, or with a shorter encryption key. The security
+        level announced in a Security Request is also enforced on the pairing that
+        follows it. The link is dropped along with the pairing so that a peer cannot keep
+        retrying with different parameters. The drawback is that a peer which
+        legitimately needs to re-pair at a lower level is refused for good, for instance
+        one whose IO capabilities changed so that Passkey Entry became Just Works. Such a
+        peer has to be unbonded by the application first, using
+        esp_ble_remove_bond_device(). A refusal from this check always keeps the stored
+        bond, even when BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL or
+        BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL is enabled, so a peer cannot
+        erase the baseline by requesting a downgrade.
+
+        Disabled: any peer can replace an existing bond with one at a lower security
+        level, without Secure Connections, or with a shorter encryption key, and no
+        authentication is needed to do so. These are the re-pairing downgrades described
+        by the BLERP paper as V3, V4 and V6. Only choose this if a peer really has to
+        re-pair at a lower level and the application cannot unbond it beforehand.
+
+config BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL
+    bool "Remove the stored bond when pairing fails as Central"
+    depends on BT_BLE_SMP_ENABLE
+    default y
+    help
+        Controls whether the bonding keys kept in NVS are erased when a BLE pairing
+        procedure fails while the local device is the Central (link-layer master) on
+        that connection. A failed encryption attempt is reported through the same
+        authentication complete path and counts as a failure here. This is the role
+        typically used by GATT Client applications.
+
+        Enabled: historical Central behaviour and the default, so applications that rely
+        on a failed pairing implicitly unbonding the peer keep working after an upgrade.
+        It also means every peer able to make pairing fail can drop the bond without any
+        authentication, by simply sending a Pairing Failed, by letting the 30 second SMP
+        timeout expire, or by disconnecting in the middle of the procedure. As Central,
+        that implicit unbond is also what recovers when the peer deleted the bond on its
+        side and answers LL_ENC_REQ with KEY_MISSING.
+
+        Disabled: the bond survives a failed pairing in the Central role and unbonding
+        becomes an explicit application decision through esp_ble_remove_bond_device().
+        A stale LTK then makes every following connection fail to encrypt until the
+        application unbonds from the ESP_GAP_BLE_AUTH_CMPL_EVT failure callback,
+        preferably after a few attempts rather than on the first one.
+
+        A downgrade refused by BT_BLE_SMP_HARDENED_REPAIRING never erases the bond,
+        regardless of this option.
+
+config BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL
+    bool "Remove the stored bond when pairing fails as Peripheral"
+    depends on BT_BLE_SMP_ENABLE
+    default n
+    help
+        Controls whether the bonding keys kept in NVS are erased when a BLE pairing
+        procedure fails while the local device is the Peripheral (link-layer slave) on
+        that connection. A failed encryption attempt is reported through the same
+        authentication complete path and counts as a failure here. This is the role
+        typically used by GATT Server applications.
+
+        Disabled (default): the bond survives a failed pairing in the Peripheral role.
+        Unbonding is an explicit application decision through esp_ble_remove_bond_device().
+        This avoids losing the bond when the user walks away mid-pairing, when the SMP
+        timeout expires, or when a peer sends Pairing Failed. Legitimate re-pairing from
+        a Central that deleted its own bond is still possible through a new Pairing
+        Request, as long as BT_BLE_SMP_HARDENED_REPAIRING does not refuse a downgrade.
+
+        Enabled: restores the historical behaviour where any pairing failure as
+        Peripheral erases the NVS bond. Prefer this only if the application depends on
+        that implicit unbond and cannot call esp_ble_remove_bond_device() itself.
+
+        A downgrade refused by BT_BLE_SMP_HARDENED_REPAIRING never erases the bond,
+        regardless of this option.
+
+config BT_BLE_SMP_UNBOND_ON_KEY_MISSING
+    bool "Drop the local LE keys when the peer reports it has no key"
+    depends on BT_BLE_SMP_ENABLE
+    default n
+    help
+        As Central, an encryption attempt using the stored LTK fails with "PIN or Key
+        Missing" when the peer has deleted the bond on its side. This option controls how
+        the stack reacts to that specific error.
+
+        Enabled: the local LE keys are discarded and the link is kept up, so the
+        application can re-pair straight away and recovers without user interaction. The
+        problem is that an impersonating device can report the same error, so a peer can
+        strip the stored security level without any authentication and then re-pair at a
+        weaker level. That is exactly the re-pairing downgrade the BLERP paper describes,
+        which is why this is not the default.
+
+        Disabled: the link is dropped and the keys are kept, so no peer can drop the bond
+        by refusing to encrypt. The problem is that the same stale LTK is then used again
+        on every following connection and encryption keeps failing, which never recovers
+        on its own. The application has to call esp_ble_remove_bond_device() from the
+        ESP_GAP_BLE_AUTH_CMPL_EVT failure callback to get out of it.
+
+config BT_BLE_PERIPH_PSEUDO_ADDR_BOND
+    bool "Peripheral dual local-identity bond isolation (pseudo address)"
+    depends on BT_BLE_SMP_ENABLE && BT_BLE_50_EXTEND_ADV_EN
+    default n
+    help
+        Enable Host-internal pseudo address derivation so that one peer phone
+        connecting through two distinct local identities (e.g. Public and a
+        fixed Static Random advertising set) is treated as two independent
+        peers. Each connection gets its own device record, LTK and NVS bond
+        section keyed by pseudo = f(local_identity, peer). The over-the-air
+        and SMP cryptography keep using the real peer and the real local
+        identity; the pseudo address never leaves the Host.
+
+        This is intended for BLE 5.0 Extended Advertising peripherals that need
+        simultaneous dual-identity connections with isolated bonds. Requires
+        BT_BLE_50_EXTEND_ADV_EN. When disabled (default) the stack behaves
+        exactly as before.
+
 config BT_BLE_RPA_SUPPORTED
     bool "Update RPA to Controller"
     depends on (BT_BLE_SMP_ENABLE && ((BT_CONTROLLER_ENABLED && !SOC_BLE_DEVICE_PRIVACY_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
@@ -562,6 +690,7 @@ endmenu #BT debug option
 config BT_STACK_NO_LOG
     bool "Disable BT debug logs (minimize bin size)"
     depends on BT_BLUEDROID_ENABLED
+    default y if BLE_LOG_ENABLED && !BLE_LOG_HOST_LOG
     default n
     help
         This select can save the rodata code size
@@ -1356,6 +1485,34 @@ config BT_ALLOCATION_FROM_SPIRAM_FIRST
     help
         This select can save the internal RAM if there have the PSRAM
 
+config BT_BLUEDROID_TASK_STACK_IN_EXT_MEM
+    bool "Place BT task stack in external memory"
+    depends on FREERTOS_TASK_CREATE_ALLOW_EXT_MEM && (!IDF_TARGET_ESP32 || SPIRAM_CACHE_WORKAROUND)
+    default n
+    help
+        Common prerequisites for placing Bluedroid host
+        task stacks in PSRAM.
+
+config BT_BLUEDROID_BTU_TASK_STACK_IN_EXT_MEM
+    bool "Place BTU task stack in external memory"
+    depends on BT_BLUEDROID_TASK_STACK_IN_EXT_MEM
+    default n
+    help
+        Allocate BTU_TASK stack from external SPIRAM using static task
+        allocation. TCB remains in internal DRAM.
+
+        BTU does not perform NVS operations directly.
+
+config BT_BLUEDROID_HCI_TASK_STACK_IN_EXT_MEM
+    bool "Place HCI host task stack in external memory"
+    depends on BT_BLUEDROID_TASK_STACK_IN_EXT_MEM
+    default n
+    help
+        Allocate HCI host task (hciT) stack from external SPIRAM using
+        static task allocation. TCB remains in internal DRAM.
+
+        HCI does not perform NVS operations.
+
 config BT_BLE_DYNAMIC_ENV_MEMORY
     bool "Use dynamic memory allocation in BT/BLE stack"
     depends on BT_BLUEDROID_ENABLED
@@ -1612,7 +1769,20 @@ config BT_BLE_FEAT_CHANNEL_SOUNDING
     depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_CHANNEL_SOUNDING_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
     default n
     help
-        Enable BLE channel sounding
+        Enable BLE channel sounding.
+        CS Security Requirements (Core 6.3) is configured separately via
+        BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS.
+
+config BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS
+    bool "Enable BLE CS Security Requirements (Core 6.3)"
+    depends on BT_BLE_FEAT_CHANNEL_SOUNDING && ((BT_CONTROLLER_ENABLED && SOC_BLE_CS_SECURITY_REQUIREMENTS_SUPPORTED) || BT_CONTROLLER_DISABLED) # NOERROR
+    default n
+    help
+        Enable Channel Sounding security requirements HCI commands (Bluetooth Core 6.3).
+        Supports LE CS Set Security Requirements (0x00A7) and
+        LE CS Set Default Security Requirements (0x00A8).
+        Use esp_ble_cs_set_security_requirements() and
+        esp_ble_cs_set_default_security_requirements().
 
 config BT_BLE_FEAT_ADV_MONITOR
     bool "Enable BLE Advertising Monitor (LE Monitor Advertisement)"
@@ -1622,6 +1792,50 @@ config BT_BLE_FEAT_ADV_MONITOR
         Enable LE Monitor Advertisement feature (Bluetooth Core 6.0).
         Allows the host to add devices to a monitor list and receive reports when
         the controller detects advertising from those devices (e.g. RSSI threshold).
+
+config BT_BLE_FEAT_DBAF
+    bool "Enable BLE Decision-Based Advertising Filtering (DBAF)"
+    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_DBAF_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    default n
+    help
+        Enable Decision-Based Advertising Filtering (Bluetooth Core 6.0).
+        Supports LE Set Decision Data and LE Set Decision Instructions HCI commands.
+
+config BT_BLE_FEAT_FRAME_SPACE_UPDATE
+    bool "Enable BLE Frame Space Update"
+    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_FRAME_SPACE_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    default n
+    help
+        Enable Frame Space Update feature (Bluetooth Core 6.0).
+
+config BT_BLE_FEAT_LL_EXT_FEAT
+    bool "Enable BLE LL Extended Feature Set"
+    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_LL_EXT_FEAT_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    default n
+    help
+        Enable LL Extended Feature Set (Bluetooth Core 6.0).
+        Supports LE Read All Local/Remote Supported Features HCI commands.
+
+config BT_BLE_FEAT_SHORTER_CONN_INTERVALS
+    bool "Enable BLE Shorter Connection Intervals (Core 6.2)"
+    depends on BT_BLE_FEAT_CONN_SUBRATING && (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_SHORTER_CONN_INTERVALS_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    default n
+    help
+        Enable Shorter Connection Intervals feature (Bluetooth Core 6.2).
+        Requires Connection Subrating (Core 5.3) per [Vol 6] Part B, Section 4.6.50.
+        Supports LE Connection Rate Request, LE Set Default Rate Parameters,
+        LE Read Minimum Supported Connection Interval commands and LE Connection Rate Change event.
+        Connection intervals use 125 us units (minimum 375 us). Use esp_ble_gap_connection_rate_request(),
+        esp_ble_gap_set_default_rate_parameters(), esp_ble_gap_read_min_supported_connection_interval()
+        and ESP_BLE_GAP_CONN_RATE_* conversion macros in esp_gap_ble_api.h.
+
+config BT_BLE_FEAT_LE_UTP
+    bool "Enable BLE Unified Test Protocol (UTP)"
+    depends on (BT_BLE_50_FEATURES_SUPPORTED && ((BT_CONTROLLER_ENABLED && SOC_BLE_LE_UTP_SUPPORTED) || BT_CONTROLLER_DISABLED)) # NOERROR
+    default n
+    help
+        Enable LE Unified Test Protocol (Bluetooth Core 6.2).
+        Supports LE Enable UTP OTA Mode, LE UTP Send commands and LE UTP Receive event.
 
 menuconfig BT_BLE_42_FEATURES_SUPPORTED
     bool "Enable BLE 4.2 features(please disable BLE 5.0 if enable BLE 4.2)"
@@ -1667,6 +1881,87 @@ config BT_BLE_HIGH_DUTY_ADV_INTERVAL
     default n
     help
         This enable BLE high duty advertising interval feature
+
+menu "Bluedroid L2CAP CoC"
+    # LE CoC client code is compiled only with GATTC and server code only with
+    # GATTS (see BLE_L2CAP_COC_CLIENT/SERVER_INCLUDED in bt_target.h). Without
+    # either, enabling CoC would silently compile out entirely, so require at
+    # least one GATT role to be enabled.
+    depends on BT_BLE_ENABLED && (BT_GATTC_ENABLE || BT_GATTS_ENABLE)
+
+    config BT_BLE_L2CAP_COC_ENABLED
+        bool "Enable BLE L2CAP Connection Oriented Channels"
+        default n
+        help
+            Enable LE Credit Based Flow Control mode L2CAP CoC in Bluedroid stack.
+            Independent of Classic Bluetooth L2CAP; does not affect esp_bt_l2cap_* APIs.
+
+    config BT_BLE_L2CAP_COC_MAX_CHAN
+        int "Maximum LE CoC channels"
+        depends on BT_BLE_L2CAP_COC_ENABLED
+        range 1 15
+        default 5
+
+    config BT_BLE_L2CAP_COC_MPS
+        int "Default MPS (L2CAP fragment size)"
+        depends on BT_BLE_L2CAP_COC_ENABLED
+        range 23 65533 if !BT_BLE_L2CAP_ENHANCED_COC
+        range 64 65533 if BT_BLE_L2CAP_ENHANCED_COC
+        default 247
+        help
+            Default Maximum PDU Payload Size for LE CoC channels. Legacy LE Credit
+            Based Flow Control allows 23–65533 octets (section 4.22). Enhanced
+            Credit Based Flow Control (ECFC/EATT) requires 64–65533 (section 4.25).
+            When ECFC is enabled the minimum is raised to 64 automatically.
+
+    config BT_BLE_L2CAP_COC_INIT_CREDITS
+        int "Initial RX credit window (K-frames per channel)"
+        depends on BT_BLE_L2CAP_COC_ENABLED
+        range 1 64
+        default 24
+        help
+            Number of LE CoC RX credits granted to the peer when a channel opens.
+            One credit allows the peer to send one K-frame. A larger window can
+            raise sustained throughput but increases how many in-flight frames
+            the peer may send before waiting for more credits (higher RX memory
+            pressure). A smaller window reduces that pressure but can lower
+            throughput. Manual credit mode can stall if a single SDU needs more
+            K-frames than this window; prefer automatic credit mode or a larger
+            MPS when using large MTUs.
+
+    config BT_BLE_L2CAP_ENHANCED_COC
+        bool "Enable Enhanced Credit Based Flow Control (ECFC)"
+        depends on BT_BLE_L2CAP_COC_ENABLED
+        default n
+        help
+            Enable LE Enhanced CoC (L2CAP signaling 0x17/0x18) for multi-channel
+            establishment. Required for EATT multi-bearer support.
+
+    config BT_BLE_EATT_ENABLE
+        bool "Enable Enhanced ATT (EATT)"
+        depends on BT_BLE_L2CAP_COC_ENABLED && BT_BLE_L2CAP_ENHANCED_COC
+        default n
+        help
+            Enable EATT bearers over LE Enhanced CoC (PSM 0x0027).
+            GATT operations may use multiple parallel bearers after link encryption.
+
+    config BT_BLE_EATT_CHAN_NUM
+        int "Number of EATT bearers per connection"
+        depends on BT_BLE_EATT_ENABLE
+        range 1 BT_BLE_L2CAP_COC_MAX_CHAN
+        default 3
+        help
+            Number of parallel EATT bearers established per connection. Must not
+            exceed the maximum LE CoC channels, since EATT bearers are LE CoC
+            channels; the range is capped by BT_BLE_L2CAP_COC_MAX_CHAN.
+
+    config BT_BLE_EATT_MTU
+        int "EATT bearer MTU"
+        depends on BT_BLE_EATT_ENABLE
+        range 64 517
+        default 247
+
+endmenu
 
 config BT_ABORT_WHEN_ALLOCATION_FAILS
     bool "Abort when memory allocation fails in BT/BLE stack"

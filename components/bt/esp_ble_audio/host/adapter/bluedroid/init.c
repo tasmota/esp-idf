@@ -30,13 +30,27 @@ LOG_MODULE_REGISTER(LEA_BINIT, CONFIG_BT_ISO_LOG_LEVEL);
 #define CSIS_SVC_COUNT      0
 #endif /* CONFIG_BT_CSIP_SET_MEMBER */
 
+#if CONFIG_BT_TBS
+#define TBS_BEARER_SVC_COUNT    CONFIG_BT_TBS_BEARER_COUNT
+#else /* CONFIG_BT_TBS */
+#define TBS_BEARER_SVC_COUNT    0
+#endif /* CONFIG_BT_TBS */
+
+#if CONFIG_BT_MCS
+#define MCS_INSTANCE_SVC_COUNT  CONFIG_BT_MCS_INSTANCE_COUNT
+#else /* CONFIG_BT_MCS */
+#define MCS_INSTANCE_SVC_COUNT  0
+#endif /* CONFIG_BT_MCS */
+
 /* 3 is reserved for other GATT services */
 #define TOTAL_SERVICE_COUNT     (3 + \
                                  (IS_ENABLED(CONFIG_BT_ASCS) ? 1 : 0) + \
                                  (IS_ENABLED(CONFIG_BT_PACS) ? 1 : 0) + \
                                  (IS_ENABLED(CONFIG_BT_BAP_SCAN_DELEGATOR) ? 1 : 0) + \
                                  (IS_ENABLED(CONFIG_BT_TMAP) ? 1 : 0) + \
+                                 (IS_ENABLED(CONFIG_BT_GMAP) ? 1 : 0) + \
                                  (IS_ENABLED(CONFIG_BT_MCS) ? 1 : 0) + \
+                                 MCS_INSTANCE_SVC_COUNT + \
                                  (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER) ? CSIS_SVC_COUNT : 0) + \
                                  (IS_ENABLED(CONFIG_BT_CAP_ACCEPTOR) ? 1 : 0) + \
                                  (IS_ENABLED(CONFIG_BT_VCP_VOL_REND) ? 1 : 0) + \
@@ -44,6 +58,7 @@ LOG_MODULE_REGISTER(LEA_BINIT, CONFIG_BT_ISO_LOG_LEVEL);
                                  CONFIG_BT_VOCS_MAX_INSTANCE_COUNT + \
                                  CONFIG_BT_AICS_MAX_INSTANCE_COUNT + \
                                  (IS_ENABLED(CONFIG_BT_TBS) ? 1 : 0) + \
+                                 TBS_BEARER_SVC_COUNT + \
                                  (IS_ENABLED(CONFIG_BT_HAS) ? 1 : 0))
 
 _Static_assert(TOTAL_SERVICE_COUNT <= CONFIG_BT_GATT_MAX_SR_PROFILES, "Too small BT_GATT_MAX_SR_PROFILES");
@@ -55,6 +70,19 @@ int bt_le_bluedroid_audio_init(void)
     BTA_GATT_SetLocalMTU(BLE_AUDIO_ATT_MTU_MIN);
 
     bt_le_bluedroid_audio_gatts_init();
+
+#if CONFIG_BT_CSIP_SET_MEMBER
+    bt_le_bluedroid_csis_state_reset();
+#endif /* CONFIG_BT_CSIP_SET_MEMBER */
+#if CONFIG_BT_VCP_VOL_REND
+    bt_le_bluedroid_vcs_state_reset();
+#endif /* CONFIG_BT_VCP_VOL_REND */
+#if CONFIG_BT_MICP_MIC_DEV
+    bt_le_bluedroid_mics_state_reset();
+#endif /* CONFIG_BT_MICP_MIC_DEV */
+#if CONFIG_BT_MCS
+    bt_le_bluedroid_mcs_state_reset();
+#endif /* CONFIG_BT_MCS */
 
 #if CONFIG_BT_PACS
     err = bt_le_bluedroid_pacs_init();
@@ -90,6 +118,11 @@ int bt_le_bluedroid_audio_init(void)
     if (err) {
         return err;
     }
+
+    err = bt_le_bluedroid_tbs_init();
+    if (err) {
+        return err;
+    }
 #endif /* CONFIG_BT_TBS */
 
 #if CONFIG_BT_HAS
@@ -101,6 +134,16 @@ int bt_le_bluedroid_audio_init(void)
 #endif /* (BLE_AUDIO_SVC_DEFERRED_ADD == 0) */
 
     return err;
+}
+
+void bt_le_bluedroid_audio_deinit(void)
+{
+    LOG_DBG("[B]AudioDeinit");
+
+    /* The services are removed by the BTA_GATTS_AppDeregister() in the ISO
+     * layer's gatt deinit - GATT_Deregister() stops every service the app
+     * owns - so only this layer's own hook is dropped here. */
+    bt_le_bluedroid_audio_gatts_deinit();
 }
 
 #if CONFIG_BT_CSIP_SET_MEMBER
@@ -156,11 +199,12 @@ int bt_le_bluedroid_media_proxy_pl_init(void)
 {
     int err;
 
-#if CONFIG_BT_MPL_OBJECTS
-
-#endif /* CONFIG_BT_MPL_OBJECTS */
-
     err = bt_le_bluedroid_gmcs_init();
+    if (err) {
+        return err;
+    }
+
+    err = bt_le_bluedroid_mcs_init();
     if (err) {
         return err;
     }
@@ -289,6 +333,20 @@ int bt_le_bluedroid_audio_start(void *info)
     }
 #endif /* CONFIG_BT_TMAP */
 
+#if CONFIG_BT_GMAP
+    /* GMAS attrs are role-dependent (filled by esp_ble_audio_gmap_register, after
+     * audio_init), so create it here in the start phase where it's populated. */
+    err = bt_le_bluedroid_gmas_init();
+    if (err) {
+        return err;
+    }
+
+    err = bt_le_bluedroid_gmas_start();
+    if (err) {
+        return err;
+    }
+#endif /* CONFIG_BT_GMAP */
+
 #if CONFIG_BT_CSIP_SET_MEMBER
     err = bt_le_bluedroid_csis_start();
     if (err) {
@@ -322,10 +380,20 @@ int bt_le_bluedroid_audio_start(void *info)
     if (err) {
         return err;
     }
+
+    err = bt_le_bluedroid_mcs_start();
+    if (err) {
+        return err;
+    }
 #endif /* CONFIG_BT_MCS */
 
 #if CONFIG_BT_TBS
     err = bt_le_bluedroid_gtbs_start();
+    if (err) {
+        return err;
+    }
+
+    err = bt_le_bluedroid_tbs_start();
     if (err) {
         return err;
     }

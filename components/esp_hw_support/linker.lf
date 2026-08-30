@@ -13,12 +13,16 @@ entries:
     cpu: esp_cpu_compare_and_set (noflash)
     esp_memory_utils (noflash)
     clk_utils (noflash)
-    # TODO: PM-630
-    if IDF_TARGET_ESP32S31 != y:
-        esp_clk_tree: esp_clk_tree_enable_src (noflash)
-        esp_clk_tree: esp_clk_tree_enable_power (noflash)
-        esp_clk_tree: esp_clk_tree_is_power_on (noflash)
+    esp_clk_tree: esp_clk_tree_enable_src (noflash)
     if RTC_CLK_FUNC_IN_IRAM = y:
+        esp_clk_tree:esp_clk_tree_enable_power (noflash)
+        esp_clk_tree:esp_clk_tree_port_is_power_on (noflash)
+        esp_clk_tree_common:esp_clk_tree_is_power_on (noflash)
+        if SOC_CLK_MPLL_SUPPORTED = y:
+            esp_clk_tree_common:esp_clk_tree_mpll_release (noflash)
+        if SOC_CLK_APLL_SUPPORTED = y:
+            esp_clk_tree_common:esp_clk_tree_apll_acquire (noflash)
+            esp_clk_tree_common:esp_clk_tree_apll_release (noflash)
         rtc_clk (noflash)
     if IDF_TARGET_ESP32 = y:
         rtc_clk:rtc_clk_cpu_freq_to_pll_mhz (noflash)
@@ -44,8 +48,10 @@ entries:
             pmu_param (noflash)
         if SOC_LIGHT_SLEEP_SUPPORTED = y:
             pmu_sleep (noflash)
-            if SOC_PM_SLEEP_CLK_ICG_USE_REGDMA = y && PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP != y:
+            if PM_SLEEP_CLK_ICG_ENABLE = y && PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP != y:
                 pmu_sleep_clock_icg:pmu_sleep_clock_icg_config (noflash)
+            if IDF_TARGET_ESP32H4 = y && BT_LE_MODEM_STATE_ENABLED = y:
+                pmu_sleep_power:pmu_sleep_power_analog_wait_config (noflash)
             sleep_mspi (noflash)
             if PM_SLP_IRAM_OPT = y && IDF_TARGET_ESP32S31 != y:
                 pmu_param:get_act_lp_dbias (noflash)

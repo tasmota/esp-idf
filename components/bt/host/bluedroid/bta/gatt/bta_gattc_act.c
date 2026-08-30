@@ -175,6 +175,7 @@ void bta_gattc_disable(tBTA_GATTC_CB *p_cb)
     if (p_cb->state != BTA_GATTC_STATE_DISABLING) {
         p_cb->state = BTA_GATTC_STATE_DISABLED;
         memset(p_cb, 0, sizeof(tBTA_GATTC_CB));
+        bta_sys_deregister(BTA_ID_GATTC);
     }
 }
 
@@ -824,7 +825,8 @@ void bta_gattc_conncback(tBTA_GATTC_RCB *p_rcb, tBTA_GATTC_DATA *p_data)
         bta_gattc_send_connect_cback(p_rcb,
                                      p_data->int_conn.remote_bda,
                                      p_data->int_conn.hdr.layer_specific, p_data->int_conn.conn_params, p_data->int_conn.role,
-                                     p_data->int_conn.ble_addr_type, p_data->int_conn.conn_handle);
+                                     p_data->int_conn.ble_addr_type, p_data->int_conn.conn_handle,
+                                     p_data->int_conn.adv_handle, p_data->int_conn.sync_handle);
 
     }
 }
@@ -1153,7 +1155,9 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB *p_clcb, tBTA_GATTC_DATA *p_data)
     }
 
     if (p_clcb->auto_update == BTA_GATTC_DISC_WAITING) {
-        /* start discovery again */
+        /* Service change arrived during discovery; restart even if p_q_cmd is set.
+         * Mirrors bta_gattc_op_cmpl(). */
+        p_clcb->auto_update = BTA_GATTC_REQ_WAITING;
         bta_gattc_sm_execute(p_clcb, BTA_GATTC_INT_DISCOVER_EVT, NULL);
     }
     /* get any queued command to proceed */
@@ -1841,6 +1845,7 @@ void bta_gattc_deregister_cmpl(tBTA_GATTC_RCB *p_clreg)
 
     if (bta_gattc_num_reg_app() == 0 && p_cb->state == BTA_GATTC_STATE_DISABLING) {
         p_cb->state = BTA_GATTC_STATE_DISABLED;
+        bta_sys_deregister(BTA_ID_GATTC);
     }
 }
 
@@ -1881,9 +1886,13 @@ static void bta_gattc_conn_cback(tGATT_IF gattc_if, BD_ADDR bda, UINT16 conn_id,
                 p_buf->int_conn.ble_addr_type = p_lcb->ble_addr_type;
                 #endif
                 p_buf->int_conn.conn_handle = p_lcb->handle;
+                l2cu_read_pawr_conn_handles(p_lcb, &p_buf->int_conn.adv_handle,
+                                            &p_buf->int_conn.sync_handle);
 
             } else {
                 APPL_TRACE_WARNING("gattc_conn_cb: conn params not found");
+                l2cu_read_pawr_conn_handles(NULL, &p_buf->int_conn.adv_handle,
+                                            &p_buf->int_conn.sync_handle);
             }
         }
         p_buf->int_conn.hdr.layer_specific   = conn_id;

@@ -8,6 +8,7 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_macros.h"
 #include "esp_fault.h"
 
 #include "hal/mmu_types.h"
@@ -145,6 +146,15 @@ void _ss_esprv_int_set_vectored(int rv_int_num, bool vectored)
 
 /* ---------------------------------------------- RTC_WDT ------------------------------------------------- */
 
+static bool is_wdt_dev_valid(const void *dev)
+{
+    return (dev == (const void *)&TIMERG0)
+#if TIMG_LL_GET(INST_NUM) >= 2
+           || (dev == (const void *)&TIMERG1)
+#endif
+           || (dev == (const void *)RWDT_DEV_GET());
+}
+
 void _ss_wdt_hal_init(wdt_hal_context_t *hal, wdt_inst_t wdt_inst, uint32_t prescaler, bool enable_intr)
 {
     bool valid_addr = esp_tee_buf_in_ree(hal, sizeof(wdt_hal_context_t));
@@ -159,7 +169,8 @@ void _ss_wdt_hal_init(wdt_hal_context_t *hal, wdt_inst_t wdt_inst, uint32_t pres
 
 void _ss_wdt_hal_deinit(wdt_hal_context_t *hal)
 {
-    bool valid_addr = esp_tee_buf_in_ree(hal, sizeof(wdt_hal_context_t));
+    bool valid_addr = (esp_tee_buf_in_ree(hal, sizeof(wdt_hal_context_t)) &&
+                       is_wdt_dev_valid(hal->mwdt_dev));
 
     if (!valid_addr) {
         return;
@@ -171,69 +182,79 @@ void _ss_wdt_hal_deinit(wdt_hal_context_t *hal)
 
 /* ---------------------------------------------- Secure Storage ------------------------------------------------- */
 
+/* NOTE: The key-name pointers here (cfg->id/ctx->key_id) are REE-supplied, NULL-terminated
+ * NVS key names used read-only for key lookup (NVS compares them with strncmp bounded to
+ * NVS_KEY_NAME_MAX_SIZE-1) — never written through, never used as a register base.
+ * Pointing one at TEE memory yields at most a load-fault DoS or a useless presence oracle,
+ * so they are left unchecked. Argument checks cost code size and add latency to every
+ * service call, so we keep only the ones that close a real REE->TEE read/write/control-flow gap.
+ * The buffers alongside these ARE validated, since the TEE reads/writes them.
+ */
 esp_err_t _ss_esp_tee_sec_storage_ecdsa_sign(const esp_tee_sec_storage_key_cfg_t *cfg, const uint8_t *hash, size_t hlen, esp_tee_sec_storage_ecdsa_sign_t *out_sign)
 {
-    bool valid_addr = (esp_tee_buf_in_ree(cfg, sizeof(esp_tee_sec_storage_key_cfg_t)) &&
-                       esp_tee_buf_in_ree(hash, hlen) &&
-                       esp_tee_buf_in_ree(out_sign, sizeof(esp_tee_sec_storage_ecdsa_sign_t)));
-
-    if (!valid_addr) {
+    bool valid_arg = (esp_tee_buf_in_ree(cfg, sizeof(esp_tee_sec_storage_key_cfg_t)) &&
+                      esp_tee_buf_in_ree(hash, hlen) &&
+                      esp_tee_buf_in_ree(out_sign, sizeof(esp_tee_sec_storage_ecdsa_sign_t)) &&
+                      !esp_tee_sec_storage_is_key_tee_owned(cfg->id));
+    if (!valid_arg) {
         return ESP_ERR_INVALID_ARG;
     }
-    ESP_FAULT_ASSERT(valid_addr);
+    ESP_FAULT_ASSERT(valid_arg);
 
     return esp_tee_sec_storage_ecdsa_sign(cfg, hash, hlen, out_sign);
 }
 
 esp_err_t _ss_esp_tee_sec_storage_ecdsa_get_pubkey(const esp_tee_sec_storage_key_cfg_t *cfg, esp_tee_sec_storage_ecdsa_pubkey_t *out_pubkey)
 {
-    bool valid_addr = (esp_tee_buf_in_ree(cfg, sizeof(esp_tee_sec_storage_key_cfg_t)) &&
-                       esp_tee_buf_in_ree(out_pubkey, sizeof(esp_tee_sec_storage_ecdsa_pubkey_t)));
-
-    if (!valid_addr) {
+    bool valid_arg = (esp_tee_buf_in_ree(cfg, sizeof(esp_tee_sec_storage_key_cfg_t)) &&
+                      esp_tee_buf_in_ree(out_pubkey, sizeof(esp_tee_sec_storage_ecdsa_pubkey_t)) &&
+                      !esp_tee_sec_storage_is_key_tee_owned(cfg->id));
+    if (!valid_arg) {
         return ESP_ERR_INVALID_ARG;
     }
-    ESP_FAULT_ASSERT(valid_addr);
+    ESP_FAULT_ASSERT(valid_arg);
 
     return esp_tee_sec_storage_ecdsa_get_pubkey(cfg, out_pubkey);
 }
 
 esp_err_t _ss_esp_tee_sec_storage_aead_encrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, uint8_t *iv, size_t iv_len, uint8_t *tag, size_t tag_len, uint8_t *output)
 {
-    bool valid_addr = (esp_tee_buf_in_ree(ctx, sizeof(esp_tee_sec_storage_aead_ctx_t)) &&
-                       esp_tee_buf_in_ree(ctx->input, ctx->input_len) &&
-                       esp_tee_buf_in_ree(iv, iv_len) &&
-                       esp_tee_buf_in_ree(tag, tag_len) &&
-                       esp_tee_buf_in_ree(output, ctx->input_len));
+    bool valid_arg = (esp_tee_buf_in_ree(ctx, sizeof(esp_tee_sec_storage_aead_ctx_t)) &&
+                      esp_tee_buf_in_ree(ctx->input, ctx->input_len) &&
+                      esp_tee_buf_in_ree(iv, iv_len) &&
+                      esp_tee_buf_in_ree(tag, tag_len) &&
+                      esp_tee_buf_in_ree(output, ctx->input_len) &&
+                      !esp_tee_sec_storage_is_key_tee_owned(ctx->key_id));
 
     if (ctx->aad_len != 0) {
-        valid_addr &= esp_tee_buf_in_ree(ctx->aad, ctx->aad_len);
+        valid_arg &= esp_tee_buf_in_ree(ctx->aad, ctx->aad_len);
     }
 
-    if (!valid_addr) {
+    if (!valid_arg) {
         return ESP_ERR_INVALID_ARG;
     }
-    ESP_FAULT_ASSERT(valid_addr);
+    ESP_FAULT_ASSERT(valid_arg);
 
     return esp_tee_sec_storage_aead_encrypt(ctx, iv, iv_len, tag, tag_len, output);
 }
 
 esp_err_t _ss_esp_tee_sec_storage_aead_decrypt(const esp_tee_sec_storage_aead_ctx_t *ctx, const uint8_t *iv, size_t iv_len, const uint8_t *tag, size_t tag_len, uint8_t *output)
 {
-    bool valid_addr = (esp_tee_buf_in_ree(ctx, sizeof(esp_tee_sec_storage_aead_ctx_t)) &&
-                       esp_tee_buf_in_ree(ctx->input, ctx->input_len) &&
-                       esp_tee_buf_in_ree(iv, iv_len) &&
-                       esp_tee_buf_in_ree(tag, tag_len) &&
-                       esp_tee_buf_in_ree(output, ctx->input_len));
+    bool valid_arg = (esp_tee_buf_in_ree(ctx, sizeof(esp_tee_sec_storage_aead_ctx_t)) &&
+                      esp_tee_buf_in_ree(ctx->input, ctx->input_len) &&
+                      esp_tee_buf_in_ree(iv, iv_len) &&
+                      esp_tee_buf_in_ree(tag, tag_len) &&
+                      esp_tee_buf_in_ree(output, ctx->input_len) &&
+                      !esp_tee_sec_storage_is_key_tee_owned(ctx->key_id));
 
     if (ctx->aad_len != 0) {
-        valid_addr &= esp_tee_buf_in_ree(ctx->aad, ctx->aad_len);
+        valid_arg &= esp_tee_buf_in_ree(ctx->aad, ctx->aad_len);
     }
 
-    if (!valid_addr) {
+    if (!valid_arg) {
         return ESP_ERR_INVALID_ARG;
     }
-    ESP_FAULT_ASSERT(valid_addr);
+    ESP_FAULT_ASSERT(valid_arg);
 
     return esp_tee_sec_storage_aead_decrypt(ctx, iv, iv_len, tag, tag_len, output);
 }
@@ -256,11 +277,32 @@ esp_err_t _ss_esp_tee_sec_storage_ecdsa_sign_pbkdf2(const esp_tee_sec_storage_pb
 
 /* ---------------------------------------------- MMU HAL ------------------------------------------------- */
 
+static bool tee_ree_ext_vaddr_ok(uint32_t mmu_id, uint32_t vaddr, uint32_t len)
+{
+    uint32_t page = mmu_hal_pages_to_bytes(mmu_id, 1);
+    uint32_t map_len = ESP_ALIGN_UP(len, page);
+
+    return (len != 0 && map_len >= len && (vaddr % page == 0) &&
+            mmu_hal_check_valid_ext_vaddr_region(mmu_id, vaddr, map_len,
+                                                 MMU_VADDR_DATA | MMU_VADDR_INSTRUCTION) &&
+            !esp_tee_flash_check_vrange_in_tee_region(vaddr, map_len));
+}
+
+static bool tee_ree_ext_paddr_ok(uint32_t mmu_id, uint32_t paddr, uint32_t len)
+{
+    uint32_t page = mmu_hal_pages_to_bytes(mmu_id, 1);
+    uint32_t map_len = ESP_ALIGN_UP(len, page);
+
+    return (len != 0 && map_len >= len && (paddr % page == 0) &&
+            mmu_hal_check_valid_paddr_region(mmu_id, paddr, map_len) &&
+            !esp_tee_flash_check_prange_in_tee_region(paddr, map_len));
+}
+
 void _ss_mmu_hal_map_region(uint32_t mmu_id, mmu_target_t mem_type, uint32_t vaddr,
                             uint32_t paddr, uint32_t len, uint32_t *out_len)
 {
-    bool valid_addr = (!esp_tee_flash_check_vrange_in_tee_region(vaddr, len) &&
-                       !esp_tee_flash_check_prange_in_tee_region(paddr, len) &&
+    bool valid_addr = (tee_ree_ext_vaddr_ok(mmu_id, vaddr, len) &&
+                       tee_ree_ext_paddr_ok(mmu_id, paddr, len) &&
                        esp_tee_buf_in_ree(out_len, sizeof(uint32_t)));
 
     if (!valid_addr) {
@@ -274,20 +316,21 @@ void _ss_mmu_hal_map_region(uint32_t mmu_id, mmu_target_t mem_type, uint32_t vad
 
 void _ss_mmu_hal_unmap_region(uint32_t mmu_id, uint32_t vaddr, uint32_t len)
 {
-    bool vaddr_chk = esp_tee_flash_check_vrange_in_tee_region(vaddr, len);
+    bool valid_addr = tee_ree_ext_vaddr_ok(mmu_id, vaddr, len);
 
-    if (vaddr_chk) {
+    if (!valid_addr) {
         ESP_LOGD(TAG, "[%s] Illegal flash access at 0x%08x", __func__, vaddr);
         return;
     }
-    ESP_FAULT_ASSERT(!vaddr_chk);
+    ESP_FAULT_ASSERT(valid_addr);
 
     mmu_hal_unmap_region(mmu_id, vaddr, len);
 }
 
 bool _ss_mmu_hal_vaddr_to_paddr(uint32_t mmu_id, uint32_t vaddr, uint32_t *out_paddr, mmu_target_t *out_target)
 {
-    bool valid_addr = (!esp_tee_flash_check_vaddr_in_tee_region(vaddr) &&
+    uint32_t page = mmu_hal_pages_to_bytes(mmu_id, 1);
+    bool valid_addr = (tee_ree_ext_vaddr_ok(mmu_id, ESP_ALIGN_DOWN(vaddr, page), 1) &&
                        esp_tee_buf_in_ree(out_paddr, sizeof(uint32_t)) &&
                        esp_tee_buf_in_ree(out_target, sizeof(mmu_target_t)));
 
@@ -301,7 +344,8 @@ bool _ss_mmu_hal_vaddr_to_paddr(uint32_t mmu_id, uint32_t vaddr, uint32_t *out_p
 
 bool _ss_mmu_hal_paddr_to_vaddr(uint32_t mmu_id, uint32_t paddr, mmu_target_t target, mmu_vaddr_t type, uint32_t *out_vaddr)
 {
-    bool valid_addr = (!esp_tee_flash_check_paddr_in_tee_region(paddr) &&
+    bool valid_addr = (mmu_hal_check_valid_paddr_region(mmu_id, paddr, 1) &&
+                       !esp_tee_flash_check_paddr_in_tee_region(paddr) &&
                        esp_tee_buf_in_ree(out_vaddr, sizeof(uint32_t)));
 
     if (!valid_addr) {
@@ -337,7 +381,10 @@ static bool is_flash_addr_readable(uint32_t paddr, uint32_t len)
 
 static bool is_spi_host_in_ree(spi_flash_host_inst_t *host)
 {
-    return esp_tee_buf_in_ree(host, sizeof(spi_flash_hal_context_t));
+    const spi_flash_hal_context_t *ctx = (const spi_flash_hal_context_t *)host;
+
+    return (esp_tee_buf_in_ree(host, sizeof(spi_flash_hal_context_t)) &&
+            ctx->spi == spi_flash_ll_get_hw(SPI1_HOST));
 }
 
 static bool is_spi_trans_valid(spi_flash_host_inst_t *host, spi_flash_trans_t *trans)

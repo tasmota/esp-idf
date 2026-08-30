@@ -57,6 +57,9 @@ typedef enum {
     BTC_PID_AVRC_CT,
     BTC_PID_AVRC_TG,
     BTC_PID_SPP,
+#if (BTC_PAN_INCLUDED == TRUE)
+    BTC_PID_PAN,
+#endif /* BTC_PAN_INCLUDED */
     BTC_PID_HD,
     BTC_PID_HH,
     BTC_PID_L2CAP,
@@ -120,6 +123,9 @@ typedef enum {
 #if (BLE_FEAT_CTE_EN == TRUE)
     BTC_PID_BLE_CTE,
 #endif // #if (BLE_FEAT_CTE_EN == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+    BTC_PID_BLE_L2CAP,
+#endif // #if (BLE_L2CAP_COC_INCLUDED == TRUE)
     BTC_PID_NUM,
 } btc_pid_t; //btc profile id
 

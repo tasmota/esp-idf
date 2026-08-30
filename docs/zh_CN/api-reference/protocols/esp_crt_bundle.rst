@@ -12,8 +12,8 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 
 生成证书包时，你需选择：
 
-* 来自 Mozilla 的完整根证书包，包含超过 130 份证书。目前提供的证书包更新于 2026 年 5 月 14 日，星期四, 03:12:02 (GMT)。
-* 一组预先筛选的常用根证书。其中仅包含约 38 份证书，但根据 SSL 证书颁发机构统计数据，其绝对使用率约达到 93%，市场覆盖率约达 99%。
+* 来自 Mozilla 的完整根证书包，包含超过 130 份证书。目前提供的证书包更新于 2026 年 8 月 13 日，星期四, 03:12:01 (GMT)。
+* 一组预先筛选的常用根证书。其中仅包含约 35 份证书，但根据 SSL 证书颁发机构统计数据，其绝对使用率约达到 94%，市场覆盖率约达 99%。
 
 此外，还可指定证书文件的路径或包含证书的目录，将其他证书添加到生成的证书包中。
 
@@ -26,9 +26,13 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 
 多数配置可通过 menuconfig 完成。CMake 会根据配置信息生成及嵌入证书包。
 
- * :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE`：自动创建并附加证书包。
- * :ref:`CONFIG_MBEDTLS_DEFAULT_CERTIFICATE_BUNDLE`：决定添加证书列表中的哪些证书。
- * :ref:`CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH`：指定要在证书包中嵌入的其他证书的路径。
+ * :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE`：自动创建并附加证书包。
+ * :menuitem:`CONFIG_MBEDTLS_DEFAULT_CERTIFICATE_BUNDLE`：决定添加证书列表中的哪些证书。
+ * :menuitem:`CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH`：指定要在证书包中嵌入的其他证书的路径。
+
+.. note::
+
+    只有扩展名为 ``.pem`` 的 PEM 编码证书和扩展名为 ``.der`` 的 DER 编码证书会被解析。扩展名必须与文件的编码格式一致，例如保存为 ``.crt`` 的 PEM 编码证书不会被接受。如果 :ref:`CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH` 直接指向其他扩展名的文件，构建将失败；如果证书目录中存在此类文件，该文件会被跳过并打印警告。
 
 要在使用 ESP-TLS 时启用证书包，将函数指针指向证书包的 attach 函数：
 
@@ -75,7 +79,7 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 定期同步
 -------------
 
-证书包会与 Mozilla 的 NSS 根证书商店定期同步。在 ESP-IDF 的次要版本或补丁版本中，为了保证兼容性，会将上游证书包中已弃用的证书添加到弃用列表。如有需要，可以通过 :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEPRECATED_LIST` 将弃用证书加入默认证书包。这些弃用证书将在下一个 ESP-IDF 主要版本中移除。
+证书包会与 Mozilla 的 NSS 根证书商店定期同步。在 ESP-IDF 的次要版本或补丁版本中，为了保证兼容性，会将上游证书包中已弃用的证书添加到弃用列表。如有需要，可以通过 :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEPRECATED_LIST` 将弃用证书加入默认证书包。这些弃用证书将在下一个 ESP-IDF 主要版本中移除。
 
 交叉签名证书支持
 ----------------
@@ -83,7 +87,7 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 概述
 ^^^^
 
-启用配置选项 :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` 时，ESP x509 证书包 API 将支持验证包含交叉签名根证书的证书链。
+启用配置选项 :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` 时，ESP x509 证书包 API 将支持验证包含交叉签名根证书的证书链。
 
 即使证书链中包含交叉签名根证书，验证过程中也能从证书包中智能匹配候选的证书颁发机构 (CA)，从而提高与各类服务器证书的互操作性。
 
@@ -91,7 +95,7 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 
 .. note::
 
-    启用交叉签名证书支持功能后，运行时的堆内存使用量将增加约 700 字节，但由于证书包体积减小，flash 占用会降低。
+    启用交叉签名证书支持功能后，TLS 握手期间的运行时堆内存峰值将增加约 1 KB。该内存为临时分配（证书验证期间构建的候选 CA 证书），握手完成后即被释放，其具体大小与支持的最大 RSA 密钥长度相关。此外，由于证书包体积减小，flash 占用也会降低。
 
 关键点：
 
@@ -102,11 +106,11 @@ ESP x509 证书包 API 提供了一种简便的方法，帮助你安装自定义
 使用方法
 ^^^^^^^^
 
-除了在项目配置中启用 :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` 外，应用无需额外更改。握手过程中，证书包会自动提供候选的 CA。
+除了在项目配置中启用 :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` 外，应用无需额外更改。握手过程中，证书包会自动提供候选的 CA。
 
 .. note::
 
-    如果启用了 :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY`，其内部会使用 ``MBEDTLS_X509_TRUSTED_CERT_CALLBACK``。在此情况下，用户 **不应** 自行提供受信任证书回调函数，因为证书包会自动处理。
+    如果启用了 :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY`，其内部会使用 ``MBEDTLS_X509_TRUSTED_CERT_CALLBACK``。在此情况下，用户 **不应** 自行提供受信任证书回调函数，因为证书包会自动处理。
 
 应用示例
 ---------

@@ -176,7 +176,7 @@ static IRAM_ATTR NOINLINE_ATTR void cs_initialize(esp_flash_t *chip, const esp_f
 
     //To avoid the panic caused by flash data line conflicts during cs line
     //initialization, disable the cache temporarily
-    chip->os_func->start(chip->os_func_data, 0);
+    chip->os_func->start(chip->os_func_data, ESP_FLASH_START_FLAG_NO_READ);
     gpio_hal_input_enable(&gpio_hal, cs_io_num);
     if (cs_use_iomux) {
         gpio_hal_func_sel(&gpio_hal, cs_io_num, spics_func);
@@ -439,17 +439,21 @@ esp_err_t spi_bus_remove_flash_device(esp_flash_t *chip)
         return ESP_ERR_INVALID_ARG;
     }
 
+    spi_bus_lock_dev_handle_t dev_handle = NULL;
+    esp_err_t ret = esp_flash_deinit_os_functions(chip, &dev_handle);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
     // Disable GPSPI clocks before cleanup
     deinit_gpspi_clock(chip);
 
-    spi_bus_lock_dev_handle_t dev_handle = NULL;
-    esp_flash_deinit_os_functions(chip, &dev_handle);
     if (dev_handle) {
         spi_bus_lock_unregister_dev(dev_handle);
     }
     free(chip->host);
     free(chip);
-    return ESP_OK;
+    return ret;
 }
 
 /* The default (ie initial boot) no-OS ROM esp_flash_os_functions_t */
@@ -632,10 +636,8 @@ esp_err_t esp_flash_app_init(void)
 #if CONFIG_SPI_FLASH_ENABLE_COUNTERS
     esp_flash_reset_counters();
 #endif
-#if CONFIG_SPI_FLASH_SHARE_SPI1_BUS
-    err = esp_flash_init_main_bus_lock();
+    err = esp_flash_app_init_os_functions();
     if (err != ESP_OK) return err;
-#endif
     err = esp_flash_app_enable_os_functions(&default_chip);
     return err;
 }

@@ -110,7 +110,7 @@ PCNT 单元和通道分别用 :cpp:type:`pcnt_unit_handle_t` 与 :cpp:type:`pcnt
 
 .. note::
 
-    PCNT 中涉及到的 GPIO 都可以在初始化完 PCNT 后, 通过 :cpp:func:`gpio_pullup_en` 和 :cpp:func:`gpio_pullup_dis` 等函数，重新进行上下拉等配置。
+    PCNT 驱动不会为边沿信号或电平信号对应的 GPIO 配置内部上拉或下拉电阻。如果信号源需要确定的空闲电平，请使用 :cpp:func:`gpio_set_pull_mode`、:cpp:func:`gpio_pullup_en` 和 :cpp:func:`gpio_pullup_dis` 等函数显式配置 GPIO 上下拉模式。
 
 .. _pcnt-setup-channel-actions:
 
@@ -256,8 +256,12 @@ PCNT 单元的滤波器可滤除信号中的短时毛刺，:cpp:type:`pcnt_glitc
 
     PCNT 单元的可以接收来自 GPIO 的清零信号，:cpp:type:`pcnt_clear_signal_config_t` 中列出了清零信号的配置参数：
 
-        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` 用于指定 **清零** 信号对应的 GPIO 编号。默认有效电平为高，使能下拉输入。
-        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` 用于确定信号在输入 PCNT 之前是否需要被翻转，信号翻转由 GPIO 矩阵 (不是 PCNT 单元) 执行。驱动会使能上拉输入，以确保信号在未连接时保持高电平。
+        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` 用于指定 **清零** 信号对应的 GPIO 编号。默认有效电平为高。
+        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` 用于确定信号在输入 PCNT 之前是否需要被翻转，信号翻转由 GPIO 矩阵（不是 PCNT 单元）执行。
+
+    .. note::
+
+        PCNT 驱动不会为清零信号对应的 GPIO 配置内部上拉或下拉电阻。如果清零信号需要确定的空闲电平，请使用 GPIO API 显式配置 GPIO 上下拉模式。
 
     该输入信号的作用与调用 :cpp:func:`pcnt_unit_clear_count` 函数相同，但它不受软件延迟的限制，更适用于需要低延迟的场合。请注意，该信号的翻转频率不能太高。
 
@@ -342,7 +346,7 @@ PCNT 内部的硬件计数器会在计数达到高/低门限的时候自动清�
 电源管理
 ^^^^^^^^^^
 
-当电源管理使能（即 :ref:`CONFIG_PM_ENABLE` 开启）时，系统会在进入 Light-sleep 模式之前调整 APB 的频率，这可能导致 PCNT 毛刺滤波器将有效信号误认为噪声。
+当电源管理使能（即 :menuitem:`CONFIG_PM_ENABLE` 开启）时，系统会在进入 Light-sleep 模式之前调整 APB 的频率，这可能导致 PCNT 毛刺滤波器将有效信号误认为噪声。
 
 为了防止这种情况发生，驱动程序可以获取类型为 :cpp:enumerator:`ESP_PM_APB_FREQ_MAX` 的电源管理锁，以确保 APB 频率保持不变。该锁在通过 :cpp:func:`pcnt_unit_enable` 使能 PCNT 单元时获取，并在通过 :cpp:func:`pcnt_unit_disable` 禁用单元时释放。
 
@@ -353,7 +357,7 @@ PCNT 内部的硬件计数器会在计数达到高/低门限的时候自动清�
 
 当缓存由于写入/擦除 flash 等原因被禁用时，PCNT 中断会默认被延迟。这会导致报警中断无法及时执行，从而无法满足实时性应用的要求。
 
-Konfig 选项 :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` 可以实现以下功能：
+Konfig 选项 :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` 可以实现以下功能：
 
 1. 即使缓存被禁用也可以使能中断服务
 2. 将 ISR 使用的所有函数都放入 IRAM 中 [2]_
@@ -361,7 +365,7 @@ Konfig 选项 :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` 可以实现以下功能：
 
 这样，在缓存被禁用时，中断也可运行，但是这也会增加 IRAM 的消耗。
 
-另外一个 Konfig 选项 :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` 也可以把常用的 IO 控制函数放在 IRAM 中。这样，当缓存禁用时，这些函数仍然可以执行。这些 IO 控制函数如下所示：
+另外一个 Konfig 选项 :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` 也可以把常用的 IO 控制函数放在 IRAM 中。这样，当缓存禁用时，这些函数仍然可以执行。这些 IO 控制函数如下所示：
 
 - :cpp:func:`pcnt_unit_start`
 - :cpp:func:`pcnt_unit_stop`
@@ -389,9 +393,9 @@ Konfig 选项 :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` 可以实现以下功能：
 支持的 Kconfig 选项
 ^^^^^^^^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` 用于确定 PCNT 控制函数的位置（放在 IRAM 还是 flash 中），请参考 :ref:`pcnt-iram-safe` 获取更多信息。
-- :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` 用于控制当缓存禁用时，默认的 ISR 句柄是否可以工作，请参考 :ref:`pcnt-iram-safe` 获取更多信息。
-- :ref:`CONFIG_PCNT_ENABLE_DEBUG_LOG` 用于使能调试日志输出，而这会增大固件二进制文件。
+- :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` 用于确定 PCNT 控制函数的位置（放在 IRAM 还是 flash 中），请参考 :ref:`pcnt-iram-safe` 获取更多信息。
+- :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` 用于控制当缓存禁用时，默认的 ISR 句柄是否可以工作，请参考 :ref:`pcnt-iram-safe` 获取更多信息。
+- :menuitem:`CONFIG_PCNT_ENABLE_DEBUG_LOG` 用于使能调试日志输出，而这会增大固件二进制文件。
 
 应用示例
 ------------

@@ -134,7 +134,7 @@ ESP-IDF 支持多个目标芯片，运行 ``idf.py --list-targets`` 查看当前
 
 每次成功烧录后，构建系统会在构建目录中保存所有已烧录文件（引导加载程序、分区表、应用程序以及其他任何资源）的副本，文件名带有 ``_flashed`` 后缀（例如，``bootloader_flashed.bin``、``partition-table_flashed.bin``）。下次执行 ``idf.py flash`` 命令时会自动使用这些文件，以便快速重新烧录。
 
-无论是否启用 :ref:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` 选项，快速重新烧录都可正常工作。启用该选项可调整应用程序二进制文件的布局，使修改集中在局部区域，从而进一步提升重新烧录的效率，需要重写的 flash 扇区会减少。但该选项可能会增加应用程序二进制文件的大小，不建议用于生产构建。
+无论是否启用 :menuitem:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` 选项，快速重新烧录都可正常工作。启用该选项可调整应用程序二进制文件的布局，使修改集中在局部区域，从而进一步提升重新烧录的效率，需要重写的 flash 扇区会减少。但该选项可能会增加应用程序二进制文件的大小，不建议用于生产构建。
 
 全量烧录
 ^^^^^^^^
@@ -317,7 +317,7 @@ ESP-IDF 的 MCP（Model Context Protocol，模型上下文协议）服务器可�
 
   eim run "idf.py mcp-server"
 
-2. 直接使用 ``idf.py``：在已激活 ESP-IDF 环境的 shell 中运行 ``idf.py mcp-server`` 命令启动 MCP 服务器。必须在有效的 ESP-IDF 项目目录中执行该命令，或者使用 ``idf.py -C <project_dir> mcp-server`` 指定项目路径。
+2. 直接使用 ``idf.py``：在已激活 ESP-IDF 环境的 shell 中运行 ``idf.py mcp-server`` 命令启动 MCP 服务器。该服务器可以在任何目录下启动。使用 ``idf.py -C <project_dir> mcp-server`` 或设置 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量来配置默认项目。如果在启动时未配置任何项目，则在每次调用工具时显式传递项目目录。
 
 .. code-block:: bash
 
@@ -330,12 +330,15 @@ ESP-IDF 的 MCP（Model Context Protocol，模型上下文协议）服务器可�
 可用工具与资源
 ^^^^^^^^^^^^^^
 
-MCP 服务器提供以下可用的命令：
+MCP 服务器提供以下工具：
 
 - ``set target``：设置 ESP-IDF 的目标芯片（esp32，esp32s3，esp32c6 等）
 - ``build project``：使用当前目标构建 ESP-IDF 项目
-- ``flash project``：将已构建的项目烧录到已连接的设备，通过端口名称进行指定。
+- ``flash project``：将已构建的项目烧录到已连接的设备，通过端口名称进行指定
 - ``clean project``：清理构建产物
+- ``create project``：基于示例模板创建新的 ESP-IDF 项目，可在尚无项目时使用
+
+所有工具都接受可选的 ``project_dir`` 参数。当省略该参数时，工具将默认使用启动时配置的目录（该目录可通过 ``-C`` 参数或 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量指定）。你可以要求 AI 模型明确指定某个项目目录，例如当同时处理多个项目，或启动时未配置默认项目的情况下。
 
 同时提供以下资源：
 

@@ -22,6 +22,10 @@ PROJECT_NAME = "IDF Programming Guide"
 
 INPUT = \
     $(PROJECT_PATH)/components/app_trace/include/esp_app_trace.h \
+    $(PROJECT_PATH)/components/esp_trace/include/esp_trace.h \
+    $(PROJECT_PATH)/components/esp_trace/include/esp_trace_types.h \
+    $(PROJECT_PATH)/components/esp_trace/include/esp_trace_port_encoder.h \
+    $(PROJECT_PATH)/components/esp_trace/include/esp_trace_port_transport.h \
     $(PROJECT_PATH)/components/app_update/include/esp_ota_ops.h \
     $(PROJECT_PATH)/components/bootloader_support/include/bootloader_random.h \
     $(PROJECT_PATH)/components/bootloader_support/include/esp_app_format.h \
@@ -95,6 +99,7 @@ INPUT = \
     $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_hidd_api.h \
     $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_hidh_api.h \
     $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_l2cap_bt_api.h \
+    $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_pan_api.h \
     $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_sdp_api.h \
     $(PROJECT_PATH)/components/bt/host/bluedroid/api/include/api/esp_spp_api.h \
     $(PROJECT_PATH)/components/bt/host/nimble/esp-hci/include/esp_nimble_hci.h \
@@ -126,6 +131,7 @@ INPUT = \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_oneshot.h \
     $(PROJECT_PATH)/components/esp_driver_dac/include/driver/dac_types.h \
     $(PROJECT_PATH)/components/esp_driver_dma/include/esp_async_crc.h \
+    $(PROJECT_PATH)/components/esp_driver_dma/include/esp_async_color_convert.h \
     $(PROJECT_PATH)/components/esp_driver_dma/include/esp_async_memcpy.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/dedic_gpio.h \
     $(PROJECT_PATH)/components/esp_driver_gpio/include/driver/gpio.h \
@@ -335,6 +341,7 @@ INPUT = \
     $(PROJECT_PATH)/components/mbedtls/port/psa_driver/include/psa_crypto_driver_esp_aes_contexts.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
+    $(PROJECT_PATH)/components/nvs_flash/include/nvs_handle.hpp \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_bootloader.h \
     $(PROJECT_PATH)/components/nvs_sec_provider/include/nvs_sec_provider.h \
     $(PROJECT_PATH)/components/openthread/include/esp_openthread_border_router.h \

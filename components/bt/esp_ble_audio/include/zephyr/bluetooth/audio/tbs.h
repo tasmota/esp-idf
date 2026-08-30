@@ -201,7 +201,17 @@ extern "C" {
  */
 #define BT_TBS_GTBS_INDEX                               0xFF
 
-/** @brief Opaque Telephone Bearer Service instance. */
+/** Maximum size of bearer uniform caller identifier (UCI)
+ *
+ * Includes the NULL terminator.
+ * Allowed values are defined by Bluetooth Assigned Numbers.
+ */
+#define BT_TBS_MAX_UCI_SIZE 6
+
+/**
+ * @struct bt_tbs_instance
+ * @brief Opaque Telephone Bearer Service instance.
+ */
 struct bt_tbs_instance;
 
 /**
@@ -401,6 +411,51 @@ int bt_tbs_remote_incoming_safe(uint8_t bearer_index, const char *to,
                                 const char *from, const char *friendly_name);
 
 /**
+ * @brief Create a call directly in a given state (test setup helper).
+ *
+ * Allocates a call on the bearer and sets it to @p state without running the
+ * call state machine, bypassing the single-outgoing-call restriction and the
+ * Dialing->Alerting auto-promotion. Intended for setting up the fixed call
+ * configurations required by the Join test procedures (e.g. a stable Dialing
+ * call coexisting with an Alerting one). The call is notified once.
+ *
+ * @param[in]  bearer_index  The index of the Telephone Bearer.
+ * @param[in]  state         The initial call state (BT_TBS_CALL_STATE_*).
+ * @param[in]  uri           The remote URI stored for the call.
+ * @param[out] call_index    Where the new call index is stored.
+ *
+ * @return int            New call index if positive or 0,
+ *                        errno value if negative.
+ */
+int bt_tbs_add_call_safe(uint8_t bearer_index, uint8_t state, const char *uri,
+                         uint8_t *call_index);
+
+/**
+ * @brief Enable or disable automatic Dialing->Alerting promotion (test control).
+ *
+ * When disabled, an originated call on the bearer remains in the Dialing state
+ * until bt_tbs_set_call_alerting() is called. This lets a test harness control
+ * the transition timing and keep multiple outgoing calls in Dialing at once.
+ * Enabled by default.
+ *
+ * @param bearer_index  The index of the Telephone Bearer or BT_TBS_GTBS_INDEX.
+ * @param enable        true to auto-promote (default), false to keep Dialing.
+ *
+ * @return int          0 on success, errno value if negative.
+ */
+int bt_tbs_set_auto_alerting_safe(uint8_t bearer_index, bool enable);
+
+/**
+ * @brief Move a Dialing call to the Alerting state (test setup helper).
+ *
+ * @param call_index  The call index to promote.
+ *
+ * @return int        BT_TBS_RESULT_CODE_* if positive or 0,
+ *                    errno value if negative.
+ */
+int bt_tbs_set_call_alerting_safe(uint8_t call_index);
+
+/**
  * @brief Set a new bearer provider.
  *
  * @param bearer_index  The index of the Telephone Bearer or BT_TBS_GTBS_INDEX
@@ -453,13 +508,11 @@ int bt_tbs_set_status_flags_safe(uint8_t bearer_index, uint16_t status_flags);
  * @brief Sets the URI scheme list of a bearer.
  *
  * @param bearer_index  The index of the Telephone Bearer.
- * @param uri_list      List of URI prefixes (e.g. {"skype", "tel"}).
- * @param uri_count     Number of URI prefixes in @p uri_list.
+ * @param uri_scheme_list Comma-separated list of URI prefixes (e.g. "skype,tel").
  *
  * @return BT_TBS_RESULT_CODE_* if positive or 0, errno value if negative.
  */
-int bt_tbs_set_uri_scheme_list_safe(uint8_t bearer_index, const char **uri_list,
-                                    uint8_t uri_count);
+int bt_tbs_set_uri_scheme_list_safe(uint8_t bearer_index, const char *uri_scheme_list);
 /**
  * @brief Register the callbacks for TBS.
  *
@@ -538,6 +591,7 @@ struct bt_tbs_register_param {
  *         @kconfig{CONFIG_BT_TBS_BEARER_COUNT})
  * @retval -ENOEXEC The service failed to be registered
  */
+int bt_tbs_register_bearer(const struct bt_tbs_register_param *param);
 int bt_tbs_register_bearer_safe(const struct bt_tbs_register_param *param);
 
 /**
@@ -558,6 +612,7 @@ int bt_tbs_register_bearer_safe(const struct bt_tbs_register_param *param);
  *                 registered.
  * @retval -ENOEXEC The service failed to be unregistered
  */
+int bt_tbs_unregister_bearer(uint8_t bearer_index);
 int bt_tbs_unregister_bearer_safe(uint8_t bearer_index);
 
 /** @brief Prints all calls of all services to the debug log */
@@ -1086,7 +1141,8 @@ int bt_tbs_client_read_friendly_name_safe(struct bt_conn *conn, uint8_t inst_ind
  * @note @kconfig{CONFIG_BT_TBS_CLIENT_OPTIONAL_OPCODES} must be set
  * for this function to be effective.
  */
-int bt_tbs_client_read_optional_opcodes(struct bt_conn *conn, uint8_t inst_index);
+int bt_tbs_client_read_optional_opcodes(struct bt_conn *conn,
+                                        uint8_t inst_index);
 int bt_tbs_client_read_optional_opcodes_safe(struct bt_conn *conn,
                                              uint8_t inst_index);
 
@@ -1114,6 +1170,16 @@ int bt_tbs_client_register_cb_safe(struct bt_tbs_client_cb *cbs);
  */
 struct bt_tbs_instance *bt_tbs_client_get_by_ccid_safe(const struct bt_conn *conn,
                                                        uint8_t ccid);
+
+/**
+ * @brief Look up Telephone Bearer Service instance by index
+ *
+ * @param conn  The connection to the TBS server.
+ * @param index The index to lookup a service instance for.
+ *
+ * @return Pointer to a Telephone Bearer Service instance if found else NULL.
+ */
+struct bt_tbs_instance *bt_tbs_client_get_by_index_safe(const struct bt_conn *conn, uint8_t index);
 
 #ifdef __cplusplus
 }

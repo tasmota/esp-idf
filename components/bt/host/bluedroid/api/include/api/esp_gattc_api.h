@@ -212,6 +212,10 @@ typedef union {
         esp_gatt_conn_params_t conn_params; /*!< Current connection parameters */
         esp_ble_addr_type_t ble_addr_type;  /*!< Remote device address type */
         uint16_t conn_handle;               /*!< HCI connection handle */
+#if (CONFIG_BT_BLE_FEAT_PAWR_EN)
+        uint8_t adv_handle;                 /*!< PAwR Advertising_Handle from connection complete; ESP_BLE_PAWR_ADV_HANDLE_NONE if N/A */
+        uint16_t sync_handle;               /*!< PAwR Sync_Handle from connection complete; ESP_BLE_PAWR_SYNC_HANDLE_NONE if N/A */
+#endif // (CONFIG_BT_BLE_FEAT_PAWR_EN)
     } connect;                              /*!< Callback parameter for the event `ESP_GATTC_CONNECT_EVT` */
 
     /**
@@ -911,6 +915,8 @@ esp_err_t esp_ble_gattc_read_char_descr (esp_gatt_if_t gattc_if,
  *      3. `handle` must be greater than 0.
  *      4. If `auth_req` is not `ESP_GATT_AUTH_REQ_NONE`, the stack may start encryption
  *         or SMP pairing before sending the ATT write.
+ *      5. `ESP_GATT_AUTH_REQ_SIGNED_*` with `ESP_GATT_WRITE_TYPE_NO_RSP` sends ATT Signed
+ *         Write Command when bonded (CSRK) and the link is not encrypted.
  *
  * @return
  *       - ESP_OK: Success

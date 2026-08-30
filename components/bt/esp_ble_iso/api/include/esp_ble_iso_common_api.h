@@ -287,6 +287,9 @@ typedef struct bt_iso_tx_cb_info            esp_ble_iso_tx_cb_info_t;
 /** Extended advertising information structure */
 typedef struct {
     uint8_t adv_handle; /*!< Handle for the advertising set */
+    uint8_t addr_type;  /*!< Advertising address type (0=public, 1=random) */
+    uint8_t addr[6];    /*!< Advertising address */
+    uint8_t sid;        /*!< Advertising SID */
 } esp_ble_iso_ext_adv_info_t;
 
 /**
@@ -363,6 +366,10 @@ esp_err_t esp_ble_iso_cig_terminate(esp_ble_iso_cig_t *cig);
  * @param   param       Connection parameters.
  * @param   conn_handle Connection handle.
  * @param   count       Number of channels to connect.
+ *
+ * @note    ISO only knows links whose connection event it saw, so one
+ *          established before esp_ble_iso_common_init() returns
+ *          ESP_ERR_NOT_FOUND until it is handed back.
  *
  * @return  ESP_OK on success, or an error code on failure.
  */
@@ -575,12 +582,37 @@ typedef struct {
 /**
  * @brief   Post an application-layer GAP event for ISO internal usage.
  *
- * @note    This function is only needed while using NimBLE Host.
+ * @note    NimBLE-only: NimBLE has no global GAP callback, so ISO sees only what
+ *          the application forwards here. An event left out is dropped silently.
+ *          Bluedroid's ISO layer hooks the stack directly.
  *
- * @param   type    Event type.
- * @param   param   Event parameters.
+ * @note    Forward every event below that the application's flows can produce.
+ *          Forwarding one ISO does not use is harmless; omitting one leaves the
+ *          matching ISO state uncreated and fails later and elsewhere:
+ *          - BLE_GAP_EVENT_EXT_DISC             extended advertising report
+ *          - BLE_GAP_EVENT_CONNECT              ACL established or failed
+ *          - BLE_GAP_EVENT_DISCONNECT           ACL closed
+ *          - BLE_GAP_EVENT_ENC_CHANGE           encryption changed
+ *          - BLE_GAP_EVENT_PERIODIC_SYNC        PA sync established
+ *          - BLE_GAP_EVENT_PERIODIC_SYNC_LOST   PA sync lost
+ *          - BLE_GAP_EVENT_PERIODIC_REPORT      periodic advertising report
+ *          - BLE_GAP_EVENT_PERIODIC_TRANSFER    PA sync received over PAST
+ *          - BLE_GAP_EVENT_PERIODIC_TRANSFER_V2 as above, PAwR
+ *
+ *          BIGInfo needs no forwarding: ISO takes it from the controller itself
+ *          and delivers it as ESP_BLE_ISO_GAP_EVENT_BIGINFO_RECV.
+ *
+ * @param   type    Event type, i.e. ble_gap_event::type.
+ * @param   param   Event parameters, i.e. the struct ble_gap_event pointer.
  */
-void esp_ble_iso_gap_app_post_event(uint8_t type, void *param);
+void esp_ble_iso_gap_app_post_event(uint16_t type, void *param);
+
+/** Which of ISO's records of application-owned objects deinit clears. */
+typedef struct {
+    bool reset_ext_adv;     /*!< Clear the advertising sets added for BIG */
+    bool reset_pa_sync;     /*!< Clear the periodic advertising syncs */
+    bool reset_acl_conn;    /*!< Clear the ACL links. Must be true - see below */
+} esp_ble_iso_deinit_info_t;
 
 /**
  * @brief   Initialize ISO common functionality.
@@ -590,6 +622,34 @@ void esp_ble_iso_gap_app_post_event(uint8_t type, void *param);
  * @return  ESP_OK on success, or an error code on failure.
  */
 esp_err_t esp_ble_iso_common_init(esp_ble_iso_init_info_t *info);
+
+/**
+ * @brief   Deinitialize ISO common functionality.
+ *
+ * The application must first disconnect all CIS/BIS and terminate every CIG/BIG.
+ * If any is still up this returns ESP_ERR_INVALID_STATE and releases nothing,
+ * logging each offending item at ERROR level.
+ *
+ * ACL links, advertising sets and periodic advertising syncs belong to the
+ * application: they neither block deinit nor get torn down, only ISO's record of
+ * them goes. @p info chooses which records to drop - a dropped one is logged at
+ * WARNING level and must be handed back after the next init. NULL drops all three.
+ *
+ * reset_acl_conn must be true for now: on Bluedroid the GATT teardown drops ISO's
+ * reference, so a link ISO alone held is disconnected while a shared one stays up,
+ * and ISO cannot yet tell the two apart.
+ *
+ * @param   info    Which records to clear, or NULL to clear all.
+ *
+ * @note    Must not be called from an ISO callback (they run on the ISO task,
+ *          which this stops).
+ *
+ * @return  ESP_OK on success,
+ *          ESP_ERR_INVALID_STATE if something ISO owns is still active,
+ *          ESP_ERR_TIMEOUT if the ISO task could not be stopped.
+ *          Nothing is released unless ESP_OK is returned.
+ */
+esp_err_t esp_ble_iso_common_deinit(const esp_ble_iso_deinit_info_t *info);
 
 #if CONFIG_BT_BLUEDROID_ENABLED
 /**

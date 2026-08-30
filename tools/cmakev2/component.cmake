@@ -88,6 +88,20 @@ function(__idf_component_get_property_unchecked variable component_interface pro
     set(${variable} ${value} PARENT_SCOPE)
 endfunction()
 
+function(__idf_component_get_linker_language variable)
+    get_property(enabled_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    if(C IN_LIST enabled_languages)
+        set(language C)
+    elseif(CXX IN_LIST enabled_languages)
+        set(language CXX)
+    elseif(ASM IN_LIST enabled_languages)
+        set(language ASM)
+    else()
+        idf_die("No supported language is enabled for component targets")
+    endif()
+    set(${variable} ${language} PARENT_SCOPE)
+endfunction()
+
 #[[api
 .. cmakev2:function:: idf_component_get_property
 
@@ -495,10 +509,12 @@ function(__get_component_priority)
     endif()
 
     if("${ARG_SOURCE}" STREQUAL "project_components")
-        set(priority 3)
+        set(priority 4)
     elseif("${ARG_SOURCE}" STREQUAL "project_extra_components")
-        set(priority 2)
+        set(priority 3)
     elseif("${ARG_SOURCE}" STREQUAL "project_managed_components")
+        set(priority 2)
+    elseif("${ARG_SOURCE}" STREQUAL "idf_managed_components")
         set(priority 1)
     elseif("${ARG_SOURCE}" STREQUAL "idf_components")
         set(priority 0)
@@ -802,16 +818,84 @@ function(__set_component_cmakev1_properties component_name)
 endfunction()
 
 #[[api
+.. cmakev2:variable:: COMPONENT_TARGET
+
+    The name of the library target that the component must create, for example
+    with ``add_library``. The build system sets this variable in the component's
+    scope when the component is evaluated, and links the created target into the
+    component's interface target so that other components can depend on it.
+
+.. cmakev2:variable:: COMPONENT_LIB
+
+    The cmakev1-compatible alias of :cmakev2:ref:`COMPONENT_TARGET`. It holds the
+    same value and refers to the same library target.
+
+.. cmakev2:variable:: COMPONENT_NAME
+
+    The name of the component being evaluated, which is the name of its directory.
+
+.. cmakev2:variable:: ESP_PLATFORM
+
+    Set to ``1`` on any build driven by ``idf.py``, which passes
+    ``-DESP_PLATFORM=1`` to CMake as a cache variable. It is therefore defined
+    throughout the project, in both the top-level and component
+    ``CMakeLists.txt`` files, and is also added as a compile definition so that
+    source code can test it with ``#ifdef ESP_PLATFORM``. Use it to detect that
+    the build is driven by ESP-IDF, for example to guard ESP-IDF-specific code
+    in a project that can also build as a plain host application.
+#]]
+
+#[[api
+.. cmakev2:component_property:: WHOLE_ARCHIVE
+
+    When set to a true value, every object file from the component's static
+    library is kept in the final binary (linked with ``--whole-archive`` on GNU
+    or ``-force_load`` on Apple). Useful for link-time registration, where object
+    files may have no directly referenced symbols.
+
+.. cmakev2:component_property:: LDFRAGMENTS
+
+    List of linker fragment files contributed by the component. They are
+    processed by the linker script generator. See
+    :doc:`/api-guides/linker-script-generation`.
+
+.. cmakev2:component_property:: LINKER_SCRIPTS
+
+    List of linker script files added to the link command (with ``-T``) for the
+    component.
+
+.. cmakev2:component_property:: NO_KASAN
+
+    When set to a true value, the component is compiled without Kernel Address
+    Sanitizer instrumentation (``-fno-sanitize=kernel-address``) while
+    ``CONFIG_COMPILER_KASAN`` is enabled. Set it on a component that runs before
+    the sanitizer shadow is initialised, executes with the flash cache disabled,
+    or is otherwise too low-level to instrument.
+
+    The low-level ESP-IDF components are excluded already; the built-in set is
+    defined in ``tools/cmake/kasan.cmake`` and shared with the CMake-based build
+    system v1, which honours this property as well.
+#]]
+
+#[[api
 .. cmakev2:function:: idf_component_include
 
     .. code-block:: cmake
 
         idf_component_include(<name>
+                              [OPTIONAL]
                               [INTERFACE <variable>])
 
     *name[in]*
 
         Component name.
+
+    *OPTIONAL[opt]*
+
+        If specified, the call is a silent no-op when the component is not
+        known to the build, instead of aborting. When combined with
+        ``INTERFACE``, the output variable is set to the empty string on
+        miss, so callers can use ``if(${variable})`` as a truth check.
 
     *INTERFACE[out,opt]*
 
@@ -830,15 +914,41 @@ endfunction()
 
     When the ``INTERFACE`` variable is provided, the name of the included
     component interface target will be stored in it.
+
+    By default, the function aborts the build if ``<name>`` is not known to
+    the build system. Pass ``OPTIONAL`` to make the call non-fatal -- useful
+    for integrations with components that may or may not be in the build,
+    such as managed dependencies that only some board configurations pull
+    in.
+
+    .. code-block:: cmake
+
+        # Wire up an optional integration only when the component is present.
+        idf_component_include(button OPTIONAL INTERFACE button_iface)
+        if(button_iface)
+            target_sources(${COMPONENT_TARGET} PRIVATE button_glue.c)
+            target_link_libraries(${COMPONENT_TARGET} PRIVATE ${button_iface})
+        endif()
 #]]
 function(idf_component_include name)
-    set(options)
+    set(options OPTIONAL)
     set(one_value INTERFACE)
     set(multi_value)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
-    __get_component_interface_or_die(COMPONENT "${name}"
-                                     OUTPUT component_interface)
+    if(ARG_OPTIONAL)
+        __get_component_interface(COMPONENT "${name}"
+                                  OUTPUT component_interface)
+        if("${component_interface}" STREQUAL "NOTFOUND")
+            if(DEFINED ARG_INTERFACE)
+                set(${ARG_INTERFACE} "" PARENT_SCOPE)
+            endif()
+            return()
+        endif()
+    else()
+        __get_component_interface_or_die(COMPONENT "${name}"
+                                         OUTPUT component_interface)
+    endif()
 
     # Check if the component is already included, meaning the add_subdirectory
     # has already been called for it and the component has been processed.  If
@@ -891,6 +1001,29 @@ function(idf_component_include name)
     endif()
 
     list(APPEND __DEPENDENCY_CHAIN "${component_interface}")
+
+    # Inject managed dependencies BEFORE add_subdirectory() evaluates the
+    # component's CMakeLists.txt — otherwise any component that queries a
+    # managed dependency at register time via
+    # idf_component_get_property(... COMPONENT_LIB) finds nothing because the
+    # target hasn't been created yet.
+    idf_build_get_property(idf_component_manager IDF_COMPONENT_MANAGER)
+    if(idf_component_manager EQUAL 1)
+        idf_component_get_property(_comp_dir "${component_name}" COMPONENT_DIR)
+        if(EXISTS "${_comp_dir}/idf_component.yml")
+            __inject_requirements_for_component_from_manager("${component_name}")
+
+            idf_component_get_property(_managed_req "${component_name}" MANAGED_REQUIRES)
+            idf_component_get_property(_managed_priv_req "${component_name}" MANAGED_PRIV_REQUIRES)
+
+            foreach(_dep IN LISTS _managed_req _managed_priv_req)
+                if(_dep)
+                    idf_component_include("${_dep}")
+                endif()
+            endforeach()
+        endif()
+    endif()
+
     # Evaluate the CMakeLists.txt file of the component.
     idf_component_get_property(component_build_dir "${component_name}" COMPONENT_BUILD_DIR)
     add_subdirectory("${component_directory}" "${component_build_dir}")
@@ -905,6 +1038,43 @@ function(idf_component_include name)
     idf_build_get_property(components_included COMPONENTS_INCLUDED)
     list(APPEND components_included "${component_name}")
     idf_build_set_property(COMPONENTS_INCLUDED "${components_included}")
+
+    # Compile-time LTO (CONFIG_COMPILER_LTO_COMPILETIME): record which components
+    # must NOT be compiled with LTO. Linker fragments place object code by
+    # archive / object-file name, which LTO renames and merges, so any component
+    # that participates in fragment placement must be excluded. The decision is
+    # recorded in the NO_LTO component property and consumed later, when the
+    # component's static library is created, via a generator expression. Because
+    # the generator expression is evaluated only after every component has been
+    # processed, it does not matter that a component may be placed by a fragment
+    # belonging to a component that is included after it.
+    # A subproject that must not use LTO (for example the bootloader) opts out by
+    # setting the SET_COMPILER_LTO build property to NO, the same way it uses
+    # SET_COMPILER_OPTIMIZATION; an unset property means LTO is allowed. The
+    # result is reused by the apply block further below.
+    idf_build_get_property(set_compiler_lto SET_COMPILER_LTO)
+    if(NOT DEFINED set_compiler_lto OR set_compiler_lto STREQUAL "")
+        set(set_compiler_lto YES)
+    endif()
+    if(CONFIG_COMPILER_LTO_COMPILETIME AND set_compiler_lto)
+        # A component with its own linker fragments relies on object-file-name
+        # placement and must not be compiled with LTO.
+        idf_component_get_property(component_ldfragments "${component_name}" LDFRAGMENTS)
+        if(component_ldfragments)
+            idf_component_set_property("${component_name}" NO_LTO 1)
+        endif()
+        # A component may also place the object code of *other* components by
+        # naming their archive ("archive: libNAME.a") in its own fragments; mark
+        # those too. Names that do not resolve to a build component (for example
+        # toolchain archives such as libc.a) are skipped.
+        __lto_collect_fragment_placed_components(lto_placed_components "${component_name}")
+        foreach(placed_component IN LISTS lto_placed_components)
+            __get_component_interface(COMPONENT "${placed_component}" OUTPUT placed_interface)
+            if(NOT "${placed_interface}" STREQUAL "NOTFOUND")
+                idf_component_set_property("${placed_component}" NO_LTO 1)
+            endif()
+        endforeach()
+    endif()
 
     idf_component_get_property(component_interface "${name}" COMPONENT_INTERFACE)
     if(DEFINED ARG_INTERFACE)
@@ -946,18 +1116,22 @@ function(idf_component_include name)
     elseif("${component_real_target_type}" STREQUAL "STATIC_LIBRARY")
         idf_component_get_property(whole_archive "${component_name}" WHOLE_ARCHIVE)
         if(whole_archive)
-            idf_build_get_property(linker_type LINKER_TYPE)
-            if(linker_type STREQUAL "GNU")
-                target_link_options("${component_interface}" INTERFACE
-                    "SHELL:-Wl,--whole-archive $<TARGET_FILE:${component_real_target}> -Wl,--no-whole-archive")
-                target_link_libraries("${component_interface}" INTERFACE "${component_real_target}")
-            elseif(linker_type STREQUAL "Darwin")
-                target_link_options("${component_interface}" INTERFACE
-                    "SHELL:-Wl,-force_load $<TARGET_FILE:${component_real_target}>")
-                target_link_libraries("${component_interface}" INTERFACE "${component_real_target}")
-            endif()
+            __idf_build_link_whole_archive("${component_interface}" INTERFACE "${component_real_target}")
         else()
             target_link_libraries("${component_interface}" INTERFACE "${component_real_target}")
+        endif()
+
+        # Compile-time LTO (CONFIG_COMPILER_LTO_COMPILETIME): compile this static
+        # library with -flto=auto unless it was marked NO_LTO during inclusion
+        # (because it, or another component, places its object code via a linker
+        # fragment, or it opted out explicitly). NO_LTO is read as a generator
+        # expression so that vetoes recorded by components processed after this
+        # one are still taken into account. set_compiler_lto was resolved during
+        # inclusion above (NO when a subproject opts out via SET_COMPILER_LTO).
+        if(CONFIG_COMPILER_LTO_COMPILETIME AND set_compiler_lto)
+            idf_component_get_property(no_lto_genex "${component_name}" NO_LTO GENERATOR_EXPRESSION)
+            target_compile_options("${component_real_target}" PRIVATE
+                "$<$<NOT:$<BOOL:${no_lto_genex}>>:-flto=auto>")
         endif()
     else()
         idf_die("Unsupported target type '${component_real_target_type}' in component '${component_name}'")
@@ -977,24 +1151,15 @@ function(idf_component_include name)
         target_add_binary_data(${COMPONENT_TARGET} "${file}" "TEXT")
     endforeach()
 
-    # Inject managed dependencies if component manager is enabled
+    # Link managed dependencies for cmakev1 components (backward compat).
+    # The injection and inclusion already happened before add_subdirectory().
     idf_build_get_property(idf_component_manager IDF_COMPONENT_MANAGER)
     idf_component_get_property(component_format "${component_name}" COMPONENT_FORMAT)
     if(idf_component_manager EQUAL 1)
         idf_component_get_property(component_dir "${component_name}" COMPONENT_DIR)
-        # Check if component has manifest for managed dependency injection
         if(EXISTS "${component_dir}/idf_component.yml")
-            __inject_requirements_for_component_from_manager("${component_name}")
-
-            # Include any managed dependencies
             idf_component_get_property(managed_requires "${component_name}" MANAGED_REQUIRES)
             idf_component_get_property(managed_priv_requires "${component_name}" MANAGED_PRIV_REQUIRES)
-
-            foreach(dep IN LISTS managed_requires managed_priv_requires)
-                if(dep)
-                    idf_component_include("${dep}")
-                endif()
-            endforeach()
 
             # For cmakev1 components, automatically link managed dependencies to maintain
             # backward compatibility.
@@ -1051,7 +1216,10 @@ function(idf_component_include name)
     endif()
 
     # Set the component archive file name.
-    set_target_properties(${component_real_target} PROPERTIES OUTPUT_NAME ${component_name} LINKER_LANGUAGE C)
+    __idf_component_get_linker_language(component_linker_language)
+    set_target_properties(${component_real_target} PROPERTIES
+                          OUTPUT_NAME ${component_name}
+                          LINKER_LANGUAGE ${component_linker_language})
 
     idf_build_get_property(include_directories INCLUDE_DIRECTORIES GENERATOR_EXPRESSION)
     target_include_directories("${component_real_target}" BEFORE PRIVATE "${include_directories}")

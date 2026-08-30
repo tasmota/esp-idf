@@ -39,6 +39,9 @@
 #if (BLE_INCLUDED == TRUE)
 #include "stack/gatt_api.h"
 #include "gatt_int.h"
+#if (BLE_EATT_INCLUDED == TRUE)
+#include "gatt_eatt_int.h"
+#endif
 #if SMP_INCLUDED == TRUE
 #include "smp_int.h"
 #endif
@@ -120,6 +123,14 @@ void btu_init_core(void)
 ******************************************************************************/
 void btu_free_core(void)
 {
+#if (BLE_INCLUDED == TRUE && defined(GATT_INCLUDED) && GATT_INCLUDED == true && BLE_EATT_INCLUDED == TRUE)
+    /* Tear down EATT before l2c_free(): gatt_eatt_deinit() deregisters the EATT
+     * LE CoC PSM (L2CA_DeregisterLECoc) and the EATT GATT interface
+     * (GATT_Deregister, which may disconnect open links). Both need live L2CAP
+     * state; running them after l2c_free() dereferences the freed l2c_cb_ptr. */
+    gatt_eatt_deinit();
+#endif
+
     // Free the mandatory core stack components
     l2c_free();
 
@@ -148,10 +159,10 @@ void btu_free_core(void)
 **                  NOTE: Must be called before creating any tasks
 **                      (RPC, BTU, HCIT, APPL, etc.)
 **
-** Returns          void
+** Returns          true for success, otherwise false
 **
 ******************************************************************************/
-void BTU_StartUp(void)
+bool BTU_StartUp(void)
 {
 #if BTU_DYNAMIC_MEMORY
     btu_cb_ptr = (tBTU_CB *)osi_malloc(sizeof(tBTU_CB));
@@ -184,9 +195,18 @@ void BTU_StartUp(void)
     osi_mutex_new(&btu_l2cap_alarm_lock);
 
     const size_t workqueue_len[] = {BTU_TASK_WORKQUEUE0_LEN};
+#if (!CONFIG_BT_BLUEDROID_BTU_TASK_STACK_IN_EXT_MEM)
     btu_thread = osi_thread_create(BTU_TASK_NAME, BTU_TASK_STACK_SIZE, BTU_TASK_PRIO, BTU_TASK_PINNED_TO_CORE,
-                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len);
+                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len, false);
+#else
+    btu_thread = osi_thread_create(BTU_TASK_NAME, BTU_TASK_STACK_SIZE, BTU_TASK_PRIO, BTU_TASK_PINNED_TO_CORE,
+                                   BTU_TASK_WORKQUEUE_NUM, workqueue_len, true);
+#endif
     if (btu_thread == NULL) {
+        goto error_exit;
+    }
+
+    if (!btu_acl_queue_init()) {
         goto error_exit;
     }
 
@@ -194,11 +214,12 @@ void BTU_StartUp(void)
         goto error_exit;
     }
 
-    return;
+    return true;
 
 error_exit:;
     LOG_ERROR("%s Unable to allocate resources for bt_workqueue", __func__);
     BTU_ShutDown();
+    return false;
 }
 
 /*****************************************************************************
@@ -212,10 +233,19 @@ error_exit:;
 ******************************************************************************/
 void BTU_ShutDown(void)
 {
+    btu_acl_queue_close();
+
+    btu_task_shut_down();
+
+    if (btu_thread) {
+        osi_thread_free(btu_thread);
+        btu_thread = NULL;
+    }
+
+    btu_acl_queue_deinit();
 #if BTU_DYNAMIC_MEMORY
     FREE_AND_RESET(btu_cb_ptr);
 #endif
-    btu_task_shut_down();
 
     hash_map_free(btu_general_alarm_hash_map);
     osi_mutex_free(&btu_general_alarm_lock);
@@ -225,11 +255,6 @@ void BTU_ShutDown(void)
 
     hash_map_free(btu_l2cap_alarm_hash_map);
     osi_mutex_free(&btu_l2cap_alarm_lock);
-
-    if (btu_thread) {
-        osi_thread_free(btu_thread);
-        btu_thread = NULL;
-    }
 
     btu_general_alarm_hash_map = NULL;
     btu_oneshot_alarm_hash_map = NULL;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -105,9 +105,10 @@ static esp_err_t mcpwm_del_timer_sync_src(mcpwm_sync_t *sync_src)
 
 static esp_err_t mcpwm_gpio_sync_src_register_to_group(mcpwm_gpio_sync_src_t *gpio_sync_src, int group_id)
 {
-    mcpwm_group_t *group = mcpwm_acquire_group_handle(group_id);
-    ESP_RETURN_ON_FALSE(group, ESP_ERR_NO_MEM, TAG, "no mem for group (%d)", group_id);
+    mcpwm_group_t *group = NULL;
+    esp_err_t ret = ESP_OK;
 
+    ESP_GOTO_ON_ERROR(mcpwm_acquire_group_handle(group_id, 0, &group), err, TAG, "acquire group failed");
     int sync_id = -1;
     portENTER_CRITICAL(&group->spinlock);
     for (int i = 0; i < MCPWM_LL_GET(GPIO_SYNCHROS_PER_GROUP); i++) {
@@ -119,16 +120,17 @@ static esp_err_t mcpwm_gpio_sync_src_register_to_group(mcpwm_gpio_sync_src_t *gp
     }
     portEXIT_CRITICAL(&group->spinlock);
 
-    if (sync_id < 0) {
-        mcpwm_release_group_handle(group);
-        group = NULL;
-    } else {
-        gpio_sync_src->base.group = group;
-        gpio_sync_src->sync_id = sync_id;
-    }
-    ESP_RETURN_ON_FALSE(sync_id >= 0, ESP_ERR_NOT_FOUND, TAG, "no free gpio sync_src in group (%d)", group_id);
+    ESP_GOTO_ON_FALSE(sync_id >= 0, ESP_ERR_NOT_FOUND, err, TAG, "no free gpio sync_src in group (%d)", group_id);
 
+    gpio_sync_src->base.group = group;
+    gpio_sync_src->sync_id = sync_id;
     return ESP_OK;
+
+err:
+    if (group) {
+        mcpwm_release_group_handle(group);
+    }
+    return ret;
 }
 
 static void mcpwm_gpio_sync_src_unregister_from_group(mcpwm_gpio_sync_src_t *gpio_sync_src)
@@ -219,7 +221,7 @@ esp_err_t mcpwm_new_soft_sync_src(const mcpwm_soft_sync_config_t *config, mcpwm_
     ESP_GOTO_ON_FALSE(soft_sync, ESP_ERR_NO_MEM, err, TAG, "no mem for soft sync");
 
     // fill in other sync member
-    soft_sync->soft_sync_from = MCPWM_SOFT_SYNC_FROM_NONE;
+    soft_sync->soft_sync_bound_to = MCPWM_SOFT_SYNC_BOUND_TO_NONE;
     soft_sync->base.type = MCPWM_SYNC_TYPE_SOFT;
     soft_sync->base.del = mcpwm_del_soft_sync_src;
     *ret_sync = &soft_sync->base;
@@ -253,13 +255,13 @@ esp_err_t mcpwm_soft_sync_activate(mcpwm_sync_handle_t sync_src)
     mcpwm_group_t *group = sync_src->group;
     mcpwm_soft_sync_src_t *soft_sync = __containerof(sync_src, mcpwm_soft_sync_src_t, base);
 
-    switch (soft_sync->soft_sync_from) {
-    case MCPWM_SOFT_SYNC_FROM_TIMER: {
+    switch (soft_sync->soft_sync_bound_to) {
+    case MCPWM_SOFT_SYNC_BOUND_TO_TIMER: {
         mcpwm_timer_t *timer = soft_sync->timer;
         mcpwm_ll_timer_trigger_soft_sync(group->hal.dev, timer->timer_id);
         break;
     }
-    case MCPWM_SOFT_SYNC_FROM_CAP: {
+    case MCPWM_SOFT_SYNC_BOUND_TO_CAP: {
         mcpwm_ll_capture_trigger_sw_sync(group->hal.dev);
         break;
     }

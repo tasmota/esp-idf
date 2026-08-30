@@ -52,8 +52,9 @@ If the configurations in :cpp:type:`uhci_controller_config_t` is specified, user
     uhci_controller_config_t uhci_cfg = {
         .uart_port = EX_UART_NUM,                 // Connect uart port to UHCI hardware.
         .tx_trans_queue_depth = 30,               // Queue depth of transaction queue.
-        .max_receive_internal_mem = 10 * 1024,    // internal memory usage, for more information, please refer to API reference.
-        .max_transmit_size = 10 * 1024,           // Maximum transfer size in one transaction, in bytes.
+        .max_receive_internal_mem = 10 * 1024,    // Expected max uhci_receive() buffer size; also sizes the RX DMA descriptor chain. For large transfers, configure it so that at least two descriptors are available for ping-pong operation.
+        .max_transmit_size = 10 * 1024,           // Maximum transfer size in one transaction, in bytes (including all buffers).
+        .max_transmit_buffer_count = 1,           // Maximum number of buffers in one transmit transaction. 0 or 1 means only single-buffer transmit is used.
         .dma_burst_size = 32,                     // Burst size.
         .rx_eof_flags.idle_eof = 1,               // When to trigger a end of frame event, you can choose `idle_eof`, `rx_brk_eof`, `length_eof`, for more information, please refer to API reference.
     };
@@ -112,6 +113,30 @@ Data can be transmitted via UHCI as follows:
     // Wait all transaction finishes
     ESP_ERROR_CHECK(uhci_wait_all_tx_transaction_done(uhci_ctrl, -1));
 
+If the data to be sent is scattered across several separate buffers, you can send them as a single transaction without copying them into one contiguous buffer first, by using :cpp:func:`uhci_multi_buffer_transmit`. The buffer segments are described by an array of :cpp:type:`uhci_transmit_buffer_info_t` and are transmitted in the given order as one continuous UART stream (internally, the segments are assembled into one DMA link list and only the last segment is marked as the end of the transaction). To use this feature, :cpp:member:`uhci_controller_config_t::max_transmit_buffer_count` must be set to the maximum number of segments you intend to send in one call when creating the controller.
+
+The following constraints apply:
+
+- ``array_size`` must not exceed :cpp:member:`uhci_controller_config_t::max_transmit_buffer_count`.
+- The total size of all segments must not exceed :cpp:member:`uhci_controller_config_t::max_transmit_size`.
+- Every buffer segment must remain valid until the transmission is complete, same as :cpp:func:`uhci_transmit`.
+
+.. code:: c
+
+    uint8_t header[8];
+    uint8_t payload[DATA_LENGTH];
+    // ... fill header and payload ...
+    uhci_transmit_buffer_info_t buffer_info[] = {
+        { .write_buffer = header,  .buffer_size = sizeof(header) },
+        { .write_buffer = payload, .buffer_size = sizeof(payload) },
+    };
+    ESP_ERROR_CHECK(uhci_multi_buffer_transmit(uhci_ctrl, buffer_info, 2));
+    ESP_ERROR_CHECK(uhci_wait_all_tx_transaction_done(uhci_ctrl, -1));
+
+.. note::
+
+    When a transaction is submitted through :cpp:func:`uhci_multi_buffer_transmit` with more than one segment, :cpp:member:`uhci_tx_done_event_data_t::buffer` in the "trans-done" callback only points to the first segment and should be treated as an identifying handle for the transaction, not as the start of a ``sent_size``-byte contiguous region. :cpp:member:`uhci_tx_done_event_data_t::sent_size` is the sum of the sizes of all segments.
+
 Initiating UHCI Reception
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -165,7 +190,7 @@ Data can be received via UHCI as follows:
         }
     }
 
-In the API :cpp:func:`uhci_receive` interface, the parameter `read_buffer` is a buffer that must be provided by the user, and parameter `buffer_size` represents the size of the buffer supplied by the user. In the configuration structure of the UHCI controller, the parameter :cpp:member:`uhci_controller_config_t::max_receive_internal_mem` specifies the desired size of the internal DMA working space. The software allocates a certain number of DMA nodes based on this working space size. These nodes form a circular linked list.
+In the API :cpp:func:`uhci_receive` interface, the parameter ``read_buffer`` is a buffer that must be provided by the user, and parameter ``buffer_size`` represents the size of the buffer supplied by the user. ``buffer_size`` should generally not exceed :cpp:member:`uhci_controller_config_t::max_receive_internal_mem`.
 
 When a node is filled, but the reception has not yet completed, the event :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` will be triggered, accompanied by :cpp:member:`uhci_rx_event_data_t::flags::totally_received` set to 0. When all the data has been fully received, the :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` event will be triggered again with :cpp:member:`uhci_rx_event_data_t::flags::totally_received` set to 1.
 
@@ -173,7 +198,31 @@ This mechanism allows the user to achieve continuous and fast reception using a 
 
 .. note::
 
-    The parameter `read_buffer` of :cpp:func:`uhci_receive` cannot be freed until receive finishes.
+    The parameter ``read_buffer`` of :cpp:func:`uhci_receive` cannot be freed until receive finishes.
+
+Continuous Reception
+^^^^^^^^^^^^^^^^^^^^^
+
+:cpp:func:`uhci_receive` is a one-shot API: it stops the DMA after a single frame and has to be re-armed for the next one. During that re-arm gap incoming bytes can be lost. For continuous streaming, use :cpp:func:`uhci_start_receive_continuous` instead. It keeps the GDMA running across EOFs, so the reception never idles and no data is dropped between frames.
+
+The provided ``read_buffer`` is split across the DMA nodes and used as a ring: each finished frame (for example, a UART idle or length EOF) is delivered through the :cpp:member:`uhci_event_callbacks_t::on_rx_trans_event` callback with :cpp:member:`uhci_rx_event_data_t::flags::totally_received` set to 1, while a filled-but-not-yet-complete node is delivered with it set to 0. The callback hands out a pointer directly into the ring buffer (zero-copy), so the application must consume the data before the DMA wraps around and overwrites it. Size the buffer according to the expected throughput and consumer latency; overrun protection is not provided.
+
+Call :cpp:func:`uhci_stop_receive` to end the session and return the controller to the idle state, after which it can be re-armed or deleted.
+
+.. code:: c
+
+    // Register callback and start continuous reception.
+    ESP_ERROR_CHECK(uhci_register_event_callbacks(uhci_ctrl, &uhci_cbs, ctx));
+    ESP_ERROR_CHECK(uhci_start_receive_continuous(uhci_ctrl, pdata, buffer_size));
+
+    // ... consume the frames delivered through on_rx_trans_event ...
+
+    // Stop the session before freeing pdata or deleting the controller.
+    ESP_ERROR_CHECK(uhci_stop_receive(uhci_ctrl));
+
+.. note::
+
+    The parameter ``read_buffer`` of :cpp:func:`uhci_start_receive_continuous` must stay valid until :cpp:func:`uhci_stop_receive` returns.
 
 Uninstall UHCI controller
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -192,7 +241,7 @@ As the basic usage has been covered, it's time to explore more advanced features
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When power management is enabled, i.e., :ref:`CONFIG_PM_ENABLE` is on, the system may adjust or disable the clock source before going to sleep. As a result, the FIFO inside the UHCI can't work as expected.
+When power management is enabled, i.e., :menuitem:`CONFIG_PM_ENABLE` is on, the system may adjust or disable the clock source before going to sleep. As a result, the FIFO inside the UHCI can't work as expected.
 
 The driver can prevent the above issue by creating a power management lock. The lock type is set based on different clock sources. The driver will acquire the lock in :cpp:func:`uhci_receive` or :cpp:func:`uhci_transmit`, and release it in the transaction-done interrupt. That means, any UHCI transactions between these two functions are guaranteed to work correctly and stably.
 
@@ -201,7 +250,7 @@ Cache Safe
 
 By default, the interrupt on which UHCI relies is deferred when the Cache is disabled for reasons such as writing or erasing the main flash. Thus, the transaction-done interrupt fails to be handled in time, which is unacceptable in a real-time application. What is worse, when the UHCI transaction relies on **ping-pong** interrupt to successively encode or copy the UHCI buffer, a delayed interrupt can lead to an unpredictable result.
 
-There is a Kconfig option :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` that has the following features:
+There is a Kconfig option :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE` that has the following features:
 
 1. Enable the interrupt being serviced even when the cache is disabled
 2. Place all functions used by the ISR into IRAM [1]_
@@ -216,7 +265,7 @@ Use the :doc:`/api-guides/tools/idf-size` tool to check the code and data consum
 
 **Note that the following data are not exact values and are for reference only; they may differ on different chip models.**
 
-Resource consumption when :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` is enabled:
+Resource consumption when :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE` is enabled:
 
 .. list-table:: Resource Consumption
     :widths: 10 10 10 10 10 10 10 10 10
@@ -241,7 +290,7 @@ Resource consumption when :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` is enabled:
       - 175
       - 175
 
-Resource consumption when :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` is disabled:
+Resource consumption when :menuitem:`CONFIG_UHCI_ISR_CACHE_SAFE` is disabled:
 
 .. list-table:: Resource Consumption
     :widths: 10 10 10 10 10 10 10 10 10 10
@@ -271,7 +320,7 @@ Resource consumption when :ref:`CONFIG_UHCI_ISR_CACHE_SAFE` is disabled:
 Performance
 ^^^^^^^^^^^
 
-To improve the real-time response capability of interrupt handling, the UHCI driver provides the :ref:`CONFIG_UHCI_ISR_HANDLER_IN_IRAM` option. Enabling this option will place the interrupt handler in internal RAM, reducing the latency caused by cache misses when loading instructions from Flash.
+To improve the real-time response capability of interrupt handling, the UHCI driver provides the :menuitem:`CONFIG_UHCI_ISR_HANDLER_IN_IRAM` option. Enabling this option will place the interrupt handler in internal RAM, reducing the latency caused by cache misses when loading instructions from Flash.
 
 .. note::
 
@@ -285,7 +334,7 @@ The factory function :cpp:func:`uhci_new_controller`, :cpp:func:`uhci_register_e
 Other Kconfig Options
 ^^^^^^^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_UHCI_ENABLE_DEBUG_LOG` is allowed for the forced enabling of all debug logs for the UHCI driver, regardless of the global log level setting. Enabling this option can help developers obtain more detailed log information during the debugging process, making it easier to locate and resolve issues, but it will increase the size of the firmware binary.
+- :menuitem:`CONFIG_UHCI_ENABLE_DEBUG_LOG` is allowed for the forced enabling of all debug logs for the UHCI driver, regardless of the global log level setting. Enabling this option can help developers obtain more detailed log information during the debugging process, making it easier to locate and resolve issues, but it will increase the size of the firmware binary.
 
 Application Examples
 --------------------

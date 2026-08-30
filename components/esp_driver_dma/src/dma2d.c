@@ -26,7 +26,8 @@
 #include "hal/dma2d_periph.h"
 #include "soc/soc_caps.h"
 #include "esp_bit_defs.h"
-#include "esp_efuse.h"
+#include "esp_private/esp_mspi_align.h"
+#include "esp_private/sleep_retention.h"
 
 /**
  * The 2D-DMA driver is designed with a pool & client model + queue design pattern.
@@ -166,7 +167,35 @@ revert:
     return found;
 }
 
-/* This function will free up the RX channel and its bundled TX channels, then check for whether there is next transaction to be picked up */
+/* Atomically claim the teardown of the transaction that currently owns `rx_chan`.
+ *
+ * `status.transaction` is published (set) under the group spinlock when channels are
+ * acquired for a transaction, and is used here as a combined identity + claim token:
+ * the claim succeeds only if the channel is still owned by `expected` (the transaction
+ * the caller believes is in-flight). The winner clears it to NULL so that the other
+ * teardown path (the natural-completion ISR vs. dma2d_force_end) will fail its own
+ * claim and therefore will not free the same channels a second time.
+ *
+ * Passing a NULL `expected` never claims (there is nothing to tear down).
+ */
+FORCE_INLINE_ATTR bool claim_rx_transaction(dma2d_group_t *group, dma2d_rx_channel_t *rx_chan, dma2d_trans_t *expected)
+{
+    bool claimed = false;
+    esp_os_enter_critical_safe(&group->spinlock);
+    if (expected != NULL && rx_chan->base.status.transaction == expected) {
+        rx_chan->base.status.transaction = NULL;
+        claimed = true;
+    }
+    esp_os_exit_critical_safe(&group->spinlock);
+    return claimed;
+}
+
+/* This function will free up the RX channel and its bundled TX channels, then check for whether there is next transaction to be picked up.
+ *
+ * Precondition: the caller must have successfully claimed the teardown of this RX channel's transaction
+ * (i.e. cleared `rx_chan->base.status.transaction` from the owning transaction to NULL under the group
+ * spinlock, via `claim_rx_transaction` or the equivalent inline claim in `dma2d_force_end`). This
+ * guarantees the channels cannot be reassigned and that only one path performs the teardown. */
 static bool free_up_channels(dma2d_group_t *group, dma2d_rx_channel_t *rx_chan)
 {
     bool need_yield = false;
@@ -214,6 +243,7 @@ static bool free_up_channels(dma2d_group_t *group, dma2d_rx_channel_t *rx_chan)
     // 2. Check if next pending transaction in the tailq can start
     bool channels_found = false;
     const dma2d_trans_config_t *next_trans = NULL;
+    uint32_t total_channel_num = 0;
     dma2d_trans_channel_info_t channel_handle_array[DMA2D_MAX_CHANNEL_NUM_PER_TRANSACTION];
 
     esp_os_enter_critical_safe(&group->spinlock);
@@ -233,14 +263,9 @@ static bool free_up_channels(dma2d_group_t *group, dma2d_rx_channel_t *rx_chan)
 
     if (channels_found) {
         TAILQ_REMOVE(&group->pending_trans_tailq, next_trans_elm, entry);
-    }
-    esp_os_exit_critical_safe(&group->spinlock);
-
-    if (channels_found) {
-        // If the transaction can be processed, let consumer handle the transaction
-        uint32_t total_channel_num = next_trans->tx_channel_num + next_trans->rx_channel_num;
         // Store the acquired rx_chan into trans_elm (dma2d_trans_t) in case upper driver later need it to call `dma2d_force_end`
         // Upper driver controls the life cycle of trans_elm
+        total_channel_num = next_trans->tx_channel_num + next_trans->rx_channel_num;
         for (int i = 0; i < total_channel_num; i++) {
             if (channel_handle_array[i].dir == DMA2D_CHANNEL_DIRECTION_RX) {
                 next_trans_elm->rx_chan = channel_handle_array[i].chan;
@@ -248,7 +273,17 @@ static bool free_up_channels(dma2d_group_t *group, dma2d_rx_channel_t *rx_chan)
             // Also save the transaction pointer
             channel_handle_array[i].chan->status.transaction = next_trans_elm;
         }
+        // Mark the pick->start window: ownership is published (so the transaction already looks
+        // in-flight to dma2d_force_end) but on_job_picked has not configured/started the channels
+        // yet. dma2d_force_end must wait for `started` to become true before tearing channels down.
+        atomic_store(&next_trans_elm->started, false);
+    }
+    esp_os_exit_critical_safe(&group->spinlock);
+
+    if (channels_found) {
+        // If the transaction can be processed, let consumer handle the transaction
         need_yield |= next_trans->on_job_picked(total_channel_num, channel_handle_array, next_trans->user_config);
+        atomic_store(&next_trans_elm->started, true);
     }
     return need_yield;
 }
@@ -306,16 +341,26 @@ static NOINLINE_ATTR bool _dma2d_default_rx_isr(dma2d_group_t *group, int channe
     }
 
     // If last transaction completes (regardless success or not), free the channels
+    bool transaction_claimed = false;
     if (intr_status & (DMA2D_LL_EVENT_RX_SUC_EOF | DMA2D_LL_EVENT_RX_ERR_EOF | DMA2D_LL_EVENT_RX_DESC_ERROR | DMA2D_LL_EVENT_RX_DESC_EMPTY)) {
-        if (!(intr_status & DMA2D_LL_EVENT_RX_ERR_EOF)) {
-            assert(dma2d_ll_rx_is_fsm_idle(group->hal.dev, channel_id));
+        // Only free the channels if we win the claim for the transaction that owned this RX
+        // channel when the interrupt fired (edata.transaction, captured above).
+        // If dma2d_force_end already claimed it, or the channel has already been freed and reassigned to another transaction,
+        // the claim fails and we must not free here, otherwise we would tear down channels that no longer belong to this transaction.
+        // Likewise for the FSM idle sanity check.
+        if (claim_rx_transaction(group, rx_chan, edata.transaction)) {
+            transaction_claimed = true;
+            if (!(intr_status & DMA2D_LL_EVENT_RX_ERR_EOF)) {
+                assert(dma2d_ll_rx_is_fsm_idle(group->hal.dev, channel_id));
+            }
+            need_yield |= free_up_channels(group, rx_chan);
         }
-        need_yield |= free_up_channels(group, rx_chan);
     }
 
     // Handle last transaction's end callbacks (at this point, last transaction's channels are completely freed,
-    // therefore, we don't pass in channel handle to the callbacks anymore)
-    if (intr_status & DMA2D_LL_EVENT_RX_SUC_EOF) {
+    // therefore, we don't pass in channel handle to the callbacks anymore).
+    // Deliver the EOF callback is probably not expected if we lost the claim (i.e. transaction was ended by dma2d_force_end).
+    if (transaction_claimed && (intr_status & DMA2D_LL_EVENT_RX_SUC_EOF)) {
         if (on_recv_eof) {
             edata.rx_eof_desc_addr = suc_eof_desc_addr;
             need_yield |= on_recv_eof(NULL, &edata, user_data);
@@ -350,6 +395,17 @@ static void dma2d_default_isr(void *args)
         portYIELD_FROM_ISR();
     }
 }
+
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+static esp_err_t dma2d_create_sleep_retention_link_cb(void *arg)
+{
+    sleep_retention_module_t module = dma2d_reg_retention_info.module;
+    esp_err_t err = sleep_retention_entries_create(dma2d_reg_retention_info.regdma_entry_array,
+                                                   dma2d_reg_retention_info.array_size,
+                                                   REGDMA_LINK_PRI_DMA2D, module);
+    return err;
+}
+#endif
 
 esp_err_t dma2d_acquire_pool(const dma2d_pool_config_t *config, dma2d_pool_handle_t *ret_pool)
 {
@@ -404,6 +460,34 @@ esp_err_t dma2d_acquire_pool(const dma2d_pool_config_t *config, dma2d_pool_handl
             dma2d_hal_init(&pre_alloc_group->hal, group_id); // initialize HAL context
             // Enable 2D-DMA module clock
             dma2d_ll_hw_enable(s_platform.groups[group_id]->hal.dev, true);
+
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+            // acquire sleep retention
+            sleep_retention_module_t module = dma2d_reg_retention_info.module;
+            sleep_retention_module_init_param_t init_param = {
+                .cbs = {
+                    .create = {
+                        .handle = dma2d_create_sleep_retention_link_cb,
+                        .arg = NULL,
+                    },
+                },
+                .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
+                .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
+            };
+            if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
+                // even though the sleep retention module init failed, DMA2D driver should still work, so just warning here
+                ESP_LOGW(TAG, "init sleep retention failed, power domain may be turned off during sleep");
+            } else {
+                if (sleep_retention_module_allocate(module) != ESP_OK) {
+                    ESP_LOGW(TAG, "fail to allocate retention link list");
+                    // don't call sleep_retention_module_deinit here, otherwise DMA2D peripheral may be powered off during sleep
+                } else {
+                    if (sleep_retention_module_attach(module) != ESP_OK) {
+                        ESP_LOGW(TAG, "attach retention module failed, power domain can't turn off");
+                    }
+                }
+            }
+#endif
         } else {
             ret = ESP_ERR_NO_MEM;
             free(pre_alloc_tx_channels);
@@ -494,6 +578,19 @@ esp_err_t dma2d_release_pool(dma2d_pool_handle_t dma2d_pool)
         PERIPH_RCC_ATOMIC() {
             dma2d_ll_enable_bus_clock(group_id, false);
         }
+
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+        sleep_retention_module_t module = dma2d_reg_retention_info.module;
+        if (sleep_retention_is_module_attached(module)) {
+            sleep_retention_module_detach(module);
+        }
+        if (sleep_retention_is_module_created(module)) {
+            sleep_retention_module_free(module);
+        }
+        if (sleep_retention_is_module_inited(module)) {
+            sleep_retention_module_deinit(module);
+        }
+#endif
     }
 
     if (do_deinitialize) {
@@ -704,8 +801,12 @@ esp_err_t dma2d_set_desc_addr(dma2d_channel_handle_t dma2d_chan, intptr_t desc_b
     addr_in_spm = esp_ptr_in_spm((void *)desc_base_addr);
 #endif
     ESP_GOTO_ON_FALSE_ISR((desc_base_addr & 0x7) == 0 && !addr_in_spm, ESP_ERR_INVALID_ARG, err, TAG, "invalid descriptor base addr");
-    // When flash encryption is enabled, the descriptor must be in internal RAM because descriptor size is not 16-byte aligned, which breaks flash encryption alignment restriction
-    ESP_GOTO_ON_FALSE_ISR(!esp_efuse_is_flash_encryption_enabled() || esp_ptr_internal((void *)desc_base_addr), ESP_ERR_INVALID_ARG, err, TAG, "invalid description base addr");
+    // If descriptors are placed in external memory, their size must meet MSPI alignment constraints;
+    // otherwise, descriptors must be located in internal RAM.
+    size_t mspi_align = esp_mspi_get_alignment((void *)desc_base_addr);
+    bool desc_size_mspi_aligned = (sizeof(dma2d_descriptor_t) & (mspi_align - 1)) == 0;
+    ESP_GOTO_ON_FALSE_ISR(desc_size_mspi_aligned || esp_ptr_internal((void *)desc_base_addr),
+                          ESP_ERR_INVALID_ARG, err, TAG, "invalid description base addr");
 
     dma2d_group_t *group = dma2d_chan->group;
     int channel_id = dma2d_chan->channel_id;
@@ -823,20 +924,19 @@ esp_err_t dma2d_set_transfer_ability(dma2d_channel_handle_t dma2d_chan, const dm
     ESP_GOTO_ON_FALSE_ISR(dma2d_chan && ability, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
     ESP_GOTO_ON_FALSE_ISR(ability->data_burst_length && ((ability->data_burst_length & (ability->data_burst_length - 1)) == 0), ESP_ERR_INVALID_ARG, err, TAG, "invalid argument"); // burst size must be power of 2
     ESP_GOTO_ON_FALSE_ISR(ability->mb_size < DMA2D_MACRO_BLOCK_SIZE_INVALID, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+    ESP_GOTO_ON_FALSE_ISR(!ability->access_ext_mem || (SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH), ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
 
     dma2d_group_t *group = dma2d_chan->group;
     int channel_id = dma2d_chan->channel_id;
-
-    // When flash encryption is enabled, and the channel is accessing external memory, burst length has to be as least as the encryption alignment restriction size
     uint32_t data_burst_length = ability->data_burst_length;
-#if SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH
-    if (esp_efuse_is_flash_encryption_enabled() && ability->access_ext_mem) {
-        if (data_burst_length < SOC_MEMSPI_ENCRYPTION_ALIGNMENT) {
-            data_burst_length = SOC_MEMSPI_ENCRYPTION_ALIGNMENT;
-            ESP_LOGW(TAG, "channel access encrypted external memory, adjust burst size to %d", SOC_MEMSPI_ENCRYPTION_ALIGNMENT);
+    if (ability->access_ext_mem) {
+        // If channel is accessing external memory, burst length has to be at least the MSPI alignment restriction size
+        size_t mspi_alignment = dma2d_get_alloc_alignment();
+        if (data_burst_length < mspi_alignment) {
+            data_burst_length = mspi_alignment;
+            ESP_LOGW(TAG, "requested burst size does not meet MSPI alignment constraint, adjust to %d", (int)mspi_alignment);
         }
     }
-#endif
 
     if (dma2d_chan->direction == DMA2D_CHANNEL_DIRECTION_TX) {
         dma2d_ll_tx_enable_descriptor_burst(group->hal.dev, channel_id, ability->desc_burst_en);
@@ -852,6 +952,46 @@ err:
     return ret;
 }
 
+size_t dma2d_get_buffer_alignment_constraint(const void *buffer)
+{
+    if (!buffer) {
+        return BIT(31);
+    }
+
+    return esp_mspi_get_alignment(buffer);
+}
+
+size_t dma2d_get_alloc_alignment(void)
+{
+    // Worst-case alignment for buffers that may be accessed by DMA2D (MSPI FE/ECC, etc.)
+    return esp_mspi_get_alignment(NULL);
+}
+
+bool dma2d_check_transaction_alignment_constraint(const void *buf, uint32_t pic_width, uint32_t blk_width,
+                                                  uint32_t offset_x, uint32_t bit_depth)
+{
+    if (!buf || bit_depth == 0) {
+        return false;
+    }
+
+    size_t alignment = dma2d_get_buffer_alignment_constraint(buf);
+    if (alignment <= 1) {
+        return true;
+    }
+
+    // Under Flash Encryption / PSRAM ECC, MSPI requires each AXI access to be aligned in both address and size.
+    // For 2D DMA that means:
+    // - buffer base address aligned to N bytes
+    // - bytes-per-line (pic_width * bpp/8) aligned, so every next line starts on an N-byte boundary
+    // - transfer width (blk_width * bpp/8) aligned
+    // - horizontal window offset (offset_x * bpp/8) aligned, so the first pixel of the window is aligned
+    uint32_t alignment_bits = alignment * 8;
+    return (((uintptr_t)buf & (alignment - 1)) == 0) &&
+           (((uint64_t)pic_width * bit_depth) % alignment_bits == 0) &&
+           (((uint64_t)blk_width * bit_depth) % alignment_bits == 0) &&
+           (((uint64_t)offset_x * bit_depth) % alignment_bits == 0);
+}
+
 esp_err_t dma2d_configure_color_space_conversion(dma2d_channel_handle_t dma2d_chan, const dma2d_csc_config_t *config)
 {
     esp_err_t ret = ESP_OK;
@@ -861,20 +1001,37 @@ esp_err_t dma2d_configure_color_space_conversion(dma2d_channel_handle_t dma2d_ch
     int channel_id = dma2d_chan->channel_id;
 
     if (dma2d_chan->direction == DMA2D_CHANNEL_DIRECTION_TX) {
-        ESP_GOTO_ON_FALSE_ISR((1 << channel_id) & DMA2D_LL_TX_CHANNEL_SUPPORT_CSC_MASK, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        bool tx_csc_supported = ((1U << channel_id) & DMA2D_LL_TX_CHANNEL_SUPPORT_CSC_MASK) != 0;
+        bool tx_csc_disabled = config->tx_csc_option == DMA2D_CSC_TX_NONE &&
+                               config->pre_scramble == DMA2D_SCRAMBLE_ORDER_NONE;
         ESP_GOTO_ON_FALSE_ISR(config->tx_csc_option < DMA2D_CSC_TX_INVALID, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
-        ESP_GOTO_ON_FALSE_ISR(config->post_scramble == 0, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        ESP_GOTO_ON_FALSE_ISR(config->post_scramble == DMA2D_SCRAMBLE_ORDER_NONE, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
         ESP_GOTO_ON_FALSE_ISR(config->pre_scramble == DMA2D_SCRAMBLE_ORDER_BYTE2_1_0 || (config->pre_scramble != DMA2D_SCRAMBLE_ORDER_BYTE2_1_0 && config->tx_csc_option != DMA2D_CSC_TX_NONE),
                               ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        ESP_GOTO_ON_FALSE_ISR(tx_csc_supported || tx_csc_disabled,
+                              ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        if (!tx_csc_supported) {
+            // bypass register configuration
+            return ret;
+        }
 
         dma2d_ll_tx_configure_color_space_conv(group->hal.dev, channel_id, config->tx_csc_option);
         dma2d_ll_tx_set_csc_pre_scramble(group->hal.dev, channel_id, config->pre_scramble);
     } else {
-        ESP_GOTO_ON_FALSE_ISR((1 << channel_id) & DMA2D_LL_RX_CHANNEL_SUPPORT_CSC_MASK, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        bool rx_csc_supported = ((1U << channel_id) & DMA2D_LL_RX_CHANNEL_SUPPORT_CSC_MASK) != 0;
+        bool rx_csc_disabled = config->rx_csc_option == DMA2D_CSC_RX_NONE &&
+                               config->pre_scramble == DMA2D_SCRAMBLE_ORDER_NONE &&
+                               config->post_scramble == DMA2D_SCRAMBLE_ORDER_NONE;
         ESP_GOTO_ON_FALSE_ISR(config->rx_csc_option < DMA2D_CSC_RX_INVALID, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
         ESP_GOTO_ON_FALSE_ISR((config->pre_scramble == DMA2D_SCRAMBLE_ORDER_BYTE2_1_0 && config->post_scramble == DMA2D_SCRAMBLE_ORDER_BYTE2_1_0) ||
                               ((config->pre_scramble != DMA2D_SCRAMBLE_ORDER_BYTE2_1_0 || config->post_scramble != DMA2D_SCRAMBLE_ORDER_BYTE2_1_0) && config->rx_csc_option != DMA2D_CSC_RX_NONE),
                               ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        ESP_GOTO_ON_FALSE_ISR(rx_csc_supported || rx_csc_disabled,
+                              ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
+        if (!rx_csc_supported) {
+            // bypass register configuration
+            return ret;
+        }
 
         dma2d_ll_rx_configure_color_space_conv(group->hal.dev, channel_id, config->rx_csc_option);
         dma2d_ll_rx_set_csc_pre_scramble(group->hal.dev, channel_id, config->pre_scramble);
@@ -943,57 +1100,111 @@ esp_err_t dma2d_enqueue(dma2d_pool_handle_t dma2d_pool, const dma2d_trans_config
         } else {
             TAILQ_INSERT_HEAD(&dma2d_group->pending_trans_tailq, trans_placeholder, entry);
         }
-    }
-    esp_os_exit_critical_safe(&dma2d_group->spinlock);
-    if (!enqueue) {
-        // Free channels available, start transaction immediately
+    } else { // free channels available and acquired
         // Store the acquired rx_chan into trans_placeholder (dma2d_trans_t) in case upper driver later need it to call `dma2d_force_end`
         // Upper driver controls the life cycle of trans_placeholder
         for (int i = 0; i < total_channel_num; i++) {
             if (channel_handle_array[i].dir == DMA2D_CHANNEL_DIRECTION_RX) {
                 trans_placeholder->rx_chan = channel_handle_array[i].chan;
             }
-            // Also save the transaction pointer
+            // Also save the transaction pointer to declare the ownership of the channels (has to be assigned in the same critical section)
             channel_handle_array[i].chan->status.transaction = trans_placeholder;
         }
+        // Mark the pick->start window (see free_up_channels): ownership is published but on_job_picked
+        // has not started the hardware yet, so dma2d_force_end must wait for `started` before tearing channels down.
+        atomic_store(&trans_placeholder->started, false);
+    }
+    esp_os_exit_critical_safe(&dma2d_group->spinlock);
+    if (!enqueue) { // start transaction immediately
         trans_desc->on_job_picked(total_channel_num, channel_handle_array, trans_desc->user_config);
+        atomic_store(&trans_placeholder->started, true);
     }
 
 err:
     return ret;
 }
 
+esp_err_t dma2d_dequeue(dma2d_pool_handle_t dma2d_pool, dma2d_trans_t *trans)
+{
+    ESP_RETURN_ON_FALSE(dma2d_pool && trans, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    dma2d_group_t *dma2d_group = dma2d_pool;
+
+    bool found = false;
+    esp_os_enter_critical(&dma2d_group->spinlock);
+    // The given transaction may have already been picked up (and thus removed from the queue) or may never
+    // have been enqueued. Removing such an element directly would corrupt the queue, so search the queue
+    // first and only remove it if it is genuinely still pending.
+    dma2d_trans_t *trans_elm;
+    TAILQ_FOREACH(trans_elm, &dma2d_group->pending_trans_tailq, entry) {
+        if (trans_elm == trans) {
+            // Safe to remove inside the loop because we break out immediately and never dereference the invalidated link pointer afterwards
+            TAILQ_REMOVE(&dma2d_group->pending_trans_tailq, trans, entry);
+            found = true;
+            break;
+        }
+    }
+    esp_os_exit_critical(&dma2d_group->spinlock);
+
+    // ESP_ERR_NOT_FOUND indicates the transaction is no longer (or was never) pending
+    // i.e. it has already been picked up for processing or it does not exist in this pool's queue
+    return found ? ESP_OK : ESP_ERR_NOT_FOUND;
+}
+
 esp_err_t dma2d_force_end(dma2d_trans_t *trans, bool *need_yield)
 {
-    ESP_RETURN_ON_FALSE_ISR(trans && trans->rx_chan && need_yield, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE_ISR(trans && need_yield, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE_ISR(trans->rx_chan, ESP_ERR_INVALID_STATE, TAG, "transaction still pending in the queue");
     assert(trans->rx_chan->direction == DMA2D_CHANNEL_DIRECTION_RX);
 
     dma2d_group_t *group = trans->rx_chan->group;
+    dma2d_rx_channel_t *rx_chan = group->rx_chans[trans->rx_chan->channel_id];
+
+    *need_yield = false;
 
     bool in_flight = false;
-    // We judge whether the transaction is in-flight by checking the RX channel it uses is being occupied or free
+    // We judge whether the transaction is in-flight by checking that the RX channel it uses is still owned by *this* transaction.
+    // Clearing the ownership in the same critical section claims the teardown: the natural
+    // completion ISR will then fail its own claim and will not free these channels again.
     esp_os_enter_critical_safe(&group->spinlock);
-    if (!(group->rx_channel_free_mask & (1 << trans->rx_chan->channel_id))) {
+    if (rx_chan->base.status.transaction == trans) {
         in_flight = true;
         dma2d_ll_rx_enable_interrupt(group->hal.dev, trans->rx_chan->channel_id, UINT32_MAX, false);
+        rx_chan->base.status.transaction = NULL; // claim the teardown of this transaction
         // DMA consumer could generate an error in both cases:
         // 1. when TX or RX is transferring data (channel not in idle state)
         // 2. TX successfully passed data to the module, but module cannot process the data, so RX has no data to delivery (RX channel in idle state)
     }
     esp_os_exit_critical_safe(&group->spinlock);
-    ESP_RETURN_ON_FALSE_ISR(in_flight, ESP_ERR_INVALID_STATE, TAG, "transaction not in-flight");
 
-    dma2d_rx_channel_t *rx_chan = group->rx_chans[trans->rx_chan->channel_id];
-    // Stop the RX channel and its bundled TX channels first
-    dma2d_stop(&rx_chan->base);
-    uint32_t tx_chans = rx_chan->bundled_tx_channel_mask;
-    for (int i = 0; i < DMA2D_LL_GET(TX_CHANS_PER_INST); i++) {
-        if (tx_chans & (1 << i)) {
-            dma2d_stop(&group->tx_chans[i]->base);
+    // If the transaction is no longer owned by this RX channel, it has already completed: its RX
+    // completion ISR has run and freed (and possibly reassigned) the channels. There is nothing to
+    // abort - the transaction has ended, which is exactly what the caller wants - so this is a no-op
+    // success.
+    if (in_flight) {
+        // We now exclusively own the teardown: the channels cannot be reassigned (their free-mask
+        // bits are still marked busy until free_up_channels runs) and a concurrent ISR will bail.
+
+        // The transaction may have been picked but not yet started: the completion ISR (or the
+        // immediate-start path in dma2d_enqueue) publishes ownership (making it look in-flight here)
+        // before calling `on_job_picked`, which configures and starts the channels outside the group
+        // spinlock. Wait for that start to finish before touching the channels, otherwise
+        // `on_job_picked` would configure/start channels that we are concurrently stopping and freeing.
+        // The wait is bounded (on_job_picked runs in ISR context and does not block) and can only
+        // happen across cores.
+        while (!atomic_load(&trans->started)) {
         }
+
+        // Stop the RX channel and its bundled TX channels first
+        dma2d_stop(&rx_chan->base);
+        uint32_t tx_chans = rx_chan->bundled_tx_channel_mask;
+        for (int i = 0; i < DMA2D_LL_GET(TX_CHANS_PER_INST); i++) {
+            if (tx_chans & (1 << i)) {
+                dma2d_stop(&group->tx_chans[i]->base);
+            }
+        }
+        // Then release channels
+        *need_yield = free_up_channels(group, rx_chan);
     }
-    // Then release channels
-    *need_yield = free_up_channels(group, rx_chan);
 
     return ESP_OK;
 }

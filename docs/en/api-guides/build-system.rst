@@ -77,7 +77,13 @@ In the above list, the ``cmake`` command configures the project and generates bu
 
 It's not necessary to run ``cmake`` more than once. After the first build, you only need to run ``ninja`` each time. ``ninja`` will automatically re-invoke ``cmake`` if the project needs reconfiguration.
 
-When using ``idf.py`` with the Ninja generator, you can cap the number of parallel build jobs by setting the ``IDF_PY_BUILD_JOBS`` environment variable. For example:
+You can control the number of parallel build jobs passed to the underlying build tool (Ninja or Make) with the ``-j``/``--jobs`` option of ``idf.py``. For example:
+
+.. code-block:: bash
+
+    idf.py -j 6 build
+
+The same value can be set with the ``IDF_PY_BUILD_JOBS`` environment variable, which is used as the default when ``-j``/``--jobs`` is not given:
 
 .. code-block:: bash
 
@@ -428,7 +434,7 @@ The following are some project/build variables that are available as build prope
 - ``IDF_TARGET``: Name of the target for which the project is being built.
 - ``PROJECT_VER``: Project version.
 
-  * If :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` option is set, the value of :ref:`CONFIG_APP_PROJECT_VER` will be used.
+  * If :menuitem:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` option is set, the value of :menuitem:`CONFIG_APP_PROJECT_VER` will be used.
   * Else, if ``PROJECT_VER`` variable is set in project CMakeLists.txt file, its value will be used.
   * Else, if the ``PROJECT_DIR/version.txt`` exists, its contents will be used as ``PROJECT_VER``.
   * Else, if ``VERSION`` argument is passed to the ``project()`` call in the CMakeLists.txt file as ``project(... VERSION x.y.z.w )`` then it will be used as ``PROJECT_VER``. The ``VERSION`` argument must be compliant with the `cmake standard <https://cmake.org/cmake/help/v3.22/command/project.html>`_.
@@ -1033,6 +1039,10 @@ To embed a file into a project, rather than a component, you can call the functi
 
 Place this line after the ``project()`` line in your project CMakeLists.txt file. Replace ``myproject.elf`` with your project name. The final argument can be ``TEXT`` to embed a null-terminated string, or ``BINARY`` to embed the content as-is.
 
+Use the optional ``ALIGN`` argument to align the embedded data's start symbol to a positive power of two. For example, to align binary data to 16 bytes::
+
+  target_add_binary_data(myproject.elf "main/data.bin" BINARY ALIGN 16)
+
 For an example of using this technique, see the "main" component of the file_serving example :example_file:`protocols/http_server/file_serving/main/CMakeLists.txt` - two files are loaded at build time and linked into the firmware.
 
 .. highlight:: cmake
@@ -1330,7 +1340,7 @@ The example in :example:`build_system/cmake/idf_as_lib` demonstrates the creatio
 
 .. only:: esp32
 
-   .. note:: The IDF build system can only set compiler flags for source files that it builds. When an external CMakeLists.txt file is used and PSRAM is enabled, remember to add ``-mfix-esp32-psram-cache-issue`` to the C compiler arguments. See :ref:`CONFIG_SPIRAM_CACHE_WORKAROUND` for details of this flag.
+   .. note:: The IDF build system can only set compiler flags for source files that it builds. When an external CMakeLists.txt file is used and PSRAM is enabled, remember to add ``-mfix-esp32-psram-cache-issue`` to the C compiler arguments. See :menuitem:`CONFIG_SPIRAM_CACHE_WORKAROUND` for details of this flag.
 
 
 .. _cmake_buildsystem_api:

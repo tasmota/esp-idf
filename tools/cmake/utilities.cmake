@@ -103,9 +103,10 @@ endfunction()
 
 # target_add_binary_data adds binary data into the built target,
 # by converting it to a generated source file which is then compiled
-# to a binary object as part of the build
+# to a binary object as part of the build. ALIGN optionally sets the
+# alignment of the embedded data's start symbol.
 function(target_add_binary_data target embed_file embed_type)
-    cmake_parse_arguments(_ "" "RENAME_TO" "DEPENDS" ${ARGN})
+    cmake_parse_arguments(_ "" "RENAME_TO;ALIGN" "DEPENDS" ${ARGN})
     idf_build_get_property(build_dir BUILD_DIR)
     idf_build_get_property(idf_path IDF_PATH)
 
@@ -119,11 +120,24 @@ function(target_add_binary_data target embed_file embed_type)
         set(rename_to_arg -D "VARIABLE_BASENAME=${__RENAME_TO}")
     endif()
 
+    set(align_arg)
+    if(DEFINED __ALIGN)
+        if(NOT __ALIGN MATCHES "^[1-9][0-9]*$")
+            message(FATAL_ERROR "ALIGN must be a positive integer")
+        endif()
+        math(EXPR alignment_mask "${__ALIGN} & (${__ALIGN} - 1)")
+        if(NOT alignment_mask EQUAL 0)
+            message(FATAL_ERROR "ALIGN must be a power of two")
+        endif()
+        set(align_arg -D "DATA_ALIGNMENT=${__ALIGN}")
+    endif()
+
     add_custom_command(OUTPUT "${embed_srcfile}"
         COMMAND "${CMAKE_COMMAND}"
         -D "DATA_FILE=${embed_file}"
         -D "SOURCE_FILE=${embed_srcfile}"
         ${rename_to_arg}
+        ${align_arg}
         -D "FILE_TYPE=${embed_type}"
         -P "${idf_path}/tools/cmake/scripts/data_file_embed_asm.cmake"
         MAIN_DEPENDENCY "${embed_file}"
@@ -211,8 +225,20 @@ function(preprocess_linker_file cmake_target script_in output_var preserve_suffi
     if(script_parent_name STREQUAL idf_target)
         # Add "../.." directory to include path (e.g. for esp_system component)
         get_filename_component(dir_to_include "${script_parent_dir}" DIRECTORY)
-        set(extra_cflags "-I\"${dir_to_include}\"")
+        # Add esp_system/ld directory to include path for the shared linker
+        # script fragments (e.g. ld.elf.internal.sections)
+        idf_component_get_property(esp_system_dir esp_system COMPONENT_DIR)
+        set(extra_cflags "-I\"${dir_to_include}\" -I\"${esp_system_dir}/ld\"")
     endif()
+
+    # Keep comments (-C): historical behavior for cmakev1 linker scripts. It was
+    # previously hardcoded in linker_script_preprocessor.cmake, which now leaves
+    # comment handling to the caller.
+    # Ask the preprocessor to emit all transitive #include dependencies. Without
+    # a depfile, CMake only knows about script_in and sdkconfig.h, so changes to
+    # files such as ld.common leave script_out stale.
+    set(depfile "${script_out}.d")
+    set(depfile_flags "-MD -MF \"${depfile}\" -MT \"${script_out}\"")
 
     add_custom_command(
         OUTPUT ${script_out}
@@ -220,10 +246,11 @@ function(preprocess_linker_file cmake_target script_in output_var preserve_suffi
             "-DCC=${CMAKE_C_COMPILER}"
             "-DSOURCE=${script_in}"
             "-DTARGET=${script_out}"
-            "-DCFLAGS=-I\"${config_dir}\" ${extra_cflags}"
+            "-DCFLAGS=-C -I\"${config_dir}\" ${depfile_flags} ${extra_cflags}"
             -P "${linker_script_generator}"
         MAIN_DEPENDENCY ${script_in}
         DEPENDS ${sdkconfig_header}
+        DEPFILE "${depfile}"
         COMMENT "Preprocessing linker script ${script_in} -> ${script_out}"
         VERBATIM)
 
@@ -485,3 +512,9 @@ function(add_deprecated_target_alias old_target new_target)
     )
     add_dependencies(${old_target} ${new_target})
 endfunction()
+
+
+# __compiler_query is defined in a standalone module so it can also be included
+# by the cmakev2 utilities; the esp_common and xtensa project_include.cmake
+# files that call it are shared by both build systems.
+include(${CMAKE_CURRENT_LIST_DIR}/compiler_query.cmake)

@@ -258,7 +258,7 @@ I2S 驱动中的资源可分为三个级别：
 电源管理
 ^^^^^^^^
 
-电源管理启用（即开启 :ref:`CONFIG_PM_ENABLE`）时，系统将在进入 Light-sleep 前调整或停止 I2S 时钟源，这可能会影响 I2S 信号，从而导致传输或接收的数据无效。
+电源管理启用（即开启 :menuitem:`CONFIG_PM_ENABLE`）时，系统将在进入 Light-sleep 前调整或停止 I2S 时钟源，这可能会影响 I2S 信号，从而导致传输或接收的数据无效。
 
 I2S 驱动可以获取电源管理锁，从而防止系统设置更改或时钟源被禁用。时钟源为 APB 时，锁的类型将被设置为 :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_APB_FREQ_MAX`。时钟源为 APLL（若支持）时，锁的类型将被设置为 :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_NO_LIGHT_SLEEP`。驱动程序将在调用 :cpp:func:`i2s_channel_enable` 启用通道时获取电源管理锁，并在调用 :cpp:func:`i2s_channel_disable` 禁用通道时释放锁，确保通道运行期间 I2S 时钟源保持稳定。
 
@@ -313,6 +313,102 @@ I2S 的数据传输（包括数据发送和接收）由 DMA 实现。在传输�
 - :cpp:func:`i2s_channel_preload_data`: 用于预加载音频数据到 I2S 内部缓存，使得 TX 通道使能后能够立即发送数据，以此降低音频初始输出延迟。
 - :cpp:func:`i2s_channel_tune_rate`: 用于在运行时动态微调音频速率，以匹配音频数据生产者和消费者的速度，从而防止因速率不匹配导致的中间缓存数据累积或不足。
 
+.. only:: SOC_I2S_SUPPORTS_TX_SYNC_CNT
+
+    - :cpp:func:`i2s_channel_get_sync_count`：通过 :cpp:type:`i2s_sync_count_t` 读取
+      TX 同步计数器。当支持 TX FIFO 同步时，也会返回 ``diff_count``。
+      该 API 也可通过 ``reset`` 参数主动清零计数器。
+
+.. only:: SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+
+    TX FIFO 同步
+    """"""""""""
+
+    {IDF_TARGET_NAME} 支持 I2S TX FIFO 同步功能，可用于通过 ETM 周期性触发 ``I2S_ETM_TASK_SYNC_FIFO`` 任务，检查 TX FIFO 实际发送的数据计数与期望计数之间的偏差。该功能适用于需要多个 I2S TX 端口或外部时序源保持同步的场景。
+
+    TX FIFO 同步相关 API 包括：
+
+    - :cpp:func:`i2s_channel_get_sync_count`：通过 :cpp:type:`i2s_sync_count_t` 读取 TX 同步计数器。
+      当支持 TX FIFO 同步时，也会返回 ``diff_count``，其含义为 ``I2S_TX_FIFO_CNT - I2S_TX_FIFO_IDEAL_CNT``。
+    - :cpp:func:`i2s_channel_config_tx_fifo_sync`：配置期望计数、自动补偿阈值、
+      手动补偿阈值以及硬件补偿方式。该 API 可在 TX 通道运行时调用，
+      但此时 TX FIFO 同步功能必须处于关闭状态。
+    - :cpp:func:`i2s_channel_enable_tx_fifo_sync`：使能或关闭 TX FIFO 同步功能。使能后，
+      硬件自动补偿和手动补偿中断同时激活。
+      关闭后，两者同时停用。使能 TX FIFO 同步时会重置 TX FIFO/BCLK 同步计数器。
+      该 API 必须在 :cpp:func:`i2s_channel_config_tx_fifo_sync` 之后调用。
+    - :cpp:func:`i2s_channel_register_event_callback`：注册手动补偿阈值中断回调。当
+      ``diff_count`` 超过手动补偿阈值时，驱动会在 ISR 中调用该回调，并通过
+      :cpp:type:`i2s_sync_event_data_t` 提供 ``diff_count``。注册回调只更新 handler；
+      TX sync 中断的开关由 :cpp:func:`i2s_channel_enable_tx_fifo_sync` 控制。
+
+    使用该功能的一般步骤如下：
+
+    1. 创建并初始化 I2S TX 通道。
+    2. 调用 :cpp:func:`i2s_channel_config_tx_fifo_sync` 配置 :cpp:type:`i2s_tx_fifo_sync_config_t`。``ideal_cnt`` 为每次 ETM 同步检查时期望发送的数据个数。该步骤可在 TX 通道运行时执行，但重新配置前必须先关闭 TX FIFO 同步功能。``auto_suppl_thresh`` 为硬件自动补偿阈值，必须小于 ``manual_suppl_thresh``。``manual_suppl_thresh`` 为触发回调并交由软件手动处理的阈值。如果偏差超过自动补偿阈值但尚未达到手动补偿阈值，硬件会自动补充或删除相应数量的数据，以实现与 ``ideal_cnt`` 同步。
+    3. 如需处理严重不同步场景，调用 :cpp:func:`i2s_channel_register_event_callback` 注册回调。
+    4. 调用 :cpp:func:`i2s_channel_enable_tx_fifo_sync` 并将 ``enable`` 设为 ``true``，同时激活硬件自动补偿和手动补偿中断。该调用会重置 TX FIFO/BCLK 同步计数器，因此第一次 ETM 同步检查会使用新的计数窗口。
+    5. 调用 :cpp:func:`i2s_new_etm_task` 创建 ``I2S_ETM_TASK_SYNC_FIFO`` 任务，并将外部 ETM 事件连接到该任务。
+    6. 使能 ETM 通道和 I2S TX 通道，由 ETM 事件周期性触发同步检查。
+
+    以下示例展示了如何使用 GPTimer alarm event 触发 I2S TX FIFO 同步检查，并在手动补偿阈值中断中获取
+    ``diff_count``：
+
+    .. code-block:: c
+
+        #include "driver/i2s_common.h"
+        #include "driver/i2s_etm.h"
+        #include "driver/gptimer.h"
+        #include "esp_etm.h"
+
+        /* 假设已经创建并初始化 I2S TX 通道、GPTimer 和 ETM 通道 */
+        i2s_chan_handle_t tx_handle;
+        gptimer_handle_t timer;
+        esp_etm_channel_handle_t etm_channel;
+
+        static bool IRAM_ATTR i2s_tx_sync_callback(i2s_chan_handle_t handle,
+                                                   const i2s_sync_event_data_t *event,
+                                                   void *user_ctx)
+        {
+            // 应用可根据 event->diff_count 决定是否调整数据源、补偿策略或上报给上层处理
+            return false;
+        }
+
+        i2s_tx_fifo_sync_config_t sync_cfg = {
+            .ideal_cnt = 1000,
+            .manual_suppl_thresh = 64,
+            .auto_suppl_thresh = 32,
+            .suppl_mode = I2S_TX_FIFO_SYNC_SUPPL_MODE_LAST_DATA,
+        };
+        i2s_event_callbacks_t cbs = {
+            .on_tx_sync_evt = i2s_tx_sync_callback,
+        };
+        i2s_channel_config_tx_fifo_sync(tx_handle, &sync_cfg);
+        i2s_channel_register_event_callback(tx_handle, &cbs, NULL);
+        i2s_channel_enable_tx_fifo_sync(tx_handle, true);
+
+        i2s_etm_task_config_t i2s_task_cfg = {
+            .task_type = I2S_ETM_TASK_SYNC_FIFO,
+        };
+        esp_etm_task_handle_t i2s_sync_task = NULL;
+        i2s_new_etm_task(tx_handle, &i2s_task_cfg, &i2s_sync_task);
+
+        gptimer_etm_event_config_t timer_event_cfg = {
+            .event_type = GPTIMER_ETM_EVENT_ALARM_MATCH,
+        };
+        esp_etm_event_handle_t timer_event = NULL;
+        gptimer_new_etm_event(timer, &timer_event_cfg, &timer_event);
+
+        esp_etm_channel_connect(etm_channel, timer_event, i2s_sync_task);
+        esp_etm_channel_enable(etm_channel);
+
+    .. note::
+
+        ``I2S_ETM_TASK_SYNC_FIFO`` 触发后，硬件会自动清零 TX FIFO/BCLK 同步计数器。
+        为避免同步检查使用到正在更新中的配置，重新配置 TX FIFO 同步前应调用
+        :cpp:func:`i2s_channel_enable_tx_fifo_sync` 并将 ``enable`` 设为 ``false``。
+        如果重新配置期间 ETM 事件源仍可能触发，可根据需要关闭 ETM 通道或暂停事件源。
+
 .. _i2s-iram-safe:
 
 IRAM 安全
@@ -320,7 +416,7 @@ IRAM 安全
 
 默认情况下，由于写入或擦除 flash 等原因导致 cache 被禁用时，I2S 中断将产生延迟，无法及时执行 EOF 中断。
 
-在实时应用中，可通过启用 Kconfig 选项 :ref:`CONFIG_I2S_ISR_IRAM_SAFE` 来避免此种情况发生，启用后：
+在实时应用中，可通过启用 Kconfig 选项 :menuitem:`CONFIG_I2S_ISR_IRAM_SAFE` 来避免此种情况发生，启用后：
 
 1. 即使在 cache 被禁用的情况下，中断仍可继续运行。
 
@@ -336,8 +432,8 @@ IRAM 安全
 Kconfig 选项
 ^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2S_ISR_IRAM_SAFE` 控制默认 ISR 处理程序能否在禁用 cache 的情况下工作。更多信息可参考 :ref:`i2s-iram-safe`。
-- :ref:`CONFIG_I2S_ENABLE_DEBUG_LOG` 用于启用调试日志输出。启用该选项将增加固件的二进制文件大小。
+- :menuitem:`CONFIG_I2S_ISR_IRAM_SAFE` 控制默认 ISR 处理程序能否在禁用 cache 的情况下工作。更多信息可参考 :ref:`i2s-iram-safe`。
+- :menuitem:`CONFIG_I2S_ENABLE_DEBUG_LOG` 用于启用调试日志输出。启用该选项将增加固件的二进制文件大小。
 
 应用实例
 --------
@@ -349,12 +445,17 @@ I2S 驱动例程请参考 :example:`peripherals/i2s` 目录。以下为每种模
 
 - :example:`peripherals/i2s/i2s_codec/i2s_es8311` 演示了如何在 {IDF_TARGET_NAME} 上使用 I2S ES8311 音频编解码器来播放音乐或回声，具有高性能和低功耗的多位 delta-sigma 音频 ADC 和 DAC，提供自定义音乐、调整麦克风增益和音量的选项。
 - :example:`peripherals/i2s/i2s_basic/i2s_std` 演示了如何在 {IDF_TARGET_NAME} 上以单工或全双工模式使用 I2S 标准模式。
+- :example:`peripherals/i2s/mic_recorder` 演示了如何通过 I2S STD 接口，使用 ES8389 音频编解码器录制模拟麦克风的音频。
 
 不同声道的通信格式可通过以下标准模式的辅助宏来生成。如上所述，在标准模式下有三种格式，辅助宏分别为：
 
 - :c:macro:`I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_PCM_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_MSB_SLOT_DEFAULT_CONFIG`
+
+.. note::
+
+    标准模式的声道辅助宏会根据 ``bits_per_sample`` 参数设置 :cpp:member:`i2s_std_slot_config_t::ws_width`。如果使用辅助宏后手动修改 :cpp:member:`i2s_std_slot_config_t::slot_bit_width`，请根据需要同步更新 :cpp:member:`i2s_std_slot_config_t::ws_width`。对于 Philips 和 MSB 格式，应将 ``ws_width`` 设置为声道位宽，以保持 WS 占空比为 50%。对于 PCM 短帧同步格式，``ws_width`` 应保持为 1 个 BCLK。
 
 时钟配置的辅助宏为：
 
@@ -704,7 +805,7 @@ STD RX 模式
     PDM RX 模式的应用
     ^^^^^^^^^^^^^^^^^^
 
-    - :example:`peripherals/i2s/i2s_recorder` 演示了如何通过 I2S 外设以 PDM 数据格式用数字 MEMS 麦克风录制音频，并将其以 ``.wav`` 文件格式保存到 {IDF_TARGET_NAME} 开发板上的 SD 卡中。
+    - :example:`peripherals/i2s/mic_recorder` 演示了如何录制音频：既可以使用 PDM 数字 MEMS 麦克风（通过 I2S PDM RX 模式），也可以使用连接 ES8389 编解码器的模拟麦克风，并将采集到的 PCM 数据通过控制台串流输出，以便在主机 PC 上重建 ``.wav`` 文件。
     - :example:`peripherals/i2s/i2s_basic/i2s_pdm` 演示了如何在 {IDF_TARGET_NAME} 上使用 PDM RX 模式，包括必要的硬件设置和配置。
 
     针对 RX 通道的 PDM 模式，声道配置的辅助宏为：
@@ -806,6 +907,10 @@ STD RX 模式
     - :c:macro:`I2S_TDM_PCM_SHORT_SLOT_DEFAULT_CONFIG`
     - :c:macro:`I2S_TDM_PCM_LONG_SLOT_DEFAULT_CONFIG`
 
+    .. note::
+
+        TDM Philips 和 MSB 声道辅助宏默认使用 ``I2S_TDM_AUTO_WS_WIDTH``，该配置会将 WS 宽度设置为帧宽的一半。如果手动修改 :cpp:member:`i2s_tdm_slot_config_t::ws_width`，请确保配置的 WS 宽度符合所选格式的预期时序。
+
     时钟配置的辅助宏为：
 
     - :c:macro:`I2S_TDM_CLK_DEFAULT_CONFIG`
@@ -892,6 +997,10 @@ STD RX 模式
 
 请注意，一个句柄只能代表一个通道，因此仍然需要对 TX 和 RX 通道逐个进行声道和时钟配置。
 
+.. note::
+
+    全双工模式下只能有一个通道作为 master 生成 BCLK 和 WS。如果配对的两个句柄都配置为 ``I2S_ROLE_MASTER``，后初始化的句柄会被自动切换为 ``I2S_ROLE_SLAVE``。
+
 驱动支持两种分配全双工通道的方法：
 
 1. 在调用 :cpp:func:`i2s_new_channel` 函数时，同时分配 TX 和 RX 通道两个通道。
@@ -909,7 +1018,7 @@ STD RX 模式
     /* 同时分配给 TX 和 RX 通道，使其进入全双工模式。 */
     i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
 
-    /* 配置两个通道，因为在全双工模式下，TX 和 RX 通道必须相同。 */
+    /* 配置两个通道。全双工模式要求 BCLK/WS 与帧时序匹配。 */
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(32000),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -934,7 +1043,7 @@ STD RX 模式
 
     ...
 
-2. 调用两次 :cpp:func:`i2s_new_channel` 函数分别分配 TX 和 RX 通道，但使用相同配置初始化 TX 和 RX 通道。
+2. 调用两次 :cpp:func:`i2s_new_channel` 函数分别分配 TX 和 RX 通道，并使用兼容配置初始化 TX 和 RX 通道。
 
 .. code-block:: c
 
@@ -949,7 +1058,7 @@ STD RX 模式
     /* 分别分配给 TX 和 RX 通道 */
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
 
-    /* 为两个通道设置完全相同的配置，TX 和 RX 将自动组成全双工模式 */
+    /* 为两个通道设置兼容配置，TX 和 RX 将自动组成全双工模式 */
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(32000),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -975,6 +1084,15 @@ STD RX 模式
 
     ...
 
+.. only:: SOC_I2S_HW_VERSION_2
+
+    当 TX 和 RX 通道分别分配时（即上述第二种方法），二者无需配置得完全相同即可组成全双工。只要满足以下条件，驱动就会让它们共享 BCLK 和 WS 信号线：
+
+    - 两个通道使用相同且有效的 ``bclk`` 和 ``ws`` 管脚；
+    - 两个通道使用相同的 BCLK/WS 反相配置；
+    - 二者产生相同的帧时序，即 ``sample_rate_hz`` 相同且每帧总位数（``total_slot * slot_bit_width``）相同。
+
+    时钟源、外部时钟频率（``ext_clk_freq_hz``）以及 MCLK 相关配置不作为组成全双工的判据，MCLK 相关配置包括 ``mclk`` 管脚、``mclk_multiple`` 和 MCLK 反相配置。槽（slot）布局本身也可以不同。例如，一个 STD 通道与一个 TDM 通道，或者 2 槽/32 位通道与 4 槽/16 位通道配对，只要每帧的位数相同，仍可组成全双工。一旦组成了一对全双工通道，便可通过 :cpp:func:`i2s_channel_get_info` 返回的 :cpp:type:`i2s_chan_info_t`::pair_chan 获取配对通道的句柄。
 
 .. only:: SOC_I2S_HW_VERSION_1
 

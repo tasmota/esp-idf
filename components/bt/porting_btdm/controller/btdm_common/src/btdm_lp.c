@@ -19,9 +19,9 @@
 #include "esp_pm.h"
 #endif
 
+#include "esp_private/sleep_modem.h"
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
 #include "esp_private/pm_impl.h"
-#include "esp_private/sleep_modem.h"
 #include "esp_private/sleep_retention.h"
 #endif
 #include "soc/rtc.h"
@@ -37,8 +37,16 @@
  */
 #define BTDM_LOG_TAG "BTDM_SLEEP"
 
-#define BTDM_RTC_DELAY_US_LIGHT_SLEEP (2000)
+#define BTDM_RTC_DELAY_US_LIGHT_SLEEP (1800)
 #define BTDM_RTC_DELAY_US_MODEM_SLEEP (1500)
+
+typedef union {
+    struct {
+        uint32_t rsv:31;
+        uint32_t bt_wakeup:1;
+    };
+    uint32_t val;
+} btdm_lp_wakeup_params_t;
 
 /*
  ***************************************************************************************************
@@ -46,6 +54,9 @@
  ***************************************************************************************************
  */
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#if UC_BT_CTRL_SLEEP_ENABLE
+static bool btdm_lp_check_wakeup_by_bt(void);
+#endif // UC_BT_CTRL_SLEEP_ENABLE
 extern bool r_btdm_sleep_should_skip_light_sleep_check(void);
 extern const sleep_retention_entries_config_t *r_btdm_mac_retention_link_get(uint8_t *size);
 extern void r_btdm_sleep_wake_up_overhead_set(uint32_t overhead);
@@ -73,6 +84,8 @@ static DRAM_ATTR esp_pm_lock_handle_t s_pm_lock = NULL;
 #endif // CONFIG_PM_ENABLE
 static uint32_t s_bt_xtal_lpclk_freq = 100000;
 static uint32_t s_bt_lpclk_freq = 0;
+static uint8_t s_btdm_lp_modem_clk_en = 0;
+static uint8_t s_btdm_lp_modem_apb_clk_en = 0;
 
 /*
  ***************************************************************************************************
@@ -82,14 +95,22 @@ static uint32_t s_bt_lpclk_freq = 0;
 static void
 btdm_lp_rtc_slow_clk_select(uint8_t slow_clk_src)
 {
+
     /* Select slow clock source for BT momdule */
     switch (slow_clk_src) {
         case MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL:
             ESP_LOGI(BTDM_LOG_TAG, "Using main XTAL as clock source");
-            modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, slow_clk_src, (CONFIG_XTAL_FREQ * 1000000 / s_bt_xtal_lpclk_freq - 1));
+            modem_clock_select_lp_clock_source(
+                PERIPH_BT_MODULE, slow_clk_src,
+                (CONFIG_XTAL_FREQ * 1000000 / s_bt_xtal_lpclk_freq - 1));
             break;
         case MODEM_CLOCK_LPCLK_SRC_RC_SLOW:
-            ESP_LOGW(BTDM_LOG_TAG, "Using 136 kHz RC as clock source, use with caution as it may not maintain ACL or Sync process due to low clock accuracy!");
+#if UC_BT_CTRL_SLEEP_ENABLE
+            ESP_LOGW(BTDM_LOG_TAG, "Using 136 kHz RC as clock source, use with caution as it may "
+                                   "not maintain ACL or Sync process due to low clock accuracy!");
+#else
+            ESP_LOGI(BTDM_LOG_TAG, "Using 136 kHz RC as clock source");
+#endif // UC_BT_CTRL_SLEEP_ENABLE
             modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, slow_clk_src, (5 - 1));
             break;
         case MODEM_CLOCK_LPCLK_SRC_XTAL32K:
@@ -97,19 +118,32 @@ btdm_lp_rtc_slow_clk_select(uint8_t slow_clk_src)
             modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, slow_clk_src, (1 - 1));
             break;
         case MODEM_CLOCK_LPCLK_SRC_RC32K:
-            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz RC as clock source, can only run legacy ADV or SCAN due to low clock accuracy!");
+#if UC_BT_CTRL_SLEEP_ENABLE
+            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz RC as clock source, can only run legacy ADV or "
+                                   "SCAN due to low clock accuracy!");
+#else
+            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz RC as clock source");
+#endif // UC_BT_CTRL_SLEEP_ENABLE
             modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, slow_clk_src, (1 - 1));
             break;
         case MODEM_CLOCK_LPCLK_SRC_EXT32K:
-            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz oscillator as clock source, can only run legacy ADV or SCAN due to low clock accuracy!");
+#if UC_BT_CTRL_SLEEP_ENABLE
+            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz oscillator as clock source, can only run legacy "
+                                   "ADV or SCAN due to low clock accuracy!");
+#else
+            ESP_LOGI(BTDM_LOG_TAG, "Using 32 kHz oscillator as clock source");
+#endif // UC_BT_CTRL_SLEEP_ENABLE
             modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, slow_clk_src, (1 - 1));
             break;
         default:
+            ESP_LOGE(BTDM_LOG_TAG, "Unsupported clock source");
+            assert(0);
+            break;
     }
 }
 
 static void
-btdm_lp_timer_clk_init(esp_btdm_controller_config_t *cfg)
+btdm_lp_timer_clk_init(esp_bt_ctrl_btdm_config_t *cfg)
 {
     if (s_bt_lpclk_src == MODEM_CLOCK_LPCLK_SRC_INVALID) {
 #if CONFIG_BT_CTRL_LP_CLK_SRC_MAIN_XTAL
@@ -152,14 +186,14 @@ modem_clock_lpclk_src_t btdm_lp_get_lpclk_src(void)
     return s_bt_lpclk_src;
 }
 
-extern esp_bt_controller_status_t esp_ble_controller_get_status(void);
+
 void btdm_lp_set_lpclk_src(modem_clock_lpclk_src_t clk_src)
 {
-    if (esp_ble_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
         return;
     }
 
-    if (clk_src >= MODEM_CLOCK_LPCLK_SRC_MAX || clk_src <= MODEM_CLOCK_LPCLK_SRC_INVALID) {
+    if (clk_src >= MODEM_CLOCK_LPCLK_SRC_MAX) {
         return;
     }
 
@@ -175,7 +209,7 @@ void btdm_lp_set_lpclk_freq(uint32_t clk_freq)
 {
     uint32_t xtal_freq;
 
-    if (esp_ble_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
         return;
     }
 
@@ -213,17 +247,33 @@ btdm_lp_sleep_cb(uint32_t enable_tick, void *arg)
 void
 btdm_lp_wake_up_cb(void *arg)
 {
+    btdm_lp_wakeup_params_t *params;
+
     if (s_bt_active) {
         return;
     }
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_acquire(s_pm_lock);
 #endif // CONFIG_PM_ENABLE
+    params = (btdm_lp_wakeup_params_t *)arg;
+    if (params) {
+        params->bt_wakeup = 0;
+    }
     esp_phy_enable(PHY_MODEM_BT);
+#if UC_BT_CTRL_SLEEP_ENABLE && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    if (params) {
+        params->bt_wakeup = btdm_lp_check_wakeup_by_bt();
+    }
+#endif // UC_BT_CTRL_SLEEP_ENABLE && CONFIG_FREERTOS_USE_TICKLESS_IDLE
     s_bt_active = true;
 }
 
 #if UC_BT_CTRL_SLEEP_ENABLE && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+static bool btdm_lp_check_wakeup_by_bt(void)
+{
+   return (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_BT));
+}
+
 static esp_err_t
 btdm_lp_modem_retention_create(void)
 {
@@ -237,12 +287,12 @@ btdm_lp_modem_retention_create(void)
     }
 
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE
-    // TODO: check the return value
+    // TODO: check the return value. Shouldn't invoke the upper layer function directly.
     sleep_modem_bredr_mac_modem_state_init();
 #endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
 
 #if UC_BT_CTRL_BLE_IS_ENABLE
-    // TODO: check the return value
+    // TODO: check the return value. Shouldn't invoke the upper layer function directly.
     sleep_modem_ble_mac_modem_state_init();
 #endif // UC_BT_CTRL_BLE_IS_ENABLE
     return err;
@@ -305,18 +355,32 @@ btdm_lp_modem_state_deinit(void)
  ***************************************************************************************************
  */
 void
-btdm_lp_enable_clock(esp_btdm_controller_config_t *cfg)
+btdm_lp_enable_clock(esp_bt_ctrl_btdm_config_t *cfg)
 {
-    modem_clock_module_enable(PERIPH_BT_MODULE);
-    modem_clock_module_mac_reset(PERIPH_BT_MODULE);
-    btdm_lp_timer_clk_init(cfg);
+    if (!s_btdm_lp_modem_clk_en) {
+        modem_clock_module_enable(PERIPH_BT_MODULE);
+        s_btdm_lp_modem_clk_en = 1;
+    }
+    if (!s_btdm_lp_modem_apb_clk_en) {
+        modem_clock_module_enable(PERIPH_BT_APB_MODULE);
+        modem_clock_module_mac_reset(PERIPH_BT_MODULE);
+        btdm_lp_timer_clk_init(cfg);
+        s_btdm_lp_modem_apb_clk_en = 1;
+    }
 }
 
 void
 btdm_lp_disable_clock(void)
 {
-    btdm_lp_timer_clk_deinit();
-    modem_clock_module_disable(PERIPH_BT_MODULE);
+    if (s_btdm_lp_modem_apb_clk_en) {
+        btdm_lp_timer_clk_deinit();
+        modem_clock_module_disable(PERIPH_BT_APB_MODULE);
+        s_btdm_lp_modem_apb_clk_en = 0;
+    }
+    if (s_btdm_lp_modem_clk_en) {
+        modem_clock_module_disable(PERIPH_BT_MODULE);
+        s_btdm_lp_modem_clk_en = 0;
+    }
 }
 
 int
@@ -391,7 +455,9 @@ btdm_lp_reset(bool enable_stage)
 #if CONFIG_PM_ENABLE
         esp_pm_lock_acquire(s_pm_lock);
 #endif // CONFIG_PM_ENABLE
-
+#if SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+        esp_phy_modem_init(SLEEP_MODEM_BT);
+#endif // SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
         esp_phy_enable(PHY_MODEM_BT);
 #if CONFIG_IDF_TARGET_ESP32H4
         // TODO: Need to be deleted.
@@ -404,6 +470,9 @@ btdm_lp_reset(bool enable_stage)
         esp_btbb_disable();
         if (s_bt_active) {
             esp_phy_disable(PHY_MODEM_BT);
+#if SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+            esp_phy_modem_deinit(SLEEP_MODEM_BT);
+#endif // SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
 #if CONFIG_PM_ENABLE
             esp_pm_lock_release(s_pm_lock);
 #endif // CONFIG_PM_ENABLE
@@ -419,5 +488,26 @@ btdm_lp_shutdown(void)
     if (s_bt_active) {
         // esp_phy_disable(PHY_MODEM_BT);
         s_bt_active = false;
+    }
+}
+
+/*
+ ***************************************************************************************************
+ * External Function Definitions for other modules
+ ***************************************************************************************************
+ */
+void IRAM_ATTR
+e_btdm_lp_modem_clock_set(bool enable)
+{
+    if (enable) {
+        if (!s_btdm_lp_modem_clk_en) {
+            modem_clock_module_enable(PERIPH_BT_MODULE);
+            s_btdm_lp_modem_clk_en = 1;
+        }
+    } else {
+        if (!s_bt_active && s_btdm_lp_modem_clk_en) {
+            modem_clock_module_disable(PERIPH_BT_MODULE);
+            s_btdm_lp_modem_clk_en = 0;
+        }
     }
 }

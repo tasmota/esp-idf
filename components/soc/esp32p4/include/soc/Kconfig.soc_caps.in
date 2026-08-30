@@ -221,7 +221,7 @@ config SOC_ECDSA_SUPPORTED
 
 config SOC_KEY_MANAGER_SUPPORTED
     bool
-    default y
+    default n
 
 config SOC_HUK_SUPPORTED
     bool
@@ -392,6 +392,10 @@ config SOC_I3C_MASTER_SUPPORTED
     default y
 
 config SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED
+    bool
+    default y
+
+config SOC_RISCV_TRACE_SUPPORTED
     bool
     default y
 
@@ -638,10 +642,6 @@ config SOC_GDMA_SUPPORT_ETM
 config SOC_GDMA_SUPPORT_SLEEP_RETENTION
     bool
     default y
-
-config SOC_GDMA_EXT_MEM_ENC_ALIGNMENT
-    int
-    default 16
 
 config SOC_GPIO_PORT
     int
@@ -1163,6 +1163,10 @@ config SOC_USB_UTMI_PHY_NUM
     int
     default 1
 
+config SOC_PM_SUPPORT_USB_WAKEUP
+    bool
+    default y
+
 config SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH
     int
     default 16
@@ -1332,6 +1336,10 @@ config SOC_SPI_SUPPORT_SLAVE_HD_VER2
     default y
 
 config SOC_SPI_SUPPORT_OCT
+    bool
+    default y
+
+config SOC_SPI_SUPPORT_DDR_CLOCK
     bool
     default y
 
@@ -1924,5 +1932,29 @@ config SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
     default y
 
 config SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED
+    bool
+    default y
+
+config SOC_DEBUG_HAVE_OCD_STUB_BINS
+    bool
+    default y
+
+config SOC_RISCV_TRACE_HAS_CONFIG_REG
+    bool
+    default y
+
+config SOC_RISCV_TRACE_AHB_CONFIGURABLE
+    bool
+    default y
+
+config SOC_RISCV_TRACE_FILTER_SUPPORTED
+    bool
+    default y
+
+config SOC_RISCV_TRACE_PRIV_WIDTH
+    int
+    default 1
+
+config SOC_RISCV_TRACE_MEM_SUPPORT_PSRAM
     bool
     default y

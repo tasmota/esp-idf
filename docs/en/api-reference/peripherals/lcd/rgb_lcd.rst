@@ -256,11 +256,11 @@ This mode allocates two "bounce buffers" from internal memory and a main frame b
 
 .. note::
 
-    For optimal performance in this mode, it is highly recommended to enable the "PSRAM XIP (Execute In Place)" feature by turning on the Kconfig option: :ref:`CONFIG_SPIRAM_XIP_FROM_PSRAM`. This allows the CPU to fetch instructions and read-only data directly from PSRAM instead of the main flash. Additionally, the external memory cache remains active even when writing to the main flash via SPI 1, making it feasible to display an OTA progress bar during your application updates.
+    For optimal performance in this mode, it is highly recommended to enable the "PSRAM XIP (Execute In Place)" feature by turning on the Kconfig option: :menuitem:`CONFIG_SPIRAM_XIP_FROM_PSRAM`. This allows the CPU to fetch instructions and read-only data directly from PSRAM instead of the main flash. Additionally, the external memory cache remains active even when writing to the main flash via SPI 1, making it feasible to display an OTA progress bar during your application updates.
 
 .. note::
 
-    This mode also faces issues due to limited PSRAM bandwidth. For instance, if your draw buffers are in PSRAM and their contents are copied to the internal frame buffer by CPU Core 1, while CPU Core 0 is performing another memory copy in the DMA EOF ISR, both CPUs will be accessing PSRAM via cache, sharing its bandwidth. This significantly increases the memory copy time in the DMA EOF ISR, causing the driver to fail in switching the bounce buffer promptly, resulting in a screen shift. Although the driver can detect this condition and restart in the LCD's VSYNC interrupt handler, you may still notice flickering on the screen.
+    This mode also faces issues due to limited PSRAM bandwidth. For instance, if your draw buffers are in PSRAM and their contents are copied to the internal frame buffer by CPU Core 1, while CPU Core 0 is performing another memory copy in the DMA EOF ISR, both CPUs will be accessing PSRAM via cache, sharing its bandwidth. This significantly increases the memory copy time in the DMA EOF ISR, causing the driver to fail in switching the bounce buffer promptly, resulting in a screen shift. On ESP32-S3, the driver can detect this condition and restart in the LCD's VSYNC interrupt handler, although you may still notice flickering on the screen.
 
 .. code:: c
 
@@ -305,10 +305,82 @@ Bounce Buffer Only
 
 This mode is similar to :ref:`bounce_buffer_with_single_psram_frame_buffer`, but there is no PSRAM frame buffer initialized by the LCD driver. Instead, the user supplies a callback function that is responsible for filling the bounce buffers. As this driver does not care where the written pixels come from, this allows for the callback doing e.g., on-the-fly conversion from a smaller, 8-bit-per-pixel PSRAM frame buffer to a 16-bit LCD, or even procedurally generated frame-buffer-less graphics. This option is selected by setting the :cpp:member:`esp_lcd_rgb_panel_config_t::no_fb` flag and supplying a :cpp:member:`esp_lcd_rgb_panel_config_t::bounce_buffer_size_px` value. And then register the :cpp:member:`esp_lcd_rgb_panel_event_callbacks_t::on_bounce_empty` callback by calling :cpp:func:`esp_lcd_rgb_panel_register_event_callbacks`.
 
-.. note::
+.. only:: esp32s3
 
-    In a well-designed embedded application, situations where the DMA cannot deliver data as fast as the LCD consumes it should be avoided. However, such scenarios can theoretically occur. In the {IDF_TARGET_NAME} hardware, this results in the LCD outputting dummy bytes while the DMA waits for data. If the DMA were to run in a continuous stream, it could cause a desynchronization between the LCD address from which the DMA reads data and the address from which the LCD peripheral outputs data, leading to a **permanently** shifted image.
-    To prevent this, you can either enable the :ref:`CONFIG_LCD_RGB_RESTART_IN_VSYNC` option, allowing the driver to automatically restart the DMA during the VBlank interrupt, or call :cpp:func:`esp_lcd_rgb_panel_restart` to manually restart the DMA. Note that :cpp:func:`esp_lcd_rgb_panel_restart` does not restart the DMA immediately; instead, the DMA will be restarted at the next VSYNC event.
+    .. note::
+
+        In a well-designed embedded application, situations where the DMA cannot deliver data as fast as the LCD consumes it should be avoided. However, such scenarios can theoretically occur. In the {IDF_TARGET_NAME} hardware, this results in the LCD outputting dummy bytes while the DMA waits for data. If the DMA were to run in a continuous stream, it could cause a desynchronization between the LCD address from which the DMA reads data and the address from which the LCD peripheral outputs data, leading to a **permanently** shifted image.
+        To prevent this, you can either enable the :menuitem:`CONFIG_LCD_RGB_RESTART_IN_VSYNC` option, allowing the driver to automatically restart the DMA during the VBlank interrupt, or call :cpp:func:`esp_lcd_rgb_panel_restart` to manually restart the DMA. Note that :cpp:func:`esp_lcd_rgb_panel_restart` does not restart the DMA immediately; instead, the DMA will be restarted at the next VSYNC event.
+
+Draw Bitmap Hook Function
+-------------------------
+
+If you want to accelerate 2D bitmap copy with DMA2D, the driver already provides a built-in DMA2D bitmap copy hook. You only need to call :cpp:func:`esp_lcd_rgb_panel_enable_dma2d` to enable it.
+
+.. code-block:: c
+
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_enable_dma2d(panel_handle));
+
+If you need more advanced applications, you can add a custom hook for draw bitmap, such as using PPA to implement rotation, scaling, etc.
+
+.. code-block:: c
+
+    esp_lcd_panel_hooks_t hooks = {
+        .draw_bitmap_hook = custom_draw_bitmap_hook,
+    };
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_hooks(panel_handle, &hooks, &user_ctx));
+
+If the custom hook is asynchronous — for example, the hook starts a PPA transfer and returns immediately while the hardware continues processing pixels in the background — call :cpp:member:`esp_lcd_draw_bitmap_hook_data_t::on_hook_end` only after the hardware operation has actually finished. ``on_hook_end`` is implemented and filled into ``hook_data`` by the RGB panel driver; you do not need to write it yourself, only call it when the asynchronous operation completes to notify the driver that the draw transaction is finished. If a color transfer done callback has been registered, it is invoked at that time as well.
+
+The panel driver does not wait for a previous draw to finish; synchronization is the custom hook's responsibility. The simplest approach is to serialize draws (do not start a new one before the previous one completes), as shown in the example below. If you want to submit multiple draws concurrently using an accelerator transaction queue such as PPA's, keep a separate ``hook_data`` copy per transaction, keep the source buffer valid until hardware completion, and handle overlapping destination regions carefully.
+
+The following snippet shows an asynchronous custom hook: it starts PPA and returns immediately, then calls ``on_hook_end`` from the PPA completion callback. The example serializes draws with a semaphore so only one draw is in flight at a time:
+
+.. code-block:: c
+
+    typedef struct {
+        esp_lcd_panel_handle_t panel;
+        esp_lcd_draw_bitmap_hook_data_t hook_data;
+        SemaphoreHandle_t draw_sem;
+        // ... other fields, e.g. ppa_client_handle_t
+    } draw_bitmap_hook_ctx_t;
+
+    static bool ppa_trans_done_callback(ppa_client_handle_t ppa_client, ppa_event_data_t *edata, void *user_ctx)
+    {
+        draw_bitmap_hook_ctx_t *ctx = (draw_bitmap_hook_ctx_t *)user_ctx;
+        bool need_yield = false;
+
+        // on_hook_end is provided by the RGB panel driver; just call it when done
+        if (ctx->hook_data.on_hook_end) {
+            if (ctx->hook_data.on_hook_end(ctx->panel)) {
+                need_yield = true;
+            }
+        }
+
+        BaseType_t task_woken = pdFALSE;
+        xSemaphoreGiveFromISR(ctx->draw_sem, &task_woken);
+        if (task_woken == pdTRUE) {
+            need_yield = true;
+        }
+        return need_yield;
+    }
+
+    static esp_err_t custom_draw_bitmap_hook(esp_lcd_panel_handle_t panel,
+                                             const esp_lcd_draw_bitmap_hook_data_t *hook_data,
+                                             void *user_ctx)
+    {
+        draw_bitmap_hook_ctx_t *ctx = (draw_bitmap_hook_ctx_t *)user_ctx;
+
+        // Simplest sync: wait until the previous draw finishes
+        xSemaphoreTake(ctx->draw_sem, portMAX_DELAY);
+
+        // Save hook_data so the completion callback can call on_hook_end later
+        ctx->hook_data = *hook_data;
+
+        // Start an asynchronous PPA transfer, then return immediately
+        // ppa_do_scale_rotate_mirror(...);
+        return ESP_OK;
+    }
 
 API Reference
 -------------

@@ -44,13 +44,50 @@ DAC channels can convert digital data continuously via the DMA. There are three 
     2. Cyclical writing: A piece of data can be converted cyclically without blocking, and no more operation is needed after the data are loaded into the DMA buffer. But note that the inputted buffer size is limited by the number of descriptors and the DMA buffer size. It is usually used to transport short signals that need to be repeated, e.g., a sine wave. To achieve cyclical writing, call :cpp:func:`dac_continuous_write_cyclically` after the DAC continuous mode is enabled. Refer to :example:`peripherals/dac/dac_continuous/signal_generator` for examples.
     3. Asynchronous writing: Data can be transmitted asynchronously based on the event callback. :cpp:member:`dac_event_callbacks_t::on_convert_done` must be registered to use asynchronous mode. Users can get the :cpp:type:`dac_event_data_t` in the callback which contains the DMA buffer address and length, allowing them to load the data into the buffer directly. To use the asynchronous writing, call :cpp:func:`dac_continuous_register_event_callback` to register the :cpp:member:`dac_event_callbacks_t::on_convert_done` before enabling, and then :cpp:func:`dac_continuous_start_async_writing` to start the asynchronous writing. Note that once the asynchronous writing is started, the callback function will be triggered continuously. Call :cpp:func:`dac_continuous_write_asynchronously` to load the data either in a separate task or in the callback directly. Refer to :example:`peripherals/dac/dac_continuous/dac_audio` for examples.
 
+The following diagram illustrates the life cycle of the DAC continuous driver and the state transitions associated with each API:
+
+.. mermaid::
+
+    flowchart TD
+        NC(["Idle (Initial State)"]) -->|"new_channels()"| REG[Registered]
+        REG -->|"del_channels()"| NC
+        REG -->|"enable()"| EN[Enabled]
+        EN -->|"disable()"| REG
+
+        EN -->|"start_async_writing()"| ASYNC[Async Writing]
+        ASYNC -->|"stop_async_writing()"| EN
+
+        EN -->|"write_cyclically()"| CYCLIC[Cyclic Writing]
+        CYCLIC -->|"stop_cyclically()"| EN
+
+        EN -->|"write()"| SYNC[Sync Writing]
+        SYNC -->|"write()"| SYNC
+        SYNC -->|"on transmission complete"| EN
+
+        subgraph REG_APIS [Registered State APIs]
+            REGCB["register_event_callbacks()"]
+        end
+
+        subgraph ASYNC_APIS [Async Writing State APIs]
+            AWRITE["write_asynchronously()"]
+        end
+
+        REG -. can call .-> REGCB
+        ASYNC -. when receiving a callback .-> AWRITE
+
+.. note::
+
+    - For brevity, the prefix ``dac_continuous_`` is omitted from all function names in the diagram.
+    - For backward compatibility, calling :cpp:func:`dac_continuous_stop_cyclically` to exit cyclic writing is optional — any API that transitions away from the Enabled state will automatically stop an ongoing cyclic conversion. However, explicitly calling :cpp:func:`dac_continuous_stop_cyclically` is recommended.
+    - Sync writing requires no explicit exit — any API that transitions away from the Enabled state will automatically stop the ongoing sync writing immediately (the data not yet converted is discarded).
+
 .. only:: esp32
 
-    On ESP32, the DAC digital controller can be connected internally to the I2S0 and use its DMA for continuous conversion. Although the DAC only needs 8-bit data for conversion, it has to be the left-shifted 8 bits (i.e., the high 8 bits in a 16-bit slot) to satisfy the I2S communication format. By default, the driver helps to expand the data to 16-bit wide automatically. To expand manually, please disable :ref:`CONFIG_DAC_DMA_AUTO_16BIT_ALIGN` in the menuconfig.
+    On ESP32, the DAC digital controller can be connected internally to the I2S0 and use its DMA for continuous conversion. Although the DAC only needs 8-bit data for conversion, it has to be the left-shifted 8 bits (i.e., the high 8 bits in a 16-bit slot) to satisfy the I2S communication format. By default, the driver helps to expand the data to 16-bit wide automatically. To expand manually, please disable :menuitem:`CONFIG_DAC_DMA_AUTO_16BIT_ALIGN` in the menuconfig.
 
     The clock of the DAC digital controller comes from I2S0 as well, so there are two clock sources for selection:
 
-    - :cpp:enumerator:`dac_continuous_digi_clk_src_t::DAC_DIGI_CLK_SRC_PLL_D2` supports frequency between 19.6 KHz to several MHz. It is the default clock which can also be selected by :cpp:enumerator:`dac_continuous_digi_clk_src_t::DAC_DIGI_CLK_SRC_DEFAULT`.
+    - :cpp:enumerator:`dac_continuous_digi_clk_src_t::DAC_DIGI_CLK_SRC_PLL_160M` supports frequency between 19.6 KHz to several MHz. It is the default clock which can also be selected by :cpp:enumerator:`dac_continuous_digi_clk_src_t::DAC_DIGI_CLK_SRC_DEFAULT`.
     - :cpp:enumerator:`dac_continuous_digi_clk_src_t::DAC_DIGI_CLK_SRC_APLL` supports frequency between 648 Hz to several MHz. However, it might be occupied by other peripherals, thus not providing the required frequency. In such case, this clock source is available only if APLL still can be correctly divided into the target DAC DMA frequency.
 
 .. only:: esp32s2
@@ -73,7 +110,7 @@ Currently, the clock source of the cosine wave generator only comes from ``RTC_F
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When the power management is enabled (i.e., :ref:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the clock source of DAC before entering Light-sleep mode, thus potential influence to the DAC signals may lead to false data conversion.
+When the power management is enabled (i.e., :menuitem:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the clock source of DAC before entering Light-sleep mode, thus potential influence to the DAC signals may lead to false data conversion.
 
 When using DAC driver in continuous mode, it can prevent the system from changing or stopping the clock source in DMA or cosine mode by acquiring a power management lock. When the clock source is generated from APB, the lock type will be set to :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_APB_FREQ_MAX`. When the clock source is APLL (only in DMA mode), it will be set to :cpp:enumerator:`esp_pm_lock_type_t::ESP_PM_NO_LIGHT_SLEEP`. Whenever the DAC is converting (i.e., DMA or cosine wave generator is working), the driver guarantees that the power management lock is acquired after calling :cpp:func:`dac_continuous_enable`. Likewise, the driver will release the lock when :cpp:func:`dac_continuous_disable` is called.
 
@@ -84,7 +121,7 @@ IRAM Safe
 
 By default, the DAC DMA interrupt will be deferred when the cache is disabled for reasons like writing/erasing Flash. Thus the DMA EOF interrupt will not get executed in time.
 
-To avoid such case in real-time applications, you can enable the Kconfig option :ref:`CONFIG_DAC_ISR_IRAM_SAFE` which:
+To avoid such case in real-time applications, you can enable the Kconfig option :menuitem:`CONFIG_DAC_ISR_IRAM_SAFE` which:
 
 1. Enables the interrupt being serviced even when cache is disabled;
 
@@ -100,12 +137,12 @@ All the public DAC APIs are guaranteed to be thread safe by the driver, which me
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_DAC_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled. See :ref:`dac-iram-safe` for more information.
-- :ref:`CONFIG_DAC_ENABLE_DEBUG_LOG` is used to enable the debug log output. Enable this option increases the firmware binary size.
+- :menuitem:`CONFIG_DAC_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled. See :ref:`dac-iram-safe` for more information.
+- :menuitem:`CONFIG_DAC_ENABLE_DEBUG_LOG` is used to enable the debug log output. Enable this option increases the firmware binary size.
 
 .. only:: esp32
 
-    - :ref:`CONFIG_DAC_DMA_AUTO_16BIT_ALIGN` auto expands the 8-bit data to 16-bit data in the driver to satisfy the I2S DMA format.
+    - :menuitem:`CONFIG_DAC_DMA_AUTO_16BIT_ALIGN` auto expands the 8-bit data to 16-bit data in the driver to satisfy the I2S DMA format.
 
 Application Example
 -------------------

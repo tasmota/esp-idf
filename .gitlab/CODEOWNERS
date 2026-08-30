@@ -69,7 +69,6 @@
 /pytest.ini                           @esp-idf-codeowners/ci
 /ruff.toml                            @esp-idf-codeowners/tools
 /sdkconfig.rename                     @esp-idf-codeowners/build-config
-/sonar-project.properties             @esp-idf-codeowners/ci
 
 # sort-order-reset
 
@@ -97,6 +96,7 @@
 /components/esp_event/                @esp-idf-codeowners/system
 /components/esp_gdbstub/              @esp-idf-codeowners/debugging
 /components/esp_hal_*/                @esp-idf-codeowners/peripherals
+/components/esp_hal_debug_assist/     @esp-idf-codeowners/peripherals @esp-idf-codeowners/debugging
 /components/esp_hal_ieee802154/       @esp-idf-codeowners/ieee802154
 /components/esp_hal_pmu/              @esp-idf-codeowners/power-management @esp-idf-codeowners/peripherals
 /components/esp_hal_rtc_timer/        @esp-idf-codeowners/power-management @esp-idf-codeowners/peripherals
@@ -122,6 +122,7 @@
 /components/esp_psram/                @esp-idf-codeowners/peripherals
 /components/esp_psram/system_layer/   @esp-idf-codeowners/peripherals @esp-idf-codeowners/system
 /components/esp_ringbuf/              @esp-idf-codeowners/system
+/components/esp_riscv_trace/          @esp-idf-codeowners/debugging
 /components/esp_rom/                  @esp-idf-codeowners/system @esp-idf-codeowners/bluetooth @esp-idf-codeowners/wifi
 /components/esp_security/             @esp-idf-codeowners/security
 /components/esp_stdio/                @esp-idf-codeowners/storage @esp-idf-codeowners/system
@@ -177,6 +178,7 @@
 /docs/**/api-guides/esp-wifi-mesh.rst              @esp-idf-codeowners/wifi
 /docs/**/api-guides/file-system-considerations.rst @esp-idf-codeowners/storage
 /docs/en/api-guides/jtag-debugging/                @esp-idf-codeowners/debugging
+/docs/**/api-guides/tracing/                       @esp-idf-codeowners/debugging
 /docs/**/api-reference/bluetooth/                  @esp-idf-codeowners/bluetooth
 /docs/**/api-reference/network/                    @esp-idf-codeowners/network @esp-idf-codeowners/wifi
 /docs/**/api-reference/peripherals/                @esp-idf-codeowners/peripherals
@@ -210,6 +212,7 @@
 /examples/storage/            @esp-idf-codeowners/storage
 /examples/system/             @esp-idf-codeowners/system
 /examples/system/ota/         @esp-idf-codeowners/app-utilities
+/examples/system/tracing/     @esp-idf-codeowners/debugging
 /examples/wifi/               @esp-idf-codeowners/wifi
 /examples/zigbee/             @esp-idf-codeowners/ieee802154
 
@@ -245,6 +248,8 @@
 /tools/test_apps/**/*.py             @esp-idf-codeowners/ci @esp-idf-codeowners/tools
 
 /tools/test_build_system/     @esp-idf-codeowners/tools @esp-idf-codeowners/build-config
+/tools/test_build_system/buildv2/test_blockdev_ioctl.py  @esp-idf-codeowners/storage
+/tools/test_build_system/test_blockdev_ioctl.py  @esp-idf-codeowners/storage
 
 /tools/tools.json             @esp-idf-codeowners/tools @esp-idf-codeowners/toolchain @esp-idf-codeowners/debugging
 

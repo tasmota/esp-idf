@@ -167,6 +167,114 @@ The new mbedTLS configuration system is organized into logical categories for ea
     X.509 certificate parsing, validation, and certificate bundle management.
 
 
+PSA ITS Custom Storage Backend
+-------------------------------
+
+ESP-IDF's PSA Internal Trusted Storage (ITS) implementation uses NVS as its default backend for storing persistent PSA Crypto keys. The custom storage backend feature allows routing a reserved range of PSA key IDs to a user-provided storage implementation, while all other keys continue using NVS.
+
+This is useful when:
+
+- Certain keys need to be stored on a different filesystem (FATFS, SPIFFS, littlefs)
+- Keys require hardware-protected encryption (e.g., via TEE secure storage)
+- Different storage partitions are needed for different key categories
+
+Enabling the Custom Backend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Enable the feature via ``menuconfig`` under ``Component Config`` > ``mbedTLS``:
+
+- :menuitem:`CONFIG_MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND`: Enable the custom storage backend
+- :menuitem:`CONFIG_MBEDTLS_PSA_ITS_CUSTOM_BACKEND_UID_MIN`: Start of the custom key ID range (default ``0x30000000``)
+- :menuitem:`CONFIG_MBEDTLS_PSA_ITS_CUSTOM_BACKEND_UID_MAX`: End of the custom key ID range (default ``0x3FFFFFFF``)
+
+PSA key IDs within the configured range are routed to the registered backend. All other key IDs (and internal PSA data such as the random seed) continue using the default NVS backend.
+
+Implementing a Custom Backend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Implement the ``esp_psa_its_custom_ops_t`` callback structure and register it before using PSA Crypto with keys in the custom range:
+
+.. code-block:: c
+
+    #include "esp_psa_its.h"
+
+    static psa_status_t my_set(void *ctx, const psa_storage_uid_t uid,
+                               const uint32_t data_length, const void *p_data,
+                               const psa_storage_create_flags_t create_flags)
+    {
+        /* Store the blob identified by uid */
+    }
+
+    static psa_status_t my_get(void *ctx, const psa_storage_uid_t uid,
+                               const uint32_t data_offset, const uint32_t data_length,
+                               void *p_data, size_t *p_data_length)
+    {
+        /* Retrieve the blob identified by uid */
+    }
+
+    static psa_status_t my_get_info(void *ctx, const psa_storage_uid_t uid,
+                                    struct psa_storage_info_t *p_info)
+    {
+        /* Return size and flags for the blob identified by uid */
+    }
+
+    static psa_status_t my_remove(void *ctx, const psa_storage_uid_t uid)
+    {
+        /* Delete the blob identified by uid */
+    }
+
+    static esp_psa_its_custom_ops_t my_ops = {
+        .set      = my_set,
+        .get      = my_get,
+        .get_info = my_get_info,
+        .remove   = my_remove,
+        .ctx      = NULL,  /* optional user context */
+    };
+
+    /* Register before using PSA keys in the custom range */
+    esp_psa_its_register_custom_backend(&my_ops);
+
+The callback signatures mirror the PSA ITS API. Each callback receives the raw ``psa_storage_uid_t`` (not a string), allowing the implementation to make routing decisions based on the numeric key ID. The ``ctx`` pointer is passed as the first argument to every callback.
+
+.. note::
+
+    Only persistent keys flow through the ITS layer. PSA requires ``psa_set_key_id()`` for persistent keys, so the application always controls which key IDs it assigns and thus which range they fall into.
+
+    The backend implementation is responsible for enforcing ``psa_storage_create_flags_t`` semantics if needed.
+
+Working with the PSA Key Blob Format
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The byte stream that flows through ``psa_its_set()`` / ``psa_its_get()`` is the PSA persistent key blob format documented in the Mbed TLS `storage specification <https://github.com/Mbed-TLS/TF-PSA-Crypto/blob/development/docs/architecture/mbed-crypto-storage-specification.md>`__. Backends that store the blob verbatim do not need to look inside it. Backends that strip the header on write (to save space) or synthesise the blob on read (for example, to expose a pre-provisioned hardware key) need to construct or parse it themselves.
+
+ESP-IDF provides two helpers in ``esp_psa_key_file.h`` for this:
+
+- :cpp:func:`esp_psa_key_file_pack` — assemble a key blob from a ``psa_key_attributes_t`` structure and raw key material bytes.
+- :cpp:func:`esp_psa_key_file_unpack` — parse a key blob back into attributes and a pointer into the key material section.
+- :cpp:func:`esp_psa_key_file_size` — return the total blob size for a given material length.
+
+These helpers implement the documented byte layout directly and do not depend on any internal Mbed TLS function. For example, a backend that stores only the inner key bytes can rebuild the blob on read:
+
+.. code-block:: c
+
+    #include "esp_psa_key_file.h"
+
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_lifetime(&attr, PSA_KEY_LIFETIME_PERSISTENT);
+    psa_set_key_type(&attr, PSA_KEY_TYPE_AES);
+    psa_set_key_bits(&attr, key_data_len * 8);
+    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_ENCRYPT | PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attr, PSA_ALG_CBC_NO_PADDING);
+
+    size_t blob_size = esp_psa_key_file_size(key_data_len);
+    uint8_t *blob = calloc(1, blob_size);
+    size_t written = 0;
+    esp_psa_key_file_pack(&attr, key_data, key_data_len, blob, blob_size, &written);
+    /* blob now holds the full PSA persistent key file; copy the requested
+     * window into p_data per psa_its_get()'s offset/length arguments. */
+
+For a complete working example using a custom NVS namespace as the custom backend, refer to :example:`security/psa_its_custom_backend`.
+
 Application Examples
 --------------------
 
@@ -182,57 +290,57 @@ The example :example:`protocols/smtp_client` sends email (including attachments)
 Important Config Options
 ------------------------
 
-The Mbed TLS configuration system supports preset configurations. Following is a brief list of important config options accessible at ``Component Config`` > ``mbedTLS``. The full list of config options can be found :ref:`here <CONFIG_MBEDTLS_MEM_ALLOC_MODE>`.
+The Mbed TLS configuration system supports preset configurations. Following is a brief list of important config options accessible at ``Component Config`` > ``mbedTLS``. The full list of config options can be found :menuitem:`here <CONFIG_MBEDTLS_MEM_ALLOC_MODE>`.
 
 **Core Configuration:**
 
 .. list::
 
-    :SOC_SHA_SUPPORTED: - :ref:`CONFIG_MBEDTLS_HARDWARE_SHA`: Support for hardware SHA acceleration
-    :SOC_AES_SUPPORTED: - :ref:`CONFIG_MBEDTLS_HARDWARE_AES`: Support for hardware AES acceleration
-    :SOC_MPI_SUPPORTED: - :ref:`CONFIG_MBEDTLS_HARDWARE_MPI`: Support for hardware MPI (bignum) acceleration
-    :SOC_ECC_SUPPORTED: - :ref:`CONFIG_MBEDTLS_HARDWARE_ECC`: Support for hardware ECC acceleration
-    - :ref:`CONFIG_MBEDTLS_MEM_ALLOC_MODE`: Memory allocation strategy (Internal/External/Custom)
-    - :ref:`CONFIG_MBEDTLS_ASYMMETRIC_CONTENT_LEN`: Asymmetric in/out fragment length for memory optimization
-    - :ref:`CONFIG_MBEDTLS_DYNAMIC_BUFFER`: Enable dynamic TX/RX buffer allocation
-    - :ref:`CONFIG_MBEDTLS_DEBUG`: Enable mbedTLS debugging (useful for debugging)
+    :SOC_SHA_SUPPORTED: - :menuitem:`CONFIG_MBEDTLS_HARDWARE_SHA`: Support for hardware SHA acceleration
+    :SOC_AES_SUPPORTED: - :menuitem:`CONFIG_MBEDTLS_HARDWARE_AES`: Support for hardware AES acceleration
+    :SOC_MPI_SUPPORTED: - :menuitem:`CONFIG_MBEDTLS_HARDWARE_MPI`: Support for hardware MPI (bignum) acceleration
+    :SOC_ECC_SUPPORTED: - :menuitem:`CONFIG_MBEDTLS_HARDWARE_ECC`: Support for hardware ECC acceleration
+    - :menuitem:`CONFIG_MBEDTLS_MEM_ALLOC_MODE`: Memory allocation strategy (Internal/External/Custom)
+    - :menuitem:`CONFIG_MBEDTLS_ASYMMETRIC_CONTENT_LEN`: Asymmetric in/out fragment length for memory optimization
+    - :menuitem:`CONFIG_MBEDTLS_DYNAMIC_BUFFER`: Enable dynamic TX/RX buffer allocation
+    - :menuitem:`CONFIG_MBEDTLS_DEBUG`: Enable mbedTLS debugging (useful for debugging)
 
 **TLS Protocol Configuration:**
 
 .. list::
 
-    - :ref:`CONFIG_MBEDTLS_TLS_ENABLED`: Enable TLS protocol support
-    - :ref:`CONFIG_MBEDTLS_SSL_PROTO_TLS1_2`: Support for TLS 1.2 (recommended)
-    - :ref:`CONFIG_MBEDTLS_SSL_PROTO_TLS1_3`: Support for TLS 1.3 (latest standard)
-    - :ref:`CONFIG_MBEDTLS_SSL_PROTO_DTLS`: Support for DTLS (UDP-based TLS)
-    - :ref:`CONFIG_MBEDTLS_CLIENT_SSL_SESSION_TICKETS`: Support for TLS Session Resumption (client session tickets)
-    - :ref:`CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS`: Support for TLS Session Resumption Server session tickets
-    - :ref:`CONFIG_MBEDTLS_SSL_ALPN`: Support for Application Layer Protocol Negotiation
-    - :ref:`CONFIG_MBEDTLS_SSL_SERVER_NAME_INDICATION`: Support for Server Name Indication (SNI)
+    - :menuitem:`CONFIG_MBEDTLS_TLS_ENABLED`: Enable TLS protocol support
+    - :menuitem:`CONFIG_MBEDTLS_SSL_PROTO_TLS1_2`: Support for TLS 1.2 (recommended)
+    - :menuitem:`CONFIG_MBEDTLS_SSL_PROTO_TLS1_3`: Support for TLS 1.3 (latest standard)
+    - :menuitem:`CONFIG_MBEDTLS_SSL_PROTO_DTLS`: Support for DTLS (UDP-based TLS)
+    - :menuitem:`CONFIG_MBEDTLS_CLIENT_SSL_SESSION_TICKETS`: Support for TLS Session Resumption (client session tickets)
+    - :menuitem:`CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS`: Support for TLS Session Resumption Server session tickets
+    - :menuitem:`CONFIG_MBEDTLS_SSL_ALPN`: Support for Application Layer Protocol Negotiation
+    - :menuitem:`CONFIG_MBEDTLS_SSL_SERVER_NAME_INDICATION`: Support for Server Name Indication (SNI)
 
 **Certificate Support:**
 
 .. list::
 
-    - :ref:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE`: Support for trusted root certificate bundle (more about this: :doc:`/api-reference/protocols/esp_crt_bundle`)
-    - :ref:`CONFIG_MBEDTLS_X509_USE_C`: Enable X.509 certificate support
-    - :ref:`CONFIG_MBEDTLS_PEM_PARSE_C`: Read & Parse PEM formatted certificates
-    - :ref:`CONFIG_MBEDTLS_PEM_WRITE_C`: Write PEM formatted certificates
-    - :ref:`CONFIG_MBEDTLS_X509_CRT_PARSE_C`: Parse X.509 certificates
-    - :ref:`CONFIG_MBEDTLS_X509_CRL_PARSE_C`: Parse X.509 certificate revocation lists
+    - :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE`: Support for trusted root certificate bundle (more about this: :doc:`/api-reference/protocols/esp_crt_bundle`)
+    - :menuitem:`CONFIG_MBEDTLS_X509_USE_C`: Enable X.509 certificate support
+    - :menuitem:`CONFIG_MBEDTLS_PEM_PARSE_C`: Read & Parse PEM formatted certificates
+    - :menuitem:`CONFIG_MBEDTLS_PEM_WRITE_C`: Write PEM formatted certificates
+    - :menuitem:`CONFIG_MBEDTLS_X509_CRT_PARSE_C`: Parse X.509 certificates
+    - :menuitem:`CONFIG_MBEDTLS_X509_CRL_PARSE_C`: Parse X.509 certificate revocation lists
 
 **Cryptographic Algorithms:**
 
 .. list::
 
-    - :ref:`CONFIG_MBEDTLS_AES_C`: AES block cipher support
-    - :ref:`CONFIG_MBEDTLS_RSA_C`: RSA public key cryptosystem
-    - :ref:`CONFIG_MBEDTLS_ECP_C`: Elliptic Curve Cryptography support
-    - :ref:`CONFIG_MBEDTLS_ECDSA_C`: Elliptic Curve Digital Signature Algorithm
-    - :ref:`CONFIG_MBEDTLS_ECDH_C`: Elliptic Curve Diffie-Hellman key exchange
-    - :ref:`CONFIG_MBEDTLS_SHA256_C`: SHA-256 hash function
-    - :ref:`CONFIG_MBEDTLS_SHA512_C`: SHA-512 hash function
-    - :ref:`CONFIG_MBEDTLS_GCM_C`: Galois/Counter Mode for authenticated encryption
+    - :menuitem:`CONFIG_MBEDTLS_AES_C`: AES block cipher support
+    - :menuitem:`CONFIG_MBEDTLS_RSA_C`: RSA public key cryptosystem
+    - :menuitem:`CONFIG_MBEDTLS_ECP_C`: Elliptic Curve Cryptography support
+    - :menuitem:`CONFIG_MBEDTLS_ECDSA_C`: Elliptic Curve Digital Signature Algorithm
+    - :menuitem:`CONFIG_MBEDTLS_ECDH_C`: Elliptic Curve Diffie-Hellman key exchange
+    - :menuitem:`CONFIG_MBEDTLS_SHA256_C`: SHA-256 hash function
+    - :menuitem:`CONFIG_MBEDTLS_SHA512_C`: SHA-512 hash function
+    - :menuitem:`CONFIG_MBEDTLS_GCM_C`: Galois/Counter Mode for authenticated encryption
 
 .. note::
 
@@ -283,20 +391,24 @@ The following table shows typical memory usage with different configs when the :
       - NA
       - 42196 B
     * - Enable SSL Dynamic Buffer Length
-      - :ref:`CONFIG_MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH`
+      - :menuitem:`CONFIG_MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH`
       -  42120 B
     * - Disable Keep Peer Certificate
-      - :ref:`CONFIG_MBEDTLS_SSL_KEEP_PEER_CERTIFICATE`
+      - :menuitem:`CONFIG_MBEDTLS_SSL_KEEP_PEER_CERTIFICATE`
       - 38533 B
     * - Enable Dynamic TX/RX Buffer
-      - :ref:`CONFIG_MBEDTLS_DYNAMIC_BUFFER`
-        :ref:`CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA`
-        :ref:`CONFIG_MBEDTLS_DYNAMIC_FREE_CA_CERT`
+      - :menuitem:`CONFIG_MBEDTLS_DYNAMIC_BUFFER`
+        :menuitem:`CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA`
+        :menuitem:`CONFIG_MBEDTLS_DYNAMIC_FREE_CA_CERT`
       - 22013 B
 
 .. note::
 
     These values are subject to change with changes in configuration options and versions of Mbed TLS.
+
+.. note::
+
+    :menuitem:`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY` is enabled by default. If cross-signed certificate chains are not required, disabling it reduces peak heap usage during the TLS handshake by approximately 1 KB, at the cost of a larger certificate bundle in flash. See :doc:`/api-reference/protocols/esp_crt_bundle` for details.
 
 
 Reducing Binary Size
@@ -305,5 +417,5 @@ Reducing Binary Size
 Under ``Component Config`` > ``mbedTLS``, several Mbed TLS features are enabled by default. These can be disabled if not needed to save code size. More information is available in the :ref:`Minimizing Binary Size <minimizing_binary_mbedtls>` documentation.
 
 
-.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v3.6.5/
+.. _`API Reference`: https://mbed-tls.readthedocs.io/projects/api/en/v4.1.1/
 .. _`Knowledge Base`: https://mbed-tls.readthedocs.io/en/latest/kb/

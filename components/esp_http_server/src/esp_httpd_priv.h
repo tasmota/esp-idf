@@ -89,6 +89,7 @@ struct sock_db {
     bool ws_close;                          /*!< Set to true to close the socket later (when WS Close frame received) */
     esp_err_t (*ws_handler)(httpd_req_t *r);   /*!< WebSocket handler, leave to null if it's not WebSocket */
     bool ws_control_frames;                         /*!< WebSocket flag indicating that control frames should be passed to user handlers */
+    esp_err_t (*ws_control_handler)(httpd_req_t *r, const httpd_ws_frame_t *frame); /*!< Dedicated WebSocket control-frame handler, NULL if not used */
     void *ws_user_ctx;                         /*!< Pointer to user context data which will be available to handler for websocket*/
 #endif
 };
@@ -520,17 +521,23 @@ int httpd_default_recv(httpd_handle_t hd, int sockfd, char *buf, size_t buf_len,
 
 
 /**
- * @brief   This function is for responding a WebSocket handshake
+ * @brief   Respond to a WebSocket opening handshake.
+ *
+ * On any RFC 6455 §4.2.1 handshake validation failure (missing Host,
+ * malformed Sec-WebSocket-Key, unsupported Sec-WebSocket-Version, etc.),
+ * this function sends the appropriate HTTP error response (400 Bad Request
+ * or 426 Upgrade Required) to the client itself and returns ESP_FAIL.
+ * Callers MUST NOT attempt to send another response on the ESP_FAIL path.
  *
  * @param[in] req                       Pointer to handshake request that will be handled
  * @param[in] supported_subprotocol     Pointer to the subprotocol supported by this URI
  * @return
- *  - ESP_OK                        : When handshake is successful
- *  - ESP_ERR_NOT_FOUND             : When some headers (Sec-WebSocket-*) are not found
- *  - ESP_ERR_INVALID_VERSION       : The WebSocket version is not "13"
- *  - ESP_ERR_INVALID_STATE         : Handshake was done beforehand
- *  - ESP_ERR_INVALID_ARG           : Argument is invalid (null or non-WebSocket)
- *  - ESP_FAIL                      : Socket failures
+ *  - ESP_OK                        : Handshake successful; 101 Switching Protocols sent
+ *  - ESP_ERR_INVALID_ARG           : @p req or its aux pointer is NULL
+ *  - ESP_ERR_INVALID_STATE         : Handshake was already performed on this session
+ *  - ESP_FAIL                      : Handshake-validation failure (HTTP error already sent),
+ *                                    memory allocation failure, hash/encode failure,
+ *                                    or socket send failure
  */
 esp_err_t httpd_ws_respond_server_handshake(httpd_req_t *req, const char *supported_subprotocol);
 
@@ -546,6 +553,61 @@ esp_err_t httpd_ws_respond_server_handshake(httpd_req_t *req, const char *suppor
  *  - ESP_FAIL                      : Socket failures
  */
 esp_err_t httpd_ws_get_frame_type(httpd_req_t *req);
+
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+/* Control frames carry at most 125 bytes of payload (RFC 6455 §5.5). These values
+ * match the historical auto-reply path: a 128-byte receive buffer, and a 126-byte
+ * cap passed to httpd_ws_recv_frame(). */
+#define HTTPD_WS_CTRL_FRAME_BUF_LEN     128
+#define HTTPD_WS_CTRL_FRAME_MAX_LEN     126
+
+/**
+ * @brief   Receive the body of a WebSocket control frame into a caller buffer.
+ *
+ * @note    The opcode/FIN must already have been decoded by httpd_ws_get_frame_type().
+ *          On success @p frame describes the received (unmasked) control frame with
+ *          @p frame->payload pointing into @p buf.
+ *
+ * @param[in]  req      WebSocket request
+ * @param[out] frame    Frame descriptor to populate
+ * @param[in]  buf      Caller-owned buffer of at least HTTPD_WS_CTRL_FRAME_BUF_LEN bytes
+ * @param[in]  max_len  Maximum payload length to accept
+ * @return
+ *  - ESP_OK                : Frame received
+ *  - ESP_ERR_INVALID_STATE : Frame could not be fully received
+ */
+esp_err_t httpd_ws_recv_control_frame(httpd_req_t *req, httpd_ws_frame_t *frame, uint8_t *buf, size_t max_len);
+
+/**
+ * @brief   Send the protocol reply for a received WebSocket control frame.
+ *
+ * @note    PING is answered with a PONG echoing the payload; CLOSE is answered with
+ *          an empty CLOSE; all other control frames (e.g. PONG) require no reply.
+ *
+ * @param[in] req    WebSocket request
+ * @param[in] frame  Control frame previously received (modified in place)
+ * @return
+ *  - ESP_OK  : Reply sent (or none needed)
+ *  - others  : Socket send failure
+ */
+esp_err_t httpd_ws_reply_to_control_frame(httpd_req_t *req, httpd_ws_frame_t *frame);
+
+/**
+ * @brief   Handle an incoming WebSocket control frame via the dedicated control handler.
+ *
+ * @note    Used only when a ws_control_handler is registered (handle_ws_control_frames
+ *          must be true). The server receives the frame body, passes a read-only view
+ *          to the control handler, then performs the protocol reply itself. If the
+ *          control handler returns an error, the reply is still sent and the error is
+ *          propagated so the caller closes the socket.
+ *
+ * @param[in] req    WebSocket request
+ * @return
+ *  - ESP_OK  : Control frame handled and replied
+ *  - others  : Control handler error, or frame could not be received/replied
+ */
+esp_err_t httpd_ws_handle_control_frame(httpd_req_t *req);
+#endif /* CONFIG_HTTPD_WS_SUPPORT */
 
 /**
  * @brief   Trigger an httpd session close externally

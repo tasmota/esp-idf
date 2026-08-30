@@ -26,6 +26,9 @@
 #include "btc_gap_ble.h"
 #include "btc_iso_ble.h"
 #include "btc_ble_cte.h"
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+#include "btc_ble_l2cap.h"
+#endif
 #include "btc/btc_dm.h"
 #include "bta/bta_gatt_api.h"
 #if CLASSIC_BT_INCLUDED
@@ -41,6 +44,9 @@
 #if (BTC_SPP_INCLUDED == TRUE)
 #include "btc_spp.h"
 #endif /* #if (BTC_SPP_INCLUDED == TRUE) */
+#if (BTC_PAN_INCLUDED == TRUE)
+#include "btc_pan.h"
+#endif /* #if (BTC_PAN_INCLUDED == TRUE) */
 #if (BTC_L2CAP_INCLUDED == TRUE)
 #include "btc_l2cap.h"
 #endif /* #if (BTC_L2CAP_INCLUDED == TRUE) */
@@ -143,6 +149,9 @@ static const btc_func_t profile_tab[BTC_PID_NUM] = {
 #if (BTC_SPP_INCLUDED == TRUE)
     [BTC_PID_SPP]         = {btc_spp_call_handler,        btc_spp_cb_handler      },
 #endif /* #if (BTC_SPP_INCLUDED == TRUE) */
+#if (BTC_PAN_INCLUDED == TRUE)
+    [BTC_PID_PAN]         = {btc_pan_call_handler,        btc_pan_cb_handler      },
+#endif /* #if (BTC_PAN_INCLUDED == TRUE) */
 #if (BTC_L2CAP_INCLUDED == TRUE)
     [BTC_PID_L2CAP]       = {btc_l2cap_call_handler,      btc_l2cap_cb_handler    },
 #endif /* #if (BTC_L2CAP_INCLUDED == TRUE) */
@@ -279,6 +288,9 @@ static const btc_func_t profile_tab[BTC_PID_NUM] = {
 #if (BLE_FEAT_CTE_EN == TRUE)
     [BTC_PID_BLE_CTE]           = {btc_ble_cte_call_handler,                    btc_ble_cte_cb_handler                   },
 #endif // #if (BLE_FEAT_CTE_EN == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+    [BTC_PID_BLE_L2CAP]         = {btc_ble_l2cap_call_handler,                  btc_ble_l2cap_cb_handler                 },
+#endif // #if (BLE_L2CAP_COC_INCLUDED == TRUE)
 };
 
 /*****************************************************************************
@@ -542,14 +554,26 @@ error_exit:;
 bt_status_t btc_init(void)
 {
     const size_t workqueue_len[] = {BTC_TASK_WORKQUEUE0_LEN, BTC_TASK_WORKQUEUE1_LEN};
+
+    /* The osi_event subsystem must be ready before any osi_event_create()
+     * (e.g. btc_gap_ble_init() below). It cannot live in osi_init(), which
+     * runs later in the BTC task via bte_main_boot_entry(). */
+    if (osi_thread_event_init() != 0) {
+        return BT_STATUS_NOMEM;
+    }
+
     btc_thread = osi_thread_create(BTC_TASK_NAME, BTC_TASK_STACK_SIZE, BTC_TASK_PRIO, BTC_TASK_PINNED_TO_CORE,
-                                   BTC_TASK_WORKQUEUE_NUM, workqueue_len);
+                                   BTC_TASK_WORKQUEUE_NUM, workqueue_len, false);
     if (btc_thread == NULL) {
+        osi_thread_event_deinit();
         return BT_STATUS_NOMEM;
     }
 
 #if BTC_DYNAMIC_MEMORY
     if (btc_init_mem() != BT_STATUS_SUCCESS){
+        osi_thread_free(btc_thread);
+        btc_thread = NULL;
+        osi_thread_event_deinit();
         return BT_STATUS_NOMEM;
     }
 #endif
@@ -599,6 +623,12 @@ void btc_deinit(void)
 
     osi_thread_free(btc_thread);
     btc_thread = NULL;
+
+    /* Tear down the osi_event subsystem last: btc_gap_ble_deinit() above may
+     * still call osi_event_delete(), which needs the global event lock. This
+     * mirrors moving osi_thread_event_init() into btc_init(); osi_deinit()
+     * (run earlier via bte_main_shutdown()) no longer owns this lifecycle. */
+    osi_thread_event_deinit();
 }
 
 int get_btc_work_queue_size(void)

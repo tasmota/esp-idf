@@ -56,8 +56,6 @@ ESP_LOG_ATTR_TAG(TAG, "dw-gdma");
 
 #define DW_GDMA_ALLOW_INTR_PRIORITY_MASK ESP_INTR_FLAG_LOWMED
 
-#define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-
 typedef struct dw_gdma_group_t dw_gdma_group_t;
 typedef struct dw_gdma_channel_t dw_gdma_channel_t;
 
@@ -480,16 +478,16 @@ esp_err_t dw_gdma_channel_config_transfer(dw_gdma_channel_handle_t chan, const d
     // transfer width
     dw_gdma_ll_channel_set_src_trans_width(hal->dev, chan_id, config->src.width);
     dw_gdma_ll_channel_set_dst_trans_width(hal->dev, chan_id, config->dst.width);
-    // set burst items
-    dw_gdma_ll_channel_set_src_burst_items(hal->dev, chan_id, config->src.burst_items);
-    dw_gdma_ll_channel_set_dst_burst_items(hal->dev, chan_id, config->dst.burst_items);
-    // set burst mode
-    dw_gdma_ll_channel_set_src_burst_mode(hal->dev, chan_id, config->src.burst_mode);
-    dw_gdma_ll_channel_set_dst_burst_mode(hal->dev, chan_id, config->dst.burst_mode);
+    // set burst size
+    dw_gdma_ll_channel_set_src_burst_size(hal->dev, chan_id, config->src.burst_size);
+    dw_gdma_ll_channel_set_dst_burst_size(hal->dev, chan_id, config->dst.burst_size);
+    // set address increment mode
+    dw_gdma_ll_channel_set_src_addr_inc_mode(hal->dev, chan_id, config->src.addr_inc_mode);
+    dw_gdma_ll_channel_set_dst_addr_inc_mode(hal->dev, chan_id, config->dst.addr_inc_mode);
     // [Ctrl1] register
-    // set burst length
-    dw_gdma_ll_channel_set_src_burst_len(hal->dev, chan_id, config->src.burst_len);
-    dw_gdma_ll_channel_set_dst_burst_len(hal->dev, chan_id, config->dst.burst_len);
+    // set AXI burst length
+    dw_gdma_ll_channel_set_src_axi_burst_len(hal->dev, chan_id, config->src.axi_burst_len);
+    dw_gdma_ll_channel_set_dst_axi_burst_len(hal->dev, chan_id, config->dst.axi_burst_len);
     // whether to enable the peripheral status write back
     dw_gdma_ll_channel_enable_src_periph_status_write_back(hal->dev, chan_id, config->src.flags.en_status_write_back);
     dw_gdma_ll_channel_enable_dst_periph_status_write_back(hal->dev, chan_id, config->dst.flags.en_status_write_back);
@@ -529,16 +527,16 @@ esp_err_t dw_gdma_lli_config_transfer(dw_gdma_lli_handle_t lli, const dw_gdma_bl
     // transfer width
     dw_gdma_ll_lli_set_src_trans_width(lli, config->src.width);
     dw_gdma_ll_lli_set_dst_trans_width(lli, config->dst.width);
-    // set burst items
-    dw_gdma_ll_lli_set_src_burst_items(lli, config->src.burst_items);
-    dw_gdma_ll_lli_set_dst_burst_items(lli, config->dst.burst_items);
-    // set burst mode
-    dw_gdma_ll_lli_set_src_burst_mode(lli, config->src.burst_mode);
-    dw_gdma_ll_lli_set_dst_burst_mode(lli, config->dst.burst_mode);
+    // set burst size
+    dw_gdma_ll_lli_set_src_burst_size(lli, config->src.burst_size);
+    dw_gdma_ll_lli_set_dst_burst_size(lli, config->dst.burst_size);
+    // set address increment mode
+    dw_gdma_ll_lli_set_src_addr_inc_mode(lli, config->src.addr_inc_mode);
+    dw_gdma_ll_lli_set_dst_addr_inc_mode(lli, config->dst.addr_inc_mode);
     // [Ctrl1] register
-    // set burst length
-    dw_gdma_ll_lli_set_src_burst_len(lli, config->src.burst_len);
-    dw_gdma_ll_lli_set_dst_burst_len(lli, config->dst.burst_len);
+    // set AXI burst length
+    dw_gdma_ll_lli_set_src_axi_burst_len(lli, config->src.axi_burst_len);
+    dw_gdma_ll_lli_set_dst_axi_burst_len(lli, config->dst.axi_burst_len);
     // whether to enable the peripheral status write back
     dw_gdma_ll_lli_enable_src_periph_status_write_back(lli, config->src.flags.en_status_write_back);
     dw_gdma_ll_lli_enable_dst_periph_status_write_back(lli, config->dst.flags.en_status_write_back);

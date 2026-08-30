@@ -172,6 +172,7 @@ const char *c_inband_ring_state_str[] = {
 };
 
 extern esp_bd_addr_t peer_addr;
+extern bool hf_client_connected;
 // If you want to connect a specific device, add it's address here
 // esp_bd_addr_t peer_addr = {0xac, 0x67, 0xb2, 0x53, 0x77, 0xbe};
 
@@ -302,6 +303,10 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
             memcpy(peer_addr,param->conn_stat.remote_bda,ESP_BD_ADDR_LEN);
             if (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_SLC_CONNECTED) {
                 esp_pbac_connect(peer_addr);
+            } else if (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_CONNECTED) {
+                hf_client_connected = true;
+            } else if (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_DISCONNECTED) {
+                hf_client_connected = false;
             }
             break;
         }
@@ -327,6 +332,8 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
                 s_sync_conn_hdl = param->audio_stat.sync_conn_handle;
                 s_audio_buff_queue = xQueueCreate(50, sizeof(esp_hf_audio_buff_t*));
                 esp_hf_client_register_audio_data_callback(bt_app_hf_client_audio_data_cb);
+                /* Disable connectable and discoverable mode to save the over-the-air bandwidth and ensure audio quality  */
+                esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
             } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
                 s_sync_conn_hdl = 0;
                 s_msbc_air_mode = false;
@@ -339,6 +346,8 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
                     s_audio_buff_queue = NULL;
                 }
                 s_audio_buff_cnt = 0;
+                /* Resume connectable and discoverable mode */
+                esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
             }
     #else
             if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_CONNECTED ||

@@ -30,6 +30,7 @@ static void dac_dma_write_task(void *args)
     size_t buf_len = EXAMPLE_ARRAY_LEN;
 
     while (1) {
+        ESP_LOGI(TAG, "%s wave start", wav_name[wav_sel]);
         /* The wave in the buffer will be converted cyclically */
         switch (wav_sel) {
         case DAC_SINE_WAVE:
@@ -49,9 +50,9 @@ static void dac_dma_write_task(void *args)
         }
         /* Switch wave every CONFIG_EXAMPLE_WAVE_PERIOD_SEC seconds */
         vTaskDelay(pdMS_TO_TICKS(CONFIG_EXAMPLE_WAVE_PERIOD_SEC * 1000));
+        ESP_ERROR_CHECK(dac_continuous_stop_cyclically(handle));
         wav_sel++;
         wav_sel %= DAC_WAVE_MAX;
-        ESP_LOGI(TAG, "%s wave start", wav_name[wav_sel]);
     }
 }
 
@@ -63,8 +64,6 @@ void example_dac_continuous_by_dma(void)
         .desc_num = 8,
         .buf_size = 2048,
         .freq_hz = EXAMPLE_CONVERT_FREQ_HZ,
-        .offset = 0,
-        .clk_src = DAC_DIGI_CLK_SRC_DEFAULT,     // If the frequency is out of range, try 'DAC_DIGI_CLK_SRC_APLL'
         /* Assume the data in buffer is 'A B C D E F'
          * DAC_CHANNEL_MODE_SIMUL:
          *      - channel 0: A B C D E F

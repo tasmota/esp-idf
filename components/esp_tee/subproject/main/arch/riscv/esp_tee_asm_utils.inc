@@ -22,6 +22,7 @@
 .equ SAVE_REGS, 32
 .equ CONTEXT_SIZE, (SAVE_REGS * 4)
 .equ MAGIC, 0x1f
+.equ NS_INT_RTN_MAGIC, (MAGIC << 12)
 
 /* Macro which first allocates space on the stack to save general
  * purpose registers, and then save them. GP register is excluded.
@@ -220,4 +221,54 @@
     ESP_HW_STACK_GUARD_MONITOR_START_CUR_CORE t0 t1
     1:
 #endif
+.endm
+
+/**
+ * SVC_LOCK_ACQUIRE / SVC_LOCK_RELEASE
+ * Hold _s_svc_lock for the duration of a secure service call, so that a call issued
+ * while another one is active branches to \fail instead of clobbering it.
+ *
+ * Clobbers: \tx
+ */
+.macro SVC_LOCK_ACQUIRE tx, fail
+    la      \tx, _s_svc_lock
+    amoswap.w.aq \tx, \tx, (\tx)
+    bnez    \tx, \fail
+.endm
+
+.macro SVC_LOCK_RELEASE tx
+    la      \tx, _s_svc_lock
+    amoswap.w.rl zero, zero, (\tx)
+.endm
+
+/**
+ * VALIDATE_REE_SP
+ * Validate an REE-supplied sp before the TEE stores through it. The TEE region is
+ * at the bottom of SRAM, so a valid REE frame [sp - framesz, sp) must lie in the
+ * band above it and below the peripheral window: [SOC_S_DRAM_END, SOC_PERIPHERAL_LOW].
+ * An out-of-bound sp will lead to a fault.
+ *
+ * With chk_priv (default) the check is skipped unless the trap came from U-mode;
+ * pass chk_priv=0 where the U-mode origin is already guaranteed (ecall-from-U).
+ *
+ * TODO: Revisit these bounds for high-performance RISC-V SoCs (e.g. ESP32-P4,
+ * ESP32-S31) with different memory maps than current ESP-TEE targets.
+ *
+ * Clobbers: \tx
+ */
+.macro VALIDATE_REE_SP framesz, tx, chk_priv=1
+.if \chk_priv
+    /* Skip validation unless the previous privilege (mstatus.MPP) was U-mode */
+    csrr    \tx, mstatus
+    srli    \tx, \tx, MSTATUS_MPP_SHIFT
+    andi    \tx, \tx, (MSTATUS_MPP >> MSTATUS_MPP_SHIFT)
+    bnez    \tx, 1f
+.endif
+    li      \tx, (SOC_S_DRAM_END + \framesz)
+    bltu    sp, \tx, _tee_sp_reject      /* frame would dip into the TEE (or sub-TEE) region */
+    li      \tx, SOC_PERIPHERAL_LOW
+    bltu    \tx, sp, _tee_sp_reject      /* sp at/above the peripheral window */
+.if \chk_priv
+1:
+.endif
 .endm

@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include "sdkconfig.h"
 #include "esp_sleep.h"
+#include "hal/uart_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +31,13 @@ typedef struct {
  */
 void esp_sleep_set_sleep_context(esp_sleep_context_t *sleep_ctx);
 #endif
+
+/**
+ * @brief Sleep internal runtime arguments
+ */
+typedef struct {
+    uint32_t clk_flags[2];      //!< Sleep clock ICG flags.
+} esp_sleep_extra_args_t;
 
 typedef enum {
     ESP_SLEEP_RTC_USE_RC_FAST_MODE,       //!< The mode requested by RTC peripherals to keep RC_FAST clock on during sleep (both HP_SLEEP and LP_SLEEP mode). (Will override the RC_FAST domain config by esp_sleep_pd_config)
@@ -134,7 +142,7 @@ void esp_sleep_restore_isolated_digital_gpio(void);
  */
 typedef enum {
     ESP_SLEEP_CLOCK_IOMUX,  //!< The clock ICG cell mapping of IOMUX
-    ESP_SLEEP_CLOCK_LEDC,   //!< The clock ICG cell mapping of LEDC
+    ESP_SLEEP_CLOCK_LEDC0,   //!< The clock ICG cell mapping of LEDC0
     ESP_SLEEP_CLOCK_UART0,   //!< The clock ICG cell mapping of UART0
     ESP_SLEEP_CLOCK_UART1,   //!< The clock ICG cell mapping of UART1
 #if SOC_UART_HP_NUM > 2
@@ -151,6 +159,9 @@ typedef enum {
 #endif
     ESP_SLEEP_CLOCK_MAX     //!< Number of ICG cells
 } esp_sleep_clock_t;
+
+// Get UART sleep clock with giving uart num (num must be a valid HP UART port)
+#define SLEEP_UART_ICG(num) ((esp_sleep_clock_t)(ESP_SLEEP_CLOCK_UART0 + (num)))
 
 /**
  * @brief Clock ICG options
@@ -208,6 +219,33 @@ void esp_deep_sleep_deregister_phy_hook(esp_deep_sleep_cb_t old_dslp_cb);
  *        3. Other events occur that affect the execution time of the CPU sleep process.
  */
 void esp_sleep_overhead_out_time_refresh(void);
+
+
+/**
+ * @brief Enter the sleep configuration critical section (task context only)
+ *
+ * Protects sleep configuration state. Must be paired with esp_sleep_exit_critical().
+ * Do not call from ISR; use esp_sleep_enter_critical_safe() instead.
+ */
+void esp_sleep_enter_critical(void);
+
+/**
+ * @brief Exit the sleep configuration critical section entered by esp_sleep_enter_critical()
+ */
+void esp_sleep_exit_critical(void);
+
+/**
+ * @brief Enter the sleep configuration critical section (safe for task or ISR context)
+ *
+ * Protects sleep configuration state (e.g. power domain options, sub-mode refs, clk icg refs...).
+ * Must be paired with esp_sleep_exit_critical_safe().
+ */
+void esp_sleep_enter_critical_safe(void);
+
+/**
+ * @brief Exit the sleep configuration critical section entered by esp_sleep_enter_critical_safe()
+ */
+void esp_sleep_exit_critical_safe(void);
 
 #ifdef __cplusplus
 }

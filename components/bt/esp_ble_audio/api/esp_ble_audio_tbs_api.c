@@ -162,6 +162,47 @@ esp_err_t esp_ble_audio_tbs_remote_incoming(uint8_t bearer_index,
     return ESP_OK;
 }
 
+esp_err_t esp_ble_audio_tbs_add_call(uint8_t bearer_index, uint8_t state,
+                                     const char *uri, uint8_t *call_index)
+{
+    int ret;
+
+    if (uri == NULL || call_index == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ret = bt_tbs_add_call_safe(bearer_index, state, uri, call_index);
+    if (ret < 0) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t esp_ble_audio_tbs_set_auto_alerting(uint8_t bearer_index, bool enable)
+{
+    int err;
+
+    err = bt_tbs_set_auto_alerting_safe(bearer_index, enable);
+    if (err) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t esp_ble_audio_tbs_set_call_alerting(uint8_t call_index)
+{
+    int err;
+
+    err = bt_tbs_set_call_alerting_safe(call_index);
+    if (err) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t esp_ble_audio_tbs_set_bearer_provider_name(uint8_t bearer_index, const char *name)
 {
     int err;
@@ -231,19 +272,15 @@ esp_err_t esp_ble_audio_tbs_set_status_flags(uint8_t bearer_index, uint16_t stat
     return ESP_OK;
 }
 
-esp_err_t esp_ble_audio_tbs_set_uri_scheme_list(uint8_t bearer_index,
-                                                const char **uri_list,
-                                                uint8_t uri_count)
+esp_err_t esp_ble_audio_tbs_set_uri_scheme_list(uint8_t bearer_index, const char *uri_scheme_list)
 {
-    uint8_t count = CONFIG_BT_TBS_BEARER_COUNT;
     int err;
 
-    if (count == 0 || bearer_index >= count ||
-            (uri_count && uri_list == NULL)) {
+    if (uri_scheme_list == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_tbs_set_uri_scheme_list_safe(bearer_index, uri_list, uri_count);
+    err = bt_tbs_set_uri_scheme_list_safe(bearer_index, uri_scheme_list);
     if (err) {
         return ESP_FAIL;
     }
@@ -300,32 +337,34 @@ static bool valid_register_param(const esp_ble_audio_tbs_register_param_t *param
 esp_err_t esp_ble_audio_tbs_register_bearer(const esp_ble_audio_tbs_register_param_t *param,
                                             uint8_t *bearer_index)
 {
-    int ret;
+    esp_err_t ret = ESP_OK;
+    int err;
 
     if (param == NULL || valid_register_param(param) == false || bearer_index == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    /* Note: currently only GTBS is supported */
-    if (param->gtbs == false) {
-        return ESP_ERR_INVALID_ARG;
+    bt_le_host_lock();
+
+    err = bt_tbs_register_bearer(param);
+    if (err < 0) {
+        ret = ESP_FAIL;
+        goto end;
     }
 
-    ret = bt_tbs_register_bearer_safe(param);
-    if (ret < 0) {
-        return ESP_FAIL;
-    }
-
-    *bearer_index = ret;
+    *bearer_index = err;
 
 #if BLE_AUDIO_SVC_DEFERRED_ADD
-    if (bt_le_gtbs_init()) {
-        bt_tbs_unregister_bearer_safe(*bearer_index);
-        return ESP_FAIL;
+    if (param->gtbs ? bt_le_gtbs_init() : bt_le_tbs_init()) {
+        bt_tbs_unregister_bearer(*bearer_index);
+        ret = ESP_FAIL;
+        goto end;
     }
 #endif /* BLE_AUDIO_SVC_DEFERRED_ADD */
 
-    return ESP_OK;
+end:
+    bt_le_host_unlock();
+    return ret;
 }
 
 esp_err_t esp_ble_audio_tbs_unregister_bearer(uint8_t bearer_index)
@@ -336,6 +375,16 @@ esp_err_t esp_ble_audio_tbs_unregister_bearer(uint8_t bearer_index)
     if (err) {
         return ESP_FAIL;
     }
+
+#if BLE_AUDIO_SVC_DEFERRED_ADD
+    if (bearer_index == ESP_BLE_AUDIO_TBS_GTBS_INDEX) {
+        if (bt_le_gtbs_deinit()) {
+            return ESP_FAIL;
+        }
+    } else if (bt_le_tbs_deinit(bearer_index)) {
+        return ESP_FAIL;
+    }
+#endif /* BLE_AUDIO_SVC_DEFERRED_ADD */
 
     return ESP_OK;
 }
@@ -994,4 +1043,23 @@ unlock:
     return ret;
 }
 #endif /* CONFIG_BT_TBS_CLIENT_CCID */
+
+esp_ble_audio_tbs_instance_t *esp_ble_audio_tbs_client_get_by_index(uint16_t conn_handle, uint8_t index)
+{
+    esp_ble_audio_tbs_instance_t *ret = NULL;
+    void *conn;
+
+    bt_le_host_lock();
+
+    conn = bt_le_acl_conn_find(conn_handle);
+    if (conn == NULL) {
+        goto unlock;
+    }
+
+    ret = lib_tbs_client_get_by_index(conn, index);
+
+unlock:
+    bt_le_host_unlock();
+    return ret;
+}
 #endif /* CONFIG_BT_TBS_CLIENT */

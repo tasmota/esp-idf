@@ -9,6 +9,7 @@
 #include "freertos/semphr.h"
 #include "esp_private/gdma.h"
 #include "esp_private/gdma_link.h"
+#include "esp_private/esp_mspi_align.h"
 #include "soc/ahb_dma_struct.h"
 #include "hal/dma_types.h"
 #include "esp_check.h"
@@ -16,10 +17,22 @@
 #include "esp_cache.h"
 #include "esp_memory_utils.h"
 #include "esp_private/esp_cache_private.h"
-#include "asrc_adapter.h"
+#include "sys/lock.h"
+#include "sdkconfig.h"
+#include "asrc_adapter_priv.h"
 
-#define TAG                               "ASRC_ADAPTER"
+#if ASRC_USE_RETENTION_LINK
+#include "esp_private/sleep_retention.h"
+#endif  /* ASRC_USE_RETENTION_LINK */
+
+#define TAG "ASRC_ADAPTER"
 #define ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE DMA_DESCRIPTOR_BUFFER_MAX_SIZE_16B_ALIGNED
+
+#if ASRC_USE_RETENTION_LINK
+/* Note: sleep retention APIs use OS locks, so use a lock rather than a light-weight critical section */
+static _lock_t s_asrc_sleep_retention_lock;
+static uint8_t s_asrc_retention_ref_count;
+#endif  /* ASRC_USE_RETENTION_LINK */
 
 static bool IRAM_ATTR asrc_hw_rx_eof(gdma_channel_handle_t dma_chan, gdma_event_data_t *event_data, void *user_data)
 {
@@ -28,6 +41,79 @@ static bool IRAM_ATTR asrc_hw_rx_eof(gdma_channel_handle_t dma_chan, gdma_event_
     xQueueSendFromISR(user_data, &asrc_evt, &higher_priority_task_awoken);
     return higher_priority_task_awoken;
 }
+
+#if ASRC_USE_RETENTION_LINK
+static esp_err_t s_asrc_sleep_retention_init_cb(void *arg)
+{
+    esp_err_t ret = sleep_retention_entries_create(asrc_reg_retention_info[0].entry_array,
+                                                   asrc_reg_retention_info[0].array_size,
+                                                   REGDMA_LINK_PRI_ASRC, asrc_reg_retention_info[0].retention_module);
+    ESP_RETURN_ON_ERROR(ret, TAG, "failed to allocate mem for sleep retention");
+    return ret;
+}
+
+static void asrc_acquire_sleep_retention(void)
+{
+    sleep_retention_module_t module = asrc_reg_retention_info[0].retention_module;
+    sleep_retention_module_init_param_t init_param = {
+        .cbs = {
+            .create = {
+                .handle = s_asrc_sleep_retention_init_cb,
+                .arg = NULL,
+            },
+        },
+        .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
+        .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM),
+    };
+
+    _lock_acquire(&s_asrc_sleep_retention_lock);
+    if (s_asrc_retention_ref_count == 0) {
+        esp_err_t err = sleep_retention_module_init(module, &init_param);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "init sleep retention failed, ASRC configuration may be lost after sleep wakeup");
+        } else {
+#if defined(CONFIG_ASRC_ALLOW_PD) && CONFIG_ASRC_ALLOW_PD
+            err = sleep_retention_module_allocate(module);
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "create retention module failed, power domain can't turn off");
+                /* don't call sleep_retention_module_deinit here, otherwise ASRC may be powered off during sleep */
+            } else if (sleep_retention_module_attach(module) != ESP_OK) {
+                ESP_LOGW(TAG, "attach retention module failed, power domain can't turn off");
+            }
+#endif  /* CONFIG_ASRC_ALLOW_PD */
+        }
+    }
+    s_asrc_retention_ref_count++;
+    _lock_release(&s_asrc_sleep_retention_lock);
+}
+
+static void asrc_release_sleep_retention(void)
+{
+    sleep_retention_module_t module = asrc_reg_retention_info[0].retention_module;
+
+    _lock_acquire(&s_asrc_sleep_retention_lock);
+    if (s_asrc_retention_ref_count == 0) {
+        _lock_release(&s_asrc_sleep_retention_lock);
+        return;
+    }
+    s_asrc_retention_ref_count--;
+    if (s_asrc_retention_ref_count == 0) {
+#if defined(CONFIG_ASRC_ALLOW_PD) && CONFIG_ASRC_ALLOW_PD
+        if (sleep_retention_module_detach(module) == ESP_OK) {
+            if (sleep_retention_module_free(module) != ESP_OK) {
+                ESP_LOGW(TAG, "fail to free the retention link list");
+            }
+        } else {
+            ESP_LOGW(TAG, "fail to detach the retention link list");
+        }
+#endif  /* CONFIG_ASRC_ALLOW_PD */
+        if (sleep_retention_module_deinit(module) != ESP_OK) {
+            ESP_LOGW(TAG, "fail to deinit the retention module");
+        }
+    }
+    _lock_release(&s_asrc_sleep_retention_lock);
+}
+#endif  /* ASRC_USE_RETENTION_LINK */
 
 esp_err_t asrc_hw_gdma_create_channel(int asrc_idx, void *user_data, uint16_t max_data_burst_size,
                                       asrc_hw_gdma_channel_handle_t *dma_tx_chan, asrc_hw_gdma_channel_handle_t *dma_rx_chan)
@@ -65,6 +151,10 @@ esp_err_t asrc_hw_gdma_create_channel(int asrc_idx, void *user_data, uint16_t ma
     ESP_GOTO_ON_ERROR(gdma_config_transfer(dma_tx, &transfer_config), cleanup, TAG, "Fail to config tx transfer");
     gdma_rx_event_callbacks_t cb = {.on_recv_eof = asrc_hw_rx_eof};
     ESP_GOTO_ON_ERROR(gdma_register_rx_event_callbacks(dma_rx, &cb, user_data), cleanup, TAG, "Fail to register rx event callbacks");
+#if ASRC_USE_RETENTION_LINK
+    /* Register retention while creating channel, same style as GDMA */
+    asrc_acquire_sleep_retention();
+#endif  /* ASRC_USE_RETENTION_LINK */
     *dma_tx_chan = dma_tx;
     *dma_rx_chan = dma_rx;
     return ESP_OK;
@@ -91,8 +181,13 @@ esp_err_t asrc_hw_gdma_create_link_list(uint32_t byte_cnt, asrc_hw_gdma_link_lis
     ESP_RETURN_ON_FALSE(list_hd, ESP_ERR_INVALID_ARG, TAG, "NULL pointer");
     ESP_RETURN_ON_FALSE(max_desc_num, ESP_ERR_INVALID_ARG, TAG, "NULL pointer");
     esp_err_t ret = ESP_OK;
-    int32_t desc_num = byte_cnt / ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
-    if (byte_cnt % ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE != 0) {
+    size_t mspi_align = esp_mspi_get_alignment(NULL);
+    uint32_t max_desc_size = ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
+    if (mspi_align > 1) {
+        max_desc_size &= ~(mspi_align - 1);
+    }
+    int32_t desc_num = byte_cnt / max_desc_size;
+    if (byte_cnt % max_desc_size != 0) {
         desc_num++;
     }
     gdma_link_list_handle_t list = (gdma_link_list_handle_t)(*list_hd);
@@ -119,21 +214,30 @@ esp_err_t asrc_hw_gdma_mount_link_list(asrc_hw_gdma_link_list_handle_t list_hd, 
     ESP_RETURN_ON_FALSE(list_hd, ESP_ERR_INVALID_ARG, TAG, "NULL pointer");
     esp_err_t ret = ESP_OK;
     uint32_t remaining_byte_cnt = byte_cnt;
+    size_t mspi_align = esp_mspi_get_alignment(buf);
+    if (mspi_align > 1) {
+        ESP_RETURN_ON_FALSE((((uintptr_t)buf & (mspi_align - 1)) == 0) && ((byte_cnt & (mspi_align - 1)) == 0),
+                            ESP_ERR_INVALID_ARG, TAG, "buffer addr or size not aligned to MSPI alignment");
+    }
+    uint32_t max_desc_size = ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
+    if (mspi_align > 1) {
+        max_desc_size &= ~(mspi_align - 1);
+    }
     gdma_buffer_mount_config_t mount_config[desc_num] = {};
     for (int i = 0; i < desc_num; i++) {
         mount_config[i].buffer = buf;
-        mount_config[i].flags.bypass_buffer_align_check = true;
+        mount_config[i].buffer_alignment = mspi_align;
         if ((i + 1) != desc_num) {
-            mount_config[i].length = ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
+            mount_config[i].length = max_desc_size;
             mount_config[i].flags.mark_eof = 0;
             mount_config[i].flags.mark_final = GDMA_FINAL_LINK_TO_DEFAULT;
-            remaining_byte_cnt -= ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
+            remaining_byte_cnt -= max_desc_size;
         } else {
             mount_config[i].length = remaining_byte_cnt;
             mount_config[i].flags.mark_eof = 1;
             mount_config[i].flags.mark_final = GDMA_FINAL_LINK_TO_NULL;
         }
-        buf += ASRC_HW_GDMA_DESC_BUFFER_MAX_SIZE;
+        buf += max_desc_size;
     }
     ret = gdma_link_mount_buffers((gdma_link_list_handle_t)list_hd, 0, mount_config, desc_num, NULL);
     if (ret != ESP_OK) {
@@ -172,6 +276,11 @@ void asrc_hw_gdma_destroy_channel(asrc_hw_gdma_channel_handle_t dma_tx_chan, asr
         gdma_disconnect(dma_rx_chan_handle);
         gdma_del_channel(dma_rx_chan_handle);
     }
+#if ASRC_USE_RETENTION_LINK
+    if (dma_tx_chan != NULL || dma_rx_chan != NULL) {
+        asrc_release_sleep_retention();
+    }
+#endif  /* ASRC_USE_RETENTION_LINK */
 }
 
 esp_err_t asrc_hw_get_buffer_alignment(uint32_t heap_caps, size_t *out_alignment)

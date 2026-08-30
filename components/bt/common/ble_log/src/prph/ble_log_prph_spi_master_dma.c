@@ -9,15 +9,13 @@
 
 /* INCLUDE */
 #include "ble_log_prph_spi_master_dma.h"
+#include "ble_log_prph_spi_common.h"
 #include "ble_log_lbm.h"
 
 #include "esp_timer.h"
 
 /* MACRO */
-#define BLE_LOG_SPI_BUS                     SPI2_HOST
-#define BLE_LOG_SPI_MAX_TRANSFER_SIZE       (10240)
 #define BLE_LOG_SPI_TRANS_ITVL_MIN_US       (30)
-#define BLE_LOG_SPI_DMA_ALIGN_BYTES         (4U)
 #define BLE_LOG_SPI_ALIGN_LOG_PERIOD        (256U)
 
 #if CONFIG_SPI_MASTER_ISR_IN_IRAM
@@ -29,7 +27,7 @@
 /* VARIABLE */
 BLE_LOG_STATIC bool prph_inited = false;
 BLE_LOG_STATIC spi_device_handle_t dev_handle = NULL;
-BLE_LOG_STATIC uint32_t last_tx_done_ts = 0;
+BLE_LOG_STATIC BLE_LOG_DRAM_ATTR uint32_t last_tx_done_ts = 0;
 
 /* PRIVATE FUNCTION DECLARATION */
 BLE_LOG_STATIC void spi_master_dma_tx_done_cb(spi_transaction_t *spi_trans);
@@ -44,9 +42,7 @@ BLE_LOG_SPI_MASTER_DMA_CB_ATTR BLE_LOG_STATIC void spi_master_dma_tx_done_cb(spi
     /* Recycle transport */
     ble_log_prph_trans_t *trans = (ble_log_prph_trans_t *)(spi_trans->user);
     trans->pos = 0;
-    ble_log_lbm_t *lbm = (ble_log_lbm_t *)trans->owner;
-    __atomic_fetch_sub(&lbm->trans_inflight, 1, __ATOMIC_RELAXED);
-    __atomic_store_n(&trans->prph_owned, false, __ATOMIC_RELEASE);
+    ble_log_lbm_recycle_trans(trans);
 }
 
 BLE_LOG_SPI_MASTER_DMA_CB_ATTR BLE_LOG_STATIC void spi_master_dma_pre_tx_cb(spi_transaction_t *spi_trans)
@@ -66,8 +62,8 @@ bool ble_log_prph_init(size_t trans_cnt)
     /* SPI master initialization */
     spi_bus_config_t bus_config = {
         .miso_io_num = -1,
-        .mosi_io_num = CONFIG_BLE_LOG_PRPH_SPI_MASTER_DMA_MOSI_IO_NUM,
-        .sclk_io_num = CONFIG_BLE_LOG_PRPH_SPI_MASTER_DMA_SCLK_IO_NUM,
+        .mosi_io_num = BLE_LOG_SPI_MOSI_IO_NUM,
+        .sclk_io_num = BLE_LOG_SPI_SCLK_IO_NUM,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = BLE_LOG_SPI_MAX_TRANSFER_SIZE,
@@ -82,7 +78,7 @@ bool ble_log_prph_init(size_t trans_cnt)
     spi_device_interface_config_t dev_config = {
         .clock_speed_hz = SPI_MASTER_FREQ_20M,
         .mode = 0,
-        .spics_io_num = CONFIG_BLE_LOG_PRPH_SPI_MASTER_DMA_CS_IO_NUM,
+        .spics_io_num = BLE_LOG_SPI_CS_IO_NUM,
         .queue_size = trans_cnt,
         .post_cb = spi_master_dma_tx_done_cb,
         .pre_cb = spi_master_dma_pre_tx_cb,
@@ -141,7 +137,7 @@ bool ble_log_prph_trans_init(ble_log_prph_trans_t **trans, size_t trans_size)
     (*trans)->ctx = (void *)spi_trans_ctx;
 
     /* Initialize log buffer */
-    (*trans)->buf = (uint8_t *)BLE_LOG_MALLOC(trans_size);
+    (*trans)->buf = (uint8_t *)BLE_LOG_ALIGNED_MALLOC(trans_size);
     if (!(*trans)->buf) {
         goto exit;
     }
@@ -204,10 +200,6 @@ BLE_LOG_IRAM_ATTR void ble_log_prph_send_trans(ble_log_prph_trans_t *trans)
     spi_trans->length = (tx_len << 3);
     spi_trans->rxlength = 0;
     if (spi_device_queue_trans(dev_handle, spi_trans, 0) != ESP_OK) {
-        ble_log_lbm_t *lbm = (ble_log_lbm_t *)trans->owner;
-        __atomic_fetch_sub(&lbm->trans_inflight, 1, __ATOMIC_RELAXED);
-        __atomic_store_n(&trans->prph_owned, false, __ATOMIC_RELEASE);
+        ble_log_lbm_recycle_trans(trans);
     }
 }
-
-void ble_log_prph_reset_util_counters(void) {}

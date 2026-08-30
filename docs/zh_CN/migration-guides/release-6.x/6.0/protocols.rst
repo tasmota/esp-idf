@@ -104,6 +104,23 @@ ESP-TLS 已移除内置的 wolfSSL TLS 协议栈支持。使用 wolfSSL 的用�
 
 新 API 需要您使用 :cpp:func:`esp_tls_init` 创建 :cpp:type:`esp_tls_t` 结构，并提供对连接过程的更好控制。
 
+统一私钥接口
+~~~~~~~~~~~~~
+
+:cpp:type:`esp_tls_cfg`、:cpp:type:`esp_tls_cfg_server` 和 :cpp:type:`httpd_ssl_config` 中的 ``use_secure_element`` 字段已被弃用且不再起作用：将其设置为 ``true`` 会使连接（或服务器启动）失败并返回 ``ESP_ERR_NOT_SUPPORTED``。保留该字段仅是为了源代码兼容性，它将在下一个主版本中被移除。ATECC608A 安全元件和所有其他硬件支持的密钥源（DS 外设、ECDSA 外设、密钥管理器）现在通过统一的 :cpp:type:`esp_key_config_t` 接口和 PSA Crypto 密钥 ID 来访问。
+
+**迁移步骤**
+
+1. 将 ``use_secure_element = true`` 替换为使用 ``ESP_KEY_SOURCE_PSA`` 的新 :cpp:type:`esp_key_config_t`，以及通过 ``psa_import_key()`` 获取的 PSA 密钥 ID。
+
+2. ``atcab_init()`` 调用不再由 ESP-TLS 内部执行。使用 ATECC608A 的应用程序必须确保在使用前在应用层初始化安全元件。详情请参阅 `esp-cryptoauthlib 文档 <https://github.com/espressif/esp-cryptoauthlib>`_。
+
+3. ``tcp_transport`` 中的 ``esp_transport_ssl_use_secure_element()`` 函数已被弃用且不再起作用（连接将失败并返回 ``ESP_ERR_NOT_SUPPORTED``）。请改用 ``esp_transport_ssl_set_client_key_config()``。
+
+4. 安全元件驱动的 Kconfig 选项已从 ``CONFIG_MBEDTLS_ATCA_HW_ECDSA_SIGN`` / ``CONFIG_MBEDTLS_ATCA_HW_ECDSA_VERIFY`` 合并为 ``CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED``。旧名称通过 ``sdkconfig.rename`` 自动映射。
+
+详细使用示例请参阅 :ref:`atecc608a-with-esp-tls`。
+
 ESP HTTP 服务器
 ---------------
 
@@ -133,7 +150,7 @@ ESP HTTP 服务器
 
 **选项 1（推荐）** — 将连接阶段的逻辑移动到一个专用的握手后回调中：
 
-1. 在 menuconfig 中启用 :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT`。
+1. 在 menuconfig 中启用 :menuitem:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT`。
 2. 在 ``httpd_uri_t`` 结构体中注册 ``ws_post_handshake_cb`` 回调，使帧处理程序保持简洁，无需再进行 `HTTP_GET` 状态检查。
 
 .. code-block:: c
@@ -159,7 +176,7 @@ ESP HTTP 服务器
 
 **选项 2（改动最少）** — 将 ``.ws_post_handshake_cb`` 设置为与 ``.handler`` 相同的函数：
 
-1. 在 menuconfig 中启用 :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT`。
+1. 在 menuconfig 中启用 :menuitem:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT`。
 2. 在 URI 注册中设置 ``.ws_post_handshake_cb = ws_handler``。现有的 ``if (req->method == HTTP_GET)`` 检查在处理程序内部仍然有效，无需额外修改代码。
 
 .. code-block:: c

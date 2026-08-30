@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 #include "esp_err.h"
+#include "esp_key_config.h"
 #include <sys/socket.h>
 
 #ifdef __cplusplus
@@ -200,6 +201,7 @@ typedef struct {
                                                      DER Certificate - Length of the buffer pointed to by client_cert_der. Should be the length of the certificate. */
     const char                  *client_key_pem;     /*!< SSL client key, PEM format as string, if the server requires to verify client */
     size_t                      client_key_len;      /*!< Length of the buffer pointed to by client_key_pem. May be 0 for null-terminated pem */
+    const esp_key_config_t      *client_key;         /*!< Unified client key configuration. Takes precedence over client_key_pem when set */
     const char                  *client_key_password;      /*!< Client key decryption password string */
     size_t                      client_key_password_len;   /*!< String length of the password pointed to by client_key_password */
     esp_http_client_proto_ver_t tls_version;         /*!< TLS protocol version of the connection, e.g., TLS 1.2, TLS 1.3 (default - no preference) */
@@ -236,9 +238,6 @@ typedef struct {
 #if CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS
     const char                  **alpn_protos;       /*!< Application protocols required for HTTP2. If HTTP2/ALPN support is required, a list of protocols that should be negotiated. The format is length followed by protocol
                                                      name. For the most common cases the following is ok: const char **alpn_protos = { "h2", NULL }; - where 'h2' is the protocol name */
-#endif
-#if CONFIG_ESP_TLS_USE_SECURE_ELEMENT
-    bool use_secure_element;                /*!< Enable this option to use secure element */
 #endif
 #if CONFIG_ESP_TLS_USE_DS_PERIPHERAL
     void *ds_data;                          /*!< Pointer for digital signature peripheral context, see ESP-TLS Documentation for more details */
@@ -298,6 +297,7 @@ typedef enum {
 #define ESP_ERR_HTTP_READ_TIMEOUT       (ESP_ERR_HTTP_BASE + 11)    /*!< HTTP data read timeout */
 #define ESP_ERR_HTTP_INCOMPLETE_DATA    (ESP_ERR_HTTP_BASE + 12)    /*!< Incomplete data received, less than Content-Length or last chunk */
 #define ESP_ERR_HTTP_REDIRECT_DOWNGRADE (ESP_ERR_HTTP_BASE + 13)   /*!< HTTPS origin redirected to a non-HTTPS scheme (downgrade blocked) */
+#define ESP_ERR_HTTP_HEADER_TOO_LONG    (ESP_ERR_HTTP_BASE + 14)   /*!< A single request header is larger than buffer_size_tx and cannot be sent (only when CONFIG_ESP_HTTP_CLIENT_STRICT_HEADER_BUFFER is enabled) */
 
 /**
  * @brief      Start a HTTP session
@@ -368,6 +368,8 @@ esp_err_t esp_http_client_prepare(esp_http_client_handle_t client);
  *  - ESP_OK on successful
  *  - ESP_FAIL on error
  *  - ESP_ERR_HTTP_WRITE_DATA if write operation fails
+ *  - ESP_ERR_HTTP_HEADER_TOO_LONG if a single request header is larger than buffer_size_tx
+ *    (only when CONFIG_ESP_HTTP_CLIENT_STRICT_HEADER_BUFFER is enabled)
  */
 esp_err_t esp_http_client_request_send(esp_http_client_handle_t client, int write_len);
 

@@ -128,7 +128,10 @@ esp_err_t esp_ble_audio_cap_unicast_group_create(const esp_ble_audio_cap_unicast
 {
     int err;
 
-    if (param == NULL || unicast_group == NULL) {
+    if (param == NULL || unicast_group == NULL ||
+            param->params == NULL ||
+            param->params_count == 0 ||
+            param->params_count > CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -145,7 +148,10 @@ esp_err_t esp_ble_audio_cap_unicast_group_reconfig(esp_ble_audio_cap_unicast_gro
 {
     int err;
 
-    if (unicast_group == NULL || param == NULL) {
+    if (unicast_group == NULL || param == NULL ||
+            param->params == NULL ||
+            param->params_count == 0 ||
+            param->params_count > CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -255,7 +261,7 @@ esp_err_t esp_ble_audio_cap_initiator_unicast_audio_start(const esp_ble_audio_ca
     int err;
 
     if (param == NULL || param->count == 0 || param->stream_params == NULL ||
-            param->count > CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT) {
+            param->count > (2 * CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -272,7 +278,7 @@ esp_err_t esp_ble_audio_cap_initiator_unicast_audio_update(const esp_ble_audio_c
     int err;
 
     if (param == NULL || param->count == 0 || param->stream_params == NULL ||
-            param->count > CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT) {
+            param->count > (2 * CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -289,7 +295,7 @@ esp_err_t esp_ble_audio_cap_initiator_unicast_audio_stop(const esp_ble_audio_cap
     int err;
 
     if (param == NULL || param->count == 0 || param->streams == NULL ||
-            param->count > CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT) {
+            param->count > (2 * CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -465,18 +471,32 @@ esp_err_t esp_ble_audio_cap_handover_unregister_cb(const esp_ble_audio_cap_hando
 esp_err_t esp_ble_audio_cap_handover_unicast_to_broadcast(
     const esp_ble_audio_cap_handover_unicast_to_broadcast_param_t *param)
 {
+    esp_ble_audio_cap_handover_unicast_to_broadcast_param_t p;
+    esp_err_t ret = ESP_OK;
     int err;
 
     if (param == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_cap_handover_unicast_to_broadcast_safe(param);
-    if (err) {
-        return ESP_FAIL;
+    p = *param;
+
+    bt_le_host_lock();
+
+    p.ext_adv = bt_le_ext_adv_find(p.adv_handle);
+    if (p.ext_adv == NULL) {
+        ret = ESP_ERR_NOT_FOUND;
+        goto unlock;
     }
 
-    return ESP_OK;
+    err = bt_cap_handover_unicast_to_broadcast(&p);
+    if (err) {
+        ret = ESP_FAIL;
+    }
+
+unlock:
+    bt_le_host_unlock();
+    return ret;
 }
 
 esp_err_t esp_ble_audio_cap_handover_broadcast_to_unicast(

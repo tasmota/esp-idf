@@ -19,6 +19,8 @@
 
 #define SPINEL_VENDOR_PROPERTY_BIT_PENDINGMODE BIT(0)
 #define SPINEL_VENDOR_PROPERTY_BIT_COORDINATOR BIT(1)
+// Must match ot::Spinel::SpinelDriver::kVersionStringSize (private, spinel_driver.hpp).
+#define ESP_RADIO_SPINEL_RCP_VERSION_MAX_SIZE 128
 static esp_ieee802154_pending_mode_t s_spinel_vendor_property_pendingmode[ot::Spinel::kSpinelHeaderMaxNumIid] = {ESP_IEEE802154_AUTO_PENDING_DISABLE};
 static bool s_spinel_vendor_property_coordinator[ot::Spinel::kSpinelHeaderMaxNumIid] = {false};
 static uint64_t s_spinel_vendor_property_mask[ot::Spinel::kSpinelHeaderMaxNumIid] = {0};
@@ -103,12 +105,14 @@ void ReceiveDone(otInstance *aInstance, otRadioFrame *aFrame, otError aError)
 {
     esp_radio_spinel_idx_t idx = get_index_from_instance(aInstance);
     assert(s_esp_radio_spinel_callbacks[idx].receive_done);
-    uint8_t *frame = (uint8_t *)malloc(aFrame->mLength + 1);
+    uint8_t *frame = (uint8_t *)calloc(1, aFrame->mLength + 1);
     esp_ieee802154_frame_info_t frame_info;
     if (frame) {
         frame[0] = aFrame->mLength;
         memcpy((void *)(frame + 1), aFrame->mPsdu, frame[0]);
         frame_info.rssi = aFrame->mInfo.mRxInfo.mRssi;
+        frame_info.channel = aFrame->mChannel;
+        frame_info.lqi = aFrame->mInfo.mRxInfo.mLqi;
         frame_info.timestamp = aFrame->mInfo.mRxInfo.mTimestamp;
         frame_info.pending = aFrame->mInfo.mRxInfo.mAckedWithFramePending;
         s_esp_radio_spinel_callbacks[idx].receive_done(frame, &frame_info);
@@ -123,17 +127,22 @@ void TransmitDone(otInstance *aInstance, otRadioFrame *aFrame, otRadioFrame *aAc
     esp_radio_spinel_idx_t idx = get_index_from_instance(aInstance);
     assert(s_esp_radio_spinel_callbacks[idx].transmit_done && s_esp_radio_spinel_callbacks[idx].transmit_failed);
     if (aError == OT_ERROR_NONE) {
-        uint8_t *frame = (uint8_t *)malloc(aFrame->mLength + 1);
+        uint8_t *frame = (uint8_t *)calloc(1, aFrame->mLength + 1);
         uint8_t *ack = nullptr;
         if (frame) {
-            esp_ieee802154_frame_info_t ack_info;
+            esp_ieee802154_frame_info_t ack_info = {};
             frame[0] = aFrame->mLength;
             memcpy((void *)(frame + 1), aFrame->mPsdu, frame[0]);
             if (aAckFrame) {
-                ack = (uint8_t *)malloc(aAckFrame->mLength + 1);
+                ack = (uint8_t *)calloc(1, aAckFrame->mLength + 1);
                 if (ack) {
                     ack[0] = aAckFrame->mLength;
                     memcpy((void *)(ack + 1), aAckFrame->mPsdu, ack[0]);
+                    ack_info.rssi = aAckFrame->mInfo.mRxInfo.mRssi;
+                    ack_info.channel = aAckFrame->mChannel;
+                    ack_info.lqi = aAckFrame->mInfo.mRxInfo.mLqi;
+                    ack_info.timestamp = aAckFrame->mInfo.mRxInfo.mTimestamp;
+                    ack_info.pending = aAckFrame->mInfo.mRxInfo.mAckedWithFramePending;
                 } else {
                     ESP_LOGE(ESP_SPINEL_LOG_TAG, "Fail to alloc memory for ack");
                 }
@@ -170,7 +179,7 @@ void TxStarted(otInstance *aInstance, otRadioFrame *aFrame)
 {
     esp_radio_spinel_idx_t idx = get_index_from_instance(aInstance);
     assert(s_esp_radio_spinel_callbacks[idx].transmit_started);
-    uint8_t *frame = (uint8_t *)malloc(aFrame->mLength + 1);
+    uint8_t *frame = (uint8_t *)calloc(1, aFrame->mLength + 1);
     if (frame) {
         frame[0] = aFrame->mLength;
         memcpy((void *)(frame + 1), aFrame->mPsdu, frame[0]);
@@ -251,7 +260,7 @@ esp_err_t esp_radio_spinel_set_short_address(uint16_t short_address, esp_radio_s
     return (s_radio[idx].SetShortAddress(short_address) == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
 }
 
-esp_err_t esp_radio_spinel_set_extended_address(uint8_t *ext_address, esp_radio_spinel_idx_t idx)
+esp_err_t esp_radio_spinel_set_extended_address(const uint8_t *ext_address, esp_radio_spinel_idx_t idx)
 {
     otExtAddress aExtAddress;
     memcpy(aExtAddress.m8, (void *)ext_address, OT_EXT_ADDRESS_SIZE);
@@ -284,6 +293,11 @@ esp_err_t esp_radio_spinel_clear_short_entries(esp_radio_spinel_idx_t idx)
     return (s_radio[idx].ClearSrcMatchShortEntries() == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
 }
 
+esp_err_t esp_radio_spinel_clear_short_entry(uint16_t short_address, esp_radio_spinel_idx_t idx)
+{
+    return (s_radio[idx].ClearSrcMatchShortEntry(short_address) == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
+}
+
 esp_err_t esp_radio_spinel_add_short_entry(uint16_t short_address, esp_radio_spinel_idx_t idx)
 {
     return (s_radio[idx].AddSrcMatchShortEntry(short_address) == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
@@ -294,7 +308,14 @@ esp_err_t esp_radio_spinel_clear_extended_entries(esp_radio_spinel_idx_t idx)
     return (s_radio[idx].ClearSrcMatchExtEntries() == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
 }
 
-esp_err_t esp_radio_spinel_add_extended_entry(uint8_t *ext_address, esp_radio_spinel_idx_t idx)
+esp_err_t esp_radio_spinel_clear_extended_entry(const uint8_t *ext_address, esp_radio_spinel_idx_t idx)
+{
+    otExtAddress aExtAddress;
+    memcpy(aExtAddress.m8, (void *)ext_address, OT_EXT_ADDRESS_SIZE);
+    return (s_radio[idx].ClearSrcMatchExtEntry(aExtAddress) == OT_ERROR_NONE) ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t esp_radio_spinel_add_extended_entry(const uint8_t *ext_address, esp_radio_spinel_idx_t idx)
 {
     otExtAddress aExtAddress;
     memcpy(aExtAddress.m8, (void *)ext_address, OT_EXT_ADDRESS_SIZE);
@@ -375,7 +396,7 @@ esp_err_t esp_radio_spinel_rcp_version_get(char *running_rcp_version, esp_radio_
 {
     const char *rcp_version = s_radio[idx].GetVersion();
     ESP_RETURN_ON_FALSE(rcp_version != nullptr, ESP_FAIL, ESP_SPINEL_LOG_TAG, "Fail to get rcp version");
-    strcpy(running_rcp_version, rcp_version);
+    strlcpy(running_rcp_version, rcp_version, ESP_RADIO_SPINEL_RCP_VERSION_MAX_SIZE);
     return ESP_OK;
 }
 

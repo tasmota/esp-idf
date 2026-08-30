@@ -5,6 +5,11 @@
 
 This example demonstrates how to use Non-Volatile Storage (NVS) through an interactive console interface. It provides a set of commands to read, write, and manage data in NVS.
 
+## When to use this example
+
+- You want to inspect and modify NVS interactively at runtime (set/get/erase/list keys across namespaces).
+- You are debugging stored values or exploring NVS behavior without writing custom firmware.
+
 ## Hardware Required
 
 This example can run on any ESP32 family development board.
@@ -13,8 +18,12 @@ This example can run on any ESP32 family development board.
 
 The example can be configured through `menuconfig`:
 1. Enable/disable command history storage (`CONFIG_CONSOLE_STORE_HISTORY`)
-2. Configure UART parameters
+2. Select the console channel under **Component config → ESP-STDIO → Channel for console output**
+   (UART0 by default, or **USB Serial/JTAG** / **USB CDC** on supported chips)
 3. Configure console prompt color settings
+
+On chips with USB Serial/JTAG, set the channel to **USB Serial/JTAG Controller**,
+connect the USB cable to that interface, then monitor that port.
 
 ## How to Use
 
@@ -26,7 +35,7 @@ Build the project and flash it to the board, then run monitor tool to view seria
 idf.py -p PORT flash monitor
 ```
 
-(Replace PORT with the name of the serial port to use.)
+(Replace PORT with the serial port that matches the console channel selected above.)
 
 ### Console Commands
 

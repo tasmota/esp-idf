@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -72,11 +72,13 @@ esp_err_t bitscrambler_loopback_create(bitscrambler_handle_t *handle, int attach
     if (!handle) {
         return ESP_ERR_INVALID_ARG;
     }
+    *handle = NULL;
     if (attach_to < 0 || attach_to > SOC_BITSCRAMBLER_ATTACH_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
     esp_err_t ret = ESP_OK;
+    bool bs_initialized = false;
     bitscrambler_loopback_t *bs = calloc(1, sizeof(bitscrambler_loopback_t));
     if (!bs) {
         return ESP_ERR_NO_MEM;
@@ -88,14 +90,13 @@ esp_err_t bitscrambler_loopback_create(bitscrambler_handle_t *handle, int attach
         .attach_to = attach_to
     };
     ESP_GOTO_ON_ERROR(bitscrambler_init_loopback(&bs->bs, &cfg), err, TAG, "failed bitscrambler init for loopback");
+    bs_initialized = true;
 
     // register extra cleanup function to free loopback resources
     bitscrambler_register_extra_clean_up(&bs->bs, bitscrambler_loopback_cleanup, bs);
 
     bs->sema_done = xSemaphoreCreateBinary();
-    if (!bs->sema_done) {
-        goto err;
-    }
+    ESP_GOTO_ON_FALSE(bs->sema_done, ESP_ERR_NO_MEM, err, TAG, "failed to create semaphore");
 
     bs->max_transfer_sz_bytes = max_transfer_sz_bytes;
     size_t desc_ct = esp_dma_calculate_node_count(max_transfer_sz_bytes, 4, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
@@ -137,8 +138,11 @@ esp_err_t bitscrambler_loopback_create(bitscrambler_handle_t *handle, int attach
     return ESP_OK;
 
 err:
-    bitscrambler_loopback_free(bs);
-    free(bs);
+    if (bs_initialized) {
+        bitscrambler_free(&bs->bs);
+    } else {
+        free(bs);
+    }
     return ret;
 }
 
@@ -217,10 +221,12 @@ esp_err_t bitscrambler_loopback_run(bitscrambler_handle_t bs, void *buffer_in, s
     gdma_reset(bsl->tx_channel);
     bitscrambler_reset(bs);
 
+    size_t in_alignment = gdma_get_buffer_alignment_constraint(bsl->tx_channel, buffer_in);
+    size_t out_alignment = gdma_get_buffer_alignment_constraint(bsl->rx_channel, buffer_out);
     // mount in and out buffer to the DMA link list
     gdma_buffer_mount_config_t in_buf_mount_config = {
         .buffer = buffer_in,
-        .buffer_alignment = 4,
+        .buffer_alignment = in_alignment,
         .length = length_bytes_in,
         .flags = {
             .mark_eof = true,
@@ -230,7 +236,7 @@ esp_err_t bitscrambler_loopback_run(bitscrambler_handle_t bs, void *buffer_in, s
     gdma_link_mount_buffers(bsl->tx_link_list, 0, &in_buf_mount_config, 1, NULL);
     gdma_buffer_mount_config_t out_buf_mount_config = {
         .buffer = buffer_out,
-        .buffer_alignment = 4,
+        .buffer_alignment = out_alignment,
         .length = length_bytes_out,
         .flags = {
             .mark_eof = false,

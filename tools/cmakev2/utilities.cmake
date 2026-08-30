@@ -7,6 +7,10 @@
 # used by toolchain CMake files.
 include(${CMAKE_CURRENT_LIST_DIR}/../cmake/deduplicate_flags.cmake)
 
+# __compiler_query is shared with cmakev1. The esp_common and xtensa
+# project_include.cmake files that call it are used by both build systems.
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/compiler_query.cmake)
+
 # Note: CMake does not support nested lists. The functions idf_die, idf_warn,
 # idf_msg, and idf_dbg use ARGV# values because this is the only way to prevent
 # arguments from being altered by CMake. ARGV and ARGN contain a flattened list
@@ -16,7 +20,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/../cmake/deduplicate_flags.cmake)
 # Using these functions has a side effect: the actual origin of the message
 # appears as the first line of the backtrace.
 
-#[[
+#[[api
 .. cmakev2:function:: idf_die
 
     .. code-block:: cmake
@@ -40,7 +44,7 @@ function(idf_die)
     message(FATAL_ERROR " IDF: ${joined}")
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_warn
 
     .. code-block:: cmake
@@ -63,7 +67,7 @@ function(idf_warn)
     message(WARNING " IDF: ${joined}")
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_msg
 
     .. code-block:: cmake
@@ -86,7 +90,7 @@ function(idf_msg)
     message(STATUS " IDF: ${joined}")
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_dbg
 
     .. code-block:: cmake
@@ -634,18 +638,22 @@ function(__split)
     set(${ARG_OUTPUT} "${filtered_lines}" PARENT_SCOPE)
 endfunction()
 
-#[[
-    idf_build_get_compile_options(<variable>)
+#[[api
+.. cmakev2:function:: idf_build_get_compile_options
 
-    *variable*
+    .. code-block:: cmake
 
-        Variable name in which the list of generator expressions for C, CXX,
-        and ASM compile options will be stored.
+        idf_build_get_compile_options(<variable>)
 
-    Gather the compilation options from COMPILE_OPTIONS, C_COMPILE_OPTIONS,
-    CXX_COMPILE_OPTIONS, and ASM_COMPILE_OPTIONS build properties into a single
-    list using generator expressions. This list can then be used with the
-    target_compile_options call.
+    *variable[out]*
+
+        Variable in which the list of compile option generator expressions is
+        stored.
+
+    Gather the compile options from the ``COMPILE_OPTIONS``,
+    ``C_COMPILE_OPTIONS``, ``CXX_COMPILE_OPTIONS``, and ``ASM_COMPILE_OPTIONS``
+    build properties into a single list of generator expressions, suitable for
+    passing to ``target_compile_options``.
 #]]
 function(idf_build_get_compile_options output)
     idf_build_get_property(compile_options COMPILE_OPTIONS GENERATOR_EXPRESSION)
@@ -829,7 +837,8 @@ endfunction()
 
 #[[
     target_add_binary_data(<target> <embed_file> <embed_type>
-                           [RENAME_TO <symbol>])
+                           [RENAME_TO <symbol>]
+                           [ALIGN <alignment>]
                            [DEPENDS <dependency>...])
 
     *target[in]*
@@ -849,6 +858,11 @@ endfunction()
         Use the given symbol name for the embedded data. If no symbol name is
         provided, the embed_file file name will be used instead.
 
+    *ALIGN[in,opt]*
+
+        Align the embedded data's start symbol to the given positive power
+        of two.
+
     *DEPENDS[in,opt]*
 
         List of additional dependencies for the generated file containing
@@ -859,7 +873,7 @@ endfunction()
     build process.
 #]]
 function(target_add_binary_data target embed_file embed_type)
-    cmake_parse_arguments(_ "" "RENAME_TO" "DEPENDS" ${ARGN})
+    cmake_parse_arguments(_ "" "RENAME_TO;ALIGN" "DEPENDS" ${ARGN})
     idf_build_get_property(build_dir BUILD_DIR)
 
     # In cmakev1, the executable target was named "${project}.elf".
@@ -884,11 +898,24 @@ function(target_add_binary_data target embed_file embed_type)
         set(rename_to_arg -D "VARIABLE_BASENAME=${__RENAME_TO}")
     endif()
 
+    set(align_arg)
+    if(DEFINED __ALIGN)
+        if(NOT __ALIGN MATCHES "^[1-9][0-9]*$")
+            message(FATAL_ERROR "ALIGN must be a positive integer")
+        endif()
+        math(EXPR alignment_mask "${__ALIGN} & (${__ALIGN} - 1)")
+        if(NOT alignment_mask EQUAL 0)
+            message(FATAL_ERROR "ALIGN must be a power of two")
+        endif()
+        set(align_arg -D "DATA_ALIGNMENT=${__ALIGN}")
+    endif()
+
     add_custom_command(OUTPUT "${embed_srcfile}"
         COMMAND "${CMAKE_COMMAND}"
         -D "DATA_FILE=${embed_file}"
         -D "SOURCE_FILE=${embed_srcfile}"
         ${rename_to_arg}
+        ${align_arg}
         -D "FILE_TYPE=${embed_type}"
         -P "${idf_path}/tools/cmake/scripts/data_file_embed_asm.cmake"
         MAIN_DEPENDENCY "${embed_file}"
@@ -917,29 +944,34 @@ function(target_add_binary_data target embed_file embed_type)
     target_sources("${target}" PRIVATE "${embed_srcfile}")
 endfunction()
 
-#[[
-    add_prebuilt_library(<target> <lib>
-                         [REQUIRES <component>...])
-                         [PRIV_REQUIRES <component>...])
+#[[api
+.. cmakev2:function:: add_prebuilt_library
+
+    .. code-block:: cmake
+
+        add_prebuilt_library(<target> <lib>
+                             [REQUIRES <component>...]
+                             [PRIV_REQUIRES <component>...])
 
     *target[in]*
 
         Target name for the imported library.
 
-    *library[in]*
+    *lib[in]*
 
-        Imported library path.
+        Path to the prebuilt static library.
 
     *REQUIRES[in,opt]*
 
-        Optional dependency on other components.
+        Components this library depends on publicly.
 
     *PRIV_REQUIRES[in,opt]*
 
-        Optional private dependency on other components.
+        Components this library depends on privately.
 
-    Add prebuilt library with support for adding dependencies on ESP-IDF
-    components.
+    Import a prebuilt static library as a CMake target, optionally linking it
+    against other ESP-IDF components. The resulting target can be linked into a
+    component or executable like any other library.
 #]]
 function(add_prebuilt_library target_name lib_path)
     cmake_parse_arguments(_ "" "" "REQUIRES;PRIV_REQUIRES" ${ARGN})
@@ -1173,7 +1205,30 @@ function(fail_at_build_time target_name message_line0)
 endfunction()
 
 #[[
-    __preprocess_linker_script(<script_in> <script_out>)
+    __linker_script_key(<path> <output>)
+
+    *path[in]*
+
+        Linker script or template path.
+
+    *output[out]*
+
+        Variable set to a stable key derived from the absolute ``path``.
+
+    Compute a collision-resistant key for a linker script. It is used to store
+    per-script metadata such as the generated output path and preprocessor
+    flags as component properties. Both the producer ``target_linker_script``
+    and the consumer ``idf_build_library`` must derive the key identically, so
+    the absolute-path normalization lives here and nowhere else.
+#]]
+function(__linker_script_key path output)
+    get_filename_component(path_abs "${path}" ABSOLUTE)
+    string(MD5 hash "${path_abs}")
+    set(${output} "${hash}" PARENT_SCOPE)
+endfunction()
+
+#[[
+    __preprocess_linker_script(<script_in> <script_out> <flags> <component_includes>)
 
     *script_in[in]*
 
@@ -1183,32 +1238,63 @@ endfunction()
 
         Path where the preprocessed linker script will be saved.
 
+    *flags[in]*
+
+        Explicit preprocessor flags from ``target_linker_script``'s ``FLAGS``
+        option, or the literal ``__DEFAULT__`` when no ``FLAGS`` was given.
+        ``__DEFAULT__`` keeps comments (``-C``) and selects the parent-dir==target
+        include heuristic; any other value, including an empty string, replaces
+        that whole set, so a caller can drop ``-C``.
+
+    *component_includes[in]*
+
+        Pre-built ``-I`` arguments for the linked component graph, always
+        appended so a template can include any component header.
+
     Run the C preprocessor on ``script_in`` and store the result in
-    ``script_out``.
+    ``script_out``. The preprocessor always receives ``-I<config_dir>`` so
+    ``sdkconfig.h`` resolves, plus ``component_includes``.
 #]]
-function(__preprocess_linker_script script_in script_out)
+function(__preprocess_linker_script script_in script_out flags component_includes)
     idf_build_get_property(sdkconfig_header __SDKCONFIG_HEADER)
     idf_build_get_property(idf_path IDF_PATH)
     idf_build_get_property(config_dir CONFIG_DIR)
     idf_build_get_property(idf_target IDF_TARGET)
 
-    # This approach is not ideal, but it is the current method used in cmakev1
-    # for the esp_system component. The linker script files for specific
-    # targets within the esp_system component include the ld.common file. This
-    # adds the ld.common directory to the search path for the C preprocessor.
-    # This method works for the specific directory layout of esp_common, but if
-    # other components with different layouts adopt this approach, adjustments
-    # will be necessary. It might be better to include the files using relative
-    # paths in the linker scripts.
-    get_filename_component(script_parent_dir "${script_in}" DIRECTORY)
-    get_filename_component(script_parent_name "${script_parent_dir}" NAME)
-    set(extra_cflags "")
-    if(script_parent_name STREQUAL idf_target)
-        get_filename_component(dir_to_include "${script_parent_dir}" DIRECTORY)
-        set(extra_cflags "-I\"${dir_to_include}\"")
+    if(flags STREQUAL "__DEFAULT__")
+        # No FLAGS were given: keep comments (-C, the historical default) and
+        # apply the parent-dir==target include heuristic. esp_system's
+        # target-specific scripts live in ld/<target>/ and include the sibling
+        # ld.common file, so add the parent directory to the C preprocessor
+        # search path. Works for that layout; a component with a different
+        # layout, or one that must drop -C, should pass FLAGS instead.
+        # esp_system/ld is added as well so that scripts of other components
+        # can include the shared fragments living there (e.g.
+        # ld.elf.internal.sections).
+        set(base_flags "-C")
+        get_filename_component(script_parent_dir "${script_in}" DIRECTORY)
+        get_filename_component(script_parent_name "${script_parent_dir}" NAME)
+        if(script_parent_name STREQUAL idf_target)
+            get_filename_component(dir_to_include "${script_parent_dir}" DIRECTORY)
+            idf_component_get_property(esp_system_dir esp_system COMPONENT_DIR)
+            string(APPEND base_flags
+                   " -I\"${dir_to_include}\" -I\"${esp_system_dir}/ld\"")
+        endif()
+    else()
+        # Explicit FLAGS replace the whole default set, including -C. config_dir
+        # and the component include dirs are always added regardless.
+        set(base_flags "${flags}")
     endif()
 
     set(linker_script_generator "${idf_path}/tools/cmake/linker_script_preprocessor.cmake")
+
+    # -MD -MF -MT makes the C preprocessor record every file it reads (the
+    # template plus everything it #includes, transitively) into a depfile, so
+    # the output is regenerated when any of them changes. MAIN_DEPENDENCY and
+    # DEPENDS only cover the top-level script and sdkconfig; the depfile closes
+    # the gap for includes the build system cannot enumerate up front.
+    set(depfile "${script_out}.d")
+    set(depfile_flags "-MD -MF \"${depfile}\" -MT \"${script_out}\"")
 
     add_custom_command(
         OUTPUT ${script_out}
@@ -1216,10 +1302,11 @@ function(__preprocess_linker_script script_in script_out)
             "-DCC=${CMAKE_C_COMPILER}"
             "-DSOURCE=${script_in}"
             "-DTARGET=${script_out}"
-            "-DCFLAGS=-I\"${config_dir}\" ${extra_cflags}"
+            "-DCFLAGS=-I\"${config_dir}\" ${depfile_flags} ${base_flags} ${component_includes}"
             -P "${linker_script_generator}"
         MAIN_DEPENDENCY "${script_in}"
         DEPENDS "${sdkconfig_header}"
+        DEPFILE "${depfile}"
         COMMENT "Preprocessing linker script ${script_in} -> ${script_out}"
         VERBATIM)
 endfunction()

@@ -85,6 +85,9 @@ typedef struct {
   * Strength of authmodes
   * Personal Networks   : OPEN < WEP < WPA_PSK < OWE < WPA2_PSK = WPA_WPA2_PSK < WAPI_PSK < WPA3_PSK = WPA2_WPA3_PSK = DPP
   * Enterprise Networks : WIFI_AUTH_WPA_ENTERPRISE < WIFI_AUTH_WPA2_ENTERPRISE < WIFI_AUTH_WPA3_ENTERPRISE = WIFI_AUTH_WPA2_WPA3_ENTERPRISE < WIFI_AUTH_WPA3_ENT_192
+  *
+  * @note WIFI_AUTH_UNKNOWN indicates an Access Point with invalid or unparseable security configuration
+  *       detected during scan parsing.
   */
 typedef enum {
     WIFI_AUTH_OPEN = 0,         /**< Authenticate mode : open */
@@ -105,6 +108,7 @@ typedef enum {
     WIFI_AUTH_WPA3_ENTERPRISE,  /**< Authenticate mode : WPA3-Enterprise Only Mode */
     WIFI_AUTH_WPA2_WPA3_ENTERPRISE, /**< Authenticate mode : WPA3-Enterprise Transition Mode */
     WIFI_AUTH_WPA_ENTERPRISE,   /**< Authenticate mode : WPA-Enterprise security */
+    WIFI_AUTH_UNKNOWN,          /**< Scan parsed authmode: Unknown or invalid security configuration parsed during scan */
     WIFI_AUTH_MAX
 } wifi_auth_mode_t;
 
@@ -195,7 +199,8 @@ typedef enum {
     .scan_time.active.min = WIFI_ACTIVE_SCAN_MIN_DEFAULT_TIME, \
     .scan_time.active.max = WIFI_ACTIVE_SCAN_MAX_DEFAULT_TIME, \
     .scan_time.passive = WIFI_PASSIVE_SCAN_DEFAULT_TIME, \
-    .home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME\
+    .home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME, \
+    .max_offchan_duration_ms = 0 \
 }
 
 /**
@@ -261,6 +266,7 @@ typedef struct {
 typedef struct {
     wifi_scan_time_t scan_time;  /**< Scan time per channel */
     uint8_t home_chan_dwell_time;/**< Time spent at home channel between scanning consecutive channels.*/
+    uint16_t max_offchan_duration_ms; /**< Maximum accumulated off-channel scan duration before returning to home channel (0 = use WIFI_ACTIVE_SCAN_MAX_DEFAULT_TIME, range: 1-4500ms). */
 } wifi_scan_default_params_t;
 
 /**
@@ -335,7 +341,8 @@ typedef struct {
     uint32_t wps: 1;                      /**< Bit: 7 flag to identify if WPS is supported or not */
     uint32_t ftm_responder: 1;            /**< Bit: 8 flag to identify if FTM is supported in responder mode */
     uint32_t ftm_initiator: 1;            /**< Bit: 9 flag to identify if FTM is supported in initiator mode */
-    uint32_t reserved: 22;                /**< Bit: 10..31 reserved */
+    uint32_t akm_dpp: 1;                  /**< Bit: 10 flag set when AP supports mixed DPP AKM (e.g., SAE + DPP or WPA2-PSK + DPP) or when AP only supports DPP AKM */
+    uint32_t reserved: 21;                /**< Bit: 11..31 reserved */
     wifi_country_t country;               /**< Country information of AP */
     wifi_he_ap_info_t he_ap;              /**< HE AP info */
     wifi_bandwidth_t bandwidth;           /**< Bandwidth of AP */
@@ -589,7 +596,25 @@ typedef struct {
     uint32_t vht_su_beamformee_disabled: 1;                       /**< Whether to disable support for operation as an VHT SU beamformee. */
     uint32_t vht_mu_beamformee_disabled: 1;                       /**< Whether to disable support for operation as an VHT MU beamformee. */
     uint32_t vht_mcs8_enabled: 1;                                 /**< Whether to support VHT-MCS8. The default value is 0. */
-    uint32_t reserved2: 19;                                       /**< Reserved for future feature set */
+    uint32_t max_bandwidth_negotiation_enabled_2g: 1;             /**< Whether to enable maximum bandwidth negotiation for the 2.4GHz band.
+                                                                        In STA-only mode, when enabled, the negotiated bandwidth depends on the negotiated protocol:
+                                                                        (1) If the negotiated protocol is 802.11ax, the negotiated bandwidth is 20 MHz.
+                                                                        (2) If the negotiated protocol is 802.11n, the negotiated bandwidth is determined by the maximum bandwidth supported by both AP and STA.
+                                                                        (3) For other negotiated protocols, the negotiated bandwidth is 20 MHz.
+                                                                        SoftAP + STA coexistence is subject to the following hardware limitations:
+                                                                        - If SoftAP is configured to 802.11ax, STA bandwidth is capped at 20 MHz.
+                                                                        - If STA is connected at 40 MHz, SoftAP cannot be configured to 802.11ax/802.11ac.
+                                                                        The default value is 0 (disabled). */
+    uint32_t max_bandwidth_negotiation_enabled_5g: 1;             /**< Whether to enable maximum bandwidth negotiation for the 5GHz band.
+                                                                        In STA-only mode, when enabled, the negotiated bandwidth depends on the negotiated protocol:
+                                                                        (1) If the negotiated protocol is 802.11ax/802.11ac, the negotiated bandwidth is 20 MHz.
+                                                                        (2) If the negotiated protocol is 802.11n/802.11an, the negotiated bandwidth is determined by the maximum bandwidth supported by both AP and STA.
+                                                                        (3) For other negotiated protocols, the negotiated bandwidth is 20 MHz.
+                                                                        SoftAP + STA coexistence is subject to the following hardware limitations:
+                                                                        - If SoftAP is configured to 802.11ax/802.11ac, STA bandwidth is capped at 20 MHz.
+                                                                        - If STA is connected at 40 MHz, SoftAP cannot be configured to 802.11ax/802.11ac.
+                                                                        The default value is 0 (disabled). */
+    uint32_t reserved2: 17;                                       /**< Reserved for future feature set */
     uint8_t sae_h2e_identifier[SAE_H2E_IDENTIFIER_LEN];           /**< Password identifier for H2E. Strings null-terminated (length < SAE_H2E_IDENTIFIER_LEN) or non-null terminated (length = SAE_H2E_IDENTIFIER_LEN) are accepted. Non-null terminated string with 0xFF for full length of SAE_H2E_IDENTIFIER_LEN is not considered a valid identifier */
 } wifi_sta_config_t;
 
@@ -604,9 +629,9 @@ typedef struct {
     uint8_t scan_time;      /**< Scan time in seconds while searching for a NAN cluster */
     uint16_t warm_up_sec;   /**< Warm up time before assuming NAN Anchor Master role */
     bool disable_random_mac;/**< Disable the MAC Randomisation in NAN */
-    uint8_t nik[ESP_WIFI_NAN_NIK_LEN];  /**< Optional NIK. Auto-generated when nik_valid is false. */
-    uint8_t nik_valid: 1;               /**< NIK present in nik[] and should be used as-is. */
-    uint8_t reserved: 7;                /**< Reserved for future use. */
+    bool reset_current_nvs_creds; /**< Erase all NAN credentials (own NIK and cached peer NIK/NPK entries) saved in NVS before starting. */
+    bool use_nvs_for_caching;     /**< Persist newly-learned peer credentials (NIK/NPK) to NVS so they survive across reboots. */
+    bool group_mgmt_prot;         /**< Device-global group management protection (IGTKSA/BIGTKSA): BIP-protect Beacons + multicast SDFs. Forces GTKSA on all secured services (CSIA caps cannot encode IGTK/BIGTK without GTKSA). */
 } wifi_nan_sync_config_t;
 
 /**
@@ -874,7 +899,9 @@ typedef struct {
 #define ESP_WIFI_NDP_ROLE_RESPONDER     2      /**< Responder role for NAN Data Path */
 
 #define ESP_WIFI_NAN_NDP_PMK_LEN        32     /**< Length of NAN Datapath PMK */
+#define ESP_WIFI_NAN_NPK_LEN            ESP_WIFI_NAN_NDP_PMK_LEN  /**< Length of NAN Pairwise Key (same as NDP PMK) */
 #define ESP_WIFI_NAN_NDP_PMKID_LEN      16     /**< Length of NAN Datapath PMKID */
+#define ESP_WIFI_NAN_MAX_PEER_CREDS     2      /**< Maximum number of NAN peer credentials that can be stored */
 #define ESP_WIFI_NAN_MAX_CREDS_PER_SVC  4      /**< Maximum number of NAN security credentials per service (passphrase/PMK entries) */
 
 #define ESP_WIFI_MAX_SVC_NAME_LEN       256    /**< Maximum length of NAN service name */
@@ -931,9 +958,9 @@ typedef enum {
     WIFI_NAN_CSID_NCS_SK_256       = 2,    /**< NCS-SK-256 (PSK/Passphrase). Reserved: not supported right now. */
     WIFI_NAN_CSID_NCS_PK_2WDH_128  = 3,    /**< NCS-PK-2WDH-128. Reserved: not supported right now. */
     WIFI_NAN_CSID_NCS_PK_2WDH_256  = 4,    /**< NCS-PK-2WDH-256. Reserved: not supported right now. */
-    WIFI_NAN_CSID_NCS_GTK_CCM_128  = 5,
-    WIFI_NAN_CSID_NCS_GTK_GCM_256  = 6,
-    WIFI_NAN_CSID_NCS_PK_PASN_128  = 7,    /**< NCS-PK-PASN-128. Reserved: not supported right now. */
+    WIFI_NAN_CSID_NCS_GTK_CCMP_128 = 5,    /**< NCS-GTK-CCMP-128, the group-data cipher (GTKSA). Selected internally when group_data_prot is set; not user-selectable via csid_bitmap. */
+    WIFI_NAN_CSID_NCS_GTK_GCMP_256 = 6,    /**< NCS-GTK-GCMP-256. Reserved: not supported right now. */
+    WIFI_NAN_CSID_NCS_PK_PASN_128  = 7,    /**< NCS-PK-PASN-128 (NAN Pairing). Requires CONFIG_ESP_WIFI_NAN_PAIRING and the Wi-Fi Aware component (esp-wifi-apps); not usable with stand-alone ESP-IDF. */
     WIFI_NAN_CSID_NCS_PK_PASN_256  = 8,    /**< NCS-PK-PASN-256. Reserved: not supported right now. */
 } wifi_nan_cipher_suite_id_t;
 
@@ -941,8 +968,8 @@ typedef enum {
 #define WIFI_NAN_CSID_BIT_NCS_SK_256       (1 << WIFI_NAN_CSID_NCS_SK_256)
 #define WIFI_NAN_CSID_BIT_NCS_PK_2WDH_128  (1 << WIFI_NAN_CSID_NCS_PK_2WDH_128)
 #define WIFI_NAN_CSID_BIT_NCS_PK_2WDH_256  (1 << WIFI_NAN_CSID_NCS_PK_2WDH_256)
-#define WIFI_NAN_CSID_BIT_NCS_GTK_CCM_128  (1 << WIFI_NAN_CSID_NCS_GTK_CCM_128)
-#define WIFI_NAN_CSID_BIT_NCS_GTK_GCM_256  (1 << WIFI_NAN_CSID_NCS_GTK_GCM_256)
+#define WIFI_NAN_CSID_BIT_NCS_GTK_CCMP_128 (1 << WIFI_NAN_CSID_NCS_GTK_CCMP_128)
+#define WIFI_NAN_CSID_BIT_NCS_GTK_GCMP_256 (1 << WIFI_NAN_CSID_NCS_GTK_GCMP_256)
 #define WIFI_NAN_CSID_BIT_NCS_PK_PASN_128  (1 << WIFI_NAN_CSID_NCS_PK_PASN_128)
 #define WIFI_NAN_CSID_BIT_NCS_PK_PASN_256  (1 << WIFI_NAN_CSID_NCS_PK_PASN_256)
 
@@ -973,8 +1000,8 @@ typedef struct {
   * is computed by the stack as the union of each credential's @c csid.
   */
 typedef struct {
-    uint8_t group_data_prot: 1;                  /**< Group addressed data frame protection. Reserved: not supported right now. */
-    uint8_t group_mgmt_prot: 1;                  /**< Group addressed management frame protection. Reserved: not supported right now. */
+    uint8_t group_data_prot: 1;                  /**< Group addressed data frame protection (GTKSA): distribute a GTK on the secured NDP so multicast data frames are protected. */
+    uint8_t group_mgmt_prot: 1;                  /**< Group addressed management frame protection (IGTKSA/BIGTKSA): BIP-protect multicast SDFs and Beacons. */
     uint8_t reserved: 6;                         /**< Reserved */
     uint8_t num_credentials;                     /**< Number of valid entries in @c creds (0..ESP_WIFI_NAN_MAX_CREDS_PER_SVC). 0 = open service. */
     wifi_nan_credential_t creds[ESP_WIFI_NAN_MAX_CREDS_PER_SVC]; /**< Credentials list. */
@@ -1304,10 +1331,9 @@ typedef enum {
     WIFI_EVENT_DPP_URI_READY,            /**< DPP URI is ready through Bootstrapping */
     WIFI_EVENT_DPP_CFG_RECVD,            /**< DPP Configuration Response; payload is wifi_event_dpp_config_received_t */
     WIFI_EVENT_DPP_FAILED,               /**< DPP failed */
-    WIFI_EVENT_NAN_BOOTSTRAP_INDICATION, /**< Received NAN Pairing Bootstrapping Request from a Peer */
-    WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED,  /**< NAN Pairing Bootstrapping completed (success/failure) */
     WIFI_EVENT_NAN_PAIRING_INDICATION,   /**< Received NAN Pairing indication (reserved) */
-    WIFI_EVENT_NAN_PAIRING_CONFIRM,      /**< NAN PASN pairwise key installation completed */
+    WIFI_EVENT_NAN_PAIRING_CONFIRM,      /**< NAN pairing completed after NIK follow-up exchange */
+    WIFI_EVENT_NAN_CLUSTER_JOIN,         /**< Posted when the device joins, starts, or merges into a NAN cluster */
     WIFI_EVENT_MAX,                      /**< Invalid Wi-Fi event ID */
 } wifi_event_t;
 
@@ -1579,6 +1605,13 @@ typedef struct {
 } wifi_event_nan_replied_t;
 
 /**
+  * @brief Argument structure for WIFI_EVENT_NAN_CLUSTER_JOIN event
+  */
+typedef struct {
+    uint8_t cluster_id[6];              /**< NAN Cluster ID (BSSID) that was joined/started by the device */
+} wifi_event_nan_cluster_join_t;
+
+/**
   * @brief Argument structure for WIFI_EVENT_NAN_RECEIVE event
   */
 typedef struct {
@@ -1629,42 +1662,7 @@ typedef struct {
 } wifi_event_ndp_terminated_t;
 
 /**
-  * @brief Argument structure for WIFI_EVENT_NAN_BOOTSTRAP_INDICATION event
-  *
-  * Posted when a NAN Pairing Bootstrapping Request is received from a peer.
-  * The application should respond using esp_wifi_nan_bootstrap_response().
-  */
-typedef struct {
-    uint8_t peer_svc_id;                        /**< Peer's service instance id */
-    uint8_t own_svc_id;                         /**< Own service instance id */
-    uint8_t peer_nmi[6];                        /**< Peer's NAN Management Interface MAC */
-    uint16_t selected_method;                   /**< Bootstrapping method selected by initiator (one WIFI_NAN_BOOTSTRAP_* bit) */
-    uint8_t is_comeback;                        /**< 1 if this is a comeback retry with cookie */
-    uint32_t cookie;                            /**< Comeback cookie from initiator (0 if none) */
-} wifi_event_nan_bootstrap_indication_t;
-
-/**
-  * @brief Argument structure for WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED event
-  *
-  * Posted when a NAN Pairing Bootstrapping Response is received,
-  * or when the bootstrapping handshake completes/fails.
-  */
-typedef struct {
-    uint8_t status;                             /**< 0=Accepted, 1=Rejected, 2=Comeback (wifi_nan_pairing_status_t) */
-    uint8_t peer_svc_id;                        /**< Peer's service instance id */
-    uint8_t own_svc_id;                         /**< Own service instance id */
-    uint8_t peer_nmi[6];                        /**< Peer's NAN Management Interface MAC */
-    uint16_t matched_method;                    /**< Matched bootstrapping method, one WIFI_NAN_BOOTSTRAP_* bit (valid if accepted) */
-    uint8_t reason_code;                        /**< Rejection reason (valid if rejected) */
-    uint16_t comeback_after;                    /**< Comeback deferral time in TUs (valid if comeback) */
-    uint32_t cookie;                            /**< Comeback cookie from responder (0 if none) */
-} wifi_event_nan_bootstrap_complete_t;
-
-/**
   * @brief Argument structure for WIFI_EVENT_NAN_PAIRING_CONFIRM event
-  *
- * Posted when PASN pairwise key installation completes.
- * Distinct from WIFI_EVENT_NAN_BOOTSTRAP_COMPLETED (NPBA follow-up bootstrapping).
   */
 typedef struct {
     uint8_t status;                             /**< 0=Accepted, 1=Rejected (wifi_nan_pairing_status_t) */

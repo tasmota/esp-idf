@@ -93,7 +93,7 @@ Check the example under :example:`protocols/http_server/persistent_sockets`. Thi
 WebSocket Server
 ----------------
 
-The HTTP server component provides WebSocket support. The WebSocket feature can be enabled in menuconfig using the :ref:`CONFIG_HTTPD_WS_SUPPORT` option.
+The HTTP server component provides WebSocket support. The WebSocket feature can be enabled in menuconfig using the :menuitem:`CONFIG_HTTPD_WS_SUPPORT` option.
 
 :example:`protocols/http_server/ws_echo_server` demonstrates how to create a WebSocket echo server using the HTTP server, which starts on a local network and requires a WebSocket client for interaction, echoing back received WebSocket frames.
 
@@ -105,7 +105,7 @@ The HTTP server component provides a pre-handshake callback for WebSocket endpoi
 
 The pre-handshake callback can be used for authentication, authorization, or other checks. If the callback returns :c:macro:`ESP_OK`, the WebSocket handshake will proceed. If the callback returns any other value, the handshake will be aborted and the connection will be closed.
 
-To use the WebSocket pre-handshake callback, you must enable :ref:`CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT` in your project configuration.
+To use the WebSocket pre-handshake callback, you must enable :menuitem:`CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT` in your project configuration.
 
 WebSocket Post-Handshake Callback
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -114,7 +114,7 @@ Similar to the pre-handshake callback, the HTTP server component also provides a
 
 At this point the connection has been upgraded to WebSocket, and the server has responded with the WebSocket handshake response. This post handshake callback can be used for logging, sending initial messages, or other setup tasks.
 
-To use the WebSocket post-handshake callback, you must enable :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` in your project configuration.
+To use the WebSocket post-handshake callback, you must enable :menuitem:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` in your project configuration.
 
 .. code-block:: c
 
@@ -137,6 +137,36 @@ To use the WebSocket post-handshake callback, you must enable :ref:`CONFIG_HTTPD
 
     // Register the handler after starting the server:
     httpd_register_uri_handler(server, &ws);
+
+
+WebSocket Control Frame Handler
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default, the server replies to WebSocket control frames automatically — a PING frame is answered with a PONG and a CLOSE frame is answered with a CLOSE — without involving the application. Setting ``handle_ws_control_frames`` to true in :cpp:type:`httpd_uri_t` disables this behavior and delivers control frames to the data handler, which then becomes responsible for receiving the frame and sending the protocol replies itself.
+
+The ``ws_control_handler`` callback provides a middle ground: when it is set (and ``handle_ws_control_frames`` is true), control frames (PING, PONG, CLOSE) are delivered to this dedicated handler instead of the data handler, while the server still receives the frame body and performs the protocol replies itself after the handler returns. This is useful for observing heartbeats (tracking PONG responses) or logging the close reason without re-implementing the reply logic.
+
+The frame passed to the handler is read-only and owned by the server; it is only valid for the duration of the call, so the handler must not free or retain it. If the handler returns an error, the server still sends the protocol reply and then closes the connection.
+
+.. code-block:: c
+
+    static esp_err_t ws_control_frame_handler(httpd_req_t *req, const httpd_ws_frame_t *frame)
+    {
+        // Observe PING/PONG/CLOSE here (e.g. heartbeat tracking, logging).
+        // The server sends the protocol reply itself after this returns.
+        return ESP_OK;
+    }
+
+    // Registering a WebSocket URI handler with a dedicated control-frame handler
+    static const httpd_uri_t ws = {
+        .uri        = "/ws",
+        .method     = HTTP_GET,
+        .handler    = handler,           // Your WebSocket data handler
+        .user_ctx   = NULL,
+        .is_websocket = true,
+        .handle_ws_control_frames = true,
+        .ws_control_handler = ws_control_frame_handler
+    };
 
 
 Event Handling

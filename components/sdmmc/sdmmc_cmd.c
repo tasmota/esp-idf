@@ -23,6 +23,20 @@ static inline size_t get_chunk_size(const sdmmc_card_t *card)
     return (chunk_size != 0) ? chunk_size : 1;
 }
 
+/**
+ * @brief Whether the host can transfer the user buffer directly, without an
+ *        intermediate DMA-capable buffer.
+ *
+ * The protocol layer does not need to reason about DMA or PSRAM: it simply asks
+ * the host driver whether the buffer is usable as-is. The driver accounts for
+ * alignment and any hardware-specific reachability constraints (e.g. whether the
+ * peripheral's DMA can reach PSRAM).
+ */
+static inline bool sdmmc_buffer_directly_usable(const sdmmc_card_t *card, const void *buf, size_t size)
+{
+    return card->host.check_buffer_alignment(card->host.slot, buf, size);
+}
+
 static esp_err_t allocate_dma_buf(size_t* actual_size, size_t block_size, void **buf)
 {
     if (actual_size == NULL || buf == NULL) {
@@ -394,7 +408,7 @@ esp_err_t sdmmc_send_cmd_send_scr(sdmmc_card_t* card, sdmmc_scr_t *out_scr)
     if (err == ESP_OK) {
         err = sdmmc_decode_scr(buf, out_scr);
     }
-    free(buf);
+    heap_caps_free(buf);
     return err;
 }
 
@@ -464,16 +478,15 @@ esp_err_t sdmmc_send_cmd_num_of_written_blocks(sdmmc_card_t* card, size_t* out_n
 
     err = sdmmc_send_app_cmd(card, &cmd);
     if (err != ESP_OK) {
-        free(buf);
+        heap_caps_free(buf);
         ESP_LOGE(TAG, "%s: sdmmc_send_app_cmd returned 0x%x, failed to get number of written write blocks", __func__, err);
         return err;
     }
 
-    size_t result = __builtin_bswap32(*(uint32_t*)buf);
     if (out_num_blocks) {
-        *out_num_blocks = result;
+        *out_num_blocks = __builtin_bswap32(*(uint32_t*)buf);
     }
-    free(buf);
+    heap_caps_free(buf);
     return err;
 }
 
@@ -486,16 +499,10 @@ esp_err_t sdmmc_write_sectors(sdmmc_card_t* card, const void* src,
 
     esp_err_t err = ESP_OK;
     size_t block_size = card->csd.sector_size;
-    bool is_aligned = card->host.check_buffer_alignment(card->host.slot, src, block_size * block_count);
-
-    if (is_aligned
-        #if !SOC_SDMMC_PSRAM_DMA_CAPABLE
-            && !esp_ptr_external_ram(src)
-        #endif
-    ) {
+    if (sdmmc_buffer_directly_usable(card, src, block_size * block_count)) {
         err = sdmmc_write_sectors_dma(card, src, start_block, block_count, block_size * block_count);
     } else {
-        // SDMMC peripheral needs DMA-capable buffers. Split the write into
+        // The host cannot transfer this buffer directly. Split the write into
         // separate (multi) block writes, if needed, and allocate a temporary
         // DMA-capable buffer.
         size_t chunk_size = get_chunk_size(card);
@@ -542,7 +549,7 @@ esp_err_t sdmmc_write_sectors(sdmmc_card_t* card, const void* src,
             }
         }
         if (!use_dma_aligned_buffer) {
-            free(buf);
+            heap_caps_free(buf);
         }
     }
     return err;
@@ -649,16 +656,10 @@ esp_err_t sdmmc_read_sectors(sdmmc_card_t* card, void* dst,
 
     esp_err_t err = ESP_OK;
     size_t block_size = card->csd.sector_size;
-    bool is_aligned = card->host.check_buffer_alignment(card->host.slot, dst, block_size * block_count);
-
-    if (is_aligned
-        #if !SOC_SDMMC_PSRAM_DMA_CAPABLE
-            && !esp_ptr_external_ram(dst)
-        #endif
-    ) {
+    if (sdmmc_buffer_directly_usable(card, dst, block_size * block_count)) {
         err = sdmmc_read_sectors_dma(card, dst, start_block, block_count, block_size * block_count);
     } else {
-        // SDMMC peripheral needs DMA-capable buffers. Split the read into
+        // The host cannot transfer this buffer directly. Split the read into
         // separate (multi) block reads, if needed, and allocate a temporary
         // DMA-capable buffer.
         size_t chunk_size = get_chunk_size(card);
@@ -705,7 +706,7 @@ esp_err_t sdmmc_read_sectors(sdmmc_card_t* card, void* dst,
             cur_dst += block_size * blocks_per_read;
         }
         if (!use_dma_aligned_buffer) {
-            free(buf);
+            heap_caps_free(buf);
         }
     }
     return err;

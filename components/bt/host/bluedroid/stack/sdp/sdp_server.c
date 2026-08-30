@@ -256,8 +256,8 @@ static void process_service_search (tCONN_CB *p_ccb, UINT16 trans_num,
         is_cont = TRUE;
     }
 
-    /* Get a buffer to use to build the response */
-    if ((p_buf = (BT_HDR *)osi_malloc(SDP_DATA_BUF_SIZE)) == NULL) {
+    /* Get a buffer to use to build the response, the whole PDU has to fit the peer MTU */
+    if ((p_buf = (BT_HDR *)osi_malloc(sizeof(BT_HDR) + L2CAP_MIN_OFFSET + p_ccb->rem_mtu_size)) == NULL) {
         SDP_TRACE_ERROR ("SDP - no buf for search rsp\n");
         return;
     }
@@ -485,6 +485,10 @@ static void process_service_attr_req (tCONN_CB *p_ccb, UINT16 trans_num,
 
             /* If doing a range, stick with this one till no more attributes found */
             if (attr_seq.attr_entry[xx].start != attr_seq.attr_entry[xx].end) {
+                // Check overflow
+                if (p_attr->id == UINT16_MAX) {
+                    continue;
+                }
                 /* Update for next time through */
                 attr_seq.attr_entry[xx].start = p_attr->id + 1;
 
@@ -519,8 +523,8 @@ static void process_service_attr_req (tCONN_CB *p_ccb, UINT16 trans_num,
         }
     }
 
-    /* Get a buffer to use to build the response */
-    if ((p_buf = (BT_HDR *)osi_malloc(SDP_DATA_BUF_SIZE)) == NULL) {
+    /* Get a buffer to use to build the response, the whole PDU has to fit the peer MTU */
+    if ((p_buf = (BT_HDR *)osi_malloc(sizeof(BT_HDR) + L2CAP_MIN_OFFSET + p_ccb->rem_mtu_size)) == NULL) {
         SDP_TRACE_ERROR ("SDP - no buf for search rsp\n");
         osi_free(p_ccb->rsp_list);
         p_ccb->rsp_list = NULL;
@@ -774,6 +778,10 @@ static void process_service_search_attr_req (tCONN_CB *p_ccb, UINT16 trans_num,
 
                 /* If doing a range, stick with this one till no more attributes found */
                 if (attr_seq.attr_entry[xx].start != attr_seq.attr_entry[xx].end) {
+                    // Check overflow
+                    if (p_attr->id == UINT16_MAX) {
+                        continue;
+                    }
                     /* Update for next time through */
                     attr_seq.attr_entry[xx].start = p_attr->id + 1;
 
@@ -857,8 +865,8 @@ static void process_service_search_attr_req (tCONN_CB *p_ccb, UINT16 trans_num,
         }
     }
 
-    /* Get a buffer to use to build the response */
-    if ((p_buf = (BT_HDR *)osi_malloc(SDP_DATA_BUF_SIZE)) == NULL) {
+    /* Get a buffer to use to build the response, the whole PDU has to fit the peer MTU */
+    if ((p_buf = (BT_HDR *)osi_malloc(sizeof(BT_HDR) + L2CAP_MIN_OFFSET + p_ccb->rem_mtu_size)) == NULL) {
         SDP_TRACE_ERROR ("SDP - no buf for search rsp\n");
         osi_free (p_ccb->rsp_list);
         p_ccb->rsp_list = NULL;

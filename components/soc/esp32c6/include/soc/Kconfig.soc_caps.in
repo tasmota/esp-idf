@@ -183,6 +183,10 @@ config SOC_APM_SUPPORTED
     bool
     default y
 
+config SOC_RISCV_TRACE_SUPPORTED
+    bool
+    default y
+
 config SOC_PMU_SUPPORTED
     bool
     default y
@@ -1043,10 +1047,6 @@ config SOC_EXTERNAL_COEX_ADVANCE
     bool
     default y
 
-config SOC_EXTERNAL_COEX_LEADER_TX_LINE
-    bool
-    default n
-
 config SOC_PHY_DIG_REGS_MEM_SIZE
     int
     default 21
@@ -1119,7 +1119,15 @@ config SOC_PM_SUPPORT_RTC_PERIPH_PD
     bool
     default y
 
+config SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+    bool
+    default y
+
 config SOC_PM_SUPPORT_PMU_MODEM_STATE
+    bool
+    default y
+
+config SOC_PM_REGDMA_MODEM_LINK_PROTECT
     bool
     default y
 
@@ -1159,7 +1167,7 @@ config SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR
     bool
     default y
 
-config SOC_PM_PAU_REGDMA_LINK_WIFIMAC
+config SOC_PM_PAU_REGDMA_LINK_MODEM
     bool
     default y
 
@@ -1350,3 +1358,7 @@ config SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED
 config SOC_DEBUG_HAVE_OCD_STUB_BINS
     bool
     default y
+
+config SOC_RISCV_TRACE_PRIV_WIDTH
+    int
+    default 1

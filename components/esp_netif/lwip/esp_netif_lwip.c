@@ -343,6 +343,11 @@ static esp_err_t esp_netif_update_default_netif_lwip(esp_netif_api_msg_t *msg)
 
     ESP_LOGV(TAG, "%s %p", __func__, esp_netif);
 
+    if (action == ESP_NETIF_SET_DEFAULT && esp_netif == NULL) {
+        // SET_DEFAULT with NULL: perform auto update and remove override
+        s_is_last_default_esp_netif_overridden = false;
+        action = ESP_NETIF_STOPPED;
+    }
     if (s_is_last_default_esp_netif_overridden && action != ESP_NETIF_SET_DEFAULT) {
         // check if manually configured default interface hasn't been destroyed
         s_last_default_esp_netif = esp_netif_is_active(s_last_default_esp_netif);
@@ -801,6 +806,7 @@ static esp_err_t esp_netif_new_api(esp_netif_api_msg_t *msg)
     const esp_netif_config_t *esp_netif_config = msg->data;
     // mandatory configuration must be provided when creating esp_netif object
     if (esp_netif_config == NULL ||
+        esp_netif_config->base == NULL ||
         esp_netif_config->base->if_key == NULL ||
         NULL != esp_netif_get_handle_from_ifkey_unsafe(esp_netif_config->base->if_key)) {
         ESP_LOGE(TAG, "%s: Failed to configure netif with config=%p (config or if_key is NULL or duplicate key)",
@@ -1146,6 +1152,9 @@ esp_err_t esp_netif_set_mac_api(esp_netif_api_msg_t *msg)
 
 esp_err_t esp_netif_set_mac(esp_netif_t *esp_netif, uint8_t mac[])
 {
+    if (mac == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     if (esp_netif == NULL || esp_netif->lwip_netif == NULL) {
         return ESP_ERR_ESP_NETIF_IF_NOT_READY;
     }
@@ -1810,11 +1819,11 @@ static esp_err_t esp_netif_set_hostname_api(esp_netif_api_msg_t *msg)
     esp_netif_t *esp_netif = msg->esp_netif;
     const char *hostname = msg->data;
 
-    ESP_LOGV(TAG, "%s esp_netif:%p hostname %s", __func__, esp_netif, hostname);
-
-    if (!esp_netif) {
+    if (!esp_netif || hostname == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    ESP_LOGV(TAG, "%s esp_netif:%p hostname %s", __func__, esp_netif, hostname);
 
 #if LWIP_NETIF_HOSTNAME
 
@@ -2478,6 +2487,56 @@ int esp_netif_get_all_preferred_ip6(esp_netif_t *esp_netif, esp_ip6_addr_t if_ip
     }
     return addr_count;
 }
+
+#if CONFIG_LWIP_ND6_SUPPORT_STATIC_ENTRIES
+typedef struct {
+    const esp_ip6_addr_t *addr;
+    const uint8_t *mac;
+} esp_netif_static_neighbor_t;
+
+static esp_err_t esp_netif_add_static_neighbor_api(esp_netif_api_msg_t *msg)
+{
+    esp_netif_t *esp_netif = msg->esp_netif;
+    const esp_netif_static_neighbor_t *nbr = msg->data;
+    ip6_addr_t ip6;
+
+    memcpy(&ip6, nbr->addr, sizeof(ip6_addr_t));
+    if (nd6_add_static_neighbor(esp_netif->lwip_netif, &ip6, nbr->mac) != ERR_OK) {
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t esp_netif_add_static_neighbor(esp_netif_t *esp_netif, const esp_ip6_addr_t *addr, const uint8_t *mac)
+{
+    if (esp_netif == NULL || esp_netif->lwip_netif == NULL || addr == NULL || mac == NULL) {
+        return ESP_ERR_ESP_NETIF_INVALID_PARAMS;
+    }
+    esp_netif_static_neighbor_t nbr = { .addr = addr, .mac = mac };
+    return esp_netif_lwip_ipc_call(esp_netif_add_static_neighbor_api, esp_netif, &nbr);
+}
+
+static esp_err_t esp_netif_remove_static_neighbor_api(esp_netif_api_msg_t *msg)
+{
+    esp_netif_t *esp_netif = msg->esp_netif;
+    const esp_ip6_addr_t *addr = msg->data;
+    ip6_addr_t ip6;
+
+    memcpy(&ip6, addr, sizeof(ip6_addr_t));
+    if (nd6_remove_static_neighbor(esp_netif->lwip_netif, &ip6) != ERR_OK) {
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t esp_netif_remove_static_neighbor(esp_netif_t *esp_netif, const esp_ip6_addr_t *addr)
+{
+    if (esp_netif == NULL || esp_netif->lwip_netif == NULL || addr == NULL) {
+        return ESP_ERR_ESP_NETIF_INVALID_PARAMS;
+    }
+    return esp_netif_lwip_ipc_call(esp_netif_remove_static_neighbor_api, esp_netif, (void *)addr);
+}
+#endif /* CONFIG_LWIP_ND6_SUPPORT_STATIC_ENTRIES */
 #endif
 
 esp_netif_flags_t esp_netif_get_flags(esp_netif_t *esp_netif)

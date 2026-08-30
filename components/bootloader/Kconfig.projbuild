@@ -588,8 +588,31 @@ menu "Security features"
         config SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
             bool "Using ECC curve NISTP384 (Recommended)"
             depends on SECURE_SIGNED_APPS_ECDSA_V2_SCHEME && SOC_ECDSA_SUPPORT_CURVE_P384
+            # ESP32-P4 revisions < v3.0 do not support Secure Boot using ECDSA-P384
+            depends on !ESP32P4_SELECTS_REV_LESS_V3
 
     endchoice
+
+    config SECURE_BOOT_IMAGE_DIGEST_LEN
+        int
+        default 48 if SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
+        default 32
+        help
+            Length in bytes of the application image digest used by Secure Boot V2.
+            Kept in sync with ESP_SECURE_BOOT_DIGEST_LEN in esp_secure_boot.h, and
+            usable from linker scripts and from components that cannot depend on
+            bootloader_support.
+
+    config SECURE_BOOT_ROM_FAST_WAKE_RESERVE_SIZE
+        int
+        default SECURE_BOOT_IMAGE_DIGEST_LEN if SECURE_BOOT && ESP_ROM_SUPPORT_SECURE_BOOT_FAST_WAKEUP
+        default 0
+        help
+            Number of bytes that must be left untouched at the end of RTC/LP RAM for
+            the ROM secure boot fast wake up feature, which stores the digest of the
+            verified application image there and re-checks it on deep sleep wake up.
+            Zero when the feature is not applicable, so that consumers can subtract
+            this value unconditionally.
 
     config SECURE_SIGNED_ON_BOOT_NO_SECURE_BOOT
         bool "Bootloader verifies app signatures"
@@ -1010,13 +1033,8 @@ menu "Security features"
                 Revoking unused digest slots makes ensures that no trusted keys can be added later by an attacker.
                 If set, it means that you have a plan to use unused digests slots later.
 
-                Note that if you plan to enable secure boot during the first boot up, the bootloader will intentionally
-                revoke the unused digest slots while enabling secure boot, even if the above config is enabled because
-                keeping the unused key slots un-revoked would a security hazard.
-                In case for any development workflow if you need to avoid this revocation, you should enable
-                secure boot externally (host based mechanism) rather than enabling it during the boot up,
-                so that the bootloader would not need to enable secure boot and thus you could avoid its revocation
-                strategy.
+                This config is honored both at runtime in the app and while enabling secure boot during the first
+                boot up in the bootloader. When set, the unused digest slots are left un-revoked in both cases.
 
         config SECURE_BOOT_SKIP_WRITE_PROTECTION_SCA
             bool "Skip write-protection of SECURE_FLASH_PSEUDO_ROUND_FUNC_STRENGTH"
@@ -1169,6 +1187,8 @@ menu "Security features"
         default y if SECURE_FLASH_ENCRYPTION_MODE_RELEASE
         default n
         depends on SECURE_FLASH_ENC_ENABLED && SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND
+        # ESP32-P4 revisions < v3.0 do not support the XTS-AES pseudo rounds function
+        depends on !ESP32P4_SELECTS_REV_LESS_V3
         help
             If set (default), the bootloader will permanently enable the XTS-AES peripheral's pseudo rounds function.
             Note: Enabling this config would burn an efuse.

@@ -21,6 +21,10 @@
 #include "sdkconfig.h"
 #include "esp_pmu.h"
 
+#if SOC_PM_SUPPORT_PMU_RETENTION_CLK_ICG
+#include "esp_private/sleep_clock_icg.h"
+#endif
+
 #if SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE
 #include "soc/pmu_reg.h" // for PMU_DATE_REG, it can provide full 32 bit read and write access
 #endif
@@ -60,7 +64,10 @@ static inline void sleep_retention_module_object_ctor(struct sleep_retention_mod
 
 static inline void sleep_retention_module_object_dtor(struct sleep_retention_module_object * const self)
 {
-    self->cbs = (sleep_retention_module_callbacks_t) { .create = { .handle = NULL, .arg = NULL } };
+    self->cbs = (sleep_retention_module_callbacks_t) {
+        .create = { .handle = NULL, .arg = NULL },
+        .destroy = { .handle = NULL, .arg = NULL }
+    };
 }
 
 static inline void set_dependencies(struct sleep_retention_module_object * const self, sleep_retention_module_bitmap_t depends)
@@ -246,6 +253,7 @@ typedef struct {
     regdma_link_priority_t highpri;
     sleep_retention_module_bitmap_t inited_modules;
     sleep_retention_module_bitmap_t created_modules;
+    sleep_retention_module_bitmap_t attached_modules;
     sleep_retention_module_bitmap_t retention_modules;
 
     void *final_default;
@@ -259,6 +267,7 @@ static DRAM_ATTR __attribute__((unused)) sleep_retention_t s_retention = {
     .highpri = (uint8_t)-1,
     .inited_modules = (sleep_retention_module_bitmap_t){ .bitmap = { 0 } },
     .created_modules = (sleep_retention_module_bitmap_t){ .bitmap = { 0 } },
+    .attached_modules = (sleep_retention_module_bitmap_t){ .bitmap = { 0 } },
     .retention_modules = (sleep_retention_module_bitmap_t){ .bitmap = { 0 } },
     .final_default = NULL
 };
@@ -459,7 +468,10 @@ void * sleep_retention_find_link_by_id(int id)
     if (s_retention.highpri >= SLEEP_RETENTION_REGDMA_LINK_HIGHEST_PRIORITY &&
         s_retention.highpri <= SLEEP_RETENTION_REGDMA_LINK_LOWEST_PRIORITY) {
         for (int entry = 0; (link == NULL && entry < ARRAY_SIZE(s_retention.retention.lists[s_retention.highpri].entries)); entry++) {
-            link = regdma_find_link_by_id(s_retention.retention.lists[s_retention.highpri].entries[entry], entry, id);
+            link = regdma_find_link_by_id(s_retention.context[0].lists[s_retention.highpri].entries[entry], entry, id);
+        }
+        for (int entry = 0; (link == NULL && entry < ARRAY_SIZE(s_retention.retention.lists[s_retention.highpri].entries)); entry++) {
+            link = regdma_find_link_by_id(s_retention.context[1].lists[s_retention.highpri].entries[entry], entry, id);
         }
     }
     _lock_release_recursive(&s_retention.lock);
@@ -594,7 +606,7 @@ static void check_and_destroy_final_default(void)
 {
     _lock_acquire_recursive(&s_retention.lock);
     assert(s_retention.highpri == SLEEP_RETENTION_REGDMA_LINK_LOWEST_PRIORITY);
-    uint32_t created_modules = 0;
+    uint32_t __attribute__((unused)) created_modules = 0;
     for (int i = 0; i < SLEEP_RETENTION_MODULE_BITMAP_SZ; i++) {
         created_modules |= s_retention.created_modules.bitmap[i];
     }
@@ -612,6 +624,8 @@ static void entries_do_destroy(sleep_retention_module_t module)
     memset(&next_entries, 0, sizeof(sleep_retention_entries_t));
 
     _lock_acquire_recursive(&s_retention.lock);
+    s_retention.retention_modules.bitmap[module >> 5] &= ~BIT(module % 32);
+    s_retention.created_modules.bitmap[module >> 5] &= ~BIT(module % 32);
     int index = module_runtime_attach(instance(module)) ? 1 : 0;
     struct module_sleep_retention_context *ctx = &s_retention.context[index];
     regdma_link_priority_t priority = 0;
@@ -628,7 +642,6 @@ static void entries_do_destroy(sleep_retention_module_t module)
             priority++;
         }
     } while (priority < SLEEP_RETENTION_REGDMA_LINK_NR_PRIORITIES);
-    s_retention.created_modules.bitmap[module >> 5] &= ~BIT(module % 32);
     _lock_release_recursive(&s_retention.lock);
 }
 
@@ -771,6 +784,11 @@ static void retention_entries_join(void)
         pmu_sleep_disable_regdma_backup();
 #endif
     }
+
+#if SOC_PM_SUPPORT_PMU_RETENTION_CLK_ICG
+    sleep_clock_icg_retention_clock_config(&s_retention.retention_modules);
+#endif
+
     _lock_release_recursive(&s_retention.lock);
 }
 
@@ -785,6 +803,7 @@ static esp_err_t entries_create_wrapper(const sleep_retention_entries_config_t r
     if(err) goto error;
     s_retention.created_modules.bitmap[module >> 5] |= BIT(module % 32);
     if (!module_runtime_attach(instance(module))) {
+        s_retention.retention_modules.bitmap[module >> 5] |= BIT(module % 32);
         retention_entries_join();
     }
 error:
@@ -833,7 +852,7 @@ sleep_retention_module_bitmap_t IRAM_ATTR sleep_retention_get_created_modules(vo
 
 sleep_retention_module_bitmap_t IRAM_ATTR sleep_retention_get_retained_modules(void)
 {
-    return s_retention.retention_modules;
+    return s_retention.attached_modules;
 }
 
 bool sleep_retention_is_module_inited(sleep_retention_module_t module)
@@ -1075,7 +1094,12 @@ static esp_err_t passive_module_free(sleep_retention_module_t module)
         if (!references_exist(instance(module))) {
             if (!module_is_retained(module)) {
                 sleep_retention_entries_destroy(module);
-                err = module_action_wrapper(module, (BIT(31) | action(2)), passive_module_free);
+                if (instance(module)->cbs.destroy.handle) {
+                    err = instance(module)->cbs.destroy.handle(instance(module)->cbs.destroy.arg);
+                }
+                if (err == ESP_OK) {
+                    err = module_action_wrapper(module, (BIT(31) | action(2)), passive_module_free);
+                }
             } else {
                 err = ESP_ERR_INVALID_STATE;
             }
@@ -1096,7 +1120,12 @@ esp_err_t sleep_retention_module_free(sleep_retention_module_t module)
     if (!module_is_passive(instance(module))) {
         if (module_is_inited(module) && module_is_created(module) && !module_is_retained(module)) {
             sleep_retention_entries_destroy(module);
-            err = module_action_wrapper(module, action(2), passive_module_free);
+            if (instance(module)->cbs.destroy.handle) {
+                err = instance(module)->cbs.destroy.handle(instance(module)->cbs.destroy.arg);
+            }
+            if (err == ESP_OK) {
+                err = module_action_wrapper(module, action(2), passive_module_free);
+            }
         } else {
             err = ESP_ERR_INVALID_STATE;
         }
@@ -1140,8 +1169,9 @@ static esp_err_t passive_module_attach(sleep_retention_module_t module)
     assert(module_runtime_attach(instance(module)) && "Illegal dependency");
     assert(module_is_inited(module) && "All passive module must be inited first!");
     if (module_is_inited(module) && module_is_created(module) && !module_is_retained(module)) {
-        module_entries_move(module, &s_retention.context[1], &s_retention.retention);
+        s_retention.attached_modules.bitmap[module >> 5] |= BIT(module % 32);
         s_retention.retention_modules.bitmap[module >> 5] |= BIT(module % 32);
+        module_entries_move(module, &s_retention.context[1], &s_retention.retention);
         err = module_action_wrapper(module, (BIT(31) | action(3)), passive_module_attach);
     }
     _lock_release_recursive(&s_retention.lock);
@@ -1159,8 +1189,9 @@ esp_err_t sleep_retention_module_attach(sleep_retention_module_t module)
     if (!module_is_passive(instance(module))) {
         if (module_is_inited(module) && module_is_created(module) && !module_is_retained(module)) {
             if (module_runtime_attach(instance(module))) {
-                module_entries_move(module, &s_retention.context[1], &s_retention.retention);
+                s_retention.attached_modules.bitmap[module >> 5] |= BIT(module % 32);
                 s_retention.retention_modules.bitmap[module >> 5] |= BIT(module % 32);
+                module_entries_move(module, &s_retention.context[1], &s_retention.retention);
                 err = module_action_wrapper(module, action(3), passive_module_attach);
             } else {
                 err = ESP_ERR_NOT_SUPPORTED;
@@ -1186,8 +1217,9 @@ static esp_err_t passive_module_detach(sleep_retention_module_t module)
     assert(module_is_inited(module) && "All passive module must be inited first!");
     if (module_is_inited(module) && module_is_created(module) && module_is_retained(module)) {
         if (refarray_zero(instance(module), 1)) {
-            module_entries_move(module, &s_retention.retention, &s_retention.context[1]);
             s_retention.retention_modules.bitmap[module >> 5] &= ~BIT(module % 32);
+            s_retention.attached_modules.bitmap[module >> 5] &= ~BIT(module % 32);
+            module_entries_move(module, &s_retention.retention, &s_retention.context[1]);
             err = module_action_wrapper(module, (BIT(31) | action(4)), passive_module_detach);
         }
     }
@@ -1206,8 +1238,9 @@ esp_err_t sleep_retention_module_detach(sleep_retention_module_t module)
     if (!module_is_passive(instance(module))) {
         if (module_is_inited(module) && module_is_created(module) && module_is_retained(module)) {
             if (module_runtime_attach(instance(module))) {
-                module_entries_move(module, &s_retention.retention, &s_retention.context[1]);
                 s_retention.retention_modules.bitmap[module >> 5] &= ~BIT(module % 32);
+                s_retention.attached_modules.bitmap[module >> 5] &= ~BIT(module % 32);
+                module_entries_move(module, &s_retention.retention, &s_retention.context[1]);
                 err = module_action_wrapper(module, action(4), passive_module_detach);
             } else {
                 err = ESP_ERR_NOT_SUPPORTED;
@@ -1303,8 +1336,8 @@ void IRAM_ATTR sleep_retention_do_system_retention(bool backup_or_restore)
 }
 #endif
 
-#if SOC_PM_SUPPORT_PMU_MODEM_STATE
-void IRAM_ATTR sleep_retention_do_phy_retention(bool backup_or_restore, bool wifimac_link_is_sel)
+#if SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+void IRAM_ATTR sleep_retention_do_phy_retention(bool backup_or_restore, bool wifimac_link_is_sel, bool blocking)
 {
 /* since the PHY link and other module links are within the sleep-retention entry (4) context，
 *  add mutex protection to avoid data race.
@@ -1315,24 +1348,35 @@ void IRAM_ATTR sleep_retention_do_phy_retention(bool backup_or_restore, bool wif
     if (backup_or_restore) {
 #if SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
         if (wifimac_link_is_sel) {
-            pau_regdma_trigger_wifimac_link_backup();
+            pau_regdma_trigger_wifimac_link_backup(blocking);
         } else
 #endif
         {
-            pau_regdma_trigger_modem_link_backup();
+            pau_regdma_trigger_modem_link_backup(blocking);
         }
     } else {
 #if SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
         if (wifimac_link_is_sel) {
-            pau_regdma_trigger_wifimac_link_restore();
+            pau_regdma_trigger_wifimac_link_restore(blocking);
         } else
 #endif
         {
-            pau_regdma_trigger_modem_link_restore();
+            pau_regdma_trigger_modem_link_restore(blocking);
         }
     }
 #if SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
     _lock_release_recursive(&s_retention.lock);
 #endif
 }
-#endif /*SOC_PM_SUPPORT_PMU_MODEM_STATE */
+
+void IRAM_ATTR sleep_retention_phy_retention_complete(void)
+{
+#if SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
+    _lock_acquire_recursive(&s_retention.lock);
+#endif
+    pau_regdma_modem_link_complete();
+#if SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
+    _lock_release_recursive(&s_retention.lock);
+#endif
+}
+#endif // SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY

@@ -12,6 +12,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/iso.h>
 #include <zephyr/bluetooth/hci_types.h>
@@ -24,7 +25,7 @@
 
 LOG_MODULE_REGISTER(ISO_SCAN, CONFIG_BT_ISO_LOG_LEVEL);
 
-static sys_slist_t scan_cbs = SYS_SLIST_STATIC_INIT(&scan_cbs);
+static BT_ISO_EXT_RAM_BSS_ATTR sys_slist_t scan_cbs;
 
 _LIB_ONLY
 int bt_le_scan_cb_register(struct bt_le_scan_cb *cb)
@@ -145,9 +146,9 @@ void bt_le_scan_recv_listener(uint16_t event_type,
     }
 }
 
-static struct bt_le_per_adv_sync per_adv_sync_pool[CONFIG_BT_PER_ADV_SYNC_MAX];
+static BT_ISO_EXT_RAM_BSS_ATTR struct bt_le_per_adv_sync per_adv_sync_pool[CONFIG_BT_PER_ADV_SYNC_MAX];
 
-static sys_slist_t pa_sync_cbs = SYS_SLIST_STATIC_INIT(&pa_sync_cbs);
+static BT_ISO_EXT_RAM_BSS_ATTR sys_slist_t pa_sync_cbs;
 
 _LIB_ONLY
 int bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb)
@@ -165,6 +166,24 @@ int bt_le_per_adv_sync_cb_register(struct bt_le_per_adv_sync_cb *cb)
     }
 
     sys_slist_append(&pa_sync_cbs, &cb->node);
+
+    return 0;
+}
+
+_LIB_ONLY
+int bt_le_per_adv_sync_cb_unregister(struct bt_le_per_adv_sync_cb *cb)
+{
+    LOG_DBG("PaSyncCbUnreg");
+
+    if (cb == NULL) {
+        LOG_ERR("PaSyncCbNull");
+        return -EINVAL;
+    }
+
+    if (!sys_slist_find_and_remove(&pa_sync_cbs, &cb->node)) {
+        LOG_ERR("PaSyncCbNotReg[%p]", cb);
+        return -ENOENT;
+    }
 
     return 0;
 }
@@ -197,9 +216,9 @@ struct bt_le_per_adv_sync *bt_le_per_adv_sync_lookup_addr(const bt_addr_le_t *ad
 {
     struct bt_le_per_adv_sync *per_adv_sync = NULL;
 
-    assert(adv_addr);
+    BT_LE_ASSERT(adv_addr);
 
-    LOG_DBG("PaSyncLookupAddr[%s][%u]", bt_addr_le_str(adv_addr), sid);
+    LOG_INF("PaSyncLookupAddr[%s][%u]", bt_addr_le_str(adv_addr), sid);
 
     for (size_t i = 0; i < ARRAY_SIZE(per_adv_sync_pool); i++) {
         if (atomic_test_bit(per_adv_sync_pool[i].flags, BT_PER_ADV_SYNC_SYNCED) &&
@@ -217,7 +236,8 @@ struct bt_le_per_adv_sync *bt_le_per_adv_sync_lookup_addr(const bt_addr_le_t *ad
     return per_adv_sync;
 }
 
-static struct bt_le_per_adv_sync *per_adv_sync_find(uint16_t handle)
+_IDF_ONLY
+struct bt_le_per_adv_sync *bt_le_per_adv_sync_find(uint16_t handle)
 {
     struct bt_le_per_adv_sync *per_adv_sync = NULL;
 
@@ -238,7 +258,7 @@ struct bt_le_per_adv_sync *bt_le_per_adv_sync_find_safe(uint16_t sync_handle)
     struct bt_le_per_adv_sync *per_adv_sync = NULL;
     LOG_DBG("PaSyncFind[%u]", sync_handle);
     bt_le_host_lock();
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     bt_le_host_unlock();
     return per_adv_sync;
 }
@@ -275,7 +295,7 @@ int bt_le_per_adv_sync_new(uint16_t sync_handle,
 {
     struct bt_le_per_adv_sync *per_adv_sync;
 
-    LOG_DBG("PaSyncNew[%u][%u][%u][%u][%u]",
+    LOG_INF("PaSyncNew[%u][%u][%u][%u][%u]",
             sync_handle, sid, phy, interval, conn_handle);
 
     if (addr_type > BT_ADDR_LE_RANDOM_ID || addr == NULL) {
@@ -283,7 +303,7 @@ int bt_le_per_adv_sync_new(uint16_t sync_handle,
         return -EINVAL;
     }
 
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     if (per_adv_sync) {
         LOG_WRN("PaSyncExist[%u]", sync_handle);
         return -EEXIST;
@@ -301,9 +321,16 @@ int bt_le_per_adv_sync_new(uint16_t sync_handle,
     per_adv_sync->interval = interval;
     per_adv_sync->conn_handle = conn_handle;
     per_adv_sync->addr.type = addr_type;
+#if CONFIG_BT_BLUEDROID_ENABLED
+    /* Bluedroid delivers the advertiser address MSB-first, but the lib compares in
+     * on-air/LSB-first order (bt_addr_le_t.a.val). NimBLE already supplies on-air
+     * order, so reverse only here. */
+    sys_memcpy_swap(per_adv_sync->addr.a.val, addr, BT_ADDR_SIZE);
+#else
     memcpy(per_adv_sync->addr.a.val, addr, BT_ADDR_SIZE);
+#endif
 
-    LOG_DBG("Addr[%s]", bt_addr_le_str(&per_adv_sync->addr));
+    LOG_INF("PaSyncAddr[%s]", bt_addr_le_str(&per_adv_sync->addr));
 
     if (out_sync) {
         *out_sync = per_adv_sync;
@@ -313,13 +340,30 @@ int bt_le_per_adv_sync_new(uint16_t sync_handle,
 }
 
 _IDF_ONLY
+int bt_le_per_adv_sync_new_safe(uint16_t sync_handle,
+                                uint8_t sid,
+                                uint8_t phy,
+                                uint16_t interval,
+                                uint8_t addr_type,
+                                const uint8_t addr[6],
+                                uint16_t conn_handle,
+                                struct bt_le_per_adv_sync **out_sync)
+{
+    int err;
+    bt_le_host_lock();
+    err = bt_le_per_adv_sync_new(sync_handle, sid, phy, interval, addr_type,
+                                 addr, conn_handle, out_sync);
+    bt_le_host_unlock();
+    return err;
+}
+
 int bt_le_per_adv_sync_delete(uint16_t sync_handle)
 {
     struct bt_le_per_adv_sync *per_adv_sync = NULL;
 
     LOG_DBG("PaSyncDelete[%u]", sync_handle);
 
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     if (per_adv_sync == NULL) {
         LOG_ERR("PaSyncNotFound[%u]", sync_handle);
         return -ENODEV;
@@ -339,7 +383,7 @@ int bt_le_per_adv_sync_establish_listener(uint16_t sync_handle)
 
     LOG_DBG("PaSyncEstabListener[%u]", sync_handle);
 
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     if (per_adv_sync == NULL) {
         LOG_ERR("PaSyncNotFound[%u]", sync_handle);
         return -ENODEV;
@@ -366,10 +410,6 @@ int bt_le_per_adv_sync_establish_listener(uint16_t sync_handle)
         }
     }
 
-    if (info.conn) {
-        bt_conn_unref(info.conn);
-    }
-
     return 0;
 }
 
@@ -382,7 +422,7 @@ int bt_le_per_adv_sync_lost_listener(uint16_t sync_handle)
 
     LOG_DBG("PaSyncLostListener[%u]", sync_handle);
 
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     if (per_adv_sync == NULL) {
         LOG_ERR("PaSyncNotFound[%u]", sync_handle);
         return -ENODEV;
@@ -418,7 +458,7 @@ int bt_le_per_adv_sync_report_recv_listener(uint16_t sync_handle,
         return -EINVAL;
     }
 
-    per_adv_sync = per_adv_sync_find(sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(sync_handle);
     if (per_adv_sync == NULL) {
         LOG_ERR("PaSyncNotFound[%u]", sync_handle);
         return -ENODEV;
@@ -450,7 +490,7 @@ void hci_le_biginfo_adv_report(struct net_buf *buf)
 
     /* LOG_DBG("BigInfoRecvListener[%u]", evt->sync_handle); */
 
-    per_adv_sync = per_adv_sync_find(evt->sync_handle);
+    per_adv_sync = bt_le_per_adv_sync_find(evt->sync_handle);
     if (per_adv_sync == NULL) {
         LOG_ERR("PaSyncNotFound[%u]", evt->sync_handle);
         return;
@@ -546,6 +586,17 @@ static void past_features_unset(void)
 }
 
 _IDF_ONLY
+void bt_le_per_adv_sync_state_reset(void)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(per_adv_sync_pool); i++) {
+        if (atomic_test_bit(per_adv_sync_pool[i].flags, BT_PER_ADV_SYNC_SYNCED)) {
+            LOG_WRN("DeinitDropPaSync[%u][%04x]", i, per_adv_sync_pool[i].handle);
+        }
+    }
+
+    memset(per_adv_sync_pool, 0, sizeof(per_adv_sync_pool));
+}
+
 int bt_le_scan_init(void)
 {
     LOG_DBG("ScanInit");

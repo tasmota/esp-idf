@@ -5,6 +5,7 @@
  */
 
 #include <sys/param.h>
+#include <stdarg.h>
 #include <string.h>
 #include "soc/soc.h"
 #include "esp_types.h"
@@ -156,12 +157,18 @@ static esp_err_t ESP_TIMER_IRAM_ATTR timer_restart(esp_timer_handle_t timer, uin
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!is_initialized() || !timer_armed(timer)) {
+    if (!is_initialized()) {
         return ESP_ERR_INVALID_STATE;
     }
 
     esp_timer_dispatch_t dispatch_method = timer->flags & FL_ISR_DISPATCH_METHOD;
     timer_list_lock(dispatch_method);
+
+    /* The timer may expire while this task is waiting for the list lock. */
+    if (!timer_armed(timer)) {
+        timer_list_unlock(dispatch_method);
+        return ESP_ERR_INVALID_STATE;
+    }
 
     const int64_t now = esp_timer_impl_get_time();
     const uint64_t period = timer->period;
@@ -343,7 +350,7 @@ esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer, uint32_t timeout_tic
 
         TickType_t start_time = xTaskGetTickCount();
         while (is_callback_running(timer, dispatch_method)) {
-            if (timeout_ticks != portMAX_DELAY) {
+            if (timeout_ticks != (uint32_t) portMAX_DELAY) {
                 TickType_t elapsed = xTaskGetTickCount() - start_time;
                 if (elapsed >= timeout_ticks) {
                     return ESP_ERR_TIMEOUT;
@@ -475,13 +482,11 @@ static ESP_TIMER_IRAM_ATTR void timer_list_unlock(esp_timer_dispatch_t timer_typ
 }
 
 #ifdef CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-static ESP_TIMER_IRAM_ATTR bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
-#else
-static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
+ESP_TIMER_IRAM_ATTR
 #endif
+static void timer_process_alarm(esp_timer_dispatch_t dispatch_method)
 {
     timer_list_lock(dispatch_method);
-    bool processed = false;
     esp_timer_handle_t it;
     while (1) {
         it = LIST_FIRST(&s_timers[dispatch_method]);
@@ -491,7 +496,6 @@ static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
             break;
         }
         ESP_COMPILER_DIAGNOSTIC_POP("-Wanalyzer-use-after-free")
-        processed = true;
         LIST_REMOVE(it, list_entry);
         if (it->event_id == EVENT_ID_DELETE_TIMER) {
             // It is handled only by ESP_TIMER_TASK (see esp_timer_delete()).
@@ -533,17 +537,9 @@ static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
 #endif
         }
     } // while(1)
-    if (it) {
-        if (dispatch_method == ESP_TIMER_TASK || (dispatch_method != ESP_TIMER_TASK && processed == true)) {
-            esp_timer_impl_set_alarm_id(it->alarm, dispatch_method);
-        }
-    } else {
-        if (processed) {
-            esp_timer_impl_set_alarm_id(UINT64_MAX, dispatch_method);
-        }
-    }
+    uint64_t next_alarm = (it != NULL) ? it->alarm : UINT64_MAX;
+    esp_timer_impl_set_alarm_id(next_alarm, dispatch_method);
     timer_list_unlock(dispatch_method);
-    return processed;
 }
 
 static void timer_task(void* arg)
@@ -558,35 +554,48 @@ static void timer_task(void* arg)
 #ifdef CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
 ESP_TIMER_IRAM_ATTR void esp_timer_isr_dispatch_need_yield(void)
 {
+#ifndef CONFIG_ESP_TIMER_IMPL_LINUX
     assert(xPortInIsrContext());
+#endif
     s_isr_dispatch_need_yield = pdTRUE;
 }
+
 #endif
 
 static void ESP_TIMER_IRAM_ATTR timer_alarm_handler(void* arg)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    bool isr_timers_processed = false;
 
 #ifdef CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-    esp_timer_impl_try_to_set_next_alarm();
-    // process timers with ISR dispatch method
-    isr_timers_processed = timer_process_alarm(ESP_TIMER_ISR);
+    uint32_t due_alarm_mask = esp_timer_impl_claim_due_alarms();
+
+    if (due_alarm_mask & (1U << ESP_TIMER_ISR)) {
+        timer_process_alarm(ESP_TIMER_ISR);
+    }
+
     xHigherPriorityTaskWoken = s_isr_dispatch_need_yield;
     s_isr_dispatch_need_yield = pdFALSE;
-#endif
 
-    if (isr_timers_processed == false) {
+    if (due_alarm_mask & (1U << ESP_TIMER_TASK)) {
         vTaskNotifyGiveFromISR(s_timer_task, &xHigherPriorityTaskWoken);
     }
+#else
+    vTaskNotifyGiveFromISR(s_timer_task, &xHigherPriorityTaskWoken);
+#endif
+
     if (xHigherPriorityTaskWoken == pdTRUE) {
-        portYIELD_FROM_ISR();
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
 
 static ESP_TIMER_IRAM_ATTR inline bool is_initialized(void)
 {
     return s_timer_task != NULL;
+}
+
+TaskHandle_t esp_timer_impl_get_timer_task_handle(void)
+{
+    return s_timer_task;
 }
 
 static esp_err_t init_timer_task(void)
@@ -695,28 +704,54 @@ esp_err_t esp_timer_deinit(void)
     return ESP_OK;
 }
 
+static void append_to_buffer(char** dst, size_t* dst_size, const char* format, ...)
+{
+    /* Defensive: avoid underflow in the truncation path below if no space remains. */
+    if (*dst_size == 0) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, format);
+    int cb = vsnprintf(*dst, *dst_size, format, args);
+    va_end(args);
+
+    if (cb < 0) {
+        return;
+    }
+
+    /* On truncation, snprintf returns the full would-be length. Keep the
+     * cursor inside the buffer and preserve the terminating NUL byte.
+     */
+    if ((size_t) cb >= *dst_size) {
+        *dst += *dst_size - 1;
+        *dst_size = 1;
+        return;
+    }
+
+    *dst += cb;
+    *dst_size -= cb;
+}
+
 static void print_timer_info(esp_timer_handle_t t, char** dst, size_t* dst_size)
 {
 #if WITH_PROFILING
-    size_t cb;
     // name is optional, might be missed.
     if (t->name) {
-        cb = snprintf(*dst, *dst_size, "%-20.20s  ", t->name);
+        append_to_buffer(dst, dst_size, "%-20.20s  ", t->name);
     } else {
-        cb = snprintf(*dst, *dst_size, "timer@%-10p  ", t);
+        append_to_buffer(dst, dst_size, "timer@%-10p  ", t);
     }
 
-    cb += snprintf(*dst + cb, *dst_size - cb, "%-10lld  %-12lld  %-12d  %-12d  %-12d  %-12lld\n",
-                   (uint64_t)t->period, t->alarm, t->times_armed,
-                   t->times_triggered, t->times_skipped, t->total_callback_run_time);
+    append_to_buffer(dst, dst_size, "%-10" PRIu64"  %-12" PRIu64"  %-12zu  %-12zu  %-12zu  %-12" PRIu64"\n",
+                     (uint64_t)t->period, t->alarm, t->times_armed,
+                     t->times_triggered, t->times_skipped, t->total_callback_run_time);
     /* keep this in sync with the format string, used in esp_timer_dump */
 #define TIMER_INFO_LINE_LEN 103
 #else
-    size_t cb = snprintf(*dst, *dst_size, "timer@%-14p  %-10lld  %-12lld\n", t, (uint64_t)t->period, t->alarm);
+    append_to_buffer(dst, dst_size, "timer@%-14p  %-10" PRIu64"  %-12" PRIu64"\n", t, (uint64_t)t->period, t->alarm);
 #define TIMER_INFO_LINE_LEN 47
 #endif
-    *dst += cb;
-    *dst_size -= cb;
 }
 
 esp_err_t esp_timer_dump(FILE* stream)
@@ -750,6 +785,7 @@ esp_err_t esp_timer_dump(FILE* stream)
      * slightly more and the output will be truncated if that is not enough.
      */
     size_t buf_size = TIMER_INFO_LINE_LEN * (timer_count + 3);
+    /* buf_size is the snprintf size, including NUL; keep one extra byte as slack. */
     char* print_buf = calloc(1, buf_size + 1);
     if (print_buf == NULL) {
         return ESP_ERR_NO_MEM;

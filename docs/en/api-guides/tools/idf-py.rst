@@ -134,7 +134,7 @@ When no ``*_flashed.bin`` files are present, ``idf.py flash`` configures esptool
 
 After each successful flash, the build system saves copies of all flashed files (bootloader, partition table, app, and any other assets) with an ``_flashed`` suffix in the build directory (e.g., ``bootloader_flashed.bin``, ``partition-table_flashed.bin``). These are used automatically on the next ``idf.py flash`` for fast reflashing.
 
-Fast reflashing works with or without the :ref:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` option. Enabling that option can further improve reflash effectiveness by laying out the application binary so that changes are localized. This results in less flash sectors needing to be rewritten. This option may increase the size of the application binary and is not recommended for production builds.
+Fast reflashing works with or without the :menuitem:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` option. Enabling that option can further improve reflash effectiveness by laying out the application binary so that changes are localized. This results in less flash sectors needing to be rewritten. This option may increase the size of the application binary and is not recommended for production builds.
 
 Full Flash
 ^^^^^^^^^^
@@ -317,7 +317,7 @@ To use the MCP server with an AI assistant, configure your agent or IDE to start
 
   eim run "idf.py mcp-server"
 
-2. Using ``idf.py`` directly: Run the MCP server with ``idf.py mcp-server`` from a shell where the ESP-IDF environment is already activated. The command must be executed from a valid ESP-IDF project directory, or use ``idf.py -C <project_dir> mcp-server`` to specify the project.
+2. Using ``idf.py`` directly: Run the MCP server with ``idf.py mcp-server`` from a shell where the ESP-IDF environment is already activated. The server can be started from any directory. Use ``idf.py -C <project_dir> mcp-server`` or set the ``IDF_MCP_WORKSPACE_FOLDER`` environment variable to configure a default project. If no project is configured at startup, pass project directory explicitly in each tool call.
 
 .. code-block:: bash
 
@@ -330,12 +330,15 @@ To use the MCP server with an AI assistant, configure your agent or IDE to start
 Available Tools and Resources
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The MCP server provides the following commands you can use:
+The MCP server provides the following tools:
 
 - ``set target``: Set the ESP-IDF target (esp32, esp32s3, esp32c6, etc.)
 - ``build project``: Build the ESP-IDF project with the current target
-- ``flash project``: Flash the built project to a connected device. Specify it by port name.
+- ``flash project``: Flash the built project to a connected device. Specify it by port name
 - ``clean project``: Clean build artifacts
+- ``create project``: Create a new ESP-IDF project from the sample template. Can be used before any project exists
+
+All tools accept an optional ``project_dir`` argument. When omitted, the tool operates on the directory configured at startup (``-C`` flag or ``IDF_MCP_WORKSPACE_FOLDER``). You can instruct the AI model to use a specific project directory explicitly, for example when working with multiple projects or when no default project was configured at startup.
 
 The MCP server also provides these resources:
 

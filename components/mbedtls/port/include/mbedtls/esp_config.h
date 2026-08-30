@@ -204,6 +204,7 @@
     #if SOC_SHA_SUPPORT_SHA256
         #define MBEDTLS_PSA_ACCEL_ALG_SHA_256
         #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_256
+        #undef MBEDTLS_SHA256_C
     #endif // SOC_SHA_SUPPORT_SHA256
     #if SOC_SHA_SUPPORT_SHA512
         #define MBEDTLS_PSA_ACCEL_ALG_SHA_512
@@ -257,6 +258,18 @@
 #undef MBEDTLS_MPI_MUL_MPI_ALT
 #endif
 
+/* mbedtls 4.1.1 made the small-factor test used in prime
+ * generation constant-time, which slows RSA key generation down roughly
+ * tenfold and starves the idle task (the computation never yields the CPU).
+ * The non constant-time variant is the default; when it is disabled,
+ * fall back to the variable-time trial division from earlier releases. See
+ * MBEDTLS_MPI_PRIME_SIEVE_VARIABLE_TIME in
+ * tf-psa-crypto/drivers/builtin/src/bignum.c.
+ */
+#ifndef CONFIG_MBEDTLS_CONSTANT_TIME_PRIME_GEN
+#define MBEDTLS_MPI_PRIME_SIEVE_VARIABLE_TIME
+#endif
+
 #if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY) || defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
 #define ESP_ECDSA_DRIVER_ENABLED
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY
@@ -267,12 +280,8 @@
 #endif
 #endif
 
-#ifdef CONFIG_MBEDTLS_ATCA_HW_ECDSA_SIGN
-#define MBEDTLS_ECDSA_SIGN_ALT
-#endif
-
-#ifdef CONFIG_MBEDTLS_ATCA_HW_ECDSA_VERIFY
-#define MBEDTLS_ECDSA_VERIFY_ALT
+#ifdef CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED
+#define SECURE_ELEMENT_DRIVER_ENABLED
 #endif
 
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECC
@@ -2633,7 +2642,6 @@
  * This module is required for the SSL/TLS 1.2 PRF function.
  */
 #ifdef CONFIG_MBEDTLS_SHA256_C
-#define MBEDTLS_SHA256_C
 #define PSA_WANT_ALG_SHA_256 1
 #define PSA_WANT_ALG_SHA_224 1
 #else

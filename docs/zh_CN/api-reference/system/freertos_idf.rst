@@ -15,7 +15,7 @@ FreeRTOS (IDF)
 
 原始 FreeRTOS（下文称 Vanilla FreeRTOS）是一款小巧高效的实时操作系统，适用于许多单核 MCU 和 SoC。但为了支持双核 ESP 芯片，如 ESP32、ESP32-S3、ESP32-P4，ESP-IDF 特别提供了支持双核对称多处理 (SMP) 的 FreeRTOS 实现（下文称 IDF FreeRTOS）。
 
-IDF FreeRTOS 源代码基于 Vanilla FreeRTOS v10.5.1，但内核行为和 API 都有重大修改，以支持双核 SMP。不过用户也可以启用 :ref:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核，详情请参阅 :ref:`freertos-idf-single-core`。
+IDF FreeRTOS 源代码基于 Vanilla FreeRTOS v10.5.1，但内核行为和 API 都有重大修改，以支持双核 SMP。不过用户也可以启用 :menuitem:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核，详情请参阅 :ref:`freertos-idf-single-core`。
 
 .. note::
 
@@ -382,6 +382,19 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
   #. 核通过清除自旋锁的所有者值释放自旋锁。
   #. 核重新启用中断或中断嵌套。
 
+线程安全 Port 临界区旁路
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``xPortThreadSafeClaim()`` 与 ``xPortThreadSafeDisclaim()`` （``portmacro.h``） 使当前核上 port 层临界区进入/退出变为 no-op。**Claim 与 Disclaim 之间的线程安全须由调用方保证。**
+
+.. warning::
+
+    - 调用方保证 Claim–Disclaim 窗口内的线程安全（含多核）。
+    - 仅在当前核已关中断时 Claim；全局至多一个 Claim；所有路径须与 Disclaim 成对。
+    - ``xPortEnterCriticalTimeout()`` 返回 ``pdPASS`` 不表示已获取 ``mux``。
+
+不能替代 ``taskENTER_CRITICAL(&spinlock)``。
+
 限制与注意事项
 ^^^^^^^^^^^^^^
 
@@ -425,7 +438,7 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
 
         .. note::
 
-            如需在 ISR 例程中使用 ``float`` 类型，请参考配置选项:ref:`CONFIG_FREERTOS_FPU_IN_ISR`。
+            如需在 ISR 例程中使用 ``float`` 类型，请参考配置选项:menuitem:`CONFIG_FREERTOS_FPU_IN_ISR`。
 
     .. note::
 
@@ -474,9 +487,9 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
 单核模式
 ^^^^^^^^
 
-尽管 IDF FreeRTOS 是为双核 SMP 专门设计的，但也可通过启用 :ref:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核。
+尽管 IDF FreeRTOS 是为双核 SMP 专门设计的，但也可通过启用 :menuitem:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核。
 
-对于 ESP32-S2 和 ESP32-C3 等单核芯片，:ref:`CONFIG_FREERTOS_UNICORE` 选项始终启用。对于 ESP32 和 ESP32-S3 等多核芯片也可以设置 :ref:`CONFIG_FREERTOS_UNICORE`，对于多核目标（如 ESP32 和 ESP32-S3），也可以设置 :ref:`CONFIG_FREERTOS_UNICORE`，但启用该选项后应用仅在核 0 上运行。
+对于 ESP32-S2 和 ESP32-C3 等单核芯片，:menuitem:`CONFIG_FREERTOS_UNICORE` 选项始终启用。对于 ESP32 和 ESP32-S3 等多核芯片也可以设置 :menuitem:`CONFIG_FREERTOS_UNICORE`，对于多核目标（如 ESP32 和 ESP32-S3），也可以设置 :menuitem:`CONFIG_FREERTOS_UNICORE`，但启用该选项后应用仅在核 0 上运行。
 
 在单核模式下，IDF FreeRTOS 与 Vanilla FreeRTOS 完全相同，因此无需考虑前文提到的对内核行为的 SMP 更改。因此，在单核模式下构建 IDF FreeRTOS 具有以下特点：
 

@@ -12,7 +12,37 @@ if(${target} STREQUAL "linux")
     return()
 endif()
 
-set(requires esp_hal_gpio esp_hal_usb esp_hal_pmu esp_hal_regi2c)
+set(public_include_dirs "include" "include/soc"
+                        "ldo/include" "debug_probe/include" "etm/include"
+                        "mspi/mspi_timing_tuning/include" "mspi/mspi_timing_tuning/tuning_scheme_impl/include"
+                        "mspi/mspi_intr/include"
+                        "mspi/esp_mspi_align/include"
+                        "mspi/mspi_mem_barrier/include"
+                        "power_supply/include" "modem/include")
+
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/include/soc/${target}")
+    list(APPEND public_include_dirs
+        "include/soc/${target}"
+    )
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/port/${target}/include")
+    list(APPEND public_include_dirs
+        "port/${target}/include"
+    )
+endif()
+
+# TODO(IDF-15951): potentially remove __ULP_BUILDV2 handling from esp_hw_support
+if(__ULP_BUILDV2)
+    # ULP headers and LP-core runtime include esp_intr_alloc.h and esp_cpu.h from
+    # ulp/ulp_riscv/include/ulp_riscv.h and
+    # ulp/lp_core/lp_core/lp_core_ubsan.c.
+    idf_component_register(INCLUDE_DIRS ${public_include_dirs}
+                           REQUIRES esp_common esp_hal_gpio hal soc)
+    return()
+endif()
+
+set(requires esp_hal_gpio esp_hal_usb esp_hal_pmu esp_hal_regi2c esp_hal_uart esp_hal_debug_assist)
 set(priv_requires efuse                 # only esp_hw_support/adc_share_hw_ctrl.c requires efuse component
                   spi_flash
                   bootloader_support
@@ -25,6 +55,9 @@ set(priv_requires efuse                 # only esp_hw_support/adc_share_hw_ctrl.
                   )
 
 set(srcs "cpu.c" "port/${IDF_TARGET}/esp_cpu_intr.c" "esp_memory_utils.c" "port/${IDF_TARGET}/cpu_region_protect.c")
+if(NOT BOOTLOADER_BUILD)
+    list(APPEND srcs "mspi/esp_mspi_align/esp_mspi_align.c")
+endif()
 if(NOT non_os_build)
     list(APPEND srcs "esp_clk.c"
                      "clk_ctrl_os.c"
@@ -43,7 +76,8 @@ if(NOT non_os_build)
                      "port/${target}/esp_clk_tree.c"
                      "spi_bus_lock.c"
                      "heap_align_hw.c"
-                     "clk_utils.c")
+                     "clk_utils.c"
+                     "mspi/mspi_mem_barrier/mspi_mem_barrier.c")
     if(CONFIG_SOC_USB_OTG_SUPPORTED)
         list(APPEND srcs "usb_phy/usb_phy.c")
     endif()
@@ -78,7 +112,8 @@ if(NOT non_os_build)
             )
         if(CONFIG_SOC_PAU_SUPPORTED AND CONFIG_SOC_PM_SUPPORT_TOP_PD)
             list(APPEND srcs "sleep_system_peripheral.c")
-            list(APPEND srcs "port/${target}/peripheral_domain_pd.c")
+            list(APPEND srcs "port/${target}/peripheral_domain_pd.c"
+                         "port/${target}/system_periph_retention.c")
         endif()
     endif()
 
@@ -111,6 +146,9 @@ if(NOT non_os_build)
 
     if(CONFIG_SOC_ETM_SUPPORTED)
         list(APPEND srcs "etm/esp_etm.c")
+        if(CONFIG_SOC_PAU_SUPPORTED)
+            list(APPEND srcs "port/${target}/etm_retention.c")
+        endif()
     endif()
 
     if(CONFIG_SOC_PAU_SUPPORTED)
@@ -176,18 +214,6 @@ else()
     list(APPEND priv_requires "esp_system")
 endif()
 
-set(public_include_dirs "include" "include/soc"
-                        "ldo/include" "debug_probe/include" "etm/include"
-                        "mspi/mspi_timing_tuning/include" "mspi/mspi_timing_tuning/tuning_scheme_impl/include"
-                        "mspi/mspi_intr/include"
-                        "power_supply/include" "modem/include")
-
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/include/soc/${target}")
-    list(APPEND public_include_dirs
-        "include/soc/${target}"
-    )
-endif()
-
 if(${target} STREQUAL "esp32p4")
     # for mipi_csi_share_hw_ctrl.c
     list(APPEND priv_requires esp_hal_cam)
@@ -231,3 +257,11 @@ endif()
 
 # Required in `adc_share_hw_ctrl.h`
 idf_component_optional_requires(PUBLIC esp_hal_ana_conv)
+
+if(CONFIG_COMPILER_STATIC_ANALYZER AND CONFIG_IDF_TOOLCHAIN_GCC)
+    set_source_files_properties(
+        sleep_retention.c
+        PROPERTIES COMPILE_FLAGS
+        -Wno-analyzer-null-dereference
+    )
+endif()

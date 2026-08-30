@@ -585,6 +585,41 @@ mainmenu "Espressif IoT Development Framework Configuration"
                 This increases binary size (typically by tens of kB) but allows using
                 dynamic_cast conversion and typeid operator.
 
+        choice COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT
+            prompt "C++ trivial automatic variable initialization"
+            default COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_UNINITIALIZED
+            depends on !IDF_TARGET_LINUX
+            help
+                Controls initialization of trivial automatic variables in C++ code
+                (-ftrivial-auto-var-init). The 'uninitialized' setting reduces overall
+                binary size compared to 'zero' or 'pattern'.
+
+            config COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_UNINITIALIZED
+                bool "Uninitialized"
+                help
+                    Does not initialize automatic variables. This matches the traditional C and
+                    C++ behavior and yields the smallest code of the three modes.
+
+                    When compiling as C++26, compilers may zero-initialize automatic variables
+                    and temporaries unless -ftrivial-auto-var-init is set explicitly. This
+                    option passes -ftrivial-auto-var-init=uninitialized to preserve the
+                    traditional behavior. Padding bits in objects are not initialized.
+
+            config COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_PATTERN
+                bool "Pattern"
+                help
+                    Initialize automatic variables with values which will likely transform logic
+                    bugs into crashes down the line, are easily recognized in a crash dump and
+                    without being values that programmers can rely on for useful program semantics.
+                    The current value is byte-repeatable pattern with byte "0xFE". The values used
+                    for pattern initialization might be changed in the future.
+
+            config COMPILER_CXX_TRIVIAL_AUTO_VAR_INIT_ZERO
+                bool "Zero"
+                help
+                    Initialize automatic variables with zeroes.
+        endchoice
+
         choice COMPILER_STACK_CHECK_MODE
             prompt "Stack smashing protection mode"
             default COMPILER_STACK_CHECK_MODE_NONE
@@ -752,6 +787,57 @@ mainmenu "Espressif IoT Development Framework Configuration"
             default "gcc" if COMPILER_RT_LIB_GCCLIB
             default "" if COMPILER_RT_LIB_HOST
 
+        config COMPILER_LTO_LINKTIME
+            bool "Enable LTO at link time"
+            default n
+            # LTO for host builds is probably not needed at all
+            # LTO with Clang needs LLD (IDF-8286)
+            # LTO works with APP_REPRODUCIBLE_BUILD (see top-level CMakeLists.txt)
+            depends on !IDF_TARGET_LINUX && !IDF_TOOLCHAIN_CLANG
+            help
+                If enabled, ESP-IDF build system will tell the linker to use LTO
+                (Link Time Optimization). This option may increase linking time but
+                will also produce smaller binaries.
+                Note that to see some code size reduction, you should also enable LTO
+                at compile time for some components.
+
+                You can do this either selectively for specific components, or use
+                the option CONFIG_COMPILER_LTO_COMPILETIME below to enable
+                it for most of the components by default.
+
+                Note that LTO can also increase task stack usage, because inlining
+                across translation units produces fewer but larger stack frames. After
+                enabling LTO, check the stack high water mark of your tasks and raise the
+                stack sizes of the affected tasks if necessary.
+
+        config COMPILER_LTO_COMPILETIME
+            bool "Enable LTO by default at compile time"
+            depends on COMPILER_LTO_LINKTIME
+            default n
+            help
+                If enabled, ESP-IDF build system will compile most of the components with
+                LTO (link time optimizations) enabled.
+
+                Components which have link-time sections placement requirements will not
+                have LTO enabled. This includes components which specify linker fragment
+                files, as well as components whose object code is placed by a linker
+                fragment of another component.
+
+                Note that enabling LTO for all components does not always reduce the
+                binary size, and in some cases can increase it. For a more predictable
+                result, consider enabling LTO selectively for specific components by
+                adding the -flto=auto compile option to them.
+
+        config COMPILER_USE_LLD
+            bool "Use LLD (ld.lld) as the linker"
+            depends on IDF_TARGET_ARCH_RISCV
+            default n
+            help
+                Link the application with the LLVM LLD linker instead of the GNU ld
+                provided by the toolchain. The "ld.lld" binary must be available in
+                PATH. Options not supported by LLD (e.g. --no-warn-rwx-segments)
+                are omitted from the link automatically.
+
         choice COMPILER_ORPHAN_SECTIONS
             prompt "Orphan sections handling"
             default COMPILER_ORPHAN_SECTIONS_ERROR
@@ -813,6 +899,105 @@ mainmenu "Espressif IoT Development Framework Configuration"
                     Define _GLIBCXX23_CONSTEXPR=__attribute__((cold)).
         endchoice
 
+        config COMPILER_CXX_ATOMIC_LOCK_POLICY
+            bool "Force libstdc++ lock-free atomic policy"
+            default n
+            depends on IDF_TARGET_ARCH_RISCV && !IDF_TARGET_ESP32C2 && !IDF_TARGET_ESP32C3
+            help
+                Define _GLIBCXX_HAVE_ATOMIC_LOCK_POLICY=1 when compiling C++ code.
+
+                libstdc++ selects between a lock-free and a mutex-based policy for
+                std::shared_ptr reference counting based on this macro. Enabling this
+                option forces the lock-free policy, which avoids pulling in the
+                mutex-based implementation and can reduce code size.
+
+                Note: the lock-free policy avoids embedding a mutex in each control
+                block, saving about 88 bytes per shared_ptr, and improves performance
+                by using atomic operations instead of mutex locking.
+
+                Note: this option changes the ABI of libstdc++ atomic/shared_ptr
+                helpers. It can be incompatible when linking against prebuilt
+                libraries that were compiled without it, leading to link errors or
+                undefined runtime behavior. Only enable it if all C++ objects and
+                libraries in the build use the same setting.
+
+        config COMPILER_KASAN
+            bool "Enable Kernel Address Sanitizer (KASAN)"
+            depends on IDF_EXPERIMENTAL_FEATURES && IDF_TOOLCHAIN_GCC && !IDF_TARGET_LINUX
+            select HEAP_USE_HOOKS
+            default n
+            help
+                Enables Kernel Address Sanitizer instrumentation (-fsanitize=kernel-address).
+                GCC instruments every memory load and store with calls to __asan_load<N>_noabort /
+                __asan_store<N>_noabort.  These stubs check a shadow memory region and panic if
+                poisoned (freed / out-of-bounds) memory is accessed.
+
+                KASAN is useful for detecting:
+                - Heap buffer overflows and underflows (with redzones)
+                - Use-after-free bugs (when heap hooks are enabled)
+                - Out-of-bounds accesses in global and stack variables (optional)
+
+                Enabling this option increases code size by 1.5-3x for instrumented components
+                and reserves shadow memory in DRAM (~42-64 KiB depending on target).
+
+                NOT compatible with bootloader builds or ROM code.  Components in the
+                hal, soc, esp_rom, and bootloader_support families are automatically
+                excluded from instrumentation.
+
+        menu "Kernel Address Sanitizer (KASAN)"
+            depends on COMPILER_KASAN
+
+            config KASAN_STACK
+                bool "Instrument stack variables (higher overhead)"
+                depends on COMPILER_KASAN
+                default n
+                help
+                    Pass --param asan-stack=1 to enable KASAN instrumentation of
+                    stack (local) variables.  This detects stack buffer overflows but
+                    significantly increases stack usage for every instrumented function.
+                    Leave disabled unless you specifically need stack-overflow detection.
+
+            config KASAN_HEAP_REDZONE_SIZE
+                int "Heap allocation redzone size in bytes (0 to disable)"
+                depends on COMPILER_KASAN
+                default 8
+                range 0 64
+                help
+                    Number of bytes of poisoned redzone added on each side of every heap
+                    allocation.  Redzones catch heap buffer overflows and underflows.
+                    This value must be a multiple of 4; the build enforces that with
+                    a static assertion in the heap KASAN runtime.  Set to 0 to disable
+                    redzones (reduces per-allocation overhead at the cost of reduced
+                    detection coverage).
+
+            config KASAN_QUARANTINE_SIZE
+                int "Freed-block quarantine queue size in bytes (0 to disable)"
+                depends on COMPILER_KASAN
+                default 8192
+                range 0 65536
+                help
+                    When non-zero, freed heap blocks are held in a FIFO quarantine for this
+                    many bytes total before being returned to the allocator.  Quarantined
+                    blocks remain poisoned, allowing KASAN to catch use-after-free accesses
+                    for some time after the block is freed.  Increases peak memory usage by
+                    the configured amount.  Set to 0 to disable (frees memory immediately).
+
+            config KASAN_NO_HALT
+                bool "Continue execution after KASAN error (no abort)"
+                depends on COMPILER_KASAN
+                default n
+                help
+                    When enabled, KASAN prints the error report but does not call
+                    esp_system_abort().  Execution continues after each violation.
+
+                    This is useful for test applications that need to verify multiple
+                    KASAN detections in a single boot cycle.
+
+                    Not recommended for production or debugging real bugs, as continued
+                    execution after a memory safety violation may cause undefined behaviour.
+
+        endmenu # Kernel Address Sanitizer (KASAN)
+
     endmenu # Compiler Options
 
     menu "Component config"
@@ -855,3 +1040,5 @@ mainmenu "Espressif IoT Development Framework Configuration"
             - CONFIG_ESP_WIFI_NAN_SECURITY
             - CONFIG_USB_HOST_EXT_PORT_RESET_ATTEMPTS
             - CONFIG_GDMA_ENABLE_WEIGHTED_ARBITRATION
+            - CONFIG_COMPILER_KASAN
+            - CONFIG_ETH_SUBLAYER_SUPPORT

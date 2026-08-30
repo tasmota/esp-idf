@@ -314,7 +314,16 @@ void bta_hf_client_scb_disable(void)
         bta_hf_client_cb.scb.p_sco_data = NULL;
     }
 
+    if (bta_hf_client_cb.scb.p_disc_db != NULL) {
+        (void)SDP_CancelServiceSearch(bta_hf_client_cb.scb.p_disc_db);
+        bta_hf_client_free_db(NULL);
+    }
+    bta_hf_client_cb.scb.colli_tmr_on = FALSE;
+    bta_sys_free_timer(&bta_hf_client_cb.scb.colli_timer);
+    bta_hf_client_at_reset();
+
     bta_hf_client_scb_init();
+    bta_sys_deregister(BTA_ID_HS);
 
     if (bta_hf_client_cb.p_cback) {
         (*bta_hf_client_cb.p_cback)(BTA_HF_CLIENT_DISABLE_EVT, NULL);
@@ -478,9 +487,6 @@ static void bta_hf_client_api_disable(tBTA_HF_CLIENT_DATA *p_data)
         APPL_TRACE_ERROR("BTA HF Client is already disabled, ignoring ...");
         return;
     }
-
-    /* De-register with BTA system manager */
-    bta_sys_deregister(BTA_ID_HS);
 
     bta_hf_client_sm_execute(BTA_HF_CLIENT_API_DEREGISTER_EVT, p_data);
 

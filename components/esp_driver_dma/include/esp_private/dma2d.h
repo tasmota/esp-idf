@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,6 +10,8 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include "esp_err.h"
 #include "hal/dma2d_types.h"
 
@@ -153,6 +155,29 @@ typedef struct {
 esp_err_t dma2d_enqueue(dma2d_pool_handle_t dma2d_pool, const dma2d_trans_config_t *trans_desc, dma2d_trans_t *trans_placeholder);
 
 /**
+ * @brief Dequeue a pending 2D-DMA transaction from a 2D-DMA pool
+ *
+ * Remove a transaction that was previously enqueued by `dma2d_enqueue` but has not yet been picked up for
+ * processing (i.e. it is still waiting in the pool's pending queue). This is useful when the upper driver wants
+ * to cancel a transaction that has not started yet.
+ *
+ * @note This API only operates on transactions that are still pending. To end a transaction that is already
+ *       in-flight (its channels have been acquired), use `dma2d_force_end` instead.
+ *
+ * @note After this function returns ESP_OK, the upper driver can safely free the transaction placeholder, as the
+ *       `on_job_picked` callback of the transaction will no longer be called.
+ *
+ * @param[in] dma2d_pool 2D-DMA pool handle, allocated by `dma2d_acquire_pool`
+ * @param[in] trans Pointer to the 2D-DMA transaction context
+ * @return
+ *      - ESP_OK: Dequeue the pending 2D-DMA transaction successfully
+ *      - ESP_ERR_INVALID_ARG: Dequeue failed because of invalid argument
+ *      - ESP_ERR_NOT_FOUND: The transaction is not in the pending queue, because it has already been picked up
+ *                           for processing or it was never enqueued to this pool
+ */
+esp_err_t dma2d_dequeue(dma2d_pool_handle_t dma2d_pool, dma2d_trans_t *trans);
+
+/**
  * @brief Force end an in-flight 2D-DMA transaction
  *
  * This API is useful when the error was caused by the DMA consumer (such as JPEG). The error can only be detected
@@ -167,7 +192,7 @@ esp_err_t dma2d_enqueue(dma2d_pool_handle_t dma2d_pool, const dma2d_trans_config
  * @param[in] trans Pointer to the 2D-DMA transaction context
  * @param[out] need_yield Pointer to a status flag to record whether a task switch is needed if this API is being called in an ISR
  * @return
- *      - ESP_OK: Force end an in-flight transaction successfully
+ *      - ESP_OK: The transaction has been ended (either force-ended by this call, or it had already completed)
  *      - ESP_ERR_INVALID_ARG: Force end failed because of invalid argument
  *      - ESP_ERR_INVALID_STATE: Force end failed because the transaction is not yet in-flight
  */
@@ -245,6 +270,47 @@ typedef struct {
  *      - ESP_ERR_INVALID_ARG: Set channel transfer ability failed because of invalid argument
  */
 esp_err_t dma2d_set_transfer_ability(dma2d_channel_handle_t dma2d_chan, const dma2d_transfer_ability_t *ability);
+
+/**
+ * @brief Get DMA2D buffer alignment constraint for a specific buffer
+ *
+ * @note On invalid arguments, returns an impossible alignment (BIT(31)).
+ *
+ * @param[in] buffer Buffer address
+ * @return Alignment requirement in bytes
+ */
+size_t dma2d_get_buffer_alignment_constraint(const void *buffer);
+
+/**
+ * @brief Get alignment required when allocating a buffer for DMA2D access
+ *
+ * Use this before the buffer exists (e.g. `heap_caps_aligned_calloc`).
+ * Unlike `dma2d_get_buffer_alignment_constraint`, this returns the worst-case
+ * DMA2D/MSPI alignment rather than treating a NULL pointer as invalid.
+ *
+ * @return Alignment requirement in bytes (1 if no strict alignment is needed)
+ */
+size_t dma2d_get_alloc_alignment(void);
+
+/**
+ * @brief Check whether a 2D DMA transaction window satisfies DMA2D/MSPI alignment
+ *
+ * Under Flash Encryption / PSRAM ECC, MSPI requires each AXI access to be aligned in both
+ * address and size. For a 2D transfer that means:
+ * - buffer base address aligned to N bytes
+ * - bytes-per-line (`pic_width * bpp/8`) aligned, so every next line starts on an N-byte boundary
+ * - transfer width (`blk_width * bpp/8`) aligned
+ * - horizontal window offset (`offset_x * bpp/8`) aligned
+ *
+ * @param[in] buf        Buffer base address
+ * @param[in] pic_width  Picture / stride width in pixels
+ * @param[in] blk_width  Transfer block width in pixels
+ * @param[in] offset_x   Horizontal offset of the block in pixels
+ * @param[in] bit_depth  Bits per pixel
+ * @return true if the transaction satisfies the alignment constraints
+ */
+bool dma2d_check_transaction_alignment_constraint(const void *buf, uint32_t pic_width, uint32_t blk_width,
+                                                  uint32_t offset_x, uint32_t bit_depth);
 
 /**
  * @brief A collection of color space conversion (CSC) items that each 2D-DMA channel could apply

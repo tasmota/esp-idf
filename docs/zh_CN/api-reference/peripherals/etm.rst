@@ -70,7 +70,7 @@ GPIO **边沿** 事件是最常见的事件类型，任何 GPIO 管脚均可触�
     :SOC_SYSTIMER_SUPPORT_ETM: - 要了解如何从 esp_timer 获取 ETM 事件句柄，请参阅 :doc:`/api-reference/system/esp_timer`。
     :SOC_TIMER_SUPPORT_ETM: - 要了解如何从 GPTimer 获取 ETM 事件句柄，请参阅 :ref:`gptimer-etm-event-and-task`。
     :SOC_GDMA_SUPPORT_ETM: - 要了解如何从 async memcpy 获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/async_memcpy`。
-    :SOC_MCPWM_SUPPORT_ETM: - 要了解如何从 MCPWM 中获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/mcpwm`。
+    :SOC_MCPWM_SUPPORT_ETM: - 要了解如何从 MCPWM 中获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/mcpwm/mcpwm_etm`。
     :SOC_ANA_CMPR_SUPPORT_ETM: - 要了解如何从模拟比较器获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/ana_cmpr`。
     :SOC_TEMPERATURE_SENSOR_SUPPORT_ETM: - 要了解如何从温度传感器获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/temp_sensor`。
     :SOC_I2S_SUPPORTS_ETM:  - 要了解如何从 I2S 获取 ETM 事件句柄，请参阅 :doc:`/api-reference/peripherals/i2s`。
@@ -139,7 +139,7 @@ ETM 通道分析
 电源管理
 ^^^^^^^^
 
-当启用电源管理时，即 :ref:`CONFIG_PM_ENABLE` 打开的时候，系统可能会调整或禁用时钟源，并在进入睡眠前关闭 ETM 外设依赖的电源。这会导致事件和任务之间的连接信息被丢失，ETM 通道在唤醒后无法正常工作。因此，默认情况下，驱动程序会获取电源管理锁，以禁止系统关闭 ETM 外设。
+当启用电源管理时，即 :menuitem:`CONFIG_PM_ENABLE` 打开的时候，系统可能会调整或禁用时钟源，并在进入睡眠前关闭 ETM 外设依赖的电源。这会导致事件和任务之间的连接信息被丢失，ETM 通道在唤醒后无法正常工作。因此，默认情况下，驱动程序会获取电源管理锁，以禁止系统关闭 ETM 外设。
 
 .. only:: SOC_ETM_SUPPORT_SLEEP_RETENTION
 
@@ -161,7 +161,7 @@ ETM 核心驱动程序具备线程安全性。
 Kconfig 选项
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_ETM_ENABLE_DEBUG_LOG` 用于启用调试日志输出，启用此选项将增加固件的二进制文件大小。
+- :menuitem:`CONFIG_ETM_ENABLE_DEBUG_LOG` 用于启用调试日志输出，启用此选项将增加固件的二进制文件大小。
 
 API 参考
 -------------

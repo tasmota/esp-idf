@@ -19,6 +19,7 @@
 #include "esp_cam_ctlr_interface.h"
 #include "esp_cam_ctlr_csi_internal.h"
 #include "hal/mipi_csi_ll.h"
+#include "hal/mipi_csi_periph.h"
 #include "hal/color_hal.h"
 #include "hal/efuse_hal.h"
 #include "soc/chip_revision.h"
@@ -30,8 +31,12 @@
 
 #if CONFIG_CAM_CTLR_MIPI_CSI_ISR_CACHE_SAFE
 #define CSI_MEM_ALLOC_CAPS   (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#define CSI_INTR_ALLOC_FLAGS (ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_IRAM)
+#define CSI_ISR_ATTR         IRAM_ATTR
 #else
 #define CSI_MEM_ALLOC_CAPS   MALLOC_CAP_DEFAULT
+#define CSI_INTR_ALLOC_FLAGS ESP_INTR_FLAG_LOWMED
+#define CSI_ISR_ATTR
 #endif
 
 typedef struct csi_platform_t {
@@ -43,6 +48,7 @@ static const char *TAG = "CSI";
 static csi_platform_t s_platform;
 
 static bool csi_dma_trans_done_callback(dw_gdma_channel_handle_t chan, const dw_gdma_trans_done_event_data_t *event_data, void *user_data);
+static void s_csi_default_isr(void *arg);
 static esp_err_t s_del_csi_ctlr(csi_controller_t *ctlr);
 static esp_err_t s_ctlr_del(esp_cam_ctlr_t *cam_ctlr);
 static esp_err_t s_register_event_callbacks(esp_cam_ctlr_handle_t handle, const esp_cam_ctlr_evt_cbs_t *cbs, void *user_data);
@@ -126,6 +132,7 @@ esp_err_t esp_cam_new_csi_ctlr(const esp_cam_ctlr_csi_config_t *config, esp_cam_
         free(ctlr);
         ESP_RETURN_ON_ERROR(ret, TAG, "no available csi controller");
     }
+    ctlr->csi_fsm = CSI_FSM_INIT;
 
     ESP_LOGD(TAG, "config->queue_items: %d", config->queue_items);
     ctlr->trans_que = xQueueCreateWithCaps(config->queue_items, sizeof(esp_cam_ctlr_trans_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -262,7 +269,6 @@ esp_err_t esp_cam_new_csi_ctlr(const esp_cam_ctlr_csi_config_t *config, esp_cam_
 #endif //CONFIG_PM_ENABLE
 
     ctlr->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
-    ctlr->csi_fsm = CSI_FSM_INIT;
     ctlr->base.del = s_ctlr_del;
     ctlr->base.enable = s_csi_ctlr_enable;
     ctlr->base.start = s_ctlr_csi_start;
@@ -296,6 +302,12 @@ esp_err_t s_del_csi_ctlr(csi_controller_t *ctlr)
     }
 #endif // CONFIG_PM_ENABLE
 
+    if (ctlr->intr_handle) {
+        mipi_csi_host_ll_enable_intr(ctlr->hal.host_dev, MIPI_CSI_HOST_LL_INTR_ERR_ALL, false);
+        ESP_RETURN_ON_ERROR(esp_intr_free(ctlr->intr_handle), TAG, "failed to free csi host interrupt");
+        ctlr->intr_handle = NULL;
+    }
+
     if (ctlr->dma_chan) {
         ESP_RETURN_ON_ERROR(dw_gdma_del_channel(ctlr->dma_chan), TAG, "failed to delete dwgdma channel");
     }
@@ -313,7 +325,9 @@ esp_err_t s_del_csi_ctlr(csi_controller_t *ctlr)
     if (!ctlr->bk_buffer_dis) {
         free(ctlr->backup_buffer);
     }
-    vQueueDeleteWithCaps(ctlr->trans_que);
+    if (ctlr->trans_que) {
+        vQueueDeleteWithCaps(ctlr->trans_que);
+    }
     free(ctlr);
 
     return ESP_OK;
@@ -367,16 +381,16 @@ IRAM_ATTR static bool csi_dma_trans_done_callback(dw_gdma_channel_handle_t chan,
     csi_dma_transfer_config = (dw_gdma_block_transfer_config_t) {
         .src = {
             .addr = MIPI_CSI_BRG_MEM_BASE,
-            .burst_mode = DW_GDMA_BURST_MODE_FIXED,
-            .burst_items = DW_GDMA_BURST_ITEMS_512,
-            .burst_len = 16,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_FIXED,
+            .burst_size = DW_GDMA_BURST_SIZE_512,
+            .axi_burst_len = 16,
             .width = DW_GDMA_TRANS_WIDTH_64,
         },
         .dst = {
             .addr = 0,
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
-            .burst_items = DW_GDMA_BURST_ITEMS_512,
-            .burst_len = 16,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
+            .burst_size = DW_GDMA_BURST_SIZE_512,
+            .axi_burst_len = 16,
             .width = DW_GDMA_TRANS_WIDTH_64,
         },
         .size = ctlr->csi_transfer_size,
@@ -447,13 +461,70 @@ esp_err_t s_register_event_callbacks(esp_cam_ctlr_handle_t handle, const esp_cam
     if (cbs->on_trans_finished) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_trans_finished), ESP_ERR_INVALID_ARG, TAG, "on_trans_finished callback not in IRAM");
     }
+    if (cbs->on_error) {
+        ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_error), ESP_ERR_INVALID_ARG, TAG, "on_error callback not in IRAM");
+    }
+    if (user_data) {
+        ESP_RETURN_ON_FALSE(esp_ptr_internal(user_data), ESP_ERR_INVALID_ARG, TAG, "user_data not in internal RAM");
+    }
 #endif
+
+    bool enable_error_intr = false;
+
+    // The error interrupt service is lazy installed, only when an on_error callback is registered.
+    if (cbs->on_error && !ctlr->intr_handle) {
+        ESP_RETURN_ON_ERROR(esp_intr_alloc(soc_mipi_csi_signals[ctlr->csi_id].host_irq_id, CSI_INTR_ALLOC_FLAGS,
+                                           s_csi_default_isr, ctlr, &ctlr->intr_handle),
+                            TAG, "failed to allocate csi host interrupt");
+        enable_error_intr = true;
+    }
 
     ctlr->cbs.on_get_new_trans = cbs->on_get_new_trans;
     ctlr->cbs.on_trans_finished = cbs->on_trans_finished;
+    ctlr->cbs.on_error = cbs->on_error;
     ctlr->cbs_user_data = user_data;
 
+    if (enable_error_intr) {
+        // clear any stale status, then unmask all error interrupts
+        mipi_csi_host_ll_clear_intr_status(ctlr->hal.host_dev, MIPI_CSI_HOST_LL_INTR_ERR_ALL);
+        mipi_csi_host_ll_enable_intr(ctlr->hal.host_dev, MIPI_CSI_HOST_LL_INTR_ERR_ALL, true);
+    }
+
     return ESP_OK;
+}
+
+static void CSI_ISR_ATTR s_csi_default_isr(void *arg)
+{
+    bool need_yield = false;
+    csi_controller_t *ctlr = (csi_controller_t *)arg;
+
+    uint32_t status = mipi_csi_host_ll_get_intr_status(ctlr->hal.host_dev);
+    // clear the detected error sources before invoking the callback
+    mipi_csi_host_ll_clear_intr_status(ctlr->hal.host_dev, status);
+
+    if (ctlr->cbs.on_error) {
+        esp_cam_ctlr_error_event_data_t edata = {};
+        if (status & (MIPI_CSI_HOST_LL_INTR_PHY_FATAL | MIPI_CSI_HOST_LL_INTR_PHY)) {
+            edata.csi_host_err_evts |= ESP_CAM_CTLR_CSI_HOST_ERR_PHY;
+        }
+        if (status & (MIPI_CSI_HOST_LL_INTR_PKT_FATAL | MIPI_CSI_HOST_LL_INTR_ECC_CORRECTED)) {
+            edata.csi_host_err_evts |= ESP_CAM_CTLR_CSI_HOST_ERR_PACKET;
+        }
+        if (status & (MIPI_CSI_HOST_LL_INTR_BNDRY_FRAME_FATAL | MIPI_CSI_HOST_LL_INTR_SEQ_FRAME_FATAL)) {
+            edata.csi_host_err_evts |= ESP_CAM_CTLR_CSI_HOST_ERR_FRAME;
+        }
+        if (status & (MIPI_CSI_HOST_LL_INTR_CRC_FRAME_FATAL | MIPI_CSI_HOST_LL_INTR_PLD_CRC_FATAL)) {
+            edata.csi_host_err_evts |= ESP_CAM_CTLR_CSI_HOST_ERR_CRC;
+        }
+        if (status & MIPI_CSI_HOST_LL_INTR_DATA_ID) {
+            edata.csi_host_err_evts |= ESP_CAM_CTLR_CSI_HOST_ERR_DATA_ID;
+        }
+        need_yield = ctlr->cbs.on_error(&(ctlr->base), &edata, ctlr->cbs_user_data);
+    }
+
+    if (need_yield) {
+        portYIELD_FROM_ISR();
+    }
 }
 
 esp_err_t s_csi_ctlr_enable(esp_cam_ctlr_handle_t handle)
@@ -532,16 +603,16 @@ esp_err_t s_ctlr_csi_start(esp_cam_ctlr_handle_t handle)
     csi_dma_transfer_config = (dw_gdma_block_transfer_config_t) {
         .src = {
             .addr = MIPI_CSI_BRG_MEM_BASE,
-            .burst_mode = DW_GDMA_BURST_MODE_FIXED,
-            .burst_items = DW_GDMA_BURST_ITEMS_512,
-            .burst_len = 16,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_FIXED,
+            .burst_size = DW_GDMA_BURST_SIZE_512,
+            .axi_burst_len = 16,
             .width = DW_GDMA_TRANS_WIDTH_64,
         },
         .dst = {
             .addr = (uint32_t)(trans.buffer),
-            .burst_mode = DW_GDMA_BURST_MODE_INCREMENT,
-            .burst_items = DW_GDMA_BURST_ITEMS_512,
-            .burst_len = 16,
+            .addr_inc_mode = DW_GDMA_ADDR_INC_MODE_INCREMENT,
+            .burst_size = DW_GDMA_BURST_SIZE_512,
+            .axi_burst_len = 16,
             .width = DW_GDMA_TRANS_WIDTH_64,
         },
         .size = ctlr->csi_transfer_size,

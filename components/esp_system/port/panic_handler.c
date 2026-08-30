@@ -27,6 +27,10 @@
 #include "esp_private/panic_internal.h"
 #include "esp_private/panic_reason.h"
 
+#if CONFIG_COMPILER_KASAN
+#include "esp_kasan.h"
+#endif
+
 #if SOC_WDT_SUPPORTED || SOC_RTC_WDT_SUPPORTED
 #include "hal/wdt_types.h"
 #include "hal/wdt_hal.h"
@@ -122,12 +126,28 @@ static void frame_to_panic_info(void *frame, panic_info_t *info, bool pseudo_exc
 FORCE_INLINE_ATTR __attribute__((__noreturn__))
 void busy_wait(void)
 {
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
+    /* This core parks here while the offending core handles the panic, which
+     * may include flash accesses with the cache suspended (e.g. writing a core
+     * dump). Stop the branch predictor so its speculative fetches cannot latch
+     * spurious cache access-fail errors that would corrupt the cache error
+     * status of the panic being reported. This core never resumes, so the
+     * predictor is not re-enabled. */
+    esp_cpu_branch_prediction_disable();
+#endif
     ESP_INFINITE_LOOP();
 }
 #endif // !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
 
 static void panic_handler(void *frame, bool pseudo_excause)
 {
+#if CONFIG_COMPILER_KASAN
+    /* Disable KASAN checks for the remainder of crash handling: backtrace and
+     * stack dumps legitimately read guard pages and poisoned redzones, which
+     * would otherwise trigger spurious KASAN reports. */
+    kasan_disable_checks();
+#endif
+
     /* If watchdogs are enabled, the panic handler runs the risk of getting aborted pre-emptively because
      * an overzealous watchdog decides to reset it. Hence, we feed the WDTs here.
      *

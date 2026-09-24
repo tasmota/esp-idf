@@ -528,7 +528,7 @@
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 
 /*------------------------- ECDSA CAPS -------------------------*/
-#define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_USES_MPI                  (1)  /*!< ECDSA reuses the MPI operand memory below rev v1.2, and shares MPI's reset domain on every revision */
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
@@ -583,11 +583,9 @@
 
 #define SOC_PM_PAU_LINK_NUM                 (4)
 #define SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR   (1)
-#define SOC_PM_PAU_REGDMA_LINK_WIFIMAC      (1)
+#define SOC_PM_PAU_REGDMA_LINK_MODEM      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
-
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN        (1)
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)

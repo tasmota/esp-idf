@@ -491,6 +491,7 @@
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
+// #define SOC_ECDSA_USES_MPI 1 // TODO: [ESP32H21] IDF-16142
 
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-H21 has 2 UARTs
@@ -535,7 +536,6 @@
 #define SOC_PM_SUPPORT_VDDSDIO_PD       (1)
 #define SOC_PM_SUPPORT_TOP_PD           (1)
 #define SOC_PM_PAU_LINK_NUM             (5)
-#define SOC_PM_RETENTION_MODULE_NUM     (32)
 #define SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE        (1)
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA           (1)
@@ -572,3 +572,6 @@
 // #define SOC_BLE_MULTI_CONN_OPTIMIZATION (1)    /*!< Support multiple connections optimization */
 // #define SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED  (1)    /*!< Support For BLE Periodic Adv Enhancements */
 // #define SOC_BLE_CTE_SUPPORTED           (1)    /*!< Support Bluetooth LE Constant Tone Extension (CTE) */
+
+/*------------------------------------- DEBUG CAPS -------------------------------------*/
+#define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)

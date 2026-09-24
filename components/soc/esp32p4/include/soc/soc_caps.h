@@ -568,7 +568,7 @@
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
-#define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_USES_MPI                  (1)  /*!< ECDSA shares MPI's reset domain, so the MPI lock is required even though ECDSA uses neither the MPI engine nor its memory */
 #define SOC_ECDSA_SUPPORT_CURVE_P384 (1)
 #define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
 
@@ -801,8 +801,6 @@
 #define SOC_SLEEP_SYSTIMER_STALL_WORKAROUND 1    //TODO IDF-11381: replace with all xtal field clk gate control
 #define SOC_SLEEP_TGWDT_STOP_WORKAROUND     1    //TODO IDF-11381: replace with all xtal field clk gate control
 
-#define SOC_PM_RETENTION_MODULE_NUM         (64)
-
 /*-------------------------- PSRAM CAPS ----------------------------*/
 #define SOC_PSRAM_VDD_POWER_MPLL    (1)
 
@@ -843,6 +841,9 @@
 #define SOC_JPEG_DECODE_SUPPORTED                 (1)
 #define SOC_JPEG_ENCODE_SUPPORTED                 (1)
 
+/*--------------------------- H264 --------------------------------*/
+#define SOC_H264_ENCODER_SUPPORTED                (1)
+
 /*--------------------------- CAM ---------------------------------*/
 #define SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV         (1)
 #define SOC_LCDCAM_CAM_PERIPH_NUM                   (1U)
@@ -863,3 +864,6 @@
 #define SOC_LP_CORE_SUPPORT_STORE_LOAD_EXCEPTIONS   (1) /*!< LP Core will raise exceptions if accessing invalid addresses */
 #define SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE          (1) /*!< LP core requests sleep, PMU clears both HP and LP wakeup causes */
 #define SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED   (1) /*!< LP UART wakeup source is kept triggered */
+
+/*------------------------------------- DEBUG CAPS -------------------------------------*/
+#define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)

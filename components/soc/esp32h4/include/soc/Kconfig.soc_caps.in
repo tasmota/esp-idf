@@ -554,3 +554,7 @@ config SOC_CLK_RC32K_SUPPORTED
 config SOC_RCC_IS_INDEPENDENT
     bool
     default y
+
+config SOC_DEBUG_HAVE_OCD_STUB_BINS
+    bool
+    default y

@@ -48,6 +48,22 @@ extern "C" {
 #error "CONFIG_SECURE_TEE_INTR_STACK_SIZE must be 16-byte (0x10) aligned"
 #endif
 
+#if ((CONFIG_SECURE_TEE_IROM_SIZE) % SOC_MMU_PAGE_SIZE)
+#error "CONFIG_SECURE_TEE_IROM_SIZE must be a multiple of SOC_MMU_PAGE_SIZE"
+#endif
+
+#if ((CONFIG_SECURE_TEE_DROM_SIZE) % SOC_MMU_PAGE_SIZE)
+#error "CONFIG_SECURE_TEE_DROM_SIZE must be a multiple of SOC_MMU_PAGE_SIZE"
+#endif
+
+/* With HAL assertions disabled (level 0), a failed HAL_ASSERT() expands to
+ * __builtin_unreachable(): the compiler then optimizes assuming the asserted
+ * preconditions always hold, turning any unvalidated HAL input into undefined
+ * behavior. The TEE must never be built this way. */
+#if CONFIG_SECURE_ENABLE_TEE && (CONFIG_HAL_DEFAULT_ASSERTION_LEVEL < 1)
+#error "ESP-TEE requires HAL assertions (CONFIG_HAL_DEFAULT_ASSERTION_LEVEL >= 1)"
+#endif
+
 /* TEE Secure Storage partition label and NVS namespace */
 #define ESP_TEE_SEC_STG_PART_LABEL    "secure_storage"
 #define ESP_TEE_SEC_STG_NVS_NAMESPACE "tee_sec_stg_ns"

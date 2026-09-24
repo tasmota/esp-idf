@@ -11,6 +11,7 @@
 #include <inttypes.h>
 
 #include "esp_attr.h"
+#include "esp_cpu.h"
 #include "esp_rom_caps.h"
 #include "esp_macros.h"
 #include "esp_memory_utils.h"
@@ -567,6 +568,9 @@ static void FORCE_IRAM_ATTR suspend_cache(void) {
         // fully check the access to external memory, writeback & invalidate is needed here.
         Cache_WriteBack_Invalidate_All(CACHE_MAP_MASK);
 #endif
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
+        esp_cpu_branch_prediction_disable();
+#endif
         spi_flash_disable_cache(esp_cpu_get_core_id(), &s_cache_state);
     }
 }
@@ -577,6 +581,9 @@ static void FORCE_IRAM_ATTR resume_cache(void) {
     assert(s_cache_suspend_cnt >= 0 && DRAM_STR("cache resume doesn't match suspend ops"));
     if (s_cache_suspend_cnt == 0) {
         spi_flash_restore_cache(esp_cpu_get_core_id(), s_cache_state);
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
+        esp_cpu_branch_prediction_enable();
+#endif
     }
 }
 
@@ -1222,12 +1229,11 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         }
     }
 #endif
-
-#if CONFIG_IDF_TARGET_ESP32S2
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
     /* Due to hardware limitations, on S2 the brownout detector sometimes trigger during deep sleep
        to circumvent this we disable the brownout detector before sleeping  */
     esp_brownout_disable();
-#endif //CONFIG_IDF_TARGET_ESP32S2
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET && CONFIG_ESP_BROWNOUT_DET
 
     esp_sync_timekeeping_timers();
 
@@ -1323,6 +1329,12 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     esp_clk_private_unlock();
 #endif
     portEXIT_CRITICAL(&s_config.lock);
+
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+    /* Brownout was disabled before attempting deep sleep; restore it after rejection. */
+    esp_brownout_init();
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+
     return err;
 }
 

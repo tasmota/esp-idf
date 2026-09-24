@@ -32,7 +32,7 @@ tools/test_apps/system/esp_intr_dump:
 
 tools/test_apps/system/flash_auto_suspend_iram_reduction:
   disable:
-    - if: IDF_TARGET == "esp32" or IDF_TARGET == "esp32s2
+    - if: IDF_TARGET == "esp32" or IDF_TARGET == "esp32s2"
       reason: Targets do not support auto-suspend
   disable_test:
     - if: IDF_TARGET != "esp32c3"
@@ -103,6 +103,11 @@ tools/test_apps/system/panic:
   enable:
     - if: INCLUDE_DEFAULT == 1
   disable:
+    - if: CONFIG_NAME in ["coredump_flash_extram_stack_bss", "coredump_flash_extram_stack_heap"] and SOC_SPIRAM_SUPPORTED != 1
+    - if: CONFIG_NAME == "coredump_flash_extram_stack_bss_xip" and SOC_SPIRAM_XIP_SUPPORTED != 1
+    - if: IDF_TARGET in ["esp32h4", "esp32h21"]
+      temporary: true
+      reason: IDF-12308, IDF-11543
     - if: IDF_TARGET in ["esp32p4"] and CONFIG_NAME == "gdbstub"
       temporary: true
       reason: not supported yet

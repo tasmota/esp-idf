@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -25,6 +25,12 @@ extern "C" {
  * Called by OS startup code. You do not need to call this in your own applications.
  */
 esp_err_t esp_flash_init_default_chip(void);
+
+/**
+ * @brief Initialize main flash
+ * @param chip Pointer to main SPI flash(SPI1 CS0) chip to use..
+ */
+esp_err_t esp_flash_init_main(esp_flash_t *chip);
 
 /**
  *  Enable OS-level SPI flash protections in IDF
@@ -63,7 +69,9 @@ esp_err_t esp_flash_init_os_functions(esp_flash_t *chip, int host_id, spi_bus_lo
  * @param chip              The chip to deinit os functions
  * @param out_dev_handle    The SPI bus lock passed from `esp_flash_init_os_functions`. The caller should deinitialize
  *                          the lock.
- * @return always ESP_OK.
+ * @return
+ *      - ESP_ERR_INVALID_STATE: the chip is still acquiring the SPI bus lock.
+ *      - ESP_OK: success.
  */
 esp_err_t esp_flash_deinit_os_functions(esp_flash_t* chip, spi_bus_lock_dev_handle_t* out_dev_handle);
 
@@ -75,7 +83,7 @@ esp_err_t esp_flash_deinit_os_functions(esp_flash_t* chip, spi_bus_lock_dev_hand
  *
  * @return esp_err_t always ESP_OK.
  */
-esp_err_t esp_flash_init_main_bus_lock(void);
+esp_err_t esp_flash_app_init_os_functions(void);
 
 /**
  *  Initialize OS-level functions for the main flash chip.

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -327,6 +327,38 @@ TEST_CASE("Test TEE Secure Storage - Null Pointer and Zero Length", "[sec_storag
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
 }
 
+#if CONFIG_SECURE_TEE_ATTESTATION
+TEST_CASE("Test TEE Secure Storage - Attestation key is not REE-accessible", "[sec_storage]")
+{
+    const char *att_key_id = CONFIG_SECURE_TEE_ATT_KEY_STR_ID;
+
+    esp_tee_sec_storage_key_cfg_t key_cfg = {
+        .id = att_key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1
+    };
+
+    uint8_t digest[SHA256_DIGEST_SZ];
+    esp_fill_random(digest, sizeof(digest));
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_gen_key(&key_cfg));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_clear_key(att_key_id));
+
+    esp_tee_sec_storage_ecdsa_sign_t sign = {};
+    esp_tee_sec_storage_ecdsa_pubkey_t pubkey = {};
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_sign(&key_cfg, digest, sizeof(digest), &sign));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_get_pubkey(&key_cfg, &pubkey));
+
+    uint8_t data[31], tag[12];
+    esp_tee_sec_storage_aead_ctx_t aead_ctx = {
+        .key_id = att_key_id,
+        .input = data,
+        .input_len = sizeof(data),
+    };
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, tag, sizeof(tag), data));
+}
+#endif
+
 TEST_CASE("Test TEE Secure Storage - WRITE_ONCE keys", "[sec_storage]")
 {
     const char *key_id = "key_id_test_wo";
@@ -344,6 +376,22 @@ TEST_CASE("Test TEE Secure Storage - WRITE_ONCE keys", "[sec_storage]")
     TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_gen_key(&key_cfg));
 
     TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_clear_key(key_cfg.id));
+}
+
+TEST_CASE("Test TEE Secure Storage - TEE_ONLY keys", "[sec_storage]")
+{
+    const char *key_id = "key_id_tee_only";
+    esp_tee_sec_storage_key_cfg_t key_cfg = {
+        .id = key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1,
+        .flags = SEC_STORAGE_FLAG_TEE_ONLY,
+    };
+
+    esp_err_t err = esp_tee_sec_storage_clear_key(key_cfg.id);
+    TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_NOT_FOUND);
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_gen_key(&key_cfg));
+    TEST_ESP_ERR(ESP_ERR_NOT_FOUND, esp_tee_sec_storage_clear_key(key_cfg.id));
 }
 
 static void test_aead_encrypt_decrypt(const char *key_id, const uint8_t *input, size_t len)
@@ -416,7 +464,7 @@ TEST_CASE("Test TEE Secure Storage - Host-generated keys", "[sec_storage_host_ke
 
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(ecdsa_key_id0));
 
-    TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_clear_key(attest_key_id));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_clear_key(attest_key_id));
 
 #if CONFIG_SECURE_TEE_ATTESTATION
     uint8_t *token_buf = heap_caps_calloc(ESP_ATT_TK_BUF_SIZE, sizeof(uint8_t), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
@@ -425,9 +473,19 @@ TEST_CASE("Test TEE Secure Storage - Host-generated keys", "[sec_storage_host_ke
     uint32_t token_len = 0;
     TEST_ESP_OK(esp_tee_att_generate_token(0xA1B2C3D4, 0x0FACADE0, (const char *)ESP_ATT_TK_PSA_CERT_REF,
                                            token_buf, ESP_ATT_TK_BUF_SIZE, &token_len));
-
     free(token_buf);
-#endif
+#endif /* CONFIG_SECURE_TEE_ATTESTATION */
+
+    esp_tee_sec_storage_key_cfg_t attest_cfg = {
+        .id   = attest_key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1,
+    };
+    esp_tee_sec_storage_ecdsa_sign_t attest_sign = {0};
+    esp_tee_sec_storage_ecdsa_pubkey_t attest_pubkey = {0};
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_sign(&attest_cfg, msg_digest, SHA256_DIGEST_SZ, &attest_sign));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_get_pubkey(&attest_cfg, &attest_pubkey));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_clear_key(attest_key_id));
 }
 
 #if CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN

@@ -436,6 +436,7 @@
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY     (1)
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
+#define SOC_ECDSA_USES_MPI                  (1)  /*!< ECDSA shares MPI's reset domain: v1.0 dropped ECDSA's use of RSA but kept the clkrst coupling, so the MPI lock is still required */
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_SUPPORT_CURVE_P384 (1)
 #define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
@@ -653,6 +654,7 @@
 #define SOC_PM_SUPPORT_MAC_BB_PD        (1)
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
 
+#define SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY (1)
 #define SOC_PM_SUPPORT_PMU_MODEM_STATE  (1)
 /* macro redefine for pass esp_wifi headers md5sum check */
 #define MAC_SUPPORT_PMU_MODEM_STATE     SOC_PM_SUPPORT_PMU_MODEM_STATE
@@ -667,14 +669,12 @@
 
 #define SOC_PM_PAU_LINK_NUM                 (5)
 #define SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE (1)
-#define SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC  (4) // The range of values for the link index is [0, SOC_PM_PAU_LINK_NUM)
 #define SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY (1)
 /** Workaround: software-triggered modem PHY retention uses dedicated WiFi MAC REGDMA, not entry link_sel */
 #define SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND (1)
+#define SOC_PM_PAU_REGDMA_LINK_IDX_PHY      (4) // The range of values for the link index is [0, SOC_PM_PAU_LINK_NUM)
 
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
-
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
@@ -729,6 +729,9 @@
 /*------------------------------------- PHY CAPS -------------------------------------*/
 // #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/
 #define SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT (1)
+
+/*------------------------------------- DEBUG CAPS -------------------------------------*/
+#define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
 
 /*------------------------------------- ULP CAPS -------------------------------------*/
 #define SOC_LP_CORE_SINGLE_INTERRUPT_VECTOR         (1) /*!< LP Core interrupts all map to a single entry in vector table */

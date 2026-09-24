@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,12 +16,19 @@ extern "C" {
 #include "esp_err.h"
 #include "esp_bit_defs.h"
 
-#define MAX_ECDSA_SUPPORTED_KEY_LEN         32   /*!< Maximum supported size for the ECDSA key */
+#include "sdkconfig.h"
+
+#if CONFIG_SECURE_TEE_SEC_STG_SUPPORT_SECP384R1_SIGN
+#define MAX_ECDSA_SUPPORTED_KEY_LEN         48   /*!< Maximum supported size for the ECDSA key (SECP384R1) */
+#else
+#define MAX_ECDSA_SUPPORTED_KEY_LEN         32   /*!< Maximum supported size for the ECDSA key (SECP256R1) */
+#endif /* CONFIG_SECURE_TEE_SEC_STG_SUPPORT_SECP384R1_SIGN */
 #define MAX_AES_SUPPORTED_KEY_LEN           32   /*!< Maximum supported size for the AES key */
 #define AES_GCM_SUPPORTED_IV_LEN            12   /*!< Supported IV length for AES-GCM operations */
 
 #define SEC_STORAGE_FLAG_NONE               0      /*!< No flags */
 #define SEC_STORAGE_FLAG_WRITE_ONCE         BIT(0) /*!< Data can only be written once */
+#define SEC_STORAGE_FLAG_TEE_ONLY           BIT(1) /*!< Key is owned exclusively by the TEE */
 
 /**
  * @brief Enum to represent the type of key stored in the secure storage
@@ -94,6 +101,21 @@ typedef struct {
  * @return esp_err_t ESP_OK on success, appropriate error code otherwise.
  */
 esp_err_t esp_tee_sec_storage_init(void);
+
+/**
+ * @brief Check whether a key ID is owned exclusively by the TEE
+ *
+ * A key is TEE-owned if either:
+ *   - it refers to the reserved TEE attestation key
+ *     (`CONFIG_SECURE_TEE_ATT_KEY_STR_ID`); this also blocks the REE from
+ *     "squatting" the ID before the TEE creates the key, or
+ *   - the stored key carries the ::SEC_STORAGE_FLAG_TEE_ONLY flag.
+ *
+ * @param key_id  NULL-terminated key identifier string (may be NULL)
+ *
+ * @return true if the key is TEE-owned (REE access must be denied), false otherwise
+ */
+bool esp_tee_sec_storage_is_key_tee_owned(const char *key_id);
 #endif
 
 /**
@@ -140,10 +162,16 @@ esp_err_t esp_tee_sec_storage_ecdsa_get_pubkey(const esp_tee_sec_storage_key_cfg
 /**
  * @brief Perform encryption using AES256-GCM with the key from secure storage
  *
- * @param[in]  ctx      Pointer to the AEAD operation context
- * @param[out] tag      Pointer to the authentication tag buffer
- * @param[in]  tag_len  Length of the authentication tag
- * @param[out] output   Pointer to the output data buffer
+ * @param[in,out] ctx      Pointer to the AEAD operation context; the generated
+ *                         initialization vector is written to @p ctx->iv
+ * @param[out]    tag      Pointer to the authentication tag buffer
+ * @param[in]     tag_len  Length of the authentication tag; must be 12 to 16 bytes (96- to 128-bit tag, per NIST SP 800-38D)
+ * @param[out]    output   Pointer to the output data buffer
+ *
+ * @note The initialization vector is generated internally and is always
+ *       ::AES_GCM_SUPPORTED_IV_LEN bytes long (96-bit IV, per NIST SP 800-38D).
+ *       Read it from @p ctx->iv after the call and store it with the ciphertext.
+ * @note Non-standard @p tag_len values are rejected with ESP_ERR_INVALID_SIZE.
  *
  * @return esp_err_t ESP_OK on success, appropriate error code otherwise.
  */
@@ -152,10 +180,15 @@ esp_err_t esp_tee_sec_storage_aead_encrypt(esp_tee_sec_storage_aead_ctx_t *ctx, 
 /**
  * @brief Perform decryption using AES256-GCM with the key from secure storage
  *
- * @param[in]  ctx      Pointer to the AEAD operation context
+ * @param[in]  ctx      Pointer to the AEAD operation context; @p ctx->iv must hold
+ *                      the initialization vector used during encryption
  * @param[in]  tag      Pointer to the authentication tag buffer
- * @param[in]  tag_len  Length of the authentication tag
+ * @param[in]  tag_len  Length of the authentication tag; must be 12 to 16 bytes (96- to 128-bit tag, per NIST SP 800-38D)
  * @param[out] output   Pointer to the output data buffer
+ *
+ * @note The initialization vector is always ::AES_GCM_SUPPORTED_IV_LEN bytes long
+ *       (96-bit IV, per NIST SP 800-38D). Write it to @p ctx->iv before the call.
+ * @note Non-standard @p tag_len values are rejected with ESP_ERR_INVALID_SIZE.
  *
  * @return esp_err_t ESP_OK on success, appropriate error code otherwise.
  */

@@ -430,7 +430,7 @@ void esp_bt_read_ctrl_log_from_flash(bool output)
 
     print_len = 0;
     max_print_len = 4096;
-    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA, &mapped_ptr, &mmap_handle);
+    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, &mapped_ptr, &mmap_handle);
     if (err != ESP_OK) {
         ESP_LOGE("FLASH", "Mmap failed: %s", esp_err_to_name(err));
         return;
@@ -765,7 +765,7 @@ static esp_err_t sleep_modem_ble_mac_modem_state_init(uint8_t extra)
     int retention_args = extra;
     sleep_retention_module_init_param_t init_param = {
         .cbs     = { .create = { .handle = sleep_modem_ble_mac_retention_init, .arg = &retention_args } },
-        .depends = RETENTION_MODULE_BITMAP_INIT(BT_BB)
+        .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_MODEM)
     };
     esp_err_t err = sleep_retention_module_init(SLEEP_RETENTION_MODULE_BLE_MAC, &init_param);
     if (err == ESP_OK) {

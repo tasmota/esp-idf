@@ -805,13 +805,14 @@ static void i2c_master_isr_handler_default(void *arg)
         i2c_master->trans_done = true;
         i2c_master->event = I2C_EVENT_DONE;
     }
-    if (i2c_master->event != I2C_EVENT_ALIVE) {
-        xQueueSendFromISR(i2c_master->event_queue, (void *)&i2c_master->event, &HPTaskAwoken);
-    }
     if (i2c_master->contains_read == true) {
         if (int_mask & I2C_LL_INTR_MST_COMPLETE || int_mask & I2C_LL_INTR_END_DETECT) {
             i2c_isr_receive_handler(i2c_master);
         }
+    }
+    /* Wait for the ISR to finish copying RX FIFO before notifying the waiter so the caller's buffer is complete */
+    if (i2c_master->event != I2C_EVENT_ALIVE) {
+        xQueueSendFromISR(i2c_master->event_queue, (void *)&i2c_master->event, &HPTaskAwoken);
     }
 
     if (i2c_master->async_trans) {
@@ -1058,7 +1059,8 @@ esp_err_t i2c_new_master_bus(const i2c_master_bus_config_t *bus_config, i2c_mast
     ESP_RETURN_ON_FALSE(bus_config->flags.allow_pd == 0, ESP_ERR_NOT_SUPPORTED, TAG, "not able to power down in light sleep");
 #endif // SOC_I2C_SUPPORT_SLEEP_RETENTION
 
-    i2c_master = heap_caps_calloc(1, sizeof(i2c_master_bus_t) + 20 * sizeof(i2c_transaction_t), I2C_MEM_ALLOC_CAPS);
+    // always allocate memory from internal memory because the driver object contains atomic variables
+    i2c_master = heap_caps_calloc(1, sizeof(i2c_master_bus_t) + 20 * sizeof(i2c_transaction_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
     ESP_GOTO_ON_FALSE(i2c_master, ESP_ERR_NO_MEM, err, TAG, "no memory for i2c master bus");
 

@@ -180,6 +180,7 @@ mainmenu "Espressif IoT Development Framework Configuration"
 
         choice APP_BUILD_TYPE
             prompt "Application build type"
+            default APP_BUILD_TYPE_ELF_ONLY if IDF_TARGET_LINUX
             default APP_BUILD_TYPE_APP_2NDBOOT
             help
                 Select the way the application is built.
@@ -252,6 +253,12 @@ mainmenu "Espressif IoT Development Framework Configuration"
                 bool
                 prompt "Build app runs entirely in RAM (EXPERIMENTAL)"
                 select APP_BUILD_GENERATE_BINARIES
+                depends on !IDF_TARGET_LINUX
+
+            config APP_BUILD_TYPE_ELF_ONLY
+                bool
+                prompt "ELF only (EXPERIMENTAL), only supported on Linux target"
+                depends on IDF_TARGET_LINUX
 
         endchoice # APP_BUILD_TYPE
 
@@ -458,6 +465,21 @@ mainmenu "Espressif IoT Development Framework Configuration"
                 to code examples under the SOC_CPU_ZCMP_WORKAROUND macro, or disable
                 the ZCMP extension for source files that contain functions which may
                 execute while mstatus.mie = 0.
+
+        menu "LLVM optimizations"
+            depends on IDF_TOOLCHAIN_CLANG && IDF_TARGET_ESP32P4
+
+            config COMPILER_LLVM_MEMCPY_OPTIMIZATION
+                bool "Optimize memcpy with PIE"
+                default n
+                help
+                    Optimize memcpy using the RISC-V PIE extension on ESP32-P4.
+                    Applied only to sources or components opted in with
+                    ENABLE_LLVM_OPT or idf_component_enable_llvm_opt, or by
+                    applying IDF_LLVM_OPT_MEMCPY or IDF_LLVM_OPT_ALL with
+                    target_compile_options.
+
+        endmenu
 
         choice COMPILER_OPTIMIZATION_ASSERTION_LEVEL
             prompt "Assertion level"

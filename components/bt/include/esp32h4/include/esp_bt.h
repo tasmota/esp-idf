@@ -20,10 +20,6 @@
  #include "../../common/btdm_bredr.h"
  #endif // SOC_BT_CLASSIC_SUPPORTED
 
- #if SOC_BLE_SUPPORTED
- #include "../../common/btdm_le.h"
- #endif /* SOC_BLE_SUPPORTED */
-
  #ifdef CONFIG_BT_LE_HCI_INTERFACE_USE_UART
  #include "driver/uart.h"
  #endif
@@ -112,7 +108,12 @@
      uint8_t val[6];   /*!< Array containing the 6-byte Bluetooth address value */
  } esp_ble_addr_t;
 
- #define BTDM_CONFIG_VERSION     0x20260127
+
+ #if SOC_BLE_SUPPORTED
+ #include "../../common/btdm_le.h"
+ #endif /* SOC_BLE_SUPPORTED */
+
+ #define BTDM_CONFIG_VERSION     0x20260916
  #define BTDM_CONFIG_MAGIC_VALUE 0x5a5aa5a5
 
  /* Types definition
@@ -123,15 +124,17 @@
   * @brief BTDM controller common configuration options
   */
  typedef struct {
-     uint32_t version;                   /*!< Version number of the defined structure */
-     uint16_t task_stack_size;           /*!< Size of Bluetooth controller task stack */
-     uint8_t task_prio;                  /*!< Priority of the Bluetooth controller task */
-     uint8_t task_run_cpu;               /*!< CPU number on which the Bluetooth controller task runs */
-     uint8_t hci_cmd_num;                /*!< HCI command buffer number */
-     uint8_t sleep_en;                   /*!< Enable sleep functionality */
-     uint8_t version_num;                /*!< Hardware version number of this chip */
-     uint8_t bluetooth_mode;             /*!< Controller mode: BR/EDR, BLE or Dual Mode */
-     uint32_t magic;                     /*!< Magic number for configuration validation */
+    uint32_t version;                       /*!< Version number of the defined structure */
+    uint16_t task_stack_size;               /*!< Size of Bluetooth controller task stack */
+    uint8_t task_prio;                      /*!< Priority of the Bluetooth controller task */
+    uint8_t task_run_cpu;                   /*!< CPU number on which the Bluetooth controller task runs */
+    uint8_t hci_cmd_num;                    /*!< HCI command buffer number */
+    uint8_t nonblocking_cmd_buf;            /*!< Non-blocking mode for command buffer allocation */
+    uint8_t sleep_en;                       /*!< Enable sleep functionality */
+    uint8_t version_num;                    /*!< Hardware version number of this chip */
+    uint8_t bluetooth_mode;                 /*!< Controller mode: BR/EDR, BLE or Dual Mode */
+    uint8_t etm_triggered_rf;               /*!< Enable enabling RF using ETM */
+    uint32_t magic;                         /*!< Magic number for configuration validation */
  } esp_bt_ctrl_btdm_config_t;
 
  /**
@@ -155,39 +158,50 @@
  #define BTDM_CONTROLLER_MODE_EFF                    ESP_BT_MODE_BTDM
  #endif // defined(CONFIG_BTDM_CTRL_MODE_BLE_ONLY)
 
+ #if CONFIG_BT_CTRL_SLEEP_ETM_TRIGGERED_RF
+ #define MODEM_ETM_CHAN_EN               (0x600C8800)
+ #define MODEM_ETM_CHAN_SET              (0x600C8804)
+ #define MODEM_ETM_CHAN_CLR              (0x600C8808)
+ #define MODEM_ETM_CHAN_MASK             (BIT(11))
+ #endif // CONFIG_BT_CTRL_SLEEP_ETM_TRIGGERED_RF
+
  #if SOC_BT_CLASSIC_SUPPORTED
- #define BT_CONTROLLER_INIT_CONFIG_DEFAULT()                                                        \
-     {                                                                                              \
-         .ble = _BT_CTRL_LE_INIT_CONFIG_DEFAULT(),                                                  \
-         .bredr = _BT_CTRL_BREDR_INIT_CONFIG_DEFAULT(),                                             \
-         .btdm =                                                                                    \
-             {                                                                                      \
-                 .version = BTDM_CONFIG_VERSION,                                                    \
-                 .task_stack_size = UC_BT_CTRL_TASK_STACK_SIZE,                                     \
-                 .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                          \
-                 .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                     \
-                 .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                         \
-                 .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                               \
-                 .version_num = 0,                                                                  \
-                 .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                        \
-                 .magic = BTDM_CONFIG_MAGIC_VALUE,                                                  \
-             },                                                                                     \
+#define BT_CONTROLLER_INIT_CONFIG_DEFAULT()                                                       \
+     {                                                                                             \
+         .ble = _BT_CTRL_LE_INIT_CONFIG_DEFAULT(),                                                 \
+         .bredr = _BT_CTRL_BREDR_INIT_CONFIG_DEFAULT(),                                            \
+         .btdm =                                                                                   \
+             {                                                                                     \
+                .version = BTDM_CONFIG_VERSION,                                                    \
+                .task_stack_size = UC_BT_CTRL_TASK_STACK_SIZE,                                     \
+                .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                          \
+                .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                     \
+                .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                         \
+                .nonblocking_cmd_buf = UC_BT_CTRL_NONBLOCK_CMD_BUF,                                \
+                .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                               \
+                .version_num = 0,                                                                  \
+                .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                        \
+                .etm_triggered_rf = UC_BT_CTRL_SLEEP_ETM_TRIGGERED_RF,                             \
+                .magic = BTDM_CONFIG_MAGIC_VALUE,                                                  \
+             },                                                                                    \
      }
- #else
+#else
  #define BT_CONTROLLER_INIT_CONFIG_DEFAULT()                                                        \
      {                                                                                              \
          .ble = _BT_CTRL_LE_INIT_CONFIG_DEFAULT(),                                                  \
          .btdm =                                                                                    \
              {                                                                                      \
-                 .version = BTDM_CONFIG_VERSION,                                                    \
-                 .task_stack_size = UC_BT_CTRL_TASK_STACK_SIZE,                                     \
-                 .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                          \
-                 .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                     \
-                 .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                         \
-                 .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                               \
-                 .version_num = 0,                                                                  \
-                 .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                        \
-                 .magic = BTDM_CONFIG_MAGIC_VALUE,                                                  \
+                .version = BTDM_CONFIG_VERSION,                                                     \
+                .task_stack_size = UC_BT_CTRL_TASK_STACK_SIZE,                                      \
+                .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                           \
+                .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                      \
+                .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                          \
+                .nonblocking_cmd_buf = UC_BT_CTRL_NONBLOCK_CMD_BUF,                                 \
+                .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                                \
+                .version_num = 0,                                                                   \
+                .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                         \
+                .etm_triggered_rf = UC_BT_CTRL_SLEEP_ETM_TRIGGERED_RF,                              \
+                .magic = BTDM_CONFIG_MAGIC_VALUE,                                                   \
              },                                                                                     \
      }
  #endif // SOC_BT_CLASSIC_SUPPORTED

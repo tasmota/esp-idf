@@ -364,6 +364,7 @@ typedef enum {
     ESP_BLE_AD_TYPE_TRANS_DISC_DATA          = 0x26,    /* relate to BTM_BLE_AD_TYPE_TRANS_DISC_DATA in stack/btm_ble_api.h */
     ESP_BLE_AD_TYPE_LE_SUPPORT_FEATURE       = 0x27,    /* relate to BTM_BLE_AD_TYPE_LE_SUPPORT_FEATURE in stack/btm_ble_api.h */
     ESP_BLE_AD_TYPE_CHAN_MAP_UPDATE          = 0x28,    /* relate to BTM_BLE_AD_TYPE_CHAN_MAP_UPDATE in stack/btm_ble_api.h */
+    ESP_BLE_AD_TYPE_ENC_ADV_DATA             = 0x31,    /* relate to BTM_BLE_AD_TYPE_ENC_ADV_DATA in stack/btm_ble_api.h */
     ESP_BLE_AD_MANUFACTURER_SPECIFIC_TYPE    = 0xFF,    /* relate to BTM_BLE_AD_MANUFACTURER_SPECIFIC_TYPE in stack/btm_ble_api.h */
 } esp_ble_adv_data_type;
 
@@ -3584,7 +3585,10 @@ esp_err_t esp_ble_gap_get_device_name(void);
  *
  *                 This function sets the session key and IV that will be exposed
  *                 through the Key Material characteristic (UUID 0x2B88) in the GAP service.
- *                 The Key Material allows central devices to decrypt encrypted advertising data.
+ *                 A central can read the characteristic over an encrypted GATT link and
+ *                 decrypt Encrypted Advertising Data with esp_ble_ead_decrypt().
+ *                 Enabling this API also requires CONFIG_BT_GATTS_KEY_MATERIAL_CHAR,
+ *                 which selects CONFIG_BT_BLE_FEAT_ENC_ADV_DATA.
  *
  * @param[in]      session_key - 16-byte (128-bit) session key for AES-CCM encryption
  * @param[in]      iv          - 8-byte (64-bit) initialization vector
@@ -3593,6 +3597,7 @@ esp_err_t esp_ble_gap_get_device_name(void);
  *                  - ESP_OK : success
  *                  - other  : failed
  *
+ * @see            esp_ble_ead_encrypt, esp_ble_ead_decrypt
  */
 esp_err_t esp_ble_gap_set_key_material(const uint8_t session_key[16], const uint8_t iv[8]);
 #endif // CONFIG_BT_GATTS_KEY_MATERIAL_CHAR
@@ -3935,6 +3940,52 @@ int esp_ble_get_bond_device_num(void);
 *
 */
 esp_err_t esp_ble_get_bond_device_list(int *dev_num, esp_ble_bond_dev_t *dev_list);
+
+/**
+* @brief           Protect or unprotect a bonded device from automatic eviction
+*                  when the bond list is full.
+*
+*                  `bd_addr` must already be in the BLE bond list (the same
+*                  address reported by `ESP_GAP_BLE_AUTH_CMPL_EVT` or
+*                  `esp_ble_get_bond_device_list()`). Do not pass an unbound
+*                  address: this API will not create a new bond section and
+*                  returns `ESP_FAIL`.
+*
+*                  Excepted devices are never selected by the overflow cleanup
+*                  in NVS (they stay bonded even if they are idle/disconnected).
+*                  `esp_ble_remove_bond_device()` still removes them explicitly.
+*
+*                  The flag is stored on that device's NVS bond record and
+*                  survives reboot. Keep the number of excepted devices
+*                  strictly less than the configured max bond count, otherwise
+*                  a new pairing may have no evictable candidate.
+*
+* @param[in]       bd_addr : BD address of an already bonded peer
+* @param[in]       except  : true to protect, false to clear the protection
+*
+* @return            - ESP_OK : success
+*                    - ESP_ERR_INVALID_ARG : bd_addr is NULL
+*                    - ESP_FAIL : device is not in the BLE bond list, the excepted bond
+*                      count would exceed (max bond count - 1), or storage write failed
+*
+*/
+esp_err_t esp_ble_gap_set_bond_device_except(esp_bd_addr_t bd_addr, bool except);
+
+/**
+* @brief           Query whether a device's bond is protected from overflow eviction.
+*
+*                  This reads a per-device flag on that bond, not a separate except list.
+*                  If the address is not bonded, `*excepted` is set to false.
+*
+* @param[in]       bd_addr  : BD address of the peer
+* @param[out]      excepted : set to true only if this device is bonded and excepted
+*
+* @return            - ESP_OK : success
+*                    - ESP_ERR_INVALID_ARG : bd_addr or excepted is NULL
+*                    - ESP_FAIL : Bluedroid is not enabled
+*
+*/
+esp_err_t esp_ble_gap_is_bond_device_excepted(esp_bd_addr_t bd_addr, bool *excepted);
 
 /**
 * @brief           This function is called to provide the OOB data for

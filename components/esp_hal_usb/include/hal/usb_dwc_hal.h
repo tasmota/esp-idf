@@ -19,6 +19,8 @@ that don't support USB OTG.
 #include "hal/assert.h"
 #endif // SOC_USB_OTG_SUPPORTED
 
+#define USB_DWC_HAL_INIT_HAS_CONFIG (1) // This version of HAL has usb_dwc_hal_init_with_config()
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,6 +54,16 @@ typedef struct {
     uint32_t nptx_fifo_lines;               /**< Size of the Non-periodic FIFO in terms the number of FIFO lines */
     uint32_t ptx_fifo_lines;                /**< Size of the Periodic FIFO in terms the number of FIFO lines */
 } usb_dwc_hal_fifo_config_t;
+
+// USB DWC HAL configuration flags
+#define USB_DWC_HAL_CONFIG_FLAG_FSLS_ONLY (0x01u) // Init a High-Speed capable USB-DWC core as Full/Low-Speed only host
+
+/**
+ * @brief USB DWC HAL configuration structure
+ */
+typedef struct {
+    uint32_t flags;                         /**< USB DWC HAL configuration flags, see USB_DWC_HAL_CONFIG_FLAG_* macros */
+} usb_dwc_hal_config_t;
 
 // --------------------- HAL Events ------------------------
 
@@ -173,16 +185,27 @@ typedef struct {
     // FIFO related
     usb_dwc_hal_fifo_config_t fifo_config;      /**< FIFO sizes configuration */
 
-    // Configuration of the USB-DWC core. Read from read-only HW registers
-    // These constants are cached from HW registers to avoid repeated reads
+    // Constants, do not change after HAL init
     struct {
+        // Configuration of the USB-DWC core
+        // These constants are cached from read-only HW registers to avoid repeated reads
         unsigned chan_num_total;                /**< Total number of channels for this configuration */
         unsigned hsphy_type;                    /**< HS PHY type of this configuration */
         unsigned fifo_size;                     /**< Total FIFO size [in lines] in this configuration */
         unsigned max_size_byte_limit;           /**< Maximum size of a transfer in bytes */
         unsigned max_size_packet_limit;         /**< Maximum size of a transfer in packets */
+
+        // Constant HAL configuration
+        union {
+            struct {
+                uint32_t fsls_only: 1;                  /**< Even if USB Core supports HS, force FS/LS only. Can be configured only during HAL init */
+                uint32_t reserved: 31;
+            };
+            uint32_t val;
+        } flags;
     } constant_config;
 
+    // HAL internal flags. Reset (zeroized) during soft-reset procedure
     union {
         struct {
             uint32_t dbnc_lock_enabled: 1;      /**< Debounce lock enabled */
@@ -207,6 +230,19 @@ typedef struct {
 /**
  * @brief Initialize the HAL context and check if DWC_OTG is alive
  *
+ * Same as `usb_dwc_hal_init()` but accepts configuration structure.
+ *
+ * @attention The user must allocate memory for channel handlers with
+ *            `hal->channels.hdls = malloc(hal->constant_config.chan_num_total * sizeof(usb_dwc_hal_chan_t*))`
+ * @param[inout] hal     Context of the HAL layer
+ * @param[in]    port_id USB port ID
+ * @param[in]    config  USB DWC HAL configuration. Can be NULL.
+ */
+void usb_dwc_hal_init_with_config(usb_dwc_hal_context_t *hal, int port_id, const usb_dwc_hal_config_t *config);
+
+/**
+ * @brief Initialize the HAL context and check if DWC_OTG is alive
+ *
  * Entry:
  * - The peripheral must have been reset and clock un-gated
  * - The USB PHY (internal or external) and associated GPIOs must already be configured
@@ -227,7 +263,10 @@ typedef struct {
  * @param[inout] hal     Context of the HAL layer
  * @param[in]    port_id USB port ID
  */
-void usb_dwc_hal_init(usb_dwc_hal_context_t *hal, int port_id);
+static inline void usb_dwc_hal_init(usb_dwc_hal_context_t *hal, int port_id)
+{
+    usb_dwc_hal_init_with_config(hal, port_id, NULL);
+}
 
 /**
  * @brief Deinitialize the HAL context
@@ -296,19 +335,19 @@ void usb_dwc_hal_get_mps_limits(usb_dwc_hal_context_t *hal, usb_hal_fifo_mps_lim
 /**
  * @brief Get Transfer Size limit
  *
- * There are 2 constraints on the size of a transfer:
- * 1. Maximum transfer size: The maximum total size of data that can be transferred in a single transfer.
- *    This is determined by the width of the transfer size counter in the hardware
- * 2. Maximum packet count: The maximum number of packets that can be transferred in a single transfer.
- *    This is determined by the width of the packet counter in the hardware
+ * In Scatter/Gather DMA mode, a bulk/control transfer is described by a single non-isochronous qTD,
+ * so the transfer size is bounded by the qTD's 17-bit "Total bytes to transfer" field
+ * (0 to 128K-1 bytes). The HCTSIZ register carries no transfer size in this mode (its XferSize/PktCnt
+ * bits are instead NTD/SCHED_INFO), hence the GHWCFG3 transfer/packet counter widths do not apply.
  *
- * The actual maximum transfer size of a transfer is the minimum of (xfer_size, packet_count * MPS), where MPS is the maximum packet size of the endpoint.
+ * The returned value is floored to a whole number of maximum-sized packets, because an IN qTD's byte
+ * count must be programmed as an integer multiple of the endpoint's MPS.
  *
- * @see USB-DWC databook Table 5-26
+ * @see USB-DWC databook Section 5.4.41 (HCTSIZi), USB-DWC programming guide Section 6
  *
  * @param[in] hal Context of the HAL layer
  * @param[in] mps Maximum packet size of the endpoint in bytes
- * @return Maximum transfer size in bytes based on the hardware counters
+ * @return Maximum transfer size in bytes for a single bulk/control transfer
  */
 size_t usb_dwc_hal_get_xfer_size_limit(usb_dwc_hal_context_t *hal, uint16_t mps);
 
@@ -370,14 +409,13 @@ static inline void usb_dwc_hal_port_toggle_power(usb_dwc_hal_context_t *hal, boo
  * @note If the host port is already enabled, then issuing a reset will cause it be disabled and generate a
  *       USB_DWC_HAL_PORT_EVENT_DISABLED event. The host port will not be enabled until the reset signal is released (thus
  *       generating the USB_DWC_HAL_PORT_EVENT_ENABLED event)
+ * @note If this port is HS an it is configured for FS/LS operation only, HCFG.fslssupp will be set
+ *       so the host port does not respond to device's HS chirp.
  *
  * @param hal Context of the HAL layer
  * @param enable Enable/disable reset signal
  */
-static inline void usb_dwc_hal_port_toggle_reset(usb_dwc_hal_context_t *hal, bool enable)
-{
-    usb_dwc_ll_hprt_set_port_reset(hal->dev, enable);
-}
+void usb_dwc_hal_port_toggle_reset(usb_dwc_hal_context_t *hal, bool enable);
 
 /**
  * @brief Enable the host port

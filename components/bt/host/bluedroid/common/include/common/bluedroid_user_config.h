@@ -166,13 +166,11 @@
 #define UC_BT_CLASSIC_BQB_ENABLED           FALSE
 #endif
 
-//Set Encryption Key Size(BT)
-#ifdef CONFIG_BT_ENC_KEY_SIZE_CTRL_STD
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   1
-#elif CONFIG_BT_ENC_KEY_SIZE_CTRL_VSC
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   2
+// Vendor-specific HCI for Classic Bluetooth encryption key size
+#ifdef CONFIG_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC
+#define UC_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC             CONFIG_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC
 #else
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   0
+#define UC_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC             FALSE
 #endif
 
 //Enable Classic Bluetooth power control vsc
@@ -805,11 +803,18 @@
 #define UC_BT_HFP_AUDIO_DATA_PATH_HCI           FALSE
 #endif
 
-//Wide Band Speech
+//Wideband Speech
 #ifdef CONFIG_BT_HFP_WBS_ENABLE
 #define UC_BT_HFP_WBS_ENABLE                    CONFIG_BT_HFP_WBS_ENABLE
 #else
 #define UC_BT_HFP_WBS_ENABLE                    FALSE
+#endif
+
+//Super Wideband Speech (LC3-SWB)
+#ifdef CONFIG_BT_HFP_LC3_ENABLE
+#define UC_BT_HFP_LC3_ENABLE                    CONFIG_BT_HFP_LC3_ENABLE
+#else
+#define UC_BT_HFP_LC3_ENABLE                    FALSE
 #endif
 
 /**********************************************************

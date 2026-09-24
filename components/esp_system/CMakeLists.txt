@@ -12,7 +12,7 @@ if(${target} STREQUAL "linux")
                         "freertos_hooks.c"
                         "startup.c"
                         INCLUDE_DIRS "include"
-                        PRIV_REQUIRES spi_flash)
+                        PRIV_REQUIRES esp_mspi)
 
     # Add custom ld file (used to place system init functions).
     # Mach-O (Apple) does not support linker scripts; section bounds are resolved
@@ -39,10 +39,10 @@ if(BOOTLOADER_BUILD OR esp_tee_build)
     if(esp_tee_build)
         list(APPEND include_dirs "port/include/private")
     endif()
-    # "_esp_error_check_failed()" requires spi_flash module
+    # "_esp_error_check_failed()" requires esp_mspi module
     # Bootloader relies on some Kconfig options defined in esp_system.
     idf_component_register(SRCS "${srcs}" INCLUDE_DIRS "${include_dirs}"
-                           REQUIRES spi_flash)
+                           PRIV_REQUIRES esp_mspi)
 else()
     list(APPEND srcs "crosscore_int.c"
             "esp_ipc.c"
@@ -96,16 +96,31 @@ else()
         list(APPEND srcs "debug_assist.c")
     endif()
 
+    set(priv_requires esp_mspi esp_timer esp_mm
+                      esp_hal_clock esp_hal_mspi esp_hal_wdt esp_hal_debug_assist
+                      esp_hal_uart esp_hal_dma esp_hal_security
+                      # [refactor-todo] requirements due to init code,
+                      # should be removable once using component init functions
+                      # link-time registration is used.
+                      bootloader_support esp_pm)
+
+    if(NOT IDF_BUILD_V2)
+        # panic.c only calls into the ROM CDC console under CONFIG_ESP_CONSOLE_USB_CDC,
+        # but requirements are resolved before Kconfig here, so the dependency has to
+        # be unconditional. Under v2 it is added below based on the config value.
+        list(APPEND priv_requires esp_usb_cdc_rom_console)
+    endif()
+
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS include
-                        PRIV_REQUIRES spi_flash esp_timer esp_mm
-                                      esp_hal_clock esp_hal_mspi esp_hal_wdt esp_hal_debug_assist
-                                      esp_hal_uart esp_hal_dma esp_hal_security
-                                      # [refactor-todo] requirements due to init code,
-                                      # should be removable once using component init functions
-                                      # link-time registration is used.
-                                      bootloader_support esp_pm esp_usb_cdc_rom_console
+                        PRIV_REQUIRES ${priv_requires}
                         LDFRAGMENTS "linker.lf" "app.lf")
+
+    if(IDF_BUILD_V2 AND CONFIG_ESP_CONSOLE_USB_CDC)
+        idf_component_include(esp_usb_cdc_rom_console)
+        target_link_libraries(${COMPONENT_LIB} PRIVATE idf::esp_usb_cdc_rom_console)
+    endif()
+
     add_subdirectory(port)
 
     # After system initialization, `start_app` (and its other cores variant) is called.
@@ -182,6 +197,11 @@ if(CONFIG_COMPILER_KASAN)
 endif()
 
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_system_include_startup_funcs")
+
+if(CONFIG_ESP_INT_WDT)
+    # Pull in the PRE_SCHEDULER registrations from int_wdt.c.
+    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_int_wdt_init")
+endif()
 
 # [refactor-todo] requirements due to init code, should be removable
 # once link-time registration of component init functions is used.

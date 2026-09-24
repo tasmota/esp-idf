@@ -258,6 +258,7 @@ typedef struct {
                                                             Please note that the 'channel' parameter above needs to be set to 0 to allow scanning by bitmap.
                                                             Also, note that only allowed channels configured by wifi_country_t can be scanned. */
     bool coex_background_scan;                         /**< Enable it to scan return home channel under coexist */
+    uint8_t max_scan_ap_num;                           /**< Max AP records to keep during the scan, sorted by RSSI. 0 means no limit. */
 } wifi_scan_config_t;
 
 /**
@@ -834,7 +835,7 @@ typedef struct {
     wifi_action_tx_t type;      /**< ACTION TX operation type */
     uint8_t channel;            /**< Channel on which to perform ACTION TX Operation */
     wifi_second_chan_t sec_channel;    /**< Secondary channel */
-    uint32_t wait_time_ms;      /**< Duration to wait for on target channel */
+    uint32_t wait_time_ms;      /**< Duration to wait for on target channel (must be greater than 0) */
     bool no_ack;                /**< Indicates no ack required */
     wifi_action_rx_cb_t rx_cb;  /**< Rx Callback to receive action frames */
     uint8_t op_id;              /**< Unique Identifier for operation provided by wifi driver */
@@ -870,7 +871,7 @@ typedef struct {
     wifi_roc_t type;                   /**< ROC operation type */
     uint8_t channel;                   /**< Channel on which to perform ROC Operation */
     wifi_second_chan_t sec_channel;    /**< Secondary channel */
-    uint32_t wait_time_ms;             /**< Duration to wait for on target channel */
+    uint32_t wait_time_ms;             /**< Duration to wait for on target channel (must be greater than 0 for WIFI_ROC_REQ only) */
     wifi_action_rx_cb_t rx_cb;         /**< Rx Callback to receive action mgmt frames */
     uint8_t op_id;                     /**< ID of this specific ROC operation provided by wifi driver */
     wifi_action_roc_done_cb_t done_cb; /**< Callback to function that will be called upon ROC done. If assigned, WIFI_EVENT_ROC_DONE event will not be posted */

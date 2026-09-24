@@ -38,7 +38,7 @@
 #include "esp_secure_boot.h"
 #include "esp_flash_encrypt.h"
 #include "esp_flash_partitions.h"
-#include "bootloader_flash_priv.h"
+#include "esp_private/bootloader_flash_internal.h"
 #include "bootloader_random.h"
 #include "bootloader_config.h"
 #include "bootloader_common.h"
@@ -390,7 +390,7 @@ int bootloader_utility_get_selected_boot_partition(const bootloader_state_t *bs)
     ESP_LOGD(TAG, "otadata[0]: sequence values 0x%08"PRIx32, otadata[0].ota_seq);
     ESP_LOGD(TAG, "otadata[1]: sequence values 0x%08"PRIx32, otadata[1].ota_seq);
 
-#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK
     bool write_encrypted = esp_efuse_is_flash_encryption_enabled();
     for (int i = 0; i < 2; ++i) {
         if (otadata[i].ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
@@ -440,13 +440,13 @@ int bootloader_utility_get_selected_boot_partition(const bootloader_state_t *bs)
             uint32_t ota_seq = otadata[active_otadata].ota_seq - 1; // Raw OTA sequence number. May be more than # of OTA slots
             boot_index = ota_seq % bs->app_count; // Actual OTA partition selection
             ESP_LOGD(TAG, "Mapping seq %"PRIu32" -> OTA slot %d", ota_seq, boot_index);
-#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK
             if (otadata[active_otadata].ota_state == ESP_OTA_IMG_NEW) {
                 ESP_LOGD(TAG, "otadata[%d] is selected as new and marked PENDING_VERIFY state", active_otadata);
                 otadata[active_otadata].ota_state = ESP_OTA_IMG_PENDING_VERIFY;
                 write_otadata(&otadata[active_otadata], bs->ota_info.offset + FLASH_SECTOR_SIZE * active_otadata, write_encrypted);
             }
-#endif // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+#endif // CONFIG_BOOTLOADER_APP_ROLLBACK
 
 #ifdef CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
             if (otadata[active_otadata].ota_state == ESP_OTA_IMG_VALID) {
@@ -1067,12 +1067,12 @@ static void set_cache_and_start_app(
     //The addr is aligned, so we add the mask off length to the size, to make sure the corresponding buses are enabled.
     drom_size = (drom_load_addr - drom_load_addr_aligned) + drom_size;
 #if CONFIG_IDF_TARGET_ESP32
-    uint32_t drom_page_count = (drom_size + SPI_FLASH_MMU_PAGE_SIZE - 1) / SPI_FLASH_MMU_PAGE_SIZE;
+    uint32_t drom_page_count = (drom_size + CONFIG_MMU_PAGE_SIZE - 1) / CONFIG_MMU_PAGE_SIZE;
     rc = cache_flash_mmu_set(0, 0, drom_load_addr_aligned, drom_addr_aligned, 64, drom_page_count);
     ESP_EARLY_LOGV(TAG, "rc=%d", rc);
     rc = cache_flash_mmu_set(1, 0, drom_load_addr_aligned, drom_addr_aligned, 64, drom_page_count);
     ESP_EARLY_LOGV(TAG, "rc=%d", rc);
-    ESP_EARLY_LOGV(TAG, "after mapping rodata, starting from paddr=0x%08" PRIx32 " and vaddr=0x%08" PRIx32 ", 0x%" PRIx32 " bytes are mapped", drom_addr_aligned, drom_load_addr_aligned, drom_page_count * SPI_FLASH_MMU_PAGE_SIZE);
+    ESP_EARLY_LOGV(TAG, "after mapping rodata, starting from paddr=0x%08" PRIx32 " and vaddr=0x%08" PRIx32 ", 0x%" PRIx32 " bytes are mapped", drom_addr_aligned, drom_load_addr_aligned, drom_page_count * CONFIG_MMU_PAGE_SIZE);
 #else
     uint32_t actual_mapped_len = 0;
     if (s_flash_seg_needs_map(drom_load_addr_aligned)) {
@@ -1091,12 +1091,12 @@ static void set_cache_and_start_app(
     //The addr is aligned, so we add the mask off length to the size, to make sure the corresponding buses are enabled.
     irom_size = (irom_load_addr - irom_load_addr_aligned) + irom_size;
 #if CONFIG_IDF_TARGET_ESP32
-    uint32_t irom_page_count = (irom_size + SPI_FLASH_MMU_PAGE_SIZE - 1) / SPI_FLASH_MMU_PAGE_SIZE;
+    uint32_t irom_page_count = (irom_size + CONFIG_MMU_PAGE_SIZE - 1) / CONFIG_MMU_PAGE_SIZE;
     rc = cache_flash_mmu_set(0, 0, irom_load_addr_aligned, irom_addr_aligned, 64, irom_page_count);
     ESP_EARLY_LOGV(TAG, "rc=%d", rc);
     rc = cache_flash_mmu_set(1, 0, irom_load_addr_aligned, irom_addr_aligned, 64, irom_page_count);
     ESP_LOGV(TAG, "rc=%d", rc);
-    ESP_EARLY_LOGV(TAG, "after mapping text, starting from paddr=0x%08" PRIx32 " and vaddr=0x%08" PRIx32 ", 0x%" PRIx32 " bytes are mapped", irom_addr_aligned, irom_load_addr_aligned, irom_page_count * SPI_FLASH_MMU_PAGE_SIZE);
+    ESP_EARLY_LOGV(TAG, "after mapping text, starting from paddr=0x%08" PRIx32 " and vaddr=0x%08" PRIx32 ", 0x%" PRIx32 " bytes are mapped", irom_addr_aligned, irom_load_addr_aligned, irom_page_count * CONFIG_MMU_PAGE_SIZE);
 #else
     if (s_flash_seg_needs_map(irom_load_addr_aligned)) {
         mmu_hal_map_region(0, MMU_TARGET_FLASH0, irom_load_addr_aligned, irom_addr_aligned, irom_size, &actual_mapped_len);

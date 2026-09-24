@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "btdm_user_cfg.h"
 #if UC_BT_CTRL_BLE_IS_ENABLE
 #include "ble_user_cfg.h"
@@ -111,6 +112,7 @@ extern int brk_sym_pawrBcast_02YCihGkfXcpLt0zh1uM(void *param);
 extern int brk_sym_pawrBcast_0PNup0d8oI1288mfULNW(void *param);
 extern int brk_sym_pawrBcast_0Wq1DOQE0eOWEGV2grxM(void *param);
 extern int brk_sym_pawrBcast_1y9l4P0a3qWUSydU3cDY(void *param);
+extern int brk_sym_pawrBcast_3Fe1AkLrn3EG25GkGfL4(void *param);
 extern int brk_sym_pawrBcast_7jK56jlcfafMtoQgLg6t(void *param);
 extern int brk_sym_pawrBcast_7qGF1F9weQ363Ml7Gj0n(void *param);
 extern int brk_sym_pawrBcast_JHmbFJCpV155hIYyDVQ8(void *param);
@@ -122,6 +124,7 @@ extern int brk_sym_pawrBcast_SB1LBCzybPoDd0XYyLM8(void *param);
 extern int brk_sym_pawrBcast_WNd7Y6n56cZrTlhBjFRU(void *param);
 extern int brk_sym_pawrBcast_eBH7HrPT8y2Fj9382el3(void *param);
 extern int brk_sym_pawrBcast_g6t1IjxRbcv5GUq1uXIA(void *param);
+extern int brk_sym_pawrBcast_ivWxQ61JhFEBhkuxoZhM(void *param);
 extern int brk_sym_pawrBcast_lk2Wpy4u04ukjtC7Ijcb(void *param);
 extern int brk_sym_pawrBcast_on08yxBjym4I0iV3tlPo(void *param);
 extern int brk_sym_pawrBcast_sSbQFGKMJszbA895ddLO(void *param);
@@ -236,6 +239,7 @@ extern int btdm_common_sched_bredr_on_sched_hw_list_done(void *param);
 extern int hci_tl_bredr_on_rx_cmd_c2h_num_pkt(void *param);
 extern int hci_tl_bredr_on_rx_cmd_set_c2h_flow_ctrl(void *param);
 extern int odm_afh_on_coex_wifi_channel_change(void *param);
+extern int olc_acl_on_coex_schm_update(void *param);
 extern int olc_intc_on_hal_exit_isr(void *param);
 extern int olc_sleep_on_sched_actual_time_get(void *param);
 extern int olc_sleep_on_sched_get_earlist_ticks(void *param);
@@ -290,6 +294,12 @@ const void * const _adv_linear_broker_flash[] = BTDM_BROKER_NODE_DEF_FLASH(
           ),
     [13] = BTDM_BROKER_ENTRY_DEF_FLASH(
               brk_sym_pawrBcast_WNd7Y6n56cZrTlhBjFRU,
+          ),
+    [14] = BTDM_BROKER_ENTRY_DEF_FLASH(
+              brk_sym_pawrBcast_3Fe1AkLrn3EG25GkGfL4,
+          ),
+    [15] = BTDM_BROKER_ENTRY_DEF_FLASH(
+              brk_sym_pawrBcast_ivWxQ61JhFEBhkuxoZhM,
           ),
 #endif /* UC_BLE_CTRL_PAWR_BCAST_SUPPORTED */
 );
@@ -397,11 +407,14 @@ const void * const _base_linear_broker_flash[] = BTDM_BROKER_NODE_DEF_FLASH(
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 
 const void * const _btdm_coex_linear_broker_flash[] = BTDM_BROKER_NODE_DEF_FLASH(
-#if UC_BT_CTRL_BLE_IS_ENABLE
     [1] = BTDM_BROKER_ENTRY_DEF_FLASH(
+#if UC_BT_CTRL_BLE_IS_ENABLE
               brk_sym_coexHook_WcEp3uxRHd6HYgB0pn0L,
-          ),
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+              olc_acl_on_coex_schm_update,
+#endif /* UC_BT_CTRL_BR_EDR_IS_ENABLE */
+          ),
     [2] = BTDM_BROKER_ENTRY_DEF_FLASH(
 #if UC_BT_CTRL_BLE_IS_ENABLE
               brk_sym_coexHook_wiWNhAUWlHyTZ7Z5ZC5Z,
@@ -837,70 +850,77 @@ int
 btdm_broker_init(void)
 {
 #if UC_BT_CTRL_BLE_IS_ENABLE
-    if (r_btdm_broker_linear_selfcheck(_adv_linear_broker_flash, false)) {
+    extern const char *ble_controller_get_compile_version(void);
+    if (memcmp(ble_controller_get_compile_version(), "42d079e", 7) != 0) {
         return -1;
     }
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 
 #if UC_BT_CTRL_BLE_IS_ENABLE
-    if (r_btdm_broker_linear_selfcheck(_base_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_adv_linear_broker_flash, false)) {
         return -2;
     }
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_coex_linear_broker_flash, false)) {
+#if UC_BT_CTRL_BLE_IS_ENABLE
+    if (r_btdm_broker_linear_selfcheck(_base_linear_broker_flash, false)) {
         return -3;
     }
+#endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_hal_linear_broker_ram, true)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_coex_linear_broker_flash, false)) {
         return -4;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_hci_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_hal_linear_broker_ram, true)) {
         return -5;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_sched_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_hci_linear_broker_flash, false)) {
         return -6;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_sched_linear_broker_ram, true)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_sched_linear_broker_flash, false)) {
         return -7;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_sleep_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_sched_linear_broker_ram, true)) {
         return -8;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_sleep_linear_broker_ram, true)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_sleep_linear_broker_flash, false)) {
         return -9;
     }
 
-    if (r_btdm_broker_linear_selfcheck(_btdm_task_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_btdm_sleep_linear_broker_ram, true)) {
         return -10;
+    }
+
+    if (r_btdm_broker_linear_selfcheck(_btdm_task_linear_broker_flash, false)) {
+        return -11;
     }
 
 #if UC_BT_CTRL_BLE_IS_ENABLE && UC_BLE_CTRL_CONN_ENABLED
     if (r_btdm_broker_linear_selfcheck(_conn_linear_broker_flash, false)) {
-        return -11;
+        return -12;
     }
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE && UC_BLE_CTRL_CONN_ENABLED */
 
 #if UC_BT_CTRL_BLE_IS_ENABLE
     if (r_btdm_broker_linear_selfcheck(_nrtIsr_linear_broker_flash, false)) {
-        return -12;
-    }
-#endif /* UC_BT_CTRL_BLE_IS_ENABLE */
-
-#if UC_BT_CTRL_BLE_IS_ENABLE
-    if (r_btdm_broker_linear_selfcheck(_perAdv_linear_broker_flash, false)) {
         return -13;
     }
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 
 #if UC_BT_CTRL_BLE_IS_ENABLE
-    if (r_btdm_broker_linear_selfcheck(_sync_linear_broker_flash, false)) {
+    if (r_btdm_broker_linear_selfcheck(_perAdv_linear_broker_flash, false)) {
         return -14;
+    }
+#endif /* UC_BT_CTRL_BLE_IS_ENABLE */
+
+#if UC_BT_CTRL_BLE_IS_ENABLE
+    if (r_btdm_broker_linear_selfcheck(_sync_linear_broker_flash, false)) {
+        return -15;
     }
 #endif /* UC_BT_CTRL_BLE_IS_ENABLE */
 

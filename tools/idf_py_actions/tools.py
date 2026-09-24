@@ -137,31 +137,90 @@ def idf_version() -> str | None:
     return version
 
 
-def get_default_serial_port() -> Any:
+def get_default_esp(target: str | None = None) -> Any:
+    """
+    Detect a connected Espressif device.
+
+    If the target is not given, it is taken from the build context, which is empty unless ensure_build_directory() was
+    called. Without a known target any Espressif device is accepted.
+    """
     # Import is done here in order to move it after the check_environment()
     # ensured that pyserial has been installed
     try:
         import esptool
 
+        target = target or get_build_context().get('proj_desc', {}).get('target')
+
         ports = esptool.get_port_list()
         # high baud rate could cause the failure of creation of the connection
         esp = esptool.get_default_connected_device(
-            serial_list=ports, port=None, connect_attempts=4, initial_baud=115200
+            serial_list=ports,
+            port=None,
+            connect_attempts=4,
+            initial_baud=115200,
+            chip=target or 'auto',
         )
         if esp is None:
+            device = f'{target} device' if target else 'serial port'
             raise NoSerialPortFoundError(
-                "No serial ports found. Connect a device, or use '-p PORT' option to set a specific port."
+                f"No {device} found. Connect a device, or use '-p PORT' option to set a specific port."
             )
 
-        serial_port = esp.serial_port
         esp._port.close()
 
-        return serial_port
+        return esp
 
     except NoSerialPortFoundError:
         raise
     except Exception as e:
         raise FatalError(f'An exception occurred during detection of the serial port: {e}')
+
+
+def get_default_serial_port(target: str | None = None) -> Any:
+    """
+    Detect a serial port with a connected device.
+
+    Ports with a device not matching the target are skipped. If the target is not given,
+    it is taken from the build context, which is empty unless ensure_build_directory() was
+    called. Without a known target any Espressif device is accepted.
+    """
+    return get_default_esp(target).serial_port
+
+
+def get_selected_target(args: 'PropertyDict') -> str | None:
+    """
+    Return the target name if a project target has been explicitly selected instead of
+    relying on the implicit default target (esp32). Return None otherwise.
+
+    The target may come from the IDF_TARGET environment variable, a -DIDF_TARGET command
+    line define, the project sdkconfig, a sdkconfig.defaults file, or the CMakeCache.txt
+    from a previous build (mirroring how CMake guesses the target). This has to be
+    evaluated before the project is (re)configured, because configuration generates a
+    sdkconfig pinned to the (possibly default) target.
+    """
+    cache_cmdl = _parse_cmdl_cmakecache(args.define_cache_entry)
+
+    target = (
+        os.environ.get('IDF_TARGET')
+        or cache_cmdl.get('IDF_TARGET')
+        or get_sdkconfig_value(get_sdkconfig_filename(args, cache_cmdl), 'CONFIG_IDF_TARGET')
+    )
+    if target:
+        return target
+
+    sdkconfig_defaults = cache_cmdl.get('SDKCONFIG_DEFAULTS') or os.environ.get('SDKCONFIG_DEFAULTS')
+    default_files = sdkconfig_defaults.split(';') if sdkconfig_defaults else ['sdkconfig.defaults']
+    for default_file in default_files:
+        default_file = os.path.join(args.project_dir, default_file)
+        target = get_sdkconfig_value(default_file, 'CONFIG_IDF_TARGET')
+        if target:
+            return target
+
+    cache_path = os.path.join(args.build_dir, 'CMakeCache.txt')
+    if os.path.exists(cache_path):
+        return _parse_cmakecache(cache_path).get('IDF_TARGET')
+
+    return None
 
 
 def debug_print_idf_version() -> None:
@@ -356,6 +415,7 @@ class RunTool:
         interactive: bool = False,
         convert_output: bool = False,
         buffer_size: int | None = None,
+        stdin: Any = None,
     ) -> None:
         self.tool_name = tool_name
         self.args = args
@@ -369,6 +429,8 @@ class RunTool:
         self.interactive = interactive
         self.convert_output = convert_output
         self.buffer_size = buffer_size or 256
+        # None inherits the parent's stdin; otherwise a file object or subprocess.DEVNULL
+        self.stdin = stdin
 
     def __call__(self) -> None:
         def quote_arg(arg: str) -> str:
@@ -405,7 +467,7 @@ class RunTool:
         if self.hints:
             process, stderr_output_file, stdout_output_file = asyncio.run(self.run_command(self.args, env_copy))
         else:
-            process = subprocess.run(self.args, env=env_copy, cwd=self.cwd)
+            process = subprocess.run(self.args, env=env_copy, cwd=self.cwd, stdin=self.stdin)
             stderr_output_file, stdout_output_file = None, None
         if process.returncode == 0:
             return
@@ -431,7 +493,7 @@ class RunTool:
         and of the command, the id of the process, paths to captured output"""
         log_dir_name = 'log'
         try:
-            os.mkdir(os.path.join(self.build_dir, log_dir_name))
+            os.makedirs(os.path.join(self.build_dir, log_dir_name), exist_ok=True)
         except FileExistsError:
             pass
         # Note: we explicitly pass in os.environ here, as we may have set IDF_PATH there during startup
@@ -442,6 +504,7 @@ class RunTool:
                 env=env_copy,
                 limit=1024 * self.buffer_size,
                 cwd=self.cwd,
+                stdin=self.stdin,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -472,7 +535,8 @@ class RunTool:
                 # the even loop is closed and we get RuntimeError: Event loop is closed
                 # in the transport __del__ function because it's trying to use the closed
                 # even loop.
-                log.err(f'\n{self.tool_name} process terminated')
+                log.print('\n')
+                log.err(f'{self.tool_name} process terminated')
         await p.wait()  # added for avoiding None returncode
         return p, stderr_output_file, stdout_output_file
 

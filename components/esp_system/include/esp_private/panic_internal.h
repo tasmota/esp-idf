@@ -90,6 +90,10 @@ void panic_prepare_frame_from_ctx(void* frame);
 
 void panic_clear_active_interrupts(const void* frame);
 
+#if CONFIG_ESP_SYSTEM_MEMPROT && CONFIG_ESP_SYSTEM_MEMPROT_PMS && !CONFIG_IDF_TARGET_ESP32S2
+bool panic_memprot_fill_info(panic_info_t *info);
+#endif
+
 /**
  * @brief Disable all watchdog timers
  *
@@ -98,6 +102,11 @@ void panic_clear_active_interrupts(const void* frame);
  * or that halt the system.
  */
 void panic_disable_all_wdts(void);
+
+/**
+ * @brief Stop instruction trace encoders on panic
+ */
+void esp_panic_handler_inst_trace_stop(void) __attribute__((weak));
 
 #ifdef __cplusplus
 }

@@ -141,31 +141,39 @@ static esp_err_t ws_post_handshake_cb(httpd_req_t *req)
 
 #ifdef CONFIG_EXAMPLE_ENABLE_WS_CONTROL_FRAME_HANDLER
 /*
- * Dedicated control-frame handler: observes PING/PONG/CLOSE frames without
- * receiving them in the data handler. The frame is read-only and owned by the
- * server, which sends the protocol reply (PONG for PING, CLOSE for CLOSE)
- * itself after this handler returns.
+ * Dedicated control-frame handler: keeps PING/PONG/CLOSE out of the data handler
+ * below, which therefore only deals with TEXT/BINARY frames.
+ *
+ * The server has already received the frame body (no allocation needed here) but
+ * does not reply, so this handler owns the protocol reply: a PONG echoing the
+ * payload for a PING, an empty CLOSE for a CLOSE, nothing for a PONG. The frame
+ * is owned by the server and is reused in place for the reply; it must not be
+ * freed, retained, or grown past the received length.
  *
  * Type "Ping" in the client to see the full heartbeat round trip: the server
  * sends a PING and the client's PONG response lands here.
  */
-static esp_err_t ws_control_frame_handler(httpd_req_t *req, const httpd_ws_frame_t *frame)
+static esp_err_t ws_control_frame_handler(httpd_req_t *req, httpd_ws_frame_t *frame)
 {
     switch (frame->type) {
     case HTTPD_WS_TYPE_PING:
-        ESP_LOGI(TAG, "Control frame: PING (len %d), server replies PONG", frame->len);
-        break;
+        ESP_LOGI(TAG, "Control frame: PING (len %d), replying PONG", frame->len);
+        frame->type = HTTPD_WS_TYPE_PONG;
+        return httpd_ws_send_frame(req, frame);
     case HTTPD_WS_TYPE_PONG:
+        /* Reply to our own PING; nothing to send back (RFC 6455, section 5.5.3) */
         ESP_LOGI(TAG, "Control frame: PONG, heartbeat alive");
-        break;
+        return ESP_OK;
     case HTTPD_WS_TYPE_CLOSE:
-        ESP_LOGI(TAG, "Control frame: CLOSE (len %d), server replies CLOSE", frame->len);
-        break;
+        ESP_LOGI(TAG, "Control frame: CLOSE (len %d), replying CLOSE", frame->len);
+        frame->len = 0;
+        frame->payload = NULL;
+        return httpd_ws_send_frame(req, frame);
     default:
-        ESP_LOGI(TAG, "Control frame: type %d", frame->type);
-        break;
+        /* Reserved control opcode: fail the connection (RFC 6455, section 5.2) */
+        ESP_LOGW(TAG, "Control frame: reserved opcode %d, closing connection", frame->type);
+        return ESP_FAIL;
     }
-    return ESP_OK;
 }
 #endif /* CONFIG_EXAMPLE_ENABLE_WS_CONTROL_FRAME_HANDLER */
 
@@ -215,9 +223,11 @@ static esp_err_t echo_handler(httpd_req_t *req)
         }
     }
 
-    ret = httpd_ws_send_frame(req, &ws_pkt);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT || ws_pkt.type == HTTPD_WS_TYPE_BINARY) {
+        ret = httpd_ws_send_frame(req, &ws_pkt);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+        }
     }
     free(buf);
     return ret;
@@ -310,8 +320,8 @@ static const httpd_uri_t ws = {
         .user_ctx   = NULL,
         .is_websocket = true,
 #ifdef CONFIG_EXAMPLE_ENABLE_WS_CONTROL_FRAME_HANDLER
-        /* Route control frames to the dedicated handler; the server still
-         * sends the protocol replies itself. */
+        /* Route control frames to the dedicated handler, which owns the
+         * protocol replies; echo_handler() then only sees data frames. */
         .handle_ws_control_frames = true,
         .ws_control_handler = ws_control_frame_handler,
 #endif /* CONFIG_EXAMPLE_ENABLE_WS_CONTROL_FRAME_HANDLER */

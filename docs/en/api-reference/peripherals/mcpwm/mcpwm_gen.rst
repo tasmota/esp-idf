@@ -206,7 +206,7 @@ Create two generators in one operator. Feed generator A into its own output with
 
 .. note::
 
-    Here, generator A is the first generator allocated from the operator handle, and generator B is the second.
+    Generator A is the first generator allocated from the operator handle, and generator B is the second.
 
 .. code-block:: c
 
@@ -229,13 +229,24 @@ Understanding the routing and parameters
 
 :func:`mcpwm_generator_set_dead_time(in_generator, out_generator, config) <mcpwm_generator_set_dead_time>` treats dead time as a small signal-processing stage. Passing the same generator for both handles changes that output in place. Passing ``gen_a`` as input and ``gen_b`` as output derives B from A, which is how the complementary example shares one PWM source.
 
-:cpp:member:`posedge_delay_ticks <mcpwm_dead_time_config_t::posedge_delay_ticks>` delays a rising edge and :cpp:member:`negedge_delay_ticks <mcpwm_dead_time_config_t::negedge_delay_ticks>` delays a falling edge. Ticks use the connected timer's resolution, so a 2-tick setting at 10 MHz is 200 ns. The diagram below shows the basic effect: the rising edge of ``pwm_A`` is delayed (RED) and the falling edge of ``pwm_B`` is delayed (FED) relative to the original signal. Start with the maximum turn-off delay from the switch and gate-driver data sheets plus margin; then measure at the transistor gates and reduce it only after confirming that process, temperature, and layout still leave enough margin. Set both delays to zero to bypass the dead-time stage. :cpp:member:`invert_output <mcpwm_dead_time_config_t::flags::invert_output>` changes polarity after that stage.
+:cpp:member:`posedge_delay_ticks <mcpwm_dead_time_config_t::posedge_delay_ticks>` delays a rising edge and :cpp:member:`negedge_delay_ticks <mcpwm_dead_time_config_t::negedge_delay_ticks>` delays a falling edge. Ticks use the connected timer's resolution, so a 2-tick setting at 10 MHz is 200 ns. The diagram below shows the basic effect: the rising edge of ``pwm_A`` is delayed by ``RED`` (Rising Edge Delay) ticks, and the falling edge of ``pwm_B`` is delayed by ``FED`` (Falling Edge Delay) ticks. Start with the maximum turn-off delay from the switch and gate-driver data sheets plus margin; then measure at the transistor gates and reduce it only after confirming that process, temperature, and layout still leave enough margin. Set both delays to zero to bypass the dead-time stage. :cpp:member:`invert_output <mcpwm_dead_time_config_t::flags::invert_output>` changes polarity after that stage.
 
 .. figure:: /../_static/mcpwm/deadtime_active_high.svg
     :align: center
     :alt: Basic dead-time effect: rising edge delayed (RED) and falling edge delayed (FED) relative to the original.
 
     Basic dead-time effect: rising edge delayed (RED) and falling edge delayed (FED) relative to the original.
+
+.. important::
+
+    Because of the topology of the rising-edge and falling-edge delay resources, it is recommended to call :cpp:func:`mcpwm_generator_set_dead_time` once for each generator to declare the intended routing. Even when only one generator needs a delay, call :cpp:func:`mcpwm_generator_set_dead_time` on the other generator with a zero-delay configuration to avoid unexpectedly affecting the other path, for example:
+
+    .. code-block:: c
+
+        mcpwm_dead_time_config_t dead_time = { .negedge_delay_ticks = 2 };
+        ESP_ERROR_CHECK(mcpwm_generator_set_dead_time(gen_a, gen_a, &dead_time));
+        dead_time.negedge_delay_ticks = 0;
+        ESP_ERROR_CHECK(mcpwm_generator_set_dead_time(gen_b, gen_b, &dead_time));
 
 Resource limits per operator
 ----------------------------
@@ -262,7 +273,7 @@ The complementary configuration above is the usual half-bridge starting point. S
 
     Active-low complementary outputs. The timing resources are the same; only the post-dead-time polarity changes.
 
-Dead time is also useful when only one channel needs an edge delay. Keep one output bypassed by passing a zero-delay configuration, and apply the available delay to the other:
+Dead time is also useful when only one channel needs an edge delay. Pass a zero-delay configuration to one output to bypass it, then apply the available delay to the other output:
 
 .. figure:: /../_static/mcpwm/deadtime_reda_bypassb.svg
     :align: center

@@ -11,6 +11,7 @@
 #define MIPI_DSI_DEFAULT_TIMEOUT_CLOCK_FREQ_MHZ 10
 // TxClkEsc frequency must be configured between 2 and 20 MHz
 #define MIPI_DSI_DEFAULT_ESCAPE_CLOCK_FREQ_MHZ  18
+#define MIPI_DSI_DEFAULT_HOST_LP_RX_TIMEOUT_COUNT     0x7FFF
 
 esp_err_t esp_lcd_new_dsi_bus(const esp_lcd_dsi_bus_config_t *bus_config, esp_lcd_dsi_bus_handle_t *ret_bus)
 {
@@ -48,11 +49,11 @@ esp_err_t esp_lcd_new_dsi_bus(const esp_lcd_dsi_bus_config_t *bus_config, esp_lc
         phy_clk_src = MIPI_DSI_PHY_PLLREF_CLK_SRC_DEFAULT;
 #endif
     }
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)phy_clk_src, true), err, TAG, "clock source enable failed");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)phy_clk_src), err, TAG, "clock source enable failed");
     dsi_bus->phy_pllref_clk_src = (soc_module_clk_t)phy_clk_src;
 
     // always use the default clock source for the DSI PHY configuration
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)MIPI_DSI_PHY_CFG_CLK_SRC_DEFAULT, true), err, TAG, "clock source enable failed");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)MIPI_DSI_PHY_CFG_CLK_SRC_DEFAULT), err, TAG, "clock source enable failed");
     dsi_bus->phy_cfg_clk_src = (soc_module_clk_t)MIPI_DSI_PHY_CFG_CLK_SRC_DEFAULT;
 
     // enable the clock source for DSI PHY
@@ -122,9 +123,11 @@ esp_err_t esp_lcd_new_dsi_bus(const esp_lcd_dsi_bus_config_t *bus_config, esp_lc
     mipi_dsi_host_ll_set_timeout_clock_division(hal->host, (uint32_t)roundf(bus_config->lane_bit_rate_mbps / 8.0f / MIPI_DSI_DEFAULT_TIMEOUT_CLOCK_FREQ_MHZ));
     // Set the divider to get the TX Escape clock, clock source is the high-speed byte clock
     mipi_dsi_host_ll_set_escape_clock_division(hal->host, (uint32_t)roundf(bus_config->lane_bit_rate_mbps / 8.0f / MIPI_DSI_DEFAULT_ESCAPE_CLOCK_FREQ_MHZ));
-    // set the timeout intervals to zero, means to disable the timeout mechanism
-    mipi_dsi_host_ll_set_timeout_count(hal->host, 0, 0, 0, 0, 0, 0, 0);
-    // DSI host will wait indefinitely for a read response from the DSI device
+    // Enable host timeout detection for command mode transactions.
+    mipi_dsi_host_ll_set_timeout_count(hal->host, 0,
+                                       MIPI_DSI_DEFAULT_HOST_LP_RX_TIMEOUT_COUNT,
+                                       0, 0, 0, 0, 0);
+    // Set the maximum time required to perform a read command, measured in lane byte clock cycles.
     mipi_dsi_phy_ll_set_max_read_time(hal->host, 6000);
     // set how long the DSI host will wait before sending the next transmission
     mipi_dsi_phy_ll_set_stop_wait_time(hal->host, 0x3F);
@@ -148,11 +151,11 @@ esp_err_t esp_lcd_del_dsi_bus(esp_lcd_dsi_bus_handle_t bus)
         mipi_dsi_ll_enable_phy_config_clock(bus_id, false);
     }
     if (bus->phy_pllref_clk_src != SOC_MOD_CLK_INVALID) {
-        esp_clk_tree_enable_src(bus->phy_pllref_clk_src, false);
+        esp_clk_tree_release_src(bus->phy_pllref_clk_src);
         bus->phy_pllref_clk_src = SOC_MOD_CLK_INVALID;
     }
     if (bus->phy_cfg_clk_src != SOC_MOD_CLK_INVALID) {
-        esp_clk_tree_enable_src(bus->phy_cfg_clk_src, false);
+        esp_clk_tree_release_src(bus->phy_cfg_clk_src);
         bus->phy_cfg_clk_src = SOC_MOD_CLK_INVALID;
     }
     // disable the APB clock for accessing the DSI peripheral registers

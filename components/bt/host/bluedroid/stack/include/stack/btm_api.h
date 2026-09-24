@@ -906,14 +906,12 @@ typedef struct {
     UINT16      pkt_types;
 } tBTM_SET_ACL_PKT_TYPES_RESULTS;
 
-#if (ENC_KEY_SIZE_CTRL_MODE != ENC_KEY_SIZE_CTRL_MODE_NONE)
 /* Structure returned with set minimal encryption key size event (in tBTM_CMPL_CB callback function)
 ** in response to BTM_SetMinEncKeySize call.
 */
 typedef struct {
     UINT8 hci_status;
 } tBTM_SET_MIN_ENC_KEY_SIZE_RESULTS;
-#endif
 
 /* Structure returned with set BLE channels event (in tBTM_CMPL_CB callback function)
 ** in response to BTM_BleSetChannels call.
@@ -1116,6 +1114,7 @@ typedef UINT8 tBTM_SCO_ROUTE_TYPE;
 #define BTM_SCO_CODEC_NONE          0x0000
 #define BTM_SCO_CODEC_CVSD          0x0001
 #define BTM_SCO_CODEC_MSBC          0x0002
+#define BTM_SCO_CODEC_LC3           0x0004
 typedef UINT16 tBTM_SCO_CODEC_TYPE;
 
 
@@ -2362,14 +2361,14 @@ tBTM_STATUS BTM_SetAclPktTypes(BD_ADDR remote_bda, UINT16 pkt_types, tBTM_CMPL_C
 ** Description      Send HCI Set Minimum Encryption Key Size
 **
 ** Returns
-**      BTM_SUCCESS         Command sent.
-**      BTM_NO_RESOURCES    If out of resources to send the command.
+**      BTM_SUCCESS             Command sent.
+**      BTM_NO_RESOURCES        If out of resources to send the command.
+**      BTM_WRONG_MODE          If the controller is not ready.
+**      BTM_MODE_UNSUPPORTED    If neither standard HCI nor VSC is available.
 **
 *******************************************************************************/
 //extern
-#if (ENC_KEY_SIZE_CTRL_MODE != ENC_KEY_SIZE_CTRL_MODE_NONE)
 tBTM_STATUS BTM_SetMinEncKeySize(UINT8 key_size, tBTM_CMPL_CB *p_cb);
-#endif
 
 /*******************************************************************************
 **

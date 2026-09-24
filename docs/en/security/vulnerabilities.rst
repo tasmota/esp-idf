@@ -10,6 +10,26 @@ This page briefly lists all of the vulnerabilities that are discovered and fixed
 CVE-2026
 --------
 
+CVE-2026-81508
+~~~~~~~~~~~~~~
+
+Heap Out-of-Bounds Read in Bluedroid A2DP Sink Media Packet Processing
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-xcpr-5mqp-9qvv`_
+
+CVE-2026-81507
+~~~~~~~~~~~~~~
+
+Bluetooth Classic L2CAP Heap Memory Disclosure Allowing Unauthorized Access to Sensitive Data
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-v335-fxwc-rc44`_
+
 CVE-2026-55687
 ~~~~~~~~~~~~~~
 
@@ -397,3 +417,5 @@ Security Advisory Concerning Wi-Fi Authentication Bypass
 .. _`GHSA-3pp8-42fh-3j3c` : https://github.com/espressif/esp-idf/security/advisories/GHSA-3pp8-42fh-3j3c
 .. _`GHSA-g764-gwc3-75m5` : https://github.com/espressif/esp-idf/security/advisories/GHSA-g764-gwc3-75m5
 .. _`GHSA-v6r2-f6p2-88cj` : https://github.com/espressif/esp-idf/security/advisories/GHSA-v6r2-f6p2-88cj
+.. _`GHSA-v335-fxwc-rc44` : https://github.com/espressif/esp-idf/security/advisories/GHSA-v335-fxwc-rc44
+.. _`GHSA-xcpr-5mqp-9qvv` : https://github.com/espressif/esp-idf/security/advisories/GHSA-xcpr-5mqp-9qvv

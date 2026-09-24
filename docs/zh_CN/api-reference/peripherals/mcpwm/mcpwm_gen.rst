@@ -175,8 +175,8 @@ MCPWM 生成器：生成 PWM 波形
 
 调节比较器阈值改变的是正常占空比。若需要临时接管输出、忽略所有事件动作而直接固定某个电平时，可改用强制电平接口。:func:`mcpwm_generator_set_force_level` 有两个关键参数：``level`` 和 ``hold_on``。
 
-- ``level``（第二个参数）指定要强制输出的原始生成器电平：``0`` 或 ``1`` 会覆盖所有事件动作，``-1`` 则解除强制并恢复事件控制。
-- ``hold_on``（第三个参数）决定强制电平持续多久：``true`` 会一直保持直到下一次调用解除；``false`` 则允许下一个事件动作将其覆盖。
+- ``level``\ （第二个参数）指定要强制输出的原始生成器电平：``0`` 或 ``1`` 会覆盖所有事件动作，``-1`` 则解除强制并恢复事件控制。
+- ``hold_on``\ （第三个参数）决定强制电平持续多久：``true`` 会一直保持直到下一次调用解除；``false`` 则允许下一个事件动作将其覆盖。
 
 例如 ``mcpwm_generator_set_force_level(generator, 0, true)`` 会覆盖所有事件动作并保持原始生成器为低电平。强制电平位于死区与 GPIO 反相之前，应使用示波器确认实际引脚电平。
 
@@ -206,7 +206,7 @@ MCPWM 生成器：生成 PWM 波形
 
 .. note::
 
-    这里约定，生成器 A 是通过操作器句柄申请的第一个生成器，生成器 B 是通过操作器句柄申请的第二个生成器。
+    约定：生成器 A 是通过操作器句柄申请的第一个生成器，生成器 B 是通过操作器句柄申请的第二个生成器。
 
 .. code-block:: c
 
@@ -229,13 +229,24 @@ MCPWM 生成器：生成 PWM 波形
 
 :func:`mcpwm_generator_set_dead_time(in_generator, out_generator, config) <mcpwm_generator_set_dead_time>` 将死区视为一个小型信号处理级。两个生成器句柄相同会原地改变该输出；将 ``gen_a`` 作为输入、 ``gen_b`` 作为输出则从 A 派生 B，这正是互补例子共享一个 PWM 源的方式。
 
-:cpp:member:`posedge_delay_ticks <mcpwm_dead_time_config_t::posedge_delay_ticks>` 延迟上升沿，:cpp:member:`negedge_delay_ticks <mcpwm_dead_time_config_t::negedge_delay_ticks>` 延迟下降沿，单位为连接定时器的 Tick。例如分辨率为 10 MHz 时，2 Tick 等于 200 ns。下图展示了基本效果：``pwm_A`` 的上升沿被延迟（RED），``pwm_B`` 的下降沿被延迟（FED）。应先采用开关管和栅极驱动器数据手册中的最大关断延迟并留出余量；在晶体管栅极实测后，确认工艺、温度和布局仍有足够余量，才可减小该值。两个延迟均设为零可旁路死区模块。:cpp:member:`invert_output <mcpwm_dead_time_config_t::flags::invert_output>` 在该级之后改变极性。
+:cpp:member:`posedge_delay_ticks <mcpwm_dead_time_config_t::posedge_delay_ticks>` 延迟上升沿，:cpp:member:`negedge_delay_ticks <mcpwm_dead_time_config_t::negedge_delay_ticks>` 延迟下降沿，单位为连接定时器的 Tick。例如分辨率为 10 MHz 时，2 Tick 等于 200 ns。下图展示了基本效果：``pwm_A`` 的上升沿被延迟 ``RED`` （Rising Edge Delay） 个tick，``pwm_B`` 的下降沿被延迟 ``FED`` （Falling Edge Delay） 个tick。应先采用开关管和栅极驱动器数据手册中的最大关断延迟并留出余量；在晶体管栅极实测后，确认工艺、温度和布局仍有足够余量，才可减小该值。两个延迟均设为零可旁路死区模块。:cpp:member:`invert_output <mcpwm_dead_time_config_t::flags::invert_output>` 在该级之后改变极性。
 
 .. figure:: /../_static/mcpwm/deadtime_active_high.svg
     :align: center
     :alt: 基本死区效果：上升沿延迟（RED）和下降沿延迟（FED）。
 
     基本死区效果：上升沿延迟（RED）和下降沿延迟（FED）。
+
+.. important::
+
+    受限于上升沿和下降沿的延迟资源的拓扑结构，任何时候都建议分别对两个生成器调用 :cpp:func:`mcpwm_generator_set_dead_time` 声明配置方式。即便只需要配置一路的延迟，也应对另一路显式调用 :cpp:func:`mcpwm_generator_set_dead_time` 并传入零延迟，避免意外影响另一路的，例如：
+
+    .. code-block:: c
+
+        mcpwm_dead_time_config_t dead_time = { .negedge_delay_ticks = 2 };
+        ESP_ERROR_CHECK(mcpwm_generator_set_dead_time(gen_a, gen_a, &dead_time));
+        dead_time.negedge_delay_ticks = 0;
+        ESP_ERROR_CHECK(mcpwm_generator_set_dead_time(gen_b, gen_b, &dead_time));
 
 每个操作器的资源限制
 --------------------

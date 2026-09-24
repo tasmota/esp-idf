@@ -407,15 +407,24 @@ int spi_get_freq_limit(bool gpio_is_used, int input_delay_ns)
 }
 
 #if SPI_LL_SRC_PRE_DIV_MAX
-static uint32_t s_spi_find_clock_src_pre_div(uint32_t src_freq, uint32_t target_freq)
+static uint32_t s_spi_find_clock_src_pre_div(uint32_t src_freq, uint32_t target_freq, bool need_timing_tune)
 {
-    // pre division must be even and at least 2
-    uint32_t min_div = ((src_freq / SPI_PERIPH_SRC_FREQ_MAX) + 1) & (~0x01UL);
-    min_div = min_div < 2 ? 2 : min_div;
+    uint32_t min_div;
+    uint32_t step;
+    if (need_timing_tune) {
+        // mst_div == 2: total pre_div must be even and at least 2
+        min_div = ((src_freq / SPI_PERIPH_SRC_FREQ_MAX) + 1) & (~0x01UL);
+        min_div = min_div < 2 ? 2 : min_div;
+        step = 2;
+    } else {
+        // mst_div == 1: only guarantee peripheral input <= SPI_PERIPH_SRC_FREQ_MAX
+        min_div = (src_freq + SPI_PERIPH_SRC_FREQ_MAX - 1) / SPI_PERIPH_SRC_FREQ_MAX;
+        min_div = min_div < 1 ? 1 : min_div;
+        step = 1;
+    }
 
     uint32_t total_div = src_freq / target_freq;
-    // Loop the `div` to find a divisible value of `total_div`
-    for (uint32_t pre_div = min_div; pre_div <= MIN(total_div, SPI_LL_SRC_PRE_DIV_MAX); pre_div += 2) {
+    for (uint32_t pre_div = min_div; pre_div <= MIN(total_div, SPI_LL_SRC_PRE_DIV_MAX); pre_div += step) {
         if ((total_div % pre_div) || (total_div / pre_div) > SPI_LL_PERIPH_CLK_DIV_MAX) {
             continue;
         }
@@ -450,10 +459,10 @@ esp_err_t spi_bus_add_device(spi_host_device_t host_id, const spi_device_interfa
     uint32_t clock_source_hz = 0;
     uint32_t clock_source_div = 1;
     spi_clock_source_t clk_src = dev_config->clock_source ? dev_config->clock_source : SPI_CLK_SRC_DEFAULT;
-    SPI_CHECK(esp_clk_tree_enable_src(clk_src, true) == ESP_OK, "clock source enable failed", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(esp_clk_tree_acquire_src(clk_src) == ESP_OK, "clock source enable failed", ESP_ERR_INVALID_STATE);
     esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clock_source_hz);
 #if SPI_LL_SRC_PRE_DIV_MAX
-    clock_source_div = s_spi_find_clock_src_pre_div(clock_source_hz, dev_config->clock_speed_hz);
+    clock_source_div = s_spi_find_clock_src_pre_div(clock_source_hz, dev_config->clock_speed_hz, dev_config->input_delay_ns > 0);
     clock_source_hz /= clock_source_div; //actual freq enter to SPI peripheral
 #endif
     SPI_CHECK(dev_config->clock_speed_hz <= clock_source_hz, "invalid sclk speed", ESP_ERR_INVALID_ARG);
@@ -612,7 +621,7 @@ esp_err_t spi_bus_remove_device(spi_device_handle_t handle)
             spi_device_release_bus(handle);
         }
     }
-    SPI_CHECK(esp_clk_tree_enable_src(handle->hal_dev.timing_conf.clock_source, false) == ESP_OK, "clock source disable failed", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(esp_clk_tree_release_src(handle->hal_dev.timing_conf.clock_source) == ESP_OK, "clock source disable failed", ESP_ERR_INVALID_STATE);
 
     //return
     int spics_io_num = handle->cfg.spics_io_num;
@@ -703,10 +712,13 @@ static SPI_MASTER_ISR_ATTR void spi_setup_device(spi_device_t *dev, spi_trans_pr
         spi_hal_setup_device(hal, hal_dev);
         PERIPH_RCC_ATOMIC() {
 #if SPI_LL_SRC_PRE_DIV_MAX
-            //we set mst_div as const 2, then (hs_clk = 2*mst_clk) to ensure timing turning work as past
-            //and sure (hs_div * mst_div = source_pre_div)
-            assert(hal_dev->timing_conf.source_pre_div >= 2);   // source_pre_div must be even and at least 2
-            spi_ll_clk_source_pre_div(hal->hw, hal_dev->timing_conf.source_pre_div / 2, 2);
+            // input_delay_ns > 0: mst_div = 2 for timing tuning; otherwise mst_div = 1
+            uint32_t pre_div = hal_dev->timing_conf.source_pre_div;
+            if (dev->cfg.input_delay_ns > 0) {
+                spi_ll_clk_source_pre_div(hal->hw, pre_div / 2, 2);
+            } else {
+                spi_ll_clk_source_pre_div(hal->hw, pre_div, 1);
+            }
 #endif
             spi_ll_set_clk_source(hal->hw, hal_dev->timing_conf.clock_source);
         }
@@ -853,11 +865,13 @@ static void SPI_MASTER_ISR_ATTR spi_new_trans(spi_device_t *dev, spi_trans_priv_
     }
 #if CONFIG_SPIRAM && SOC_PSRAM_DMA_CAPABLE
     spi_hal_clear_intr_mask(hal, SPI_LL_INTR_IN_FULL | SPI_LL_INTR_OUT_EMPTY);
+#if !SPI_LL_SUPPORT_FD_TX_WAIT_DMA
     if (esp_ptr_dma_ext_capable(hal_trans.send_buffer)) {
         // ! Delay here is required for EDMA to pass data from PSRAM to GPSPI
         esp_rom_delay_us(SPI_EDMA_SETUP_TIME_US(hal_dev->timing_conf.real_freq));
     }
-#endif
+#endif // !SPI_LL_SUPPORT_FD_TX_WAIT_DMA
+#endif // CONFIG_SPIRAM && SOC_PSRAM_DMA_CAPABLE
     //Kick off transfer
     spi_hal_user_start(hal);
 }
@@ -924,10 +938,7 @@ static void SPI_MASTER_ISR_ATTR spi_new_sct_trans(spi_device_t *dev, spi_sct_tra
     //Reconfigure according to device settings, the function only has effect when the dev_id is changed.
     spi_setup_device(dev, NULL);
 
-#if !CONFIG_IDF_TARGET_ESP32S2
-    // s2 update this seg_gap_clock_len by dma from conf_buffer
     spi_hal_sct_set_conf_bits_len(&dev->host->hal, cur_sct_trans->sct_trans_desc_head->sct_gap_len);
-#endif
     s_sct_load_dma_link(dev, cur_sct_trans->rx_seg_head, cur_sct_trans->tx_seg_head);
     if (dev->cfg.pre_cb) {
         dev->cfg.pre_cb((spi_transaction_t *)cur_sct_trans->sct_trans_desc_head);
@@ -1795,7 +1806,6 @@ static void SPI_MASTER_ATTR s_sct_format_conf_buffer(spi_device_handle_t handle,
     if (seg_end) {
         seg_config.seg_end = true;
     }
-    seg_config.seg_gap_len = seg_trans_desc->sct_gap_len;
 
     // set line mode to hal_config
     spi_sct_set_hal_trans_config(seg_trans_desc, &hal->trans_config);

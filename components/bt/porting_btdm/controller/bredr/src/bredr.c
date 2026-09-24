@@ -128,6 +128,7 @@ extern int bredr_ctrl_feat_coex_en(void);
 extern int bredr_ctrl_feat_sam_en(void);
 extern int bredr_ctrl_feat_mws_en(void);
 
+extern void bredr_ctrl_get_btdm_info(uint32_t *version, uint32_t *size);
 extern const char *co_orca_get_git_version_str(void);
 extern void r_orca_log_set_printf(bredr_log_printf_fn printf_fn);
 /* Shutdown */
@@ -295,6 +296,41 @@ static int bredr_psa_gen_keypair(bool p256, uint8_t *public_key, uint8_t *privat
     return 0;
 }
 
+/*
+ * CVE-2018-5383: validate the peer's public key is a valid point on the curve
+ * before using it in the DH computation. PSA validates the point (rejects the
+ * point at infinity and out-of-range coordinates) when importing it as a public key.
+ */
+static int bredr_psa_validate_peer_pubkey(bool p256, const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y)
+{
+    const size_t coord_len = p256 ? BREDR_P256_COORD_LEN : BREDR_P192_COORD_LEN;
+    const size_t pub_len = p256 ? BREDR_PUB_KEY_LEN_P256 : BREDR_PUB_KEY_LEN_P192;
+
+    uint8_t pk[BREDR_PUB_KEY_LEN_P256];  /* uncompressed: 0x04 || X || Y */
+
+    pk[0] = 0x04;
+    btdm_swap_buf(&pk[1], peer_pub_key_x, coord_len);
+    btdm_swap_buf(&pk[1 + coord_len], peer_pub_key_y, coord_len);
+
+    psa_key_attributes_t pub_attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_key_id_t pub_key_id = 0;
+    psa_status_t pub_status;
+
+    psa_set_key_type(&pub_attr, PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1));
+    psa_set_key_bits(&pub_attr, p256 ? 256 : 192);
+    psa_set_key_usage_flags(&pub_attr, 0);
+
+    pub_status = psa_import_key(&pub_attr, pk, pub_len, &pub_key_id);
+    psa_reset_key_attributes(&pub_attr);
+    if (pub_status != PSA_SUCCESS) {
+        ESP_LOGE(TAG_BREDR_CRYPTO, "invalid peer public key: psa_import_key failed: %d", (int)pub_status);
+        return -1;
+    }
+
+    psa_destroy_key(pub_key_id);
+    return 0;
+}
+
 static int bredr_psa_gen_dhkey(bool p256, const uint8_t *peer_pub_key_x, const uint8_t *peer_pub_key_y,
                                const uint8_t *our_priv_key, uint8_t *out_dhkey)
 {
@@ -306,10 +342,17 @@ static int bredr_psa_gen_dhkey(bool p256, const uint8_t *peer_pub_key_x, const u
     uint8_t pk[65];
     uint8_t dh[32];
 
-    btdm_swap_buf(priv, our_priv_key, priv_len);
+    /* Validate the peer's public key before using it in the DH computation. */
+    if (bredr_psa_validate_peer_pubkey(p256, peer_pub_key_x, peer_pub_key_y) != 0) {
+        return -1;
+    }
+
+    /* Reconstruct the peer public key in uncompressed form (0x04 || X || Y). */
     pk[0] = 0x04;
     btdm_swap_buf(&pk[1], peer_pub_key_x, coord_len);
     btdm_swap_buf(&pk[1 + coord_len], peer_pub_key_y, coord_len);
+
+    btdm_swap_buf(priv, our_priv_key, priv_len);
 
     psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
     psa_key_id_t key_id = 0;
@@ -876,6 +919,14 @@ int esp_bredr_controller_init(esp_bt_controller_config_t *cfg)
     cfg->bredr.mempool_size = 1024 * (cfg->bredr.max_acl_conn + 2);
     cfg->bredr.mempool_ops = &s_orca_mempool_ops;
 
+    uint32_t bredr_btdm_version = 0;
+    uint32_t bredr_btdm_size = 0;
+    bredr_ctrl_get_btdm_info(&bredr_btdm_version, &bredr_btdm_size);
+    if ((cfg->btdm.version != bredr_btdm_version) || (sizeof(esp_bt_ctrl_btdm_config_t) != bredr_btdm_size)) {
+        ESP_LOGE(BREDR_LOG_TAG, "btdm version used by bredr check failed, version:%x, size:%d", bredr_btdm_version, bredr_btdm_size);
+        return ESP_ERR_INVALID_VERSION;
+    }
+
     status = bredr_controller_init(&cfg->bredr);
     if (status != 0) {
         ESP_LOGE(BREDR_LOG_TAG, "bredr_controller_init failed, status:%d", status);
@@ -915,7 +966,7 @@ int bredr_stack_reset(void)
 }
 
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-esp_err_t sleep_modem_bredr_mac_modem_state_init(void)
+esp_err_t sleep_modem_bredr_mac_retention_create(void)
 {
     uint8_t size;
     const sleep_retention_entries_config_t *bredr_mac_modem_config = r_bredr_mac_retention_link_get(&size);

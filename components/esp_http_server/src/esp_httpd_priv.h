@@ -87,9 +87,10 @@ struct sock_db {
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     bool ws_handshake_done;                 /*!< True if it has done WebSocket handshake (if this socket is a valid WS) */
     bool ws_close;                          /*!< Set to true to close the socket later (when WS Close frame received) */
+    bool ws_close_sent;                     /*!< Set to true once this endpoint has sent its own WS Close frame */
     esp_err_t (*ws_handler)(httpd_req_t *r);   /*!< WebSocket handler, leave to null if it's not WebSocket */
     bool ws_control_frames;                         /*!< WebSocket flag indicating that control frames should be passed to user handlers */
-    esp_err_t (*ws_control_handler)(httpd_req_t *r, const httpd_ws_frame_t *frame); /*!< Dedicated WebSocket control-frame handler, NULL if not used */
+    esp_err_t (*ws_control_handler)(httpd_req_t *r, httpd_ws_frame_t *frame); /*!< Dedicated WebSocket control-frame handler, NULL if not used */
     void *ws_user_ctx;                         /*!< Pointer to user context data which will be available to handler for websocket*/
 #endif
 };
@@ -581,8 +582,10 @@ esp_err_t httpd_ws_recv_control_frame(httpd_req_t *req, httpd_ws_frame_t *frame,
 /**
  * @brief   Send the protocol reply for a received WebSocket control frame.
  *
- * @note    PING is answered with a PONG echoing the payload; CLOSE is answered with
- *          an empty CLOSE; all other control frames (e.g. PONG) require no reply.
+ * @note    PING is answered with a PONG echoing the payload. CLOSE is answered with
+ *          a CLOSE that echoes the received status code and reason when
+ *          CONFIG_HTTPD_WS_STRICTER_RFC6455 is set, and with an empty CLOSE
+ *          otherwise. All other control frames (for example PONG) require no reply.
  *
  * @param[in] req    WebSocket request
  * @param[in] frame  Control frame previously received (modified in place)
@@ -596,15 +599,18 @@ esp_err_t httpd_ws_reply_to_control_frame(httpd_req_t *req, httpd_ws_frame_t *fr
  * @brief   Handle an incoming WebSocket control frame via the dedicated control handler.
  *
  * @note    Used only when a ws_control_handler is registered (handle_ws_control_frames
- *          must be true). The server receives the frame body, passes a read-only view
- *          to the control handler, then performs the protocol reply itself. If the
- *          control handler returns an error, the reply is still sent and the error is
- *          propagated so the caller closes the socket.
+ *          must be true). The server receives the frame body and hands it to the
+ *          control handler, which owns the protocol reply. The server does not reply
+ *          on its own, so a handler that answers a PING cannot produce a duplicate
+ *          PONG on the wire. A handler error is propagated so the caller closes the
+ *          socket.
  *
  * @param[in] req    WebSocket request
  * @return
- *  - ESP_OK  : Control frame handled and replied
- *  - others  : Control handler error, or frame could not be received/replied
+ *  - ESP_OK                : Control frame received and handled
+ *  - ESP_ERR_INVALID_ARG   : Argument is invalid (null request aux or session)
+ *  - ESP_ERR_INVALID_STATE : No control handler registered for this session
+ *  - others                : Control handler error, or frame could not be received
  */
 esp_err_t httpd_ws_handle_control_frame(httpd_req_t *req);
 #endif /* CONFIG_HTTPD_WS_SUPPORT */

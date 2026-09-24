@@ -81,6 +81,7 @@
 // #define SOC_APM_SUPPORTED               1      // TODO: [ESP32S31] IDF-14620
 #define SOC_PAU_SUPPORTED                  1
 #define SOC_PMU_SUPPORTED                  1
+#define SOC_PMU_PVT_SUPPORTED              1
 #define SOC_RTC_TIMER_SUPPORTED            1
 #define SOC_ULP_LP_UART_SUPPORTED       1
 #define SOC_LP_GPIO_MATRIX_SUPPORTED    1
@@ -164,6 +165,8 @@
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_CACHE_WRITEBACK_SUPPORTED           1
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 4   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (2U)
@@ -401,6 +404,7 @@
 #define SOC_SHA_SUPPORT_SHA512_224      (1)
 #define SOC_SHA_SUPPORT_SHA512_256      (1)
 #define SOC_SHA_SUPPORT_SHA512_T        (1)
+#define SOC_SHA_SUPPORT_SM3             (1)
 
 /*--------------------------- MPI CAPS ---------------------------------------*/
 #define SOC_MPI_MEM_BLOCKS_NUM          (4)
@@ -602,8 +606,6 @@
  */
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
 
-#define SOC_PM_RETENTION_MODULE_NUM         (64)
-
 #define SOC_PM_SUPPORT_BUS_CLK_AUTO_GATE    (1)  /*!<Support hardware auto clock gating for system bus*/
 
 /*-------------------------- LP_CORE CAPS ------------------------------------*/
@@ -661,6 +663,7 @@
 #define SOC_BLE_CTE_SUPPORTED                       (1)     /*!< Support Bluetooth LE Constant Tone Extension (CTE) */
 #define SOC_BLE_SUBRATE_SUPPORTED                   (1)     /*!< Support Bluetooth LE Connection Subrating */
 #define SOC_BLE_PERIODIC_ADV_WITH_RESPONSE          (1)     /*!< Support Bluetooth LE Periodic Advertising with Response (PAwR) */
+#define SOC_BT_H2C_ENC_KEY_CTRL_ENH_VSC_SUPPORTED   (1)     /*!< Support Bluetooth Classic encryption key size configuration through vendor-specific HCI command */
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_HW_VERSION_2                  (1)
@@ -697,8 +700,10 @@
 #define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
 
 /*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (200) /*!< Efficient Trace v2.0 */
 #define SOC_RISCV_TRACE_HAS_CONFIG_REG              (1) /*!< Has the encoder config register */
 #define SOC_RISCV_TRACE_AHB_CONFIGURABLE            (1) /*!< AHB write master is configurable */
 #define SOC_RISCV_TRACE_FILTER_SUPPORTED            (1) /*!< Has the filter unit */
 #define SOC_RISCV_TRACE_PRIV_WIDTH                  (2U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (6) /*!< Bits in the exception cause field (ecause_width_p) */
 #define SOC_RISCV_TRACE_MEM_SUPPORT_PSRAM           (1) /*!< Encoder AHB master can reach external PSRAM */

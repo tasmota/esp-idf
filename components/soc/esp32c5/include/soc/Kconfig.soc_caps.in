@@ -423,6 +423,14 @@ config SOC_CACHE_FREEZE_SUPPORTED
     bool
     default y
 
+config SOC_CACHE_CNT_SUPPORTED
+    bool
+    default y
+
+config SOC_CACHE_CNT_UNITS_NUM
+    int
+    default 2
+
 config SOC_CPU_CORES_NUM
     int
     default 1
@@ -911,6 +919,10 @@ config SOC_SHA_SUPPORT_SHA512_T
     bool
     default y
 
+config SOC_SHA_SUPPORT_SM3
+    bool
+    default y
+
 config SOC_ECC_CONSTANT_TIME_POINT_MUL
     bool
     default y
@@ -924,6 +936,10 @@ config SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
     default y
 
 config SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE
+    bool
+    default y
+
+config SOC_ECDSA_USES_MPI
     bool
     default y
 
@@ -1431,10 +1447,6 @@ config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
     bool
     default y
 
-config SOC_PM_RETENTION_MODULE_NUM
-    int
-    default 40
-
 config SOC_PM_FLASH_KEEP_POWER_IN_LSLP
     bool
     default y
@@ -1623,6 +1635,10 @@ config SOC_LP_CORE_LP_UART_WAKEUP_KEEP_TRIGGERED
     bool
     default y
 
+config SOC_RISCV_TRACE_PACKET_FORMAT_VER
+    int
+    default 200
+
 config SOC_RISCV_TRACE_HAS_CONFIG_REG
     bool
     default y
@@ -1638,3 +1654,7 @@ config SOC_RISCV_TRACE_FILTER_SUPPORTED
 config SOC_RISCV_TRACE_PRIV_WIDTH
     int
     default 1
+
+config SOC_RISCV_TRACE_ECAUSE_WIDTH
+    int
+    default 6

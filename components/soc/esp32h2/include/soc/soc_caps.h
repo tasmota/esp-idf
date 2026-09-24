@@ -161,6 +161,8 @@
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 2   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (1U)
@@ -429,7 +431,7 @@
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 
 /*------------------------- ECDSA CAPS -------------------------*/
-#define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_USES_MPI                  (1)  /*!< ECDSA reuses the MPI operand memory below rev v1.2, and shares MPI's reset domain on every revision */
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
@@ -479,8 +481,6 @@
 #define SOC_PM_PAU_REGDMA_LINK_MODEM      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
-
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN        (1)
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)
@@ -532,4 +532,6 @@
 #define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
 
 /*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (100) /*!< Processor Trace v1.0 */
 #define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (5) /*!< Bits in the exception cause field (ecause_width_p) */

@@ -68,15 +68,56 @@ MCPWM 捕获：测量输入脉冲
 
 .. list::
 
-    - :cpp:member:`gpio_num <mcpwm_capture_channel_config_t::gpio_num>` — 承载输入信号的 GPIO。
-    - :cpp:member:`prescale <mcpwm_capture_channel_config_t::prescale>` — 捕获前对输入信号分频，有效输入频率为捕获时钟除以 ``prescale``。提高它可扩展可测周期范围，但会降低时间分辨率。
+    - :cpp:member:`gpio_num <mcpwm_capture_channel_config_t::gpio_num>` — 承载输入信号的 GPIO。驱动会把它配成输入，但不会设置上拉或下拉；若信号并非主动驱动到两个电平，请调用 :cpp:func:`gpio_set_pull_mode()`，让引脚空闲时保持在期望电平。
+    - :cpp:member:`prescale <mcpwm_capture_channel_config_t::prescale>` — 输入预分频比。同沿（相同上报边沿类型）两次捕获的间隔约为 ``prescale`` 个输入周期（捕获速率 ≈ ``输入速率 / prescale``）。``0`` 或 ``1`` 表示不分频（bypass）；其它值必须为偶数。结构体里不写该字段时默认为 ``0``，即 bypass。提高它可扩展可测周期范围，但会降低时间分辨率。流水线顺序与各边沿模式下的行为见 :ref:`mcpwm-cap-input-prescale`。
     - :cpp:member:`pos_edge <mcpwm_capture_channel_config_t::flags::pos_edge>` 和 :cpp:member:`neg_edge <mcpwm_capture_channel_config_t::flags::neg_edge>` — 捕获哪些边沿。示例同时捕获两个边沿，这正是脉宽测量所需的。
     - :cpp:member:`invert_cap_signal <mcpwm_capture_channel_config_t::flags::invert_cap_signal>` — 捕获前反相输入信号，让引脚上的逻辑 ``1`` 在捕获外设看来是 ``0``，反之亦然。
     - :cpp:member:`intr_priority <mcpwm_capture_channel_config_t::intr_priority>` — 捕获回调使用的中断优先级。不设置（``0``）时由驱动选择较低优先级。
 
+.. _mcpwm-cap-input-prescale:
+
+输入预分频
+==========
+
+捕获通道内部按**固定顺序**串行处理输入，两级不能对调：
+
+1. 先用 ``prescale`` 对 GPIO 波形做预分频（``0``/``1`` 为 bypass）；
+2. 再根据 ``pos_edge``/``neg_edge`` 决定哪些分频后的事件上报给软件。
+
+也就是说，硬件不是“先按设定的边沿挑选 GPIO，再对选中的边沿分频”。因此 ``prescale > 1`` 时：
+
+- 回调里的 :cpp:member:`cap_edge <mcpwm_capture_event_data_t::cap_edge>` 不一定等于 GPIO 的物理边沿；
+- 相邻异沿间隔**不是真实脉宽**，**无法还原真实占空比**。
+
+请用相同上报类型（同沿）的时间戳计算周期或频率。各边沿模式下的具体时序见下方示意图。
+
 .. note::
 
-    捕获驱动会把 GPIO 配置为输入，但不会设置任何上拉或下拉电阻。如果输入信号并非主动驱动到两个电平，请调用 :cpp:func:`gpio_set_pull_mode()` 选择上拉或下拉方向，让引脚空闲时保持在你期望的电平。
+    测脉宽或占空比时保持 ``prescale = 1`` （bypass）并捕获双边沿。建议仅在输入过快、只需测量频率/周期时再提高 ``prescale``，且只捕获单边沿。
+
+下图说明 ``prescale`` 在仅上升沿、仅下降沿和双边沿模式下如何影响捕获时机。
+
+.. figure:: /../_static/mcpwm/capture_prescale_rising.svg
+    :align: center
+    :alt: 仅上升沿捕获：prescale bypass 与 prescale 4。
+
+仅上升沿。``prescale = 1`` （bypass）时每个上升沿捕获为 ``R``。``prescale > 1`` 时，首次捕获在 cycle ``prescale / 2 - 1``，之后每隔 ``prescale`` 个上升沿一次（图中 ``prescale = 4``：cycle 1、5、…）。同沿间隔为 ``prescale`` 个输入周期。
+
+.. figure:: /../_static/mcpwm/capture_prescale_falling.svg
+    :align: center
+    :alt: 仅下降沿捕获：prescale bypass 与 prescale 4。
+
+仅下降沿。``prescale = 1`` （bypass）时每个下降沿捕获为 ``F``。``prescale > 1`` 时 GPIO 下降沿不产生捕获；**事件落在上升沿步骤上**。首次捕获在 cycle ``prescale - 1``，之后每隔 ``prescale`` 个上升沿一次，``cap_edge`` 仍报 ``F`` （图中 ``prescale = 4``：cycle 3、7、…）。
+
+.. figure:: /../_static/mcpwm/capture_prescale_both.svg
+    :align: center
+    :alt: 双边沿捕获：prescale bypass 与 prescale 4。
+
+双边沿。``prescale = 1`` （bypass）时 ``R``/``F`` 对应真实引脚边沿。``prescale > 1`` 时只在上升沿步骤触发（每隔 ``prescale / 2`` 个周期）。首次与仅上升沿相同（cycle ``prescale / 2 - 1``）且报 ``R``，随后 ``R``/``F`` 交替；相邻 ``R``/``F`` 间隔不是脉宽。同沿间隔仍约为 ``prescale`` 个周期。请用相同上报类型（同沿）的时间戳计算周期或频率。
+
+.. warning::
+
+    ``prescale > 1`` 时边沿极性可能“消失”：上报的 ``R``/``F`` 描述的是分频之后的事件类型，不是 GPIO 物理边沿。尤其是仅下降沿路径会出现“上升沿步骤却报 ``F``”——不要用它推断引脚真实跳变，也不要用相邻异沿去算脉宽。
 
 捕获事件回调
 ============

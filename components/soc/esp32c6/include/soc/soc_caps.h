@@ -140,6 +140,8 @@
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 2   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (1U)
@@ -481,8 +483,6 @@
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
 
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
-
 #define SOC_PM_TOP_DEPENDS_ON_RTC_PERIPH    (1)
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
@@ -551,4 +551,6 @@
 #define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
 
 /*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (100) /*!< Processor Trace v1.0 */
 #define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (5) /*!< Bits in the exception cause field (ecause_width_p) */

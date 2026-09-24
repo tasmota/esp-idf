@@ -95,7 +95,8 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
         ESP_RETURN_ON_FALSE(proc_config->input_data_color_type == proc_config->output_data_color_type, ESP_ERR_INVALID_ARG, TAG, "isp is bypassed, input and output data color type should be same");
     }
 
-    isp_processor_t *proc = heap_caps_calloc(1, sizeof(isp_processor_t), ISP_MEM_ALLOC_CAPS);
+    // always allocate memory from internal memory because the driver object contains atomic variables
+    isp_processor_t *proc = heap_caps_calloc(1, sizeof(isp_processor_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(proc, ESP_ERR_NO_MEM, TAG, "no mem");
     INIT_CRIT_SECTION_LOCK_RUNTIME(&proc->spinlock);
 
@@ -127,7 +128,7 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
     if (out_clk_freq_hz != proc_config->clk_hz) {
         ESP_LOGW(TAG, "precision loss, real output frequency: %"PRIu32"Hz", out_clk_freq_hz);
     }
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true), err, TAG, "clock source enable failed");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)clk_src), err, TAG, "clock source enable failed");
     PERIPH_RCC_ATOMIC() {
         isp_ll_select_clk_source(clk_src);
         isp_ll_set_clock_div(&clk_div);
@@ -240,7 +241,7 @@ esp_err_t esp_isp_del_processor(isp_proc_handle_t proc)
 #if SOC_ISP_SHARE_CSI_BRG
     ESP_RETURN_ON_ERROR(mipi_csi_brg_declaim(proc->csi_brg_id), TAG, "declaim csi bridge fail");
 #endif
-    ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)(proc->clk_src), false), TAG, "clock source disable failed");
+    ESP_RETURN_ON_ERROR(esp_clk_tree_release_src((soc_module_clk_t)(proc->clk_src)), TAG, "clock source disable failed");
     if (proc->intr_hdl) {
         esp_isp_deregister_isr(proc, ISP_SUBMODULE_GENERAL);
     }

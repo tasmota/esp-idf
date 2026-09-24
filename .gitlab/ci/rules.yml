@@ -51,8 +51,7 @@
 .patterns-host_test_ulp_linker: &patterns-host_test_ulp_linker
   - ".gitlab/ci/host-test.yml"
 
-  - "components/ulp/ld/**/*"
-  - "components/ulp/cmake/**/*"
+  - "components/ulp/subproject/**/*"
   - "components/ulp/CMakeLists*.txt"
   - "components/ulp/component_ulp_common.cmake"
   - "components/ulp/project_include.cmake"
@@ -74,6 +73,8 @@
   - "tools/ci/check_soc_headers_leak.py"
   - "tools/ci/check_esp_memory_utils_headers.sh"
   - "tools/ci/check_blobs.sh"
+  - "components/esp_wifi/test_md5/test_md5.sh"
+  - "components/esp_coex/test_md5/test_md5.sh"
   - "tools/ci/check_public_headers.py"
   - "tools/ci/check_public_headers_exceptions.txt"
   - "tools/ci/check_register_rw_half_word.cmake"

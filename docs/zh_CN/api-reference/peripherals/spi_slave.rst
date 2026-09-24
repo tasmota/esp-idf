@@ -88,6 +88,10 @@ SPI 传输事务
 
     请注意该功能共享 MSPI 总线带宽（总线频率 * 总线位宽），因此主机对该设备的传输带宽应小于 PSRAM 带宽，否则 **可能会丢失传输数据**，此时 ``spi_slave_transmit`` 函数将会返回 :c:macro:`ESP_ERR_INVALID_STATE` 错误。
 
+    .. note::
+
+        当开启加密功能时，使用 PSRAM Buffer 的传输有更严格的对齐要求，通常为仅支持 16 字节对齐的传输。对于不对齐的传输，会返回 :c:macro:`ESP_ERR_INVALID_ARG` 错误。
+
 使用驱动程序
 ------------
 
@@ -173,7 +177,7 @@ GPIO 交换矩阵和 IO_MUX
 
     {IDF_TARGET_NAME} 的大多数外设信号都直接连接到其专用的 IO_MUX 管脚。不过，也可以使用 GPIO 交换矩阵，将信号路由到任何可用的其他管脚。如果通过 GPIO 交换矩阵路由了至少一个信号，则所有信号都将通过 GPIO 交换矩阵路由。
 
-    当 SPI 主机频率配置为 80 MHz 或更低时，则通过 GPIO 交换矩阵或 IO_MUX 路由 SPI 管脚效果相同。
+    当与从机的通信时钟频率为 40 MHz 或更低时，则通过 GPIO 交换矩阵或 IO_MUX 路由 SPI 管脚效果相同。
 
     下表列出了 SPI 总线的 IO_MUX 管脚。
 
@@ -215,7 +219,7 @@ GPIO 交换矩阵和 IO_MUX
 时钟频率要求
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40", esp32c6="40", esp32h2="32"}
+{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40", esp32c6="40", esp32h2="32", esp32c5="40", esp32c61="40", esp32h21="32"}
 
 SPI 从机的工作频率最高可达 {IDF_TARGET_MAX_FREQ} MHz。如果时钟频率过快或占空比不足 50%，数据就无法被正确识别或接收。
 

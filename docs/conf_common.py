@@ -47,6 +47,7 @@ BLE_DOCS = [
     'api-guides/low-power-mode/low-power-mode-ble.rst',
     'api-reference/bluetooth/bt_le.rst',
     'api-reference/bluetooth/esp_gap_ble.rst',
+    'api-reference/bluetooth/esp_ble_ead.rst',
     'api-reference/bluetooth/esp_gatt_defs.rst',
     'api-reference/bluetooth/esp_gatts.rst',
     'api-reference/bluetooth/esp_gattc.rst',
@@ -103,6 +104,7 @@ CLASSIC_BT_DOCS = [
     'migration-guides/release-5.x/5.3/bluetooth-classic.rst',
     'migration-guides/release-5.x/5.4/bluetooth-classic.rst',
     'migration-guides/release-6.x/6.0/bluetooth-classic.rst',
+    'migration-guides/release-6.x/6.2/bluetooth-classic.rst',
 ]
 
 BLUFI_DOCS = ['api-guides/ble/blufi.rst', 'api-reference/bluetooth/esp_blufi.rst']
@@ -131,6 +133,8 @@ WIFI_MESH_DOCS = ['api-guides/esp-wifi-mesh.rst', 'api-reference/network/esp-wif
 COEXISTENCE_DOCS = ['api-guides/coexist.rst']
 
 MM_SYNC_DOCS = ['api-reference/system/mm_sync.rst']
+
+CACHE_CNT_DOCS = ['api-reference/system/cache_cnt.rst']
 
 CAMERA_DOCS = ['api-reference/peripherals/camera_driver.rst']
 
@@ -377,6 +381,7 @@ conditional_include_dict = {
     'SOC_SUPPORT_COEXISTENCE': COEXISTENCE_DOCS,
     'SOC_PSRAM_DMA_CAPABLE': MM_SYNC_DOCS,
     'SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE': MM_SYNC_DOCS,
+    'SOC_CACHE_CNT_SUPPORTED': CACHE_CNT_DOCS,
     'SOC_CLK_TREE_SUPPORTED': CLK_TREE_DOCS,
     'SOC_UART_SUPPORTED': UART_DOCS,
     'SOC_UHCI_SUPPORTED': UHCI_DOCS,
@@ -403,6 +408,7 @@ conditional_include_dict = {
     'SOC_DIG_SIGN_SUPPORTED': ['api-reference/peripherals/ds.rst'],
     'SOC_ECDSA_SUPPORTED': ['api-reference/peripherals/ecdsa.rst'],
     'SOC_HMAC_SUPPORTED': ['api-reference/peripherals/hmac.rst'],
+    'SOC_SHA_SUPPORT_SM3': ['api-reference/peripherals/sm3.rst'],
     'SOC_GDMA_SUPPORT_CRC': ['api-reference/peripherals/async_crc.rst'],
     'SOC_ASYNC_MEMCPY_SUPPORTED': ['api-reference/peripherals/async_memcpy.rst'],
     'SOC_DMA2D_SUPPORTED': ['api-reference/peripherals/async_color_convert.rst'],
@@ -526,7 +532,6 @@ with open('../page_redirects.txt') as f:
 html_redirect_pages = [tuple(line.split(' ')) for line in lines]
 
 html_static_path = ['../_static']
-html_css_files = ['js/chatbot_widget.css']
 
 idf_build_system = {
     'doxygen_component_info': True,

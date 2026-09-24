@@ -87,9 +87,9 @@ void esp_vhci_host_send_packet_wrapper(uint8_t *data, uint16_t len)
 #if CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
     ble_log_spi_out_hci_write(BLE_LOG_SPI_OUT_SOURCE_HCI_DOWNSTREAM, data, len);
 #endif // CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
-#if CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED
+#if CONFIG_BLE_LOG_HCI_LOG_ENABLED
     ble_log_write_hci(BLE_LOG_HCI_DOWNSTREAM, data, len);
-#endif /* CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED */
+#endif /* CONFIG_BLE_LOG_HCI_LOG_ENABLED */
     esp_vhci_host_send_packet(data, len);
 }
 
@@ -274,9 +274,9 @@ static int host_rcv_pkt(uint8_t *data, uint16_t len)
 #if CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
     ble_log_spi_out_hci_write(BLE_LOG_SPI_OUT_SOURCE_HCI_UPSTREAM, data, len);
 #endif // CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
-#if CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED
+#if CONFIG_BLE_LOG_HCI_LOG_ENABLED
     ble_log_write_hci(BLE_LOG_HCI_UPSTREAM, data, len);
-#endif /* CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED */
+#endif /* CONFIG_BLE_LOG_HCI_LOG_ENABLED */
 
     bt_record_hci_data(data, len);
 
@@ -306,7 +306,8 @@ static int host_rcv_pkt(uint8_t *data, uint16_t len)
         }
 
         if (data[1] == BLE_HCI_EVCODE_HW_ERROR) {
-            assert(0);
+            esp_rom_printf("HCI HW error from controller, hw_code=%d\n",
+                           (totlen > BLE_HCI_EVENT_HDR_LEN) ? data[3] : 0);
         }
 
         /* Allocate LE Advertising Report Event from lo pool only */

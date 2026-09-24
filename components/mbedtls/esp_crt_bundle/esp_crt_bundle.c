@@ -12,6 +12,7 @@
 #include "esp_log.h"
 
 #include "mbedtls/pk.h"
+#include "mbedtls/platform.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/asn1.h"
 
@@ -442,6 +443,9 @@ static bool esp_crt_check_bundle(const uint8_t* const x509_bundle, const size_t 
     // Check all offsets for consistency with certificate data
     for (uint32_t i = 0; i < num_certs - 1; ++i) {
         const uint32_t off = esp_crt_get_cert_offset(x509_bundle, i);
+        if (unlikely((uint64_t)off + CRT_HEADER_SIZE > bundle_size)) {
+            return false;
+        }
         cert_t cert = x509_bundle + off;
         // The next offset in the list must point to right after the current cert
         const uint32_t expected_next_offset = off + esp_crt_get_len(cert);
@@ -455,7 +459,7 @@ static bool esp_crt_check_bundle(const uint8_t* const x509_bundle, const size_t 
     // The loop above stops at num_certs - 1, so the final certificate's extent is never
     // validated; check it explicitly so its key data cannot run past the bundle (CWE-125).
     const uint32_t last_off = esp_crt_get_cert_offset(x509_bundle, num_certs - 1);
-    if (unlikely(last_off >= bundle_size)) {
+    if (unlikely((uint64_t)last_off + CRT_HEADER_SIZE > bundle_size)) {
         return false;
     }
     const uint32_t last_len = esp_crt_get_len(x509_bundle + last_off);
@@ -517,7 +521,7 @@ static int esp_crt_ca_cb_callback(void *ctx, mbedtls_x509_crt const *child, mbed
     }
     // If we found a matching certificate, we need to allocate a new
     // mbedtls_x509_crt structure and copy the certificate data into it.
-    mbedtls_x509_crt *new_cert = calloc(1, sizeof(mbedtls_x509_crt));
+    mbedtls_x509_crt *new_cert = mbedtls_calloc(1, sizeof(mbedtls_x509_crt));
     if (unlikely(new_cert == NULL)) {
         ESP_LOGE(TAG, "Failed to allocate memory for new certificate");
         return MBEDTLS_ERR_X509_ALLOC_FAILED;
@@ -543,7 +547,7 @@ static int esp_crt_ca_cb_callback(void *ctx, mbedtls_x509_crt const *child, mbed
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to parse public key from certificate: %d", ret);
         mbedtls_x509_crt_free(new_cert);
-        free(new_cert);
+        mbedtls_free(new_cert);
         return ret;
     }
 
@@ -553,24 +557,24 @@ static int esp_crt_ca_cb_callback(void *ctx, mbedtls_x509_crt const *child, mbed
     if (esp_crt_ref_asn1(child_issuer, parent_subject) != 0) {
         ESP_LOGE(TAG, "Failed to reference ASN.1 data");
         mbedtls_x509_crt_free(new_cert);
-        free(new_cert);
+        mbedtls_free(new_cert);
         return MBEDTLS_ERR_X509_ALLOC_FAILED;
     }
 
     child_issuer = child_issuer->next;
     while (child_issuer != NULL) {
-        parent_subject->next = calloc(1, sizeof(mbedtls_asn1_named_data));
+        parent_subject->next = mbedtls_calloc(1, sizeof(mbedtls_asn1_named_data));
         if (parent_subject->next == NULL) {
             ESP_LOGE(TAG, "Failed to allocate memory for subject node");
             mbedtls_x509_crt_free(new_cert);
-            free(new_cert);
+            mbedtls_free(new_cert);
             return MBEDTLS_ERR_X509_ALLOC_FAILED;
         }
         parent_subject = parent_subject->next;
         if (esp_crt_ref_asn1(child_issuer, parent_subject) != 0) {
             ESP_LOGE(TAG, "Failed to reference ASN.1 data");
             mbedtls_x509_crt_free(new_cert);
-            free(new_cert);
+            mbedtls_free(new_cert);
             return MBEDTLS_ERR_X509_ALLOC_FAILED;
         }
         child_issuer = child_issuer->next;

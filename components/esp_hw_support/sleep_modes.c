@@ -41,6 +41,7 @@
 #include "hal/efuse_hal.h"
 #include "hal/rtc_io_hal.h"
 #include "hal/clk_tree_hal.h"
+#include "rom/rtc.h"
 
 #if RNG_LL_NEEDS_RESET_WHEN_WAKEUP
 #include "hal/rng_ll.h"
@@ -55,10 +56,6 @@
 #include "hal/timer_ll.h"
 #endif
 
-#if SOC_PM_SUPPORT_PMU_MODEM_STATE
-#include "esp_private/pm_impl.h"
-#endif
-
 #if !SOC_PMU_SUPPORTED
 #include "hal/rtc_cntl_ll.h"
 #endif
@@ -66,6 +63,7 @@
 
 #include "soc/rtc.h"
 
+#include "hal/clk_gate_ll.h"
 #include "hal/clk_tree_ll.h"
 #if SOC_WDT_SUPPORTED || SOC_RTC_WDT_SUPPORTED || SOC_SLEEP_TGWDT_STOP_WORKAROUND
 #include "hal/wdt_hal.h"
@@ -80,6 +78,7 @@
 #endif
 #include "hal/temperature_sensor_hal.h"
 #include "hal/mspi_ll.h"
+#include "hal/gpio_ll.h"
 #if SOC_LP_CORE_HW_AUTO_CLRWAKEUPCAUSE
 #include "hal/lp_aon_hal.h"
 #endif
@@ -99,60 +98,17 @@
 #include "esp_private/esp_task_wdt.h"
 #include "esp_private/sar_periph_ctrl.h"
 
-#if SOC_PM_SUPPORT_EXT1_WAKEUP && SOC_RTCIO_PIN_COUNT > 0
 #include "esp_private/sleep_gpio.h"
-#endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/rtc.h"
 #include "esp_private/gpio.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/rtc.h"
 #include "soc/extmem_reg.h"
 #include "esp_private/gpio.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32C2
-#include "esp32c2/rom/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32C6
-#include "esp32c6/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#include "hal/clk_gate_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32C5
-#include "esp32c5/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#include "hal/clk_gate_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32C61
-#include "esp32c61/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/rtc.h"
-#include "soc/extmem_reg.h"
-#include "hal/gpio_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32H21
-#include "esp32h21/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32H4
-#include "esp32h4/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
-#include "esp32p4/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#include "hal/clk_gate_ll.h"
-#elif CONFIG_IDF_TARGET_ESP32S31
-#include "esp32s31/rom/rtc.h"
-#include "hal/gpio_ll.h"
-#include "hal/clk_gate_ll.h"
 #endif
 
 #if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
 #include "esp_private/eco3_livelock_workaround.h"
-#endif
-
-#if SOC_MSPI_HAS_INDEPENT_IOMUX
-#include "hal/mspi_ll.h"
 #endif
 
 #include "hal/rtc_timer_hal.h"
@@ -247,6 +203,7 @@
 #elif CONFIG_IDF_TARGET_ESP32S31
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US           (324)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US        (780)
+#define PVT_REINIT_COST_US                      (95)
 #endif
 
 // Actually costs 80us, using the fastest slow clock 150K calculation takes about 16 ticks
@@ -871,8 +828,9 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
     }
 #endif
     if (deep_sleep) {
+        esp_sleep_gpio_clear_dedicated_ctrl();
 #if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP || SOC_GPIO_NEED_SOFT_ISOLATE_DURING_PD
-        esp_sleep_isolate_digital_gpio(false);
+        esp_sleep_isolate_digital_gpio(true);
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_ESP_SLEEP_SET_FLASH_DPD
@@ -914,7 +872,7 @@ static esp_err_t FORCE_IRAM_ATTR esp_sleep_start_safe(uint32_t sleep_flags, uint
     } else {
 #if SOC_GPIO_NEED_SOFT_ISOLATE_DURING_PD
         if (sleep_flags & RTC_SLEEP_PD_DIG) {
-            esp_sleep_isolate_digital_gpio(true);
+            esp_sleep_isolate_digital_gpio(false);
         }
 #endif
         /* Cache Suspend 1: will wait cache idle in cache suspend */
@@ -1218,15 +1176,13 @@ static esp_err_t SLEEP_FN_ATTR esp_sleep_start(uint32_t sleep_flags, esp_sleep_m
         sleep_cache_suspend();
     }
 #endif
-    // Restore CPU frequency
+    // Restore CPU frequency (Will fallback to rtc_clk_cpu_freq_set_config if PLL source is not configured.)
+    rtc_clk_cpu_freq_set_config_fast(&cpu_freq_config);
 #if SOC_PM_SUPPORT_PMU_MODEM_STATE && !SOC_PM_BBPLL_PD_IN_MODEM_STATE && !SOC_PM_MODEM_STATE_USE_XTAL
     if (pmu_sleep_pll_already_enabled()) {
-        rtc_clk_cpu_freq_to_pll_and_pll_lock_release(esp_pm_impl_get_cpu_freq(PM_MODE_CPU_MAX));
-    } else
-#endif
-    {
-        rtc_clk_cpu_freq_set_config(&cpu_freq_config);
+        rtc_clk_modem_pll_lock_release();
     }
+#endif
     esp_sleep_execute_event_callbacks(SLEEP_EVENT_SW_CLK_READY, (void *)0);
 
     if (!deep_sleep) {
@@ -1277,11 +1233,11 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         }
     }
 #endif
-#if CONFIG_IDF_TARGET_ESP32S2
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
     /* Due to hardware limitations, on S2 the brownout detector sometimes trigger during deep sleep
        to circumvent this we disable the brownout detector before sleeping  */
     esp_brownout_disable();
-#endif //CONFIG_IDF_TARGET_ESP32S2
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
 
     esp_sync_timekeeping_timers();
 
@@ -1412,6 +1368,12 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
 #endif
 
     esp_sleep_exit_critical();
+
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+    /* Brownout was disabled before attempting deep sleep; restore it after rejection. */
+    esp_brownout_init();
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+
     return err;
 }
 
@@ -1496,7 +1458,16 @@ static SLEEP_FN_ATTR esp_err_t sleep_smp_cpu_sleep_prepare(void)
     // which naturally avoids cache livelock, so the 20ms livelock workaround timeout is not needed.
     esp_int_wdt_livelock_workaround(false);
 #endif
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
+    esp_err_t ipc_isr_err = ESP_OK;
+    esp_ipc_isr_stall_other_cpu();
+#else
+    /* Dual-core PM_ENABLE selects THREAD_SAFE_CLAIM, so auto light sleep always takes
+     * the blocking path above. This safe-stall fallback is for non-PM callers of
+     * esp_light_sleep_start(): reject and let the upper layer decide whether to retry.
+     */
     esp_err_t ipc_isr_err = esp_ipc_isr_stall_other_cpu_safe();
+#endif
     if (ipc_isr_err == ESP_OK) {
 #if CONFIG_PM_ESP_SLEEP_POWER_DOWN_CPU && SOC_PM_CPU_RETENTION_BY_SW
         // Run CPU retention in the context of the other safely stalled CPU.

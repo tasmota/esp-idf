@@ -369,6 +369,10 @@ The example code for the SPI Master driver can be found in the :example:`periphe
 
     Note that this feature shares bandwidth (bus frequency * bus bits width) with MSPI bus, so GPSPI transfer bandwidth should be less than PSRAM bandwidth, **otherwise transmission data may be lost**. You can check the return value or :c:macro:`SPI_TRANS_DMA_RX_FAIL` and :c:macro:`SPI_TRANS_DMA_TX_FAIL` flags after the transaction is finished to check if error occurs during the transmission. If the transaction returns :c:macro:`ESP_ERR_INVALID_STATE` error, the transaction fails.
 
+    .. note::
+
+        When encryption is enabled, there are stricter alignment requirements for PSRAM buffer transfers, usually only supporting 16-byte alignment. For unaligned transfers, :c:macro:`ESP_ERR_INVALID_ARG` error will be returned. You can switch to internal memory or remove the :c:macro:`SPI_TRANS_DMA_USE_PSRAM` flag.
+
 Transactions with Data Not Exceeding 32 Bits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -471,6 +475,10 @@ To have better control of the calling sequence of functions, send mixed transact
 
 GPIO Matrix and IO_MUX
 ^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    Enabling :c:macro:`SPICOMMON_BUSFLAG_DATA_OUT_INV` forces all configured SPI bus signals through the GPIO Matrix, even when dedicated IO_MUX pins are selected. Since the GPIO Matrix and IO_MUX have target-specific timing and frequency differences, consider the limitations described below when selecting the SPI clock frequency.
 
 .. only:: esp32
 

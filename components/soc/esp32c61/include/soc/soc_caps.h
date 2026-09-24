@@ -117,6 +117,8 @@
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 #define SOC_CACHE_WRITEBACK_SUPPORTED           1
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 2   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (1U)
@@ -444,13 +446,12 @@
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
 
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
-
 #define SOC_PM_FLASH_KEEP_POWER_IN_LSLP     (1)  /*!<Keep flash on in light sleep to reduce wake latency and current leakage*/
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
+#define SOC_RNG_CLOCK_IS_INDEPENDENT              (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
@@ -500,10 +501,12 @@
 #define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
 
 /*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (200) /*!< Efficient Trace v2.0 */
 #define SOC_RISCV_TRACE_HAS_CONFIG_REG              (1) /*!< Has the encoder config register */
 #define SOC_RISCV_TRACE_AHB_CONFIGURABLE            (1) /*!< AHB write master is configurable */
 #define SOC_RISCV_TRACE_FILTER_SUPPORTED            (1) /*!< Has the filter unit */
 #define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (6) /*!< Bits in the exception cause field (ecause_width_p) */
 
 /*------------------------------------- No Reset CAPS -------------------------------------*/
 //  \#define SOC_CAPS_NO_RESET_BY_ANA_BOD           (1)   //TODO: [ESP32C61] IDF-9254

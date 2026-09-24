@@ -294,7 +294,7 @@ static esp_err_t emac_enable_ref_out_clock(emac_esp32_t *emac, const emac_clk_in
 #if !SOC_EMAC_RMII_CLK_OUT_INTERNAL_LOOPBACK
 static esp_err_t emac_config_phy_ref_clk_clock(emac_esp32_t *emac, soc_module_clk_t phy_ref_src, soc_module_clk_t upstream_src)
 {
-    ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src(phy_ref_src, true), TAG, "PHY_REF_CLK enable failed");
+    ESP_RETURN_ON_ERROR(esp_clk_tree_acquire_src(phy_ref_src), TAG, "PHY_REF_CLK enable failed");
     esp_err_t up_ret = esp_clk_tree_src_select_upstream(phy_ref_src, upstream_src);
     if (up_ret == ESP_ERR_INVALID_STATE) {
         ESP_LOGW(TAG, "PHY_REF_CLK upstream is already selected by another peripheral; reusing existing routing");
@@ -337,13 +337,13 @@ static esp_err_t emac_config_pll_clock(emac_esp32_t *emac, const emac_clk_info_t
             }
             ESP_LOGD(TAG, "info->clk_id: %i, info->clk_name: %s, pll_expt_freq: %" PRIu32 " Hz", info->clk_id, info->clk_name, pll_expt_freq);
             ESP_RETURN_ON_FALSE(pll_expt_freq > 0, ESP_ERR_NOT_SUPPORTED, TAG, "No %s on %" PRIi32 " Hz grid divides %" PRIu32 " Hz", info->clk_name, info->step_hz, *freq_hz);
-            ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src(info->clk_id, true), TAG, "%s enable failed", info->clk_name);
+            ESP_RETURN_ON_ERROR(esp_clk_tree_acquire_src(info->clk_id), TAG, "%s enable failed", info->clk_name);
             esp_err_t ret = esp_clk_tree_src_set_freq_hz(info->clk_id, pll_expt_freq, &real_freq);
             ESP_LOGD(TAG, "Clock set frequency: %" PRIu32 " Hz", real_freq);
             if (ret == ESP_ERR_INVALID_STATE) {
                 ESP_LOGW(TAG, "%s is occupied already, it is working at %" PRIu32 " Hz", info->clk_name, real_freq);
             } else if (ret != ESP_OK) {
-                esp_clk_tree_enable_src(info->clk_id, false);
+                esp_clk_tree_release_src(info->clk_id);
                 ESP_RETURN_ON_ERROR(ret, TAG, "Set %s clock failed", info->clk_name);
             }
             *freq_hz = real_freq;
@@ -560,6 +560,7 @@ static esp_err_t emac_esp32_transmit_ctrl_bufs(esp_eth_mac_t *mac, void *ctrl, c
 {
     emac_esp32_t *emac = __containerof(mac, emac_esp32_t, parent);
     emac_esp_dma_transmit_buff_t buff_array[buf_count];
+    esp_err_t ret = ESP_OK;
 
     uint32_t exp_len = 0;
     for (size_t i = 0; i < buf_count; i++) {
@@ -567,6 +568,7 @@ static esp_err_t emac_esp32_transmit_ctrl_bufs(esp_eth_mac_t *mac, void *ctrl, c
         buff_array[i].size = bufs[i].len;
         exp_len += buff_array[i].size;
     }
+    ESP_GOTO_ON_FALSE(exp_len > 0, ESP_ERR_INVALID_ARG, err, TAG, "expected length is 0");
 
     eth_mac_time_t *ts = (eth_mac_time_t *)ctrl;
     uint32_t sent_len = emac_esp_dma_transmit_frame_ext(emac->emac_dma_hndl, buff_array, (uint32_t)buf_count, ts);
@@ -575,7 +577,8 @@ static esp_err_t emac_esp32_transmit_ctrl_bufs(esp_eth_mac_t *mac, void *ctrl, c
         ESP_LOGD(TAG, "insufficient TX buffer size");
         return ESP_ERR_NO_MEM;
     }
-    return ESP_OK;
+err:
+    return ret;
 }
 
 static esp_err_t emac_esp32_transmit_ctrl_vargs(esp_eth_mac_t *mac, void *ctrl, uint32_t argc, va_list args)
@@ -615,7 +618,7 @@ static void emac_esp32_rx_task(void *arg)
     while (1) {
         // block indefinitely until got notification from underlay event
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        do {
+        while (1) {
             /* set max expected frame len */
             uint32_t frame_len = ETH_MAX_PACKET_SIZE;
             buffer = emac_esp_dma_alloc_recv_buf(emac->emac_dma_hndl, &frame_len);
@@ -645,9 +648,21 @@ static void emac_esp32_rx_task(void *arg)
                 ESP_LOGE(TAG, "no mem for receive buffer");
                 /* ensures that interface to EMAC does not get stuck with unprocessed frames */
                 emac_esp_dma_flush_recv_frame(emac->emac_dma_hndl);
-            }
-            emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
+            } else {
+                /* no valid frame: either the ring is drained or an erroneous frame was flushed with frames still behind it */
+                emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
+                if (emac->frames_remain == 0) {
 #if CONFIG_ETH_SOFT_FLOW_CONTROL
+                    /* ring drained, release any standing pause before idling */
+                    emac_hal_send_pause_frame(&emac->hal, false);
+#endif
+                    break;
+                }
+                /* erroneous frame flushed; keep draining the frames behind it */
+                continue;
+            }
+#if CONFIG_ETH_SOFT_FLOW_CONTROL
+            emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
             // we need to do extra checking of remained frames in case there are no unhandled frames left, but pause frame is still undergoing
             if ((emac->free_rx_descriptor < emac->flow_control_low_water_mark) && emac->do_flow_ctrl && emac->frames_remain) {
                 emac_hal_send_pause_frame(&emac->hal, true);
@@ -655,7 +670,7 @@ static void emac_esp32_rx_task(void *arg)
                 emac_hal_send_pause_frame(&emac->hal, false);
             }
 #endif
-        } while (emac->frames_remain);
+        }
     }
 }
 
@@ -821,7 +836,7 @@ static void emac_esp_free_driver_obj(emac_esp32_t *emac)
 
         for (int32_t i = 0; i < EMAC_USED_PLL_CLK_MAX_COUNT; i++) {
             if (emac->pll_clk_used[i] != EMAC_UNDEFINED_PLL_CLK) {
-                esp_clk_tree_enable_src(emac->pll_clk_used[i], false);
+                esp_clk_tree_release_src(emac->pll_clk_used[i]);
             }
         }
 

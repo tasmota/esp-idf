@@ -70,7 +70,7 @@ tools/test_apps/system/esp_intr_dump:
 
 tools/test_apps/system/flash_auto_suspend_iram_reduction:
   disable:
-    - if: IDF_TARGET == "esp32" or IDF_TARGET == "esp32s2
+    - if: IDF_TARGET == "esp32" or IDF_TARGET == "esp32s2"
       reason: Targets do not support auto-suspend
   disable_test:
     - if: IDF_TARGET != "esp32c3"
@@ -82,6 +82,11 @@ tools/test_apps/system/g0_components:
     - if: INCLUDE_DEFAULT == 1 or IDF_TARGET in ["esp32h21", "esp32h4", "esp32s31"] # preview targets
 
 tools/test_apps/system/g1_components:
+  disable:
+    - if: IDF_BUILD_V2 == "1"
+      reason: the cmake v2 component closure is checked by g1_components_cmakev2
+
+tools/test_apps/system/g1_components_cmakev2:
 
 tools/test_apps/system/gdb:
   disable_test:
@@ -160,11 +165,13 @@ tools/test_apps/system/panic/coredump:
   disable:
     - if: CONFIG_NAME in ["coredump_flash_extram_stack_bss", "coredump_flash_extram_stack_heap"] and SOC_SPIRAM_SUPPORTED != 1
     - if: CONFIG_NAME == "coredump_flash_extram_stack_bss_xip" and SOC_SPIRAM_XIP_SUPPORTED != 1
+    - if: CONFIG_NAME == "coredump_flash_riscv_trace" and SOC_RISCV_TRACE_SUPPORTED != 1
     - if: IDF_TARGET in ["esp32h21"]
       temporary: true
       reason: IDF-11543
   depends_components:
     - espcoredump
+    - esp_riscv_trace
     - esp_system
     - spi_flash
 
@@ -174,7 +181,7 @@ tools/test_apps/system/panic/panic_base:
 
 tools/test_apps/system/psram_stack:
   disable:
-    - if: SOC_PSRAM_SUPPORTED != 1
+    - if: SOC_SPIRAM_SUPPORTED != 1
       reason: PSRAM stack feature requires a target with PSRAM support
 
 tools/test_apps/system/ram_loadable_app:
@@ -254,5 +261,5 @@ tools/test_apps/system/unicore_bootloader:
   disable:
     - if: SOC_CPU_CORES_NUM == 1
       reason: the test is only relevant for multicore chips
-    - if: CONFIG_NAME == "unicore_psram" and SOC_PSRAM_SUPPORTED != 1
-    - if: CONFIG_NAME == "multicore_psram" and SOC_PSRAM_SUPPORTED != 1
+    - if: CONFIG_NAME == "unicore_psram" and SOC_SPIRAM_SUPPORTED != 1
+    - if: CONFIG_NAME == "multicore_psram" and SOC_SPIRAM_SUPPORTED != 1

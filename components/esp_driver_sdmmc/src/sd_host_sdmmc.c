@@ -76,6 +76,11 @@ esp_err_t sd_host_create_sdmmc_controller(const sd_host_sdmmc_cfg_t *config, sd_
     esp_err_t ret = ESP_FAIL;
     ESP_RETURN_ON_FALSE(config && ret_handle, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
 
+    size_t burst_size = config->dma_burst_size ? config->dma_burst_size : SDMMC_LL_DMA_BURST_SIZE_DEFAULT;
+    ESP_RETURN_ON_FALSE(burst_size == 1 ||
+                        (burst_size >= 4 && burst_size <= 256 && (burst_size & (burst_size - 1)) == 0),
+                        ESP_ERR_INVALID_ARG, TAG, "invalid dma_burst_size");
+
     sd_host_sdmmc_ctlr_t *ctlr = heap_caps_calloc(1, sizeof(sd_host_sdmmc_ctlr_t), SD_HOST_SDMMC_MEM_ALLOC_CAPS);
     ESP_RETURN_ON_FALSE(ctlr, ESP_ERR_NO_MEM, TAG, "no mem for sd host controller context");
 
@@ -108,10 +113,7 @@ esp_err_t sd_host_create_sdmmc_controller(const sd_host_sdmmc_cfg_t *config, sd_
 #endif //CONFIG_PM_ENABLE
 
     sdmmc_hal_init(&ctlr->hal);
-    PERIPH_RCC_ATOMIC() {
-        sdmmc_ll_pad_set_pin_dedicated_ctrl(ctlr->hal.dev, true);
-    }
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src(SDMMC_CLK_SRC_DEFAULT, true), err, TAG, "failed to acquire clk");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src(SDMMC_CLK_SRC_DEFAULT), err, TAG, "failed to acquire clk");
     uint32_t src_freq_hz = 0;
     esp_clk_tree_src_get_freq_hz(SDMMC_CLK_SRC_DEFAULT, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &src_freq_hz);
     ESP_EARLY_LOGI(TAG, "src_freq_hz: %d", src_freq_hz);
@@ -130,6 +132,7 @@ esp_err_t sd_host_create_sdmmc_controller(const sd_host_sdmmc_cfg_t *config, sd_
     sdmmc_ll_enable_interrupt(ctlr->hal.dev, 0xffffffff, false);
     sdmmc_ll_enable_global_interrupt(ctlr->hal.dev, false);
     sdmmc_ll_init_dma(ctlr->hal.dev);
+    sdmmc_ll_set_dma_burst_size(ctlr->hal.dev, burst_size);
 
     ctlr->spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
     ctlr->drv.del_ctlr = sd_host_del_sdmmc_controller;
@@ -398,6 +401,11 @@ static esp_err_t sd_host_controller_remove_sdmmc_slot(sd_host_slot_handle_t slot
         gpio_output_disable(slot_ctx->io_config.d7_io);
     }
 
+    // release the pads so that they can be used as normal GPIOs
+    PERIPH_RCC_ATOMIC() {
+        sdmmc_ll_pad_set_pin_dedicated_ctrl(ctlr->hal.dev, slot_ctx->slot_id, false);
+    }
+
     xSemaphoreGive(ctlr->mutex);
     free(slot);
 
@@ -433,7 +441,7 @@ static esp_err_t sd_host_del_sdmmc_controller(sd_host_ctlr_handle_t ctlr)
 #endif
 
 #if SDMMC_LL_MPLL_SUPPORTED
-    esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, false);
+    esp_clk_tree_release_src(SOC_MOD_CLK_MPLL);
 #endif
 
     if (ctlr_ctx->mutex) {
@@ -1088,7 +1096,7 @@ static esp_err_t sd_host_reset(sd_host_sdmmc_ctlr_t *ctlr)
  */
 static void sd_host_set_clk_div(sd_host_sdmmc_ctlr_t *ctlr, soc_periph_sdmmc_clk_src_t src, int div)
 {
-    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)src, true));
+    ESP_ERROR_CHECK(esp_clk_tree_acquire_src((soc_module_clk_t)src));
     PERIPH_RCC_ATOMIC() {
         sdmmc_ll_set_clock_div(ctlr->hal.dev, div);
         sdmmc_ll_select_clk_source(ctlr->hal.dev, src);
@@ -1392,6 +1400,10 @@ static esp_err_t sdmmc_slot_io_config(sd_host_sdmmc_slot_t *slot, const sd_host_
         GPIO_NUM_CHECK(slot_gpio->d5_io);
         GPIO_NUM_CHECK(slot_gpio->d6_io);
         GPIO_NUM_CHECK(slot_gpio->d7_io);
+    }
+
+    PERIPH_RCC_ATOMIC() {
+        sdmmc_ll_pad_set_pin_dedicated_ctrl(slot->ctlr->hal.dev, slot_id, true);
     }
 
     configure_pin(slot_gpio->clk_io, sdmmc_slot_gpio_sig[slot_id].clk, GPIO_MODE_OUTPUT, "clk", use_gpio_matrix);

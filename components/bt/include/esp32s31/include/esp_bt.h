@@ -20,10 +20,6 @@
 #include "../../common/btdm_bredr.h"
 #endif // SOC_BT_CLASSIC_SUPPORTED
 
-#if SOC_BLE_SUPPORTED
-#include "../../common/btdm_le.h"
-#endif /* SOC_BLE_SUPPORTED */
-
 #ifdef CONFIG_BT_LE_HCI_INTERFACE_USE_UART
 #include "driver/uart.h"
 #endif
@@ -112,7 +108,11 @@ typedef struct {
     uint8_t val[6];   /*!< Array containing the 6-byte Bluetooth address value */
 } esp_ble_addr_t;
 
-#define BTDM_CONFIG_VERSION     0x20260127
+#if SOC_BLE_SUPPORTED
+#include "../../common/btdm_le.h"
+#endif /* SOC_BLE_SUPPORTED */
+
+#define BTDM_CONFIG_VERSION     0x20260916
 #define BTDM_CONFIG_MAGIC_VALUE 0x5a5aa5a5
 
 /* Types definition
@@ -128,6 +128,7 @@ typedef struct {
     uint8_t task_prio;                  /*!< Priority of the Bluetooth controller task */
     uint8_t task_run_cpu;               /*!< CPU number on which the Bluetooth controller task runs */
     uint8_t hci_cmd_num;                /*!< HCI command buffer number */
+    uint8_t nonblocking_cmd_buf;        /*!< Non-blocking mode for command buffer allocation */
     uint8_t sleep_en;                   /*!< Enable sleep functionality */
     uint8_t version_num;                /*!< Hardware version number of this chip */
     uint8_t bluetooth_mode;             /*!< Controller mode: BR/EDR, BLE or Dual Mode */
@@ -167,6 +168,7 @@ typedef struct {
                 .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                          \
                 .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                     \
                 .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                         \
+                .nonblocking_cmd_buf = UC_BT_CTRL_NONBLOCK_CMD_BUF,                                \
                 .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                               \
                 .version_num = 0,                                                                  \
                 .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                        \
@@ -184,6 +186,7 @@ typedef struct {
                 .task_prio = ESP_TASK_BT_CONTROLLER_PRIO,                                          \
                 .task_run_cpu = CONFIG_BT_CTRL_PINNED_TO_CORE,                                     \
                 .hci_cmd_num = CONFIG_BT_CTRL_HCI_CMD_NUM,                                         \
+                .nonblocking_cmd_buf = UC_BT_CTRL_NONBLOCK_CMD_BUF,                                \
                 .sleep_en = UC_BT_CTRL_SLEEP_ENABLE,                                               \
                 .version_num = 0,                                                                  \
                 .bluetooth_mode = BTDM_CONTROLLER_MODE_EFF,                                        \

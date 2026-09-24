@@ -365,9 +365,13 @@ SPI 主机驱动程序的示例代码存放在 ESP-IDF 示例项目的 :example:
     使用 PSRAM 的传输事务
     ^^^^^^^^^^^^^^^^^^^^^^
 
-    {IDF_TARGET_NAME} 支持 GPSPI Master 通过 DMA 直接传输 PSRAM 存储的数据而不用内部额外的零时拷贝，应此可以节省内存，在传输配置中添加 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志信号即可使用。
+    {IDF_TARGET_NAME} 支持 GPSPI Master 通过 DMA 直接传输 PSRAM 存储的数据而不用内部额外的零时拷贝，因此可以节省内存，在传输配置中添加 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志信号即可使用。
 
     请注意该功能共享 MSPI 总线带宽（总线频率 * 总线位宽），因此 GPSPI 传输带宽应小于 PSRAM 带宽，否则 **可能会丢失传输数据**。可通过在传输结束时检查返回值或 :c:macro:`SPI_TRANS_DMA_RX_FAIL` 和 :c:macro:`SPI_TRANS_DMA_TX_FAIL` 标志信号来判断传输是否发生了错误。若传输事务返回 :c:macro:`ESP_ERR_INVALID_STATE` 错误，则传输事务失败。
+
+    .. note::
+
+        当开启加密功能时，使用 PSRAM Buffer 的传输有更严格的对齐要求，通常为仅支持 16 字节对齐的传输。对于不对齐的传输，会返回 :c:macro:`ESP_ERR_INVALID_ARG` 错误。可改为使用内部内存，或取消 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志。
 
 传输数据小于 32 位的传输事务
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -471,6 +475,10 @@ ISR 会干扰飞行中的轮询传输事务，以适应中断传输事务。在�
 
 GPIO 矩阵与 IO_MUX 管脚
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    启用 :c:macro:`SPICOMMON_BUSFLAG_DATA_OUT_INV` 后，即使选择了专用 IO_MUX 管脚，驱动也会强制所有已配置的 SPI 总线信号通过 GPIO 矩阵。由于不同芯片的 GPIO 矩阵和 IO_MUX 存在不同的时序和频率限制，选择 SPI 时钟频率时应考虑下文所述限制。
 
 .. only:: esp32
 

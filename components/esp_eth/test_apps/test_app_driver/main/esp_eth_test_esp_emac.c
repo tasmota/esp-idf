@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <inttypes.h>
+#include "esp_err.h"
 #include "esp_eth_spec.h"
 #include "time.h"
 #include "freertos/FreeRTOS.h"
@@ -422,7 +423,11 @@ TEST_CASE("internal emac erroneous frames", "[esp_emac]")
     ESP_LOGI(TAG, "Verify non-failure frame condition");
     for (i = 1; i <= TEST_FRAMES_NUM; i++) {
         test_pkt->data[0] = frame_id++;
-        TEST_ESP_OK(esp_eth_transmit(eth_handle, test_pkt, transmit_size));
+        if (esp_eth_transmit(eth_handle, test_pkt, transmit_size) == ESP_ERR_NO_MEM) {
+            // we are too fast, wait for a bit and try again
+            vTaskDelay(2);
+            TEST_ESP_OK(esp_eth_transmit(eth_handle, test_pkt, transmit_size));
+        }
         // if we have only 10 or less Rx buffers, they can be all used pretty fast => wait to be freed prior next Tx
         if (CONFIG_ETH_DMA_RX_BUFFER_NUM <= 10 && !(i % (CONFIG_ETH_DMA_RX_BUFFER_NUM / 2))) {
             ESP_LOGI(TAG, "wait prior Tx (frame num %i)", i);
@@ -450,7 +455,11 @@ TEST_CASE("internal emac erroneous frames", "[esp_emac]")
         if (!(i % 2)) {
             TEST_ESP_OK(esp_eth_ioctl(eth_handle, ETH_MAC_ESP_CMD_SET_TDES0_CFG_BITS, &emac_tx_dbg_flag));
         }
-        TEST_ESP_OK(esp_eth_transmit(eth_handle, test_pkt, transmit_size));
+        if (esp_eth_transmit(eth_handle, test_pkt, transmit_size) == ESP_ERR_NO_MEM) {
+            // we are too fast, wait for a bit and try again
+            vTaskDelay(2);
+            TEST_ESP_OK(esp_eth_transmit(eth_handle, test_pkt, transmit_size));
+        }
         if (!(i % 2)) {
             TEST_ESP_OK(esp_eth_ioctl(eth_handle, ETH_MAC_ESP_CMD_CLEAR_TDES0_CFG_BITS, &emac_tx_dbg_flag));
         }
@@ -645,37 +654,37 @@ TEST_CASE("internal emac MPLL shared with PSRAM", "[esp_emac_clk_out][skip_setup
 
     // PSRAM default speed: MPLL at 400 MHz — EMAC divider 8 gives exactly 50 MHz
     ESP_LOGI(TAG, "Verify MPLL at 400 MHz (simulating PSRAM default)");
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, true));
+    TEST_ESP_OK(esp_clk_tree_acquire_src(SOC_MOD_CLK_MPLL));
     TEST_ESP_OK(esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_MPLL, 400 * 1000000, &real_freq));
     ESP_LOGI(TAG, "MPLL set to %" PRIu32 " Hz", real_freq);
 
     mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     TEST_ASSERT_NOT_NULL(mac);
     TEST_ESP_OK(mac->del(mac));
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, false));
+    TEST_ESP_OK(esp_clk_tree_release_src(SOC_MOD_CLK_MPLL));
 
     // PSRAM 250M speed: MPLL at 500 MHz — EMAC divider 10 gives exactly 50 MHz
     ESP_LOGI(TAG, "Verify MPLL at 500 MHz (simulating PSRAM @ 250M speed)");
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, true));
+    TEST_ESP_OK(esp_clk_tree_acquire_src(SOC_MOD_CLK_MPLL));
     TEST_ESP_OK(esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_MPLL, 500 * 1000000, &real_freq));
     ESP_LOGI(TAG, "MPLL set to %" PRIu32 " Hz", real_freq);
 
     mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     TEST_ASSERT_NOT_NULL(mac);
     TEST_ESP_OK(mac->del(mac));
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, false));
+    TEST_ESP_OK(esp_clk_tree_release_src(SOC_MOD_CLK_MPLL));
 
     // PSRAM 80M speed: MPLL at 320 MHz — no integer divider can produce 50 MHz within tolerance,
     // see AP_HEX_PSRAM_MPLL_DEFAULT_FREQ_MHZ for reference
     // Best candidate: 320/6 = 53.33 MHz (error ~3.33 MHz >> 2500 Hz tolerance)
     ESP_LOGI(TAG, "Verify MPLL at 320 MHz (simulating PSRAM @ 80M speed) — expected to fail");
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, true));
+    TEST_ESP_OK(esp_clk_tree_acquire_src(SOC_MOD_CLK_MPLL));
     TEST_ESP_OK(esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_MPLL, 320 * 1000000, &real_freq));
     ESP_LOGI(TAG, "MPLL set to %" PRIu32 " Hz", real_freq);
 
     mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     TEST_ASSERT_NULL(mac);
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_MPLL, false));
+    TEST_ESP_OK(esp_clk_tree_release_src(SOC_MOD_CLK_MPLL));
 }
 #endif // SOC_EMAC_REF_CLK_FROM_MPLL
 
@@ -699,24 +708,24 @@ TEST_CASE("internal emac APLL shared with I2S", "[esp_emac_clk_out][skip_setup_t
 
     // Another peripheral has APLL at 50 MHz — exact RMII clock match, EMAC should succeed
     ESP_LOGI(TAG, "Verify APLL at 50 MHz (exact RMII clock match)");
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, true));
+    TEST_ESP_OK(esp_clk_tree_acquire_src(SOC_MOD_CLK_APLL));
     TEST_ESP_OK(esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_APLL, 50 * 1000000, &real_freq));
     ESP_LOGI(TAG, "APLL set to %" PRIu32 " Hz", real_freq);
 
     mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     TEST_ASSERT_NOT_NULL(mac);
     TEST_ESP_OK(mac->del(mac));
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, false));
+    TEST_ESP_OK(esp_clk_tree_release_src(SOC_MOD_CLK_APLL));
 
     // I2S typical frequency: APLL at ~12.288 MHz (48 kHz * 256) — far from 50 MHz, EMAC should fail
     ESP_LOGI(TAG, "Verify APLL at ~12.288 MHz (simulating I2S @ 48 kHz) — expected to fail");
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, true));
+    TEST_ESP_OK(esp_clk_tree_acquire_src(SOC_MOD_CLK_APLL));
     TEST_ESP_OK(esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_APLL, 12288000, &real_freq));
     ESP_LOGI(TAG, "APLL set to %" PRIu32 " Hz", real_freq);
 
     mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     TEST_ASSERT_NULL(mac);
-    TEST_ESP_OK(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, false));
+    TEST_ESP_OK(esp_clk_tree_release_src(SOC_MOD_CLK_APLL));
 }
 #endif // SOC_EMAC_REF_CLK_FROM_APLL
 

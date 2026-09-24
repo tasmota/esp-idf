@@ -15,9 +15,12 @@
 #include "soc/rtc.h"
 #include "soc/pmu_struct.h"
 #include "esp_private/esp_pmu.h"
+#include "esp_private/esp_clk_tree_common.h"
 #include "esp_private/sleep_clock_icg.h"
 #include "pmu_param.h"
+#include "hal/clk_gate_ll.h"
 #include "hal/clk_tree_hal.h"
+#include "hal/clk_tree_ll.h"
 #include "hal/lp_aon_hal.h"
 #include "hal/efuse_ll.h"
 #include "hal/efuse_hal.h"
@@ -301,7 +304,13 @@ static void pmu_sleep_analog_init(pmu_context_t *ctx, const pmu_sleep_analog_con
     pmu_ll_hp_set_dbg_atten                     (ctx->hal->dev, HP(SLEEP), analog->hp_sys.analog.dbg_atten);
     pmu_ll_hp_set_regulator_dbias               (ctx->hal->dev, HP(SLEEP), analog->hp_sys.analog.dbias);
     pmu_ll_hp_set_regulator_driver_bar          (ctx->hal->dev, HP(SLEEP), analog->hp_sys.analog.drv_b);
-
+#if CONFIG_ESP_ENABLE_PVT
+    uint32_t blk_version = efuse_hal_blk_version();
+    if (blk_version >= 1) {
+        uint32_t pvt_hp_dbias = GET_PERI_REG_BITS2(PMU_HP_ACTIVE_HP_REGULATOR0_REG, PMU_HP_DBIAS_VOL_V, PMU_HP_DBIAS_VOL_S);
+        pmu_ll_hp_set_regulator_dbias             (ctx->hal->dev, HP(MODEM), pvt_hp_dbias);
+    }
+#endif
     pmu_ll_lp_set_current_power_off    (ctx->hal->dev, LP(SLEEP), analog->lp_sys[LP(SLEEP)].analog.pd_cur);
     pmu_ll_lp_set_bias_sleep_enable    (ctx->hal->dev, LP(SLEEP), analog->lp_sys[LP(SLEEP)].analog.bias_sleep);
     pmu_ll_lp_set_regulator_xpd        (ctx->hal->dev, LP(SLEEP), analog->lp_sys[LP(SLEEP)].analog.xpd);
@@ -341,7 +350,7 @@ void pmu_sleep_init(const pmu_sleep_config_t *config, bool dslp)
     pmu_sleep_param_init(PMU_instance(), &config->param, dslp);
 }
 
-IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uint32_t lslp_mem_inf_fpu, bool dslp)
+uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uint32_t lslp_mem_inf_fpu, bool dslp)
 {
     if (!dslp) {
 #if !BOOTLOADER_BUILD && CONFIG_SPIRAM
@@ -352,6 +361,20 @@ IRAM_ATTR uint32_t pmu_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uin
         mspi_ll_psram_hold_all_pins();
 #endif
         s_mpll_freq_mhz_before_sleep = rtc_clk_mpll_get_freq();
+        if (s_mpll_freq_mhz_before_sleep) {
+#if !BOOTLOADER_BUILD && CONFIG_SPIRAM
+            /* MPLL is off across TOP PD; REGDMA restore needs a live PSRAM clk — switch to XTAL first (same as P4). */
+            _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_2, PSRAM_CLK_SRC_XTAL);
+            _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_3, PSRAM_CLK_SRC_XTAL);
+            if (!s_pmu_sleep_regdma_backup_enabled) {
+                // MSPI2 and MSPI3 share the register for core clock. So we only set MSPI2 here.
+                // If it's a PD_TOP sleep, psram MSPI core clock will be disabled by REGDMA
+                _psram_ctrlr_ll_enable_core_clock(PSRAM_CTRLR_LL_MSPI_ID_2, false);
+                _psram_ctrlr_ll_enable_module_clock(PSRAM_CTRLR_LL_MSPI_ID_2, false);
+            }
+#endif
+            rtc_clk_mpll_disable();
+        }
     }
     lp_aon_hal_inform_wakeup_type(dslp);
 
@@ -381,7 +404,7 @@ IRAM_ATTR uint32_t pmu_sleep_get_reject_cause(void)
     return pmu_ll_hp_get_reject_cause(PMU_instance()->hal->dev);
 }
 
-IRAM_ATTR bool pmu_sleep_finish(bool dslp)
+bool pmu_sleep_finish(bool dslp)
 {
 #ifndef CONFIG_IDF_ENV_FPGA
     // Wait eFuse memory update done.
@@ -392,6 +415,15 @@ IRAM_ATTR bool pmu_sleep_finish(bool dslp)
         if (s_mpll_freq_mhz_before_sleep) {
             rtc_clk_mpll_enable();
             rtc_clk_mpll_configure(clk_hal_xtal_get_freq_mhz(), s_mpll_freq_mhz_before_sleep, false);
+#if !BOOTLOADER_BUILD && CONFIG_SPIRAM
+            if (!s_pmu_sleep_regdma_backup_enabled) {
+                _psram_ctrlr_ll_enable_core_clock(PSRAM_CTRLR_LL_MSPI_ID_2, true);
+                _psram_ctrlr_ll_enable_module_clock(PSRAM_CTRLR_LL_MSPI_ID_2, true);
+            }
+            /* Sleep entry switched to XTAL; restore MPLL as PSRAM source after MPLL is ready. */
+            _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_2, PSRAM_CLK_SRC_MPLL);
+            _psram_ctrlr_ll_select_clk_source(PSRAM_CTRLR_LL_MSPI_ID_3, PSRAM_CLK_SRC_MPLL);
+#endif
         }
 #if !BOOTLOADER_BUILD && CONFIG_SPIRAM
         mspi_ll_psram_unhold_all_pins();
@@ -399,6 +431,26 @@ IRAM_ATTR bool pmu_sleep_finish(bool dslp)
         esp_psram_impl_exit_halfsleep_mode();
 #endif
 #endif
+        const bool modem_pll_clk_enabled = clk_gate_ll_modem_pll_clk_is_enabled();
+        assert(modem_pll_clk_enabled == clk_gate_ll_modem_clk_source_is_pll());
+        if (!modem_pll_clk_enabled) { // wake up from non-modem clock retention
+            /* Workaround for issue WIFI-7620
+             * The BA bitmap and start sequence number are updated in the read-only
+             * registers only after the PLL clock is available. */
+            bool ref_160_enabled = clk_gate_ll_ref_160m_clk_is_enabled();
+            if (!ref_160_enabled) {
+                _clk_gate_ll_ref_160m_clk_en(true);
+            }
+            _clk_gate_ll_modem_pll_source_cg_en(true);
+            _clk_gate_ll_modem_pll_source_cg_en(false);
+            if (!ref_160_enabled) {
+                _clk_gate_ll_ref_160m_clk_en(false);
+            }
+
+            if (!esp_clk_tree_is_power_on(SOC_ROOT_CIRCUIT_CLK_BBPLL)) { // clear align HW to clk_tree ref
+                clk_ll_bbpll_disable();
+            }
+        }
     }
 
 #if !SOC_APM_SUPPORTED

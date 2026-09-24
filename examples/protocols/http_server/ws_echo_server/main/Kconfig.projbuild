@@ -25,9 +25,9 @@ menu "Example Configuration"
         default y
         help
             Enable this option to register a dedicated handler for WebSocket
-            control frames (PING, PONG, CLOSE) on the /ws endpoint. The handler
-            only observes the frames (e.g. for heartbeat tracking or logging);
-            the server still sends the protocol replies (PONG for PING, CLOSE
-            for CLOSE) itself.
+            control frames (PING, PONG, CLOSE) on the /ws endpoint, keeping them
+            out of the data handler. The server receives the frame body for the
+            handler, which then sends the protocol replies itself (PONG for
+            PING, CLOSE for CLOSE).
 
 endmenu

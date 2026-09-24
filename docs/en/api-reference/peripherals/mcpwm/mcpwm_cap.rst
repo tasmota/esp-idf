@@ -68,15 +68,56 @@ Capture channel configuration
 
 .. list::
 
-    - :cpp:member:`gpio_num <mcpwm_capture_channel_config_t::gpio_num>` — the GPIO carrying the input signal.
-    - :cpp:member:`prescale <mcpwm_capture_channel_config_t::prescale>` — divides the input signal before capture; the effective input frequency is the capture clock divided by ``prescale``. Raise it to extend the measurable period range, at the cost of time resolution.
+    - :cpp:member:`gpio_num <mcpwm_capture_channel_config_t::gpio_num>` — the GPIO carrying the input signal. The driver configures it as an input but does not enable any pull-up or pull-down; if the signal is not actively driven to both levels, call :cpp:func:`gpio_set_pull_mode()` so the pin idles at the level you expect.
+    - :cpp:member:`prescale <mcpwm_capture_channel_config_t::prescale>` — input prescale ratio. Same-edge captures (same reported edge type) are spaced about ``prescale`` input periods apart (capture rate ≈ ``input_rate / prescale``). ``0`` or ``1`` means no prescaling (bypass); any other value must be even. Leaving the field at ``0`` (the C default) is therefore bypass. Raise it to extend the measurable period range, at the cost of time resolution. See :ref:`mcpwm-cap-input-prescale` for pipeline order and edge-mode behavior.
     - :cpp:member:`pos_edge <mcpwm_capture_channel_config_t::flags::pos_edge>` and :cpp:member:`neg_edge <mcpwm_capture_channel_config_t::flags::neg_edge>` — which edges are captured. The example captures both, which is what a pulse-width measurement needs.
     - :cpp:member:`invert_cap_signal <mcpwm_capture_channel_config_t::flags::invert_cap_signal>` — inverts the input signal before capture, so a logical ``1`` on the pin is seen as ``0`` by the capture peripheral and vice versa.
     - :cpp:member:`intr_priority <mcpwm_capture_channel_config_t::intr_priority>` — the interrupt priority used by the capture callbacks. Not setting it (``0``) lets the driver choose a low priority.
 
+.. _mcpwm-cap-input-prescale:
+
+Input prescale
+==============
+
+The capture channel processes the input in a **fixed, serial** order; the two stages cannot be swapped:
+
+1. **First** divide the GPIO waveform by ``prescale`` (``0``/``1`` means bypass);
+2. **Then** use ``pos_edge``/``neg_edge`` to decide which post-prescale events are reported to software.
+
+In other words, hardware does **not** “pick GPIO edges by the configured polarity first, then divide those edges.” With ``prescale > 1``:
+
+- The :cpp:member:`cap_edge <mcpwm_capture_event_data_t::cap_edge>` in the callback may not match the physical GPIO edge;
+- Adjacent opposite-edge gaps are **not pulse width**, and **the true duty cycle cannot be recovered**.
+
+Always compute period or frequency from timestamps of the same reported edge type. See the figures below for per-mode timing.
+
 .. note::
 
-    The capture driver configures the GPIO as an input but does not set any pull-up or pull-down resistor. If the input signal is not actively driven to both levels, call :cpp:func:`gpio_set_pull_mode()` to select the pull direction that keeps the pin at the level you expect when the line is idle.
+    Keep ``prescale = 1`` (bypass) and capture both edges when measuring pulse width or duty cycle. Prefer raising ``prescale`` only for very fast inputs when you only need frequency or period, and capture a single edge type only.
+
+The figures below show how ``prescale`` affects capture timing for rising-only, falling-only, and both-edge modes.
+
+.. figure:: /../_static/mcpwm/capture_prescale_rising.svg
+    :align: center
+    :alt: Rising-edge only capture with prescale bypass and prescale 4.
+
+Rising-edge only. With ``prescale = 1`` (bypass), every rising edge captures as ``R``. With ``prescale > 1``, the first capture is at cycle ``prescale / 2 - 1``, then every ``prescale``-th rising edge (the figure shows ``prescale = 4``: cycle 1, 5, …). Same-edge spacing is ``prescale`` input periods.
+
+.. figure:: /../_static/mcpwm/capture_prescale_falling.svg
+    :align: center
+    :alt: Falling-edge only capture with prescale bypass and prescale 4.
+
+Falling-edge only. With ``prescale = 1`` (bypass), every falling edge captures as ``F``. With ``prescale > 1``, GPIO falling edges do not produce captures; **events land on rising steps**. The first capture is at cycle ``prescale - 1``, then every ``prescale`` rising steps, while ``cap_edge`` still reports ``F`` (the figure shows ``prescale = 4``: cycle 3, 7, …).
+
+.. figure:: /../_static/mcpwm/capture_prescale_both.svg
+    :align: center
+    :alt: Both-edge capture with prescale bypass and prescale 4.
+
+Both edges. With ``prescale = 1`` (bypass), ``R``/``F`` match the physical pin edges. With ``prescale > 1``, captures fire on rising pin steps only (every ``prescale / 2`` periods). The first capture matches rising-only (cycle ``prescale / 2 - 1``) and reports ``R``, then ``R``/``F`` alternate; adjacent ``R``/``F`` spacing is not pulse width. Same-edge gaps remain about ``prescale`` periods. Always compute period or frequency from timestamps of the same reported edge type.
+
+.. warning::
+
+    With ``prescale > 1``, edge polarity can disappear: reported ``R``/``F`` describe the post-prescale event type, not the physical GPIO edge. Falling-edge-only capture in particular can fire on rising pin steps while still reporting ``F``. Do not infer the pin transition from ``cap_edge``, and do not treat adjacent opposite-edge gaps as pulse width.
 
 Capture event callbacks
 =======================

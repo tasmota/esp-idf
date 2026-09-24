@@ -31,6 +31,7 @@
 #include "bta_av_int.h"
 #include "stack/avdt_api.h"
 #include "bta/utl.h"
+#include "stack/sdp_api.h"
 #include "stack/l2c_api.h"
 #include "osi/allocator.h"
 #include "osi/list.h"
@@ -1302,7 +1303,14 @@ void bta_av_disable(tBTA_AV_CB *p_cb, tBTA_AV_DATA *p_data)
 
     bta_av_close_all_rc(p_cb);
 
-    utl_freebuf((void **) &p_cb->p_disc_db);
+    /* Clear disc first so a late BTA_AV_SDP_AVRC_DISC_EVT hits
+     * bta_av_rc_disc_done()'s if (!p_cb->disc) and does not scan p_disc_db. */
+    p_cb->disc = 0;
+    if (p_cb->p_disc_db) {
+        /* SDP may still be writing into this buffer (AVRCP discovery). */
+        SDP_CancelServiceSearch(p_cb->p_disc_db);
+        utl_freebuf((void **) &p_cb->p_disc_db);
+    }
 
     /* disable audio/video - de-register all channels,
      * expect BTA_AV_DEREG_COMP_EVT when deregister is complete */
@@ -1348,6 +1356,7 @@ void bta_av_sig_chg(tBTA_AV_DATA *p_data)
     int     xx;
     UINT8   mask;
     tBTA_AV_LCB *p_lcb = NULL;
+    tBTA_AV_RCB *p_rcb = NULL;
 
     APPL_TRACE_DEBUG("bta_av_sig_chg event: %d", event);
     if (event == AVDT_CONNECT_IND_EVT) {
@@ -1422,6 +1431,20 @@ void bta_av_sig_chg(tBTA_AV_DATA *p_data)
                         (bdcmp(p_cb->p_scb[xx]->peer_addr, p_data->str_msg.bd_addr) == 0)) {
                     p_cb->p_scb[xx]->disc_rsn = p_data->str_msg.hdr.offset;
                     bta_av_ssm_execute(p_cb->p_scb[xx], BTA_AV_AVDT_DISCONNECT_EVT, NULL);
+                }
+            }
+        }
+
+        /* The acceptor RCB of this link gets its shdl only when a stream opens. If no stream
+         * opened, nothing deletes the RCB and its AVCTP ccb leaks until the device reboots. */
+        if (p_lcb && p_lcb->lidx != 0 && p_lcb->lidx != (BTA_AV_NUM_LINKS + 1)) {
+            for (xx = 0; xx < BTA_AV_NUM_RCB; xx++) {
+                p_rcb = &p_cb->rcb[xx];
+                if (p_rcb->handle != BTA_AV_RC_HANDLE_NONE && p_rcb->lidx == p_lcb->lidx &&
+                        p_rcb->shdl == 0 && !(p_rcb->status & BTA_AV_RC_CONN_MASK)) {
+                    APPL_TRACE_DEBUG("bta_av_sig_chg: delete unused rcb[%d] handle:%d lidx:%d", xx,
+                                     p_rcb->handle, p_rcb->lidx);
+                    bta_av_del_rc(p_rcb);
                 }
             }
         }
@@ -1742,7 +1765,10 @@ void bta_av_rc_disc_done(tBTA_AV_DATA *p_data)
     }
 #endif
     p_cb->disc = 0;
-    utl_freebuf((void **) &p_cb->p_disc_db);
+    if (p_cb->p_disc_db) {
+        SDP_CancelServiceSearch(p_cb->p_disc_db);
+        utl_freebuf((void **) &p_cb->p_disc_db);
+    }
 
     APPL_TRACE_DEBUG("peer_features 0x%x, local features 0x%x", peer_features, p_cb->features);
 

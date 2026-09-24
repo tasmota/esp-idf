@@ -98,7 +98,7 @@ static esp_err_t i2s_std_set_clock(i2s_chan_handle_t handle, const i2s_std_clk_c
     i2s_hal_clock_info_t clk_info;
     // Calculate clock parameters before enabling clock source
     ESP_RETURN_ON_ERROR(i2s_std_calculate_clock(handle, clk_cfg, &clk_info), TAG, "clock calculate failed");
-    ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true), TAG, "clock source enable failed");
+    ESP_RETURN_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)clk_src), TAG, "clock source enable failed");
 
     hal_utils_clk_div_t ret_mclk_div = {};
     portENTER_CRITICAL(&g_i2s.spinlock);
@@ -128,7 +128,7 @@ static esp_err_t i2s_std_set_clock(i2s_chan_handle_t handle, const i2s_std_clk_c
     return ret;
 
 err:
-    esp_clk_tree_enable_src((soc_module_clk_t)clk_src, false);
+    esp_clk_tree_release_src((soc_module_clk_t)clk_src);
     return ret;
 }
 
@@ -336,6 +336,10 @@ esp_err_t i2s_channel_init_std_mode(i2s_chan_handle_t handle, const i2s_std_conf
 #if SOC_I2S_HW_VERSION_1
     ESP_GOTO_ON_ERROR(ret, err, TAG, "Failed to constitute full-duplex mode");
 #endif
+    /* DMA alignment must be known before allocating buffers in set_slot */
+    if (I2S_CHANNEL_USES_DMA(handle)) {
+        ESP_GOTO_ON_ERROR(i2s_prepare_dma(handle), err, TAG, "prepare dma failed");
+    }
     /* i2s_set_std_slot should be called before i2s_set_std_clock while initializing, because clock is relay on the slot */
     ESP_GOTO_ON_ERROR(i2s_std_set_slot(handle, &std_cfg->slot_cfg), err, TAG, "initialize channel failed while setting slot");
     ESP_GOTO_ON_ERROR(i2s_std_set_clock(handle, &std_cfg->clk_cfg), err, TAG, "initialize channel failed while setting clock");
@@ -368,6 +372,10 @@ esp_err_t i2s_channel_init_std_mode(i2s_chan_handle_t handle, const i2s_std_conf
         pm_type = ESP_PM_NO_LIGHT_SLEEP;
     }
 #endif // SOC_I2S_SUPPORTS_APLL
+    // use CPU_MAX lock to ensure PSRAM bandwidth and usability during DFS
+    if (I2S_CHANNEL_USES_DMA(handle) && handle->dma.buffer_in_psram) {
+        pm_type = ESP_PM_CPU_FREQ_MAX;
+    }
     ESP_GOTO_ON_ERROR(esp_pm_lock_create(pm_type, 0, "i2s_driver", &handle->pm_lock), err, TAG, "I2S pm lock create failed");
 #endif
 
@@ -407,7 +415,7 @@ esp_err_t i2s_channel_reconfig_std_clock(i2s_chan_handle_t handle, const i2s_std
     ESP_GOTO_ON_ERROR(i2s_std_set_clock(handle, clk_cfg), err, TAG, "update clock failed");
 
     // disable old clock source after new clock is successfully configured
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)old_clk_src, false), err, TAG, "clock source disable failed");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_release_src((soc_module_clk_t)old_clk_src), err, TAG, "clock source disable failed");
 
 #ifdef CONFIG_PM_ENABLE
     // Create/Re-create power management lock
@@ -421,6 +429,10 @@ esp_err_t i2s_channel_reconfig_std_clock(i2s_chan_handle_t handle, const i2s_std
             pm_type = ESP_PM_NO_LIGHT_SLEEP;
         }
 #endif // SOC_I2S_SUPPORTS_APLL
+        if (I2S_CHANNEL_USES_DMA(handle) && handle->dma.buffer_in_psram) {
+            // use CPU_MAX lock to ensure PSRAM bandwidth and usability during DFS
+            pm_type = ESP_PM_CPU_FREQ_MAX;
+        }
         ESP_GOTO_ON_ERROR(esp_pm_lock_create(pm_type, 0, "i2s_driver", &handle->pm_lock), err, TAG, "I2S pm lock create failed");
     }
 #endif //CONFIG_PM_ENABLE
@@ -461,7 +473,7 @@ esp_err_t i2s_channel_reconfig_std_slot(i2s_chan_handle_t handle, const i2s_std_
 #endif
         ESP_GOTO_ON_ERROR(i2s_std_set_clock(handle, &std_cfg->clk_cfg), err, TAG, "update clock failed");
         // disable old clock source after new clock is successfully configured
-        ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)old_clk_src, false), err, TAG, "clock source disable failed");
+        ESP_GOTO_ON_ERROR(esp_clk_tree_release_src((soc_module_clk_t)old_clk_src), err, TAG, "clock source disable failed");
     }
 
     xSemaphoreGive(handle->mutex);

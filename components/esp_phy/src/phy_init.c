@@ -46,7 +46,7 @@
 
 #if CONFIG_IDF_TARGET_ESP32
 #include "soc/dport_reg.h"
-#elif SOC_PM_SUPPORT_PMU_MODEM_STATE
+#elif SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
 #include "esp_private/sleep_modem.h"
 #endif
 #include "hal/efuse_hal.h"
@@ -58,6 +58,7 @@
 #if SOC_PM_REGDMA_MODEM_LINK_PROTECT
 #include "esp_private/esp_pau.h"
 #endif // SOC_PM_REGDMA_MODEM_LINK_PROTECT
+#include "esp_private/phy_debug.h"
 
 #ifndef PHY_INIT_MODEM_CLOCK_REQUIRED_BITS
 #warning "PHY_INIT_MODEM_CLOCK_REQUIRED_BITS not defined; using default value 0"
@@ -75,11 +76,6 @@ extern bool pm_mac_modem_rf_already_enabled(void);
 extern bool pm_get_wifimac_regdma_link_selection(void);
 #endif
 #endif
-
-#if SOC_PM_REGDMA_MODEM_LINK_PROTECT
-extern void phy_i2c_enter_critical(void);
-extern void phy_i2c_exit_critical(void);
-#endif // SOC_PM_REGDMA_MODEM_LINK_PROTECT
 
 static const char* TAG = "phy_init";
 
@@ -126,6 +122,13 @@ static uint8_t s_phy_modem_init_ref = 0;
 extern uint8_t multi_phy_init_data_bin_start[] asm("_binary_phy_multiple_init_data_bin_start");
 extern uint8_t multi_phy_init_data_bin_end[]   asm("_binary_phy_multiple_init_data_bin_end");
 #endif
+
+/* Both flags live in the last bytes of an init data entry */
+_Static_assert(PHY_INIT_DATA_TYPE_OFFSET == sizeof(esp_phy_init_data_t) - 2,
+               "PHY_INIT_DATA_TYPE_OFFSET does not match the PHY init data of this target");
+_Static_assert(PHY_SUPPORT_MULTIPLE_BIN_OFFSET == sizeof(esp_phy_init_data_t) - 3,
+               "PHY_SUPPORT_MULTIPLE_BIN_OFFSET does not match the PHY init data of this target");
+
 /* The following static variables are only used by Wi-Fi tasks, so they can be handled without lock */
 static phy_init_data_type_t s_phy_init_data_type = 0;
 
@@ -188,59 +191,6 @@ static phy_country_to_bin_type_t s_country_code_map_type_table[] = {
     {"TW",  ESP_PHY_INIT_DATA_TYPE_NCC},
     {"US",  ESP_PHY_INIT_DATA_TYPE_FCC},
 };
-#endif
-
-#if CONFIG_ESP_PHY_RECORD_USED_TIME
-#define ESP_PHY_MODEM_COUNT_MAX         (__builtin_ffs(PHY_MODEM_MAX - 1))
-#define ESP_PHY_IS_VALID_MODEM(modem)   (__builtin_popcount(modem) == 1 && __builtin_ctz(modem) < ESP_PHY_MODEM_COUNT_MAX)
-
-static DRAM_ATTR struct {
-    uint64_t used_time;
-    uint64_t enabled_time;
-    uint64_t disabled_time;
-} s_phy_rf_used_info[ESP_PHY_MODEM_COUNT_MAX];
-
-static IRAM_ATTR void phy_record_time(bool enabled, esp_phy_modem_t modem) {
-    uint8_t index = __builtin_ctz(modem);
-    if (enabled) {
-        s_phy_rf_used_info[index].enabled_time = esp_timer_get_time();
-    } else {
-        s_phy_rf_used_info[index].disabled_time = esp_timer_get_time();
-        s_phy_rf_used_info[index].used_time += s_phy_rf_used_info[index].disabled_time - s_phy_rf_used_info[index].enabled_time;
-    }
-}
-
-esp_err_t phy_query_used_time(uint64_t *used_time, esp_phy_modem_t modem) {
-    if (!ESP_PHY_IS_VALID_MODEM(modem)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    uint8_t index = __builtin_ctz(modem);
-    _lock_acquire(&s_phy_access_lock);
-    *used_time = s_phy_rf_used_info[index].used_time;
-    if (s_phy_rf_used_info[index].disabled_time < s_phy_rf_used_info[index].enabled_time) {
-        // phy is being used
-        *used_time += esp_timer_get_time() - s_phy_rf_used_info[index].enabled_time;
-    }
-    _lock_release(&s_phy_access_lock);
-    return ESP_OK;
-}
-
-esp_err_t phy_clear_used_time(esp_phy_modem_t modem) {
-    if (!ESP_PHY_IS_VALID_MODEM(modem)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    uint8_t index = __builtin_ctz(modem);
-    _lock_acquire(&s_phy_access_lock);
-    if (s_phy_rf_used_info[index].enabled_time > s_phy_rf_used_info[index].disabled_time) {
-        // phy is being used
-        s_phy_rf_used_info[index].enabled_time = esp_timer_get_time();
-    } else {
-        s_phy_rf_used_info[index].enabled_time = s_phy_rf_used_info[index].disabled_time;
-    }
-    s_phy_rf_used_info[index].used_time = 0;
-    _lock_release(&s_phy_access_lock);
-    return ESP_OK;
-}
 #endif
 
 uint32_t IRAM_ATTR phy_enter_critical(void)
@@ -360,16 +310,16 @@ void esp_phy_enable(esp_phy_modem_t modem)
                     }
                     bool wifimac_link_is_sel = false;
 #if SOC_PM_SUPPORT_PMU_MODEM_STATE && CONFIG_ESP_WIFI_ENHANCED_LIGHT_SLEEP && \
-    SOC_PM_PAU_REGDMA_LINK_IDX_PHY && SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
+SOC_PM_PAU_REGDMA_LINK_IDX_PHY && SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
 /*
- * A race exists between SoC wakeup and modem state sleep. After modem initiates sleep,
- * SoC may wake up before REGDMA completes RF close, leaving mac_modem_sleep_flag uncleared
- * (it depends on regdma done). The stale flag can incorrectly trigger a sleep request
- * on the next modem entry, causing abnormal sleep behavior.
- *
- * Therefore, this workaround ensures that mac_modem_sleep_flag is properly
- * cleared by regdma closing RF with wifimac link.
- * See WIFI-7246 for details.
+* A race exists between SoC wakeup and modem state sleep. After modem initiates sleep,
+* SoC may wake up before REGDMA completes RF close, leaving mac_modem_sleep_flag uncleared
+* (it depends on regdma done). The stale flag can incorrectly trigger a sleep request
+* on the next modem entry, causing abnormal sleep behavior.
+*
+* Therefore, this workaround ensures that mac_modem_sleep_flag is properly
+* cleared by regdma closing RF with wifimac link.
+* See WIFI-7246 for details.
 */
                     wifimac_link_is_sel = pm_get_wifimac_regdma_link_selection();
 #endif
@@ -447,7 +397,7 @@ void esp_phy_disable(esp_phy_modem_t modem)
             if (!sleep_modem_wifi_modem_state_is_enabled()) {
                 modem_flags |= SLEEP_MODEM_SKIP_WIFI_RETENTION;
             }
-             bool wifimac_link_is_sel = false;
+            bool wifimac_link_is_sel = false;
 #if SOC_PM_SUPPORT_PMU_MODEM_STATE && CONFIG_ESP_WIFI_ENHANCED_LIGHT_SLEEP && \
     SOC_PM_PAU_REGDMA_LINK_IDX_PHY && SOC_PM_PAU_REGDMA_MODEM_WIFIMAC_WORKAROUND
             wifimac_link_is_sel = pm_get_wifimac_regdma_link_selection();
@@ -519,17 +469,6 @@ void esp_wifi_bt_power_domain_off(void)
 #endif // SOC_PM_SUPPORT_MODEM_PD || SOC_PM_SUPPORT_WIFI_PD
 }
 
-#if SOC_PM_REGDMA_MODEM_LINK_PROTECT
-void IRAM_ATTR esp_phy_regi2c_lock_apply(bool enable)
-{
-    if (enable) {
-        phy_i2c_enter_critical();
-    } else {
-        phy_i2c_exit_critical();
-    }
-}
-#endif // SOC_PM_REGDMA_MODEM_LINK_PROTECT
-
 void esp_phy_modem_init(uint8_t modem)
 {
 #if SOC_PM_MODEM_RETENTION_BY_BACKUPDMA || CONFIG_ESP_WIFI_ENHANCED_LIGHT_SLEEP || CONFIG_ESP_PHY_HW_SWITCH_RF
@@ -542,7 +481,7 @@ void esp_phy_modem_init(uint8_t modem)
 #endif // SOC_PM_MODEM_RETENTION_BY_BACKUPDMA
 #if (SOC_PM_SUPPORT_PMU_MODEM_STATE && CONFIG_ESP_WIFI_ENHANCED_LIGHT_SLEEP) || CONFIG_ESP_PHY_HW_SWITCH_RF
 #if SOC_PM_REGDMA_MODEM_LINK_PROTECT
-    pau_regdma_register_modem_link_protect(esp_phy_regi2c_lock_apply);
+    pau_regdma_register_modem_link_protect(phy_regi2c_lock_apply);
 #endif // SOC_PM_REGDMA_MODEM_LINK_PROTECT
     if (sleep_modem_phy_init(modem) != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize sleep modem phy");
@@ -943,6 +882,18 @@ static void __attribute((unused)) esp_phy_reduce_tx_power(esp_phy_init_data_t* i
 }
 #endif
 
+#if CONFIG_ESP_PHY_ENABLED && SOC_DEEP_SLEEP_SUPPORTED
+static void phy_deep_sleep_prepare(void)
+{
+    if (phy_get_modem_flag() != 0) {
+        phy_close_rf();
+#if !CONFIG_IDF_TARGET_ESP32
+        phy_xpd_tsens();
+#endif
+    }
+}
+#endif
+
 void esp_phy_load_cal_and_init(void)
 {
     char * phy_version = get_phy_version_str();
@@ -1034,12 +985,7 @@ void esp_phy_load_cal_and_init(void)
     esp_phy_release_init_data(init_data);
 #endif
 #if CONFIG_ESP_PHY_ENABLED && SOC_DEEP_SLEEP_SUPPORTED
-    ESP_ERROR_CHECK(esp_deep_sleep_register_phy_hook(&phy_close_rf));
-#endif
-#if !CONFIG_IDF_TARGET_ESP32
-#if CONFIG_ESP_PHY_ENABLED && SOC_DEEP_SLEEP_SUPPORTED
-    ESP_ERROR_CHECK(esp_deep_sleep_register_phy_hook(&phy_xpd_tsens));
-#endif
+    ESP_ERROR_CHECK(esp_deep_sleep_register_phy_hook(&phy_deep_sleep_prepare));
 #endif
 
     free(cal_data); // PHY maintains a copy of calibration data, so we can free this
@@ -1258,6 +1204,11 @@ esp_err_t esp_phy_update_init_data(phy_init_data_type_t init_data_type)
 
     free(init_data_store);
     return ESP_OK;
+}
+
+phy_init_data_type_t esp_phy_get_init_data_type(void)
+{
+    return s_current_apply_phy_init_data;
 }
 #endif
 

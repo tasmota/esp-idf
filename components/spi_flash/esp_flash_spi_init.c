@@ -21,7 +21,6 @@
 #include "esp_private/startup_internal.h"
 #include "esp_spi_flash_counters.h"
 #include "esp_rom_spiflash.h"
-#include "bootloader_flash.h"
 #include "esp_check.h"
 #include "esp_private/esp_clk_tree_common.h"
 #include "esp_clk_tree.h"
@@ -33,6 +32,7 @@
 #include "esp_flash.h"
 #include "esp_flash_spi_init.h"
 #include "esp_flash_chips/spi_flash_chip_driver.h"
+#include "esp_flash_chips/esp_flash_types.h"
 #include "esp_private/memspi_host_driver.h"
 #include "esp_private/esp_flash_internal.h"
 #include "esp_private/spi_flash_os.h"
@@ -289,7 +289,7 @@ static uint32_t init_gpspi_clock(esp_flash_t *chip, const esp_flash_spi_device_c
     uint32_t clk_src_freq = 0;
     spi_clock_source_t clk_src = config->clock_source ? config->clock_source : SPI_CLK_SRC_DEFAULT;
 
-    esp_clk_tree_enable_src(clk_src, true);
+    esp_clk_tree_acquire_src(clk_src);
     esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clk_src_freq);
 
     // Enable GPSPI clock
@@ -354,7 +354,7 @@ static void deinit_gpspi_clock(esp_flash_t *chip)
     }
 
     // Disable the clock source
-    esp_clk_tree_enable_src(chip->clock_source, false);
+    esp_clk_tree_release_src(chip->clock_source);
 #endif // !CONFIG_IDF_TARGET_ESP32
 }
 
@@ -472,7 +472,7 @@ static DRAM_ATTR esp_flash_t default_chip = {
 static void s_esp_flash_choose_correct_mode(memspi_host_config_t *cfg)
 {
     static const char *mode = FLASH_MODE_STRING;
-    if (bootloader_flash_is_octal_mode_enabled()) {
+    if (spi_flash_is_octal_mode_enabled()) {
     #if !CONFIG_ESPTOOLPY_FLASHMODE_OPI
         ESP_EARLY_LOGW(TAG, "Octal flash chip is using but %s mode is selected, will automatically switch to Octal mode", mode);
         cfg->octal_mode_en = 1;
@@ -663,6 +663,7 @@ ESP_SYSTEM_INIT_FN(init_flash, CORE, BIT(0), 130)
     esp_mspi_register_isr(NULL);
 #endif
     //else register flash standalone ISR to deal with CPU / API flash access
+
     return ESP_OK;
 }
 #endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP

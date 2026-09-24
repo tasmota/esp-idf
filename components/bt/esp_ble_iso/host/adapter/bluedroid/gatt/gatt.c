@@ -1759,7 +1759,7 @@ static void handle_gattc_read_chrc_event(struct bt_le_gattc_read_chrc_event *eve
         goto end;
     }
 
-    val = event->value;
+    val = READ_VALUE(event);
     vlen = event->len;
 
     /* By-UUID read: report the matched handle in params->by_uuid.start_handle (like
@@ -1881,7 +1881,7 @@ static void handle_gattc_notify_event(struct bt_le_gattc_notify_rx_event *event)
                  * tearing down a core subscription like the ASCS control point
                  * over one bad PDU would drop every later notification. Tolerate
                  * the bad PDU and keep the subscription. */
-                params->notify(conn, params, event->value, event->len);
+                params->notify(conn, params, NOTIFY_VALUE(event), event->len);
             }
         }
     }

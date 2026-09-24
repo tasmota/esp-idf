@@ -9,6 +9,7 @@
 #include "esp_crypto_clk.h"
 #include "soc/clk_tree_defs.h"
 #include "soc/hp_sys_clkrst_struct.h"
+#include "hal/sec_ll.h"
 #include "hal/clk_gate_ll.h"
 #include "esp_private/esp_clk_tree_common.h"
 #if !NON_OS_BUILD
@@ -27,7 +28,11 @@ DEFINE_CRIT_SECTION_LOCK_STATIC(s_crypto_common_clk_mux);
 static void esp_crypto_pll_f240m_enable(bool enable)
 {
 #if !NON_OS_BUILD
-    esp_clk_tree_enable_src(SOC_MOD_CLK_PLL_F240M, enable);
+    if (enable) {
+        esp_clk_tree_acquire_src(SOC_MOD_CLK_PLL_F240M);
+    } else {
+        esp_clk_tree_release_src(SOC_MOD_CLK_PLL_F240M);
+    }
 #else
     /* Bootloader: BBPLL is already on; no esp_clk_tree in NON_OS. */
     _clk_gate_ll_ref_240m_clk_en(enable);
@@ -49,11 +54,13 @@ void esp_crypto_common_clk_enable(bool enable)
     CRYPTO_CLK_LOCK();
     if (enable) {
         if (s_crypto_common_clk_ref_cnt++ == 0) {
-            /* Parent: PLL_F240M (see esp_crypto_clk_init() REG_CRYPTO_CLK_SRC_SEL). */
+            /* Parent must be present before switching the crypto mux. */
             esp_crypto_pll_f240m_enable(true);
             esp_crypto_periph_clk_enable(true);
+            sec_ll_crypto_clk_src_sel(SOC_MOD_CLK_PLL_F240M);
         }
     } else if (s_crypto_common_clk_ref_cnt > 0 && --s_crypto_common_clk_ref_cnt == 0) {
+        sec_ll_crypto_clk_src_sel(SOC_MOD_CLK_XTAL);
         esp_crypto_periph_clk_enable(false);
         esp_crypto_pll_f240m_enable(false);
     }
@@ -70,6 +77,7 @@ static void esp_crypto_clk_always_on(void)
     if (!s_crypto_clk_always_on_done) {
         esp_crypto_pll_f240m_enable(true);
         esp_crypto_periph_clk_enable(true);
+        sec_ll_crypto_clk_src_sel(SOC_MOD_CLK_PLL_F240M);
         s_crypto_clk_always_on_done = true;
     }
     CRYPTO_CLK_UNLOCK();

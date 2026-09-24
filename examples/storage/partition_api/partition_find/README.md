@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # Finding Partitions Example
 
@@ -7,6 +7,10 @@ This example demonstrates how to use the partition API functions `esp_partition_
 These functions return the matching partitions given a set of constraints. By constraints we simply mean
 properties that returned results should match - notably partition type, subtype and label/name. In the case of `esp_partition_find_first`, the first matching instance is returned;
 for `esp_partition_find`, an iterator is returned iterating over matching instances.
+
+## When to use this example
+
+- You need to locate partitions by type/subtype/label at runtime (`esp_partition_find` / `esp_partition_find_first`).
 
 # Example Flow
 

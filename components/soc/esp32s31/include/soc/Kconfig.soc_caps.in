@@ -231,6 +231,10 @@ config SOC_PMU_SUPPORTED
     bool
     default y
 
+config SOC_PMU_PVT_SUPPORTED
+    bool
+    default y
+
 config SOC_RTC_TIMER_SUPPORTED
     bool
     default y
@@ -595,6 +599,10 @@ config SOC_SIMD_PREFERRED_DATA_ALIGNMENT
     int
     default 16
 
+config SOC_CPU_HAS_ZC_EXTENSIONS
+    bool
+    default y
+
 config SOC_DMA_CAN_ACCESS_FLASH
     bool
     default y
@@ -610,10 +618,6 @@ config SOC_GDMA_SUPPORT_ETM
 config SOC_GDMA_SUPPORT_SLEEP_RETENTION
     bool
     default y
-
-config SOC_GDMA_EXT_MEM_ENC_ALIGNMENT
-    int
-    default 16
 
 config SOC_MODEM_SUPPORT_ETM
     bool
@@ -1239,6 +1243,10 @@ config SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV
     bool
     default y
 
+config SOC_LCDCAM_LCD_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
 config SOC_SECURE_BOOT_V2_RSA
     bool
     default y
@@ -1380,6 +1388,10 @@ config SOC_MODEM_CLOCK_SOC_PLL_SOURCE_CG_SUPPORTED
     default y
 
 config SOC_MODEM_CLOCK_WIFI_BB_80X1_AS_APB
+    bool
+    default y
+
+config SOC_RNG_CLOCK_IS_INDEPENDENT
     bool
     default y
 
@@ -1563,7 +1575,11 @@ config SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE
     bool
     default y
 
-config SOC_PM_PAU_REGDMA_LINK_IDX_WIFIMAC
+config SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY
+    bool
+    default y
+
+config SOC_PM_PAU_REGDMA_LINK_IDX_PHY
     int
     default 4
 
@@ -1575,7 +1591,15 @@ config SOC_PM_MODEM_RETENTION_BY_REGDMA
     bool
     default y
 
+config SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY
+    bool
+    default y
+
 config SOC_PM_SUPPORT_PMU_MODEM_STATE
+    bool
+    default y
+
+config SOC_PM_REGDMA_MODEM_LINK_PROTECT
     bool
     default y
 
@@ -1586,10 +1610,6 @@ config SOC_PM_MODEM_STATE_USE_XTAL
 config SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED
     bool
     default y
-
-config SOC_PM_RETENTION_MODULE_NUM
-    int
-    default 64
 
 config SOC_LP_MAILBOX_SUPPORTED
     bool
@@ -1852,5 +1872,9 @@ config SOC_TEMPERATURE_SENSOR_SUPPORT_ETM
     default y
 
 config SOC_TEMPERATURE_SENSOR_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_DEBUG_HAVE_OCD_STUB_BINS
     bool
     default y

@@ -116,6 +116,12 @@ list(APPEND bt_common_srcs
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/deprecated/ble_log_spi_out.c"
 )
 
+if(CONFIG_BT_OSAL_ENABLED)
+    list(APPEND bt_common_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/osal/src/bt_osal_freertos.c"
+    )
+endif()
+
 list(APPEND bt_common_include_dirs
     "${CMAKE_CURRENT_LIST_DIR}/osi/include"
     "${CMAKE_CURRENT_LIST_DIR}/api/include/api"
@@ -124,6 +130,7 @@ list(APPEND bt_common_include_dirs
     "${CMAKE_CURRENT_LIST_DIR}/hci_log/include"
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/include"
     "${CMAKE_CURRENT_LIST_DIR}/ble_log/deprecated/include"
+    "${CMAKE_CURRENT_LIST_DIR}/osal/include"
 )
 
 list(APPEND bt_common_priv_include_dirs

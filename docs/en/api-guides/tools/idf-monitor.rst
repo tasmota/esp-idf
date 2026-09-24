@@ -40,7 +40,10 @@ For easy interaction with IDF Monitor, use the keyboard shortcuts given in the t
      - Reset the target board and re-starts the application via the RTS line (if connected).
    * - * Ctrl + F
      - Build and flash the project
-     - Pause idf_monitor to run the project ``flash`` target, then resumes idf_monitor. Any changed source files are recompiled and then re-flashed. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``.
+     - Pause idf_monitor to run the project ``flash`` target, then resumes idf_monitor. Any changed source files are recompiled and then re-flashed. Uses :ref:`fast reflashing <flash-with-idf-py>` by default when previously flashed binaries are available. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``.
+   * - * Ctrl + E (or E)
+     - Build and full flash the project
+     - Same as Ctrl + F (runs the ``flash`` target), but disables fast reflashing by setting the ``IDF_FLASH_FULL`` environment variable. Equivalent to ``idf.py flash -a``/``--all``. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``. Requires esp-idf-monitor 1.10.0 or later.
    * - * Ctrl + A (or A)
      - Build and flash the app only
      - Pause idf_monitor to run the ``app-flash`` target, then resumes idf_monitor. Similar to the ``flash`` target, but only the main app is built and re-flashed. Target ``encrypted-app-flash`` is run if idf_monitor was started with argument ``-E``.
@@ -240,6 +243,13 @@ The ROM ELF file is automatically loaded from a location based on the ``IDF_PATH
 .. note::
 
     Set environment variable ``ESP_MONITOR_DECODE`` to ``0`` or call esp_idf_monitor with specific command line option: ``python -m esp_idf_monitor --disable-address-decoding`` to disable address decoding.
+
+.. _idf-monitor-target-detection:
+
+Automatic Target Detection
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, ``idf.py monitor`` connects to the target that has been set for the project. However, on an unbuilt project where no target has been configured, it can connect to any target — it will automatically detect the chip on the default serial port and pass it to the monitor. This allows running ``idf.py monitor`` on a clean project without having to call ``idf.py set-target`` first.
 
 Target Reset on Connection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

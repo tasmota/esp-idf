@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define WORKFLOW_MAX_NAMELEN 16
+#define WORKFLOW_MAX_NAMELEN 32
 
 /**
  * @brief update function declaration
@@ -60,11 +60,13 @@ typedef struct esp_openthread_platform_workflow {
  *
  * @param[in]  updatefcn   The update function of the workflow added to the list.
  * @param[in]  processfcn  The process function of the workflow added to the list.
- * @param[in]  name        The name of the added workflow
+ * @param[in]  name        The name of the added workflow. Must be non-empty and shorter
+ *                         than WORKFLOW_MAX_NAMELEN (including the terminating '\\0').
  *
  * @return
  *   - ESP_OK on success
  *   - ESP_ERR_NO_MEM on allocation failure
+ *   - ESP_ERR_INVALID_ARG if name is NULL, empty, or too long
  *   - ESP_FAIL on other failures
  *
  */
@@ -154,6 +156,37 @@ void esp_openthread_set_storage_name(const char *name);
  *      - The caps of the memory.
  */
 uint32_t esp_openthread_get_alloc_caps(void);
+
+/**
+ * @brief This function gets the index of the instance
+ *
+ * @param[in]    instance   The OpenThread instance.
+ *
+ * @note Invalid input is logged and asserted.
+ *
+ * @return
+ *      - The index of the instance
+ */
+int8_t esp_openthread_get_idx_from_instance(otInstance *instance);
+
+/**
+ * @brief This function gets the instance from the index
+ *
+ * @param[in]    idx   The index of the instance.
+ *
+ * @note Invalid index is logged and asserted. A valid index always has an instance.
+ *
+ * @return
+ *      - The instance
+ */
+otInstance *esp_openthread_get_instance_from_idx(int8_t idx);
+
+/**
+ * @brief This function sets the active instance
+ *
+ * @param[in]    instance   The OpenThread instance.
+ */
+void esp_openthread_set_active_instance(otInstance *instance);
 
 #ifdef __cplusplus
 } // end of extern "C"

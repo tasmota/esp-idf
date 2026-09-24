@@ -22,6 +22,8 @@
 #include "esp_private/esp_pmu.h"
 #include "esp_hw_log.h"
 #include "hal/regi2c_ctrl_ll.h"
+#include "soc/rtc.h"
+#include "hal/efuse_hal.h"
 
 ESP_HW_LOG_ATTR_TAG(TAG, "pmu_init");
 
@@ -67,7 +69,13 @@ void pmu_hp_system_init(pmu_context_t *ctx, pmu_hp_mode_t mode, pmu_hp_system_pa
     assert(ctx->hal);
     /* Default configuration of hp-system power in active, modem and sleep modes */
     pmu_ll_hp_set_dig_power(ctx->hal->dev, mode, power->dig_power.val);
-    pmu_ll_hp_set_clk_power(ctx->hal->dev, mode, power->clk_power.val);
+    if (mode == PMU_MODE_HP_ACTIVE) {
+        // In active mode the root clock circuit power (BBPLL/CPLL/MPLL/APLL/XTALx2, etc.) is owned by esp_clk_tree.
+        // The analog i2c master is shared by all the PLLs and is not refcounted there, so it is still configured here.
+        pmu_ll_hp_set_ana_i2c_power(ctx->hal->dev, mode, power->clk_power.xpd_bb_i2c, power->clk_power.i2c_iso_en, power->clk_power.i2c_retention);
+    } else {
+        pmu_ll_hp_set_clk_power(ctx->hal->dev, mode, power->clk_power.val);
+    }
     pmu_ll_hp_set_xtal_xpd (ctx->hal->dev, mode, power->xtal.xpd_xtal);
 
     /* Default configuration of hp-system clock in active, modem and sleep modes */
@@ -224,4 +232,16 @@ void pmu_init(void)
     pmu_hp_system_init_default(PMU_instance());
     pmu_lp_system_init_default(PMU_instance());
     pmu_power_domain_force_default(PMU_instance());
+
+#if CONFIG_ESP_ENABLE_PVT
+    /*setup pvt function*/
+    uint32_t blk_version = efuse_hal_blk_version();
+    if (blk_version >= 1) {
+        pvt_auto_dbias_enable(true);
+        esp_rom_delay_us(1000);
+    }
+    else {
+        ESP_HW_LOGW(TAG, "blk_version is less than 1, pvt function not supported in efuse.");
+    }
+#endif
 }

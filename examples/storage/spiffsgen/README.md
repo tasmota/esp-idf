@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # SPIFFS Image Generation on Build Example
 
@@ -54,3 +54,7 @@ I (330) example: SPIFFS unmounted
 ```
 
 The logic of the example is contained in a [single source file](./main/spiffsgen_example_main.c), and it should be relatively simple to match points in its execution with the log outputs above.
+
+## When to use this example
+
+- You want to ship pre-created files on a SPIFFS partition, generated at build time from a host folder.

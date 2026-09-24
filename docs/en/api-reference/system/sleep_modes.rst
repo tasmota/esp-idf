@@ -649,26 +649,26 @@ If you do not call :cpp:func:`esp_sleep_set_console_uart_handling_mode`, the fol
 You can override the default by calling :cpp:func:`esp_sleep_set_console_uart_handling_mode` and choosing one of the following modes (see :cpp:enum:`esp_sleep_uart_handling_mode_t`):
 
 - :cpp:enumerator:`ESP_SLEEP_AUTO_FLUSH_SUSPEND_UART` (default): Automatically choose flush or suspend based on sleep type and power domain, as described above.
-- :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART` : Always wait until all data in the console UART TX FIFO has been transmitted before entering sleep. Use when you must guarantee that all debug output is visible; sleep entry will take longer and the chip will stay in Active state longer, increasing power consumption.
-- :cpp:enumerator:`ESP_SLEEP_ALWAYS_SUSPEND_UART` : Wait for the current UART frame to complete, then suspend the UART. If the UART stays powered during Light-sleep, transmission continues after wake. If the UART power domain is powered down, unsent data will be lost.
-- :cpp:enumerator:`ESP_SLEEP_ALWAYS_DISCARD_UART` : Discard all unsent data in the console UART FIFO and enter sleep immediately. Use for the fastest sleep entry and lowest power when debug output can be discarded.
-- :cpp:enumerator:`ESP_SLEEP_NO_HANDLING` : Do not perform any handling on the console UART before sleep. Use only when the UART state is known to be safe (e.g. no pending output or the console UART is disabled).
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART`: Always wait until all data in the console UART TX FIFO has been transmitted before entering sleep. Use when you must guarantee that all debug output is visible; sleep entry will take longer and the chip will stay in Active state longer, increasing power consumption.
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_SUSPEND_UART`: Wait for the current UART frame to complete, then suspend the UART. If the UART stays powered during Light-sleep, transmission continues after wake. If the UART power domain is powered down, unsent data will be lost.
+- :cpp:enumerator:`ESP_SLEEP_ALWAYS_DISCARD_UART`: Discard all unsent data in the console UART FIFO and enter sleep immediately. Use for the fastest sleep entry and lowest power when debug output can be discarded.
+- :cpp:enumerator:`ESP_SLEEP_NO_HANDLING`: Do not perform any handling on the console UART before sleep. Use only when the UART state is known to be safe (e.g. no pending output or the console UART is disabled).
 
 .. note::
 
-   The sleep flow runs in a critical section. When using a mode that flushes the console UART (e.g. :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART` , or the default behavior for Light-sleep/Deep-sleep when the HP peripheral domain is powered down), set :ref:`CONFIG_ESP_INT_WDT_TIMEOUT_MS` to be **greater than** ``SOC_UART_FIFO_LEN`` × (time to send one character at the current baud rate). Otherwise, if too much data is queued in the TX FIFO, the flush may take longer than the interrupt watchdog timeout and trigger a watchdog reset during sleep entry.
+    The sleep flow runs in a critical section. When using a mode that flushes the console UART (e.g. :cpp:enumerator:`ESP_SLEEP_ALWAYS_FLUSH_UART`, or the default behavior for Light-sleep/Deep-sleep when the HP peripheral domain is powered down), set :ref:`CONFIG_ESP_INT_WDT_TIMEOUT_MS` to be **greater than** ``SOC_UART_FIFO_LEN`` × (time to send one character at the current baud rate). Otherwise, if too much data is queued in the TX FIFO, the flush may take longer than the interrupt watchdog timeout and trigger a watchdog reset during sleep entry.
 
-Example: ensure all debug output is sent before every sleep::
+Example: ensure all debug output is sent before every sleep:
 
-.. code-block:: C
+.. code-block:: c
 
     fflush(stdout);
     esp_sleep_set_console_uart_handling_mode(ESP_SLEEP_ALWAYS_FLUSH_UART);
     esp_light_sleep_start();
 
-Example: minimize sleep entry time and allow discarding console output::
+Example: minimize sleep entry time and allow discarding console output:
 
-.. code-block:: C
+.. code-block:: c
 
     esp_sleep_set_console_uart_handling_mode(ESP_SLEEP_ALWAYS_DISCARD_UART);
     esp_deep_sleep_start();
@@ -680,7 +680,7 @@ Checking Sleep Wakeup Cause
 
 :cpp:func:`esp_sleep_get_wakeup_cause` function can be used to check which wakeup source has triggered wakeup from sleep mode.
 
-.. only:: SOC_TOUCH_SENSOR_SUPPORTED
+.. only:: SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
 
     For touchpad, it is possible to identify which touch pin has caused wakeup using :cpp:func:`esp_sleep_get_touchpad_wakeup_status` functions.
 

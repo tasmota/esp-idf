@@ -20,15 +20,14 @@
 
 LOG_MODULE_REGISTER(ISO_ADV, CONFIG_BT_ISO_LOG_LEVEL);
 
-static struct bt_le_ext_adv ext_adv_pool[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
+static BT_ISO_EXT_RAM_BSS_ATTR struct bt_le_ext_adv ext_adv_pool[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
 
 static struct bt_le_ext_adv *ext_adv_find(uint8_t adv_handle)
 {
     struct bt_le_ext_adv *adv = NULL;
 
     for (size_t i = 0; i < ARRAY_SIZE(ext_adv_pool); i++) {
-        if (atomic_test_bit(ext_adv_pool[i].flags,
-                            BT_PER_ADV_PARAMS_SET) &&
+        if (atomic_test_bit(ext_adv_pool[i].flags, BT_PER_ADV_PARAMS_SET) &&
                 ext_adv_pool[i].handle == adv_handle) {
             LOG_DBG("ExtAdvFound[%u][%u]", i, adv_handle);
             adv = &ext_adv_pool[i];
@@ -44,8 +43,7 @@ static struct bt_le_ext_adv *ext_adv_new(void)
     struct bt_le_ext_adv *adv = NULL;
 
     for (size_t i = 0; i < ARRAY_SIZE(ext_adv_pool); i++) {
-        if (atomic_test_bit(ext_adv_pool[i].flags,
-                            BT_PER_ADV_PARAMS_SET) == false) {
+        if (atomic_test_bit(ext_adv_pool[i].flags, BT_PER_ADV_PARAMS_SET) == false) {
             adv = &ext_adv_pool[i];
 
             memset(adv, 0, sizeof(*adv));
@@ -70,56 +68,56 @@ struct bt_le_ext_adv *bt_le_ext_adv_find(uint8_t adv_handle)
 }
 
 _IDF_ONLY
-int bt_le_ext_adv_new_safe(uint8_t adv_handle)
+void bt_le_ext_adv_state_reset(void)
 {
-    struct bt_le_ext_adv *adv = NULL;
-    int err = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(ext_adv_pool); i++) {
+        if (atomic_test_bit(ext_adv_pool[i].flags, BT_PER_ADV_PARAMS_SET)) {
+            LOG_WRN("DeinitDropExtAdv[%u]", ext_adv_pool[i].handle);
+        }
+    }
 
-    bt_le_host_lock();
+    memset(ext_adv_pool, 0, sizeof(ext_adv_pool));
+}
+
+int bt_le_ext_adv_new(uint8_t adv_handle, uint8_t addr_type,
+                      const uint8_t *addr, uint8_t sid)
+{
+    struct bt_le_ext_adv *adv;
 
     adv = ext_adv_find(adv_handle);
     if (adv) {
         LOG_WRN("ExtAdvExist[%u]", adv_handle);
-        err = -EEXIST;
-        goto end;
+        return -EEXIST;
     }
 
     adv = ext_adv_new();
     if (adv == NULL) {
         LOG_ERR("NoFreeExtAdv[%u]", adv_handle);
-        err = -ENOMEM;
-        goto end;
+        return -ENOMEM;
     }
 
     adv->handle = adv_handle;
+    adv->addr.type = addr_type;
+    bt_addr_copy(&adv->addr.a, (const bt_addr_t *)addr);
+    adv->sid = sid;
 
-end:
-    bt_le_host_unlock();
-
-    return err;
+    return 0;
 }
 
 _IDF_ONLY
-int bt_le_ext_adv_delete_safe(uint8_t adv_handle)
+int bt_le_ext_adv_delete(uint8_t adv_handle)
 {
-    struct bt_le_ext_adv *adv = NULL;
-    int err = 0;
-
-    bt_le_host_lock();
+    struct bt_le_ext_adv *adv;
 
     adv = ext_adv_find(adv_handle);
     if (adv == NULL) {
         LOG_ERR("ExtAdvNotFound[%u]", adv_handle);
-        err = -ENODEV;
-        goto end;
+        return -ENODEV;
     }
 
     ext_adv_delete(adv);
 
-end:
-    bt_le_host_unlock();
-
-    return err;
+    return 0;
 }
 
 _LIB_ONLY
@@ -136,9 +134,32 @@ int bt_le_ext_adv_get_info(const struct bt_le_ext_adv *adv,
         return -EINVAL;
     }
 
+    info->sid = adv->sid;
+    info->addr = &adv->addr;
+
     /* Force to use ENABLED state for LIB usage */
     info->ext_adv_state = BT_LE_EXT_ADV_STATE_ENABLED;
     info->per_adv_state = BT_LE_PER_ADV_STATE_ENABLED;
 
     return 0;
+}
+
+_LIB_ONLY
+struct bt_le_ext_adv *bt_le_ext_adv_lookup_addr(const bt_addr_le_t *adv_addr, uint8_t sid)
+{
+    struct bt_le_ext_adv *adv = NULL;
+
+    BT_LE_ASSERT(adv_addr);
+
+    for (size_t i = 0; i < ARRAY_SIZE(ext_adv_pool); i++) {
+        if (atomic_test_bit(ext_adv_pool[i].flags, BT_PER_ADV_PARAMS_SET) &&
+                bt_addr_le_eq(&ext_adv_pool[i].addr, adv_addr) &&
+                ext_adv_pool[i].sid == sid) {
+            LOG_INF("ExtAdvLookupAddrFound[%u][%u]", i, sid);
+            adv = &ext_adv_pool[i];
+            break;
+        }
+    }
+
+    return adv;
 }

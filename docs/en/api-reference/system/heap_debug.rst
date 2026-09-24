@@ -542,7 +542,7 @@ In ``HEAP_TRACE_ALL``:
 
 .. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
-    By default, the depth of the call stack recorded for each trace entry is 0, which means that only the direct caller of the memory allocation function can be retrieve. However, when the ``CONFIG_ESP_SYSTEM_USE_FRAME_POINTER`` option is enabled, this call stack depth can be configured in the project configuration menu, under ``Heap Memory Debugging`` > ``Enable heap tracing`` > :ref:`CONFIG_HEAP_TRACING_STACK_DEPTH`. Up to 32 stack frames can be recorded for each allocation (the default is 2). Each additional stack frame increases the memory usage of each ``heap_trace_record_t`` record by eight bytes.
+    By default, the call stack depth for each trace entry is 0: no caller PCs are recorded (allocation address, size, and related fields are still traced). Enable ``CONFIG_ESP_SYSTEM_USE_FRAME_POINTER`` to walk the stack, then configure the depth under ``Heap Memory Debugging`` > ``Enable heap tracing`` > :ref:`CONFIG_HEAP_TRACING_STACK_DEPTH`. Up to 32 stack frames can be recorded for each allocation (the default is 2). Each additional stack frame increases the memory usage of each ``heap_trace_record_t`` record by eight bytes.
 
 Finally, the total number of the 'leaked' bytes (bytes allocated but not freed while the trace is running) is printed together with the total number of allocations it represents.
 
@@ -653,15 +653,15 @@ The output from the heap trace has a similar format to the following example:
   Stop parsing trace. (Timeout 0.000000 sec while reading 1 bytes!)
   Process events from '['/tmp/heap.svdat']'...
   [0.002244575] HEAP: Allocated 1 bytes @ 0x3ffaffd8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.002258425] HEAP: Allocated 2 bytes @ 0x3ffaffe0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:48
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:48
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.002563725] HEAP: Freed bytes @ 0x3ffaffe0 from task "free" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.002782950] HEAP: Freed bytes @ 0x3ffb40b8 from task "main" on core 0 by:
@@ -673,39 +673,39 @@ The output from the heap trace has a similar format to the following example:
   /home/user/projects/esp/esp-idf/components/freertos/tasks.c:4590
 
   [0.102436025] HEAP: Allocated 2 bytes @ 0x3ffaffe0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.102449800] HEAP: Allocated 4 bytes @ 0x3ffaffe8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:48
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:48
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.102666150] HEAP: Freed bytes @ 0x3ffaffe8 from task "free" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.202436200] HEAP: Allocated 3 bytes @ 0x3ffaffe8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.202451725] HEAP: Allocated 6 bytes @ 0x3ffafff0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:48
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:48
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.202667075] HEAP: Freed bytes @ 0x3ffafff0 from task "free" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.302436000] HEAP: Allocated 4 bytes @ 0x3ffafff0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.302451475] HEAP: Allocated 8 bytes @ 0x3ffb40b8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:48
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:48
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.302667500] HEAP: Freed bytes @ 0x3ffb40b8 from task "free" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:31 (discriminator 9)
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   Processing completed.
@@ -717,19 +717,19 @@ The output from the heap trace has a similar format to the following example:
   Processed 14 heap events.
 
   [0.002244575] HEAP: Allocated 1 bytes @ 0x3ffaffd8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.102436025] HEAP: Allocated 2 bytes @ 0x3ffaffe0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.202436200] HEAP: Allocated 3 bytes @ 0x3ffaffe8 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   [0.302436000] HEAP: Allocated 4 bytes @ 0x3ffafff0 from task "alloc" on core 0 by:
-  /home/user/projects/esp/esp-idf/examples/system/sysview_tracing_heap_log/main/sysview_heap_log.c:47
+  /home/user/projects/esp/esp-idf/examples/system/tracing/sysview_tracing_heap_log/main/sysview_heap_log.c:47
   /home/user/projects/esp/esp-idf/components/freertos/port.c:355 (discriminator 1)
 
   Found 10 leaked bytes in 4 blocks.

@@ -6,18 +6,20 @@
 
 #include "sdkconfig.h"
 #include "esp_attr.h"
+#include "esp_check.h"
+#include "esp_clk_tree.h"
 #include "soc/soc_caps.h"
 #include "modem/modem_clock_impl.h"
 #include "esp_private/regi2c_ctrl.h"
 
 /* Clock dependency definitions */
 #define WIFI_CLOCK_DEPS                     ( MODEM_CLOCKS( WIFI_MAC, WIFI_APB, WIFI_BB, WIFI_BB_44M, COEXIST, WIFI_BB_80X1, SOC_PLL_SOURCE_CG ) )
-#define BLE_CLOCK_DEPS                      ( MODEM_CLOCKS( BLE_MAC, BT_I154_COMMON_BB, ETM, COEXIST, WIFI_BB_80X1, SOC_PLL_SOURCE_CG, BT_APB, BT_PERIPHERAL ) )
-#define BT_APB_CLOCK_DEPS                   ( MODEM_CLOCKS( BT_APB, ETM, SOC_PLL_SOURCE_CG, BLE_MAC ) )
+#define BLE_CLOCK_DEPS                      ( MODEM_CLOCKS( BT_MAC, BT_I154_COMMON_BB, ETM, COEXIST, WIFI_BB_80X1, SOC_PLL_SOURCE_CG, BT_APB, BT_PERIPHERAL ) )
+#define BT_APB_CLOCK_DEPS                   ( MODEM_CLOCKS( BT_APB, ETM, SOC_PLL_SOURCE_CG, BT_MAC ) )
 #define IEEE802154_CLOCK_DEPS               ( MODEM_CLOCKS( 802154_MAC, BT_I154_COMMON_BB, ETM, COEXIST, WIFI_BB_80X1, SOC_PLL_SOURCE_CG, BT_APB ) )
 #define COEXIST_CLOCK_DEPS                  ( MODEM_CLOCKS( COEXIST, SOC_PLL_SOURCE_CG ) )
 #define I2C_ANA_MST_CLOCK_DEPS              ( MODEM_CLOCKS( I2C_MASTER ) )
-#define PHY_CLOCK_DEPS                      ( MODEM_CLOCKS( MODEM_ADC_COMMON_FE, MODEM_PRIVATE_FE, SOC_PLL_SOURCE_CG ) | I2C_ANA_MST_CLOCK_DEPS )
+#define PHY_CLOCK_DEPS                      ( MODEM_CLOCKS( MODEM_ADC_COMMON_FE, MODEM_PRIVATE_FE, SOC_PLL_SOURCE_CG, WIFI_BB_80X1) | I2C_ANA_MST_CLOCK_DEPS )
 #define MODEM_ETM_CLOCK_DEPS                ( MODEM_CLOCKS( ETM ) )
 #define MODEM_ADC_COMMON_FE_CLOCK_DEPS      ( MODEM_CLOCKS( MODEM_ADC_COMMON_FE, SOC_PLL_SOURCE_CG ) )
 #define PHY_CALIBRATION_WIFI_CLOCK_DEPS     ( MODEM_CLOCKS( WIFI_APB, WIFI_BB, WIFI_BB_44M, WIFI_BB_80X1, SOC_PLL_SOURCE_CG ) )
@@ -212,7 +214,13 @@ static void IRAM_ATTR modem_clock_coex_configure(modem_clock_context_t *ctx, boo
 #if SOC_MODEM_CLOCK_SOC_PLL_SOURCE_CG_SUPPORTED
 static void IRAM_ATTR modem_clock_soc_pll_source_cg_configure(modem_clock_context_t *ctx, bool enable)
 {
+    if (enable) {
+        ESP_ERROR_CHECK(esp_clk_tree_enable_src(SOC_MOD_CLK_PLL_F160M, true));
+    }
     modem_clock_hal_enable_soc_pll_source_cg(ctx->hal, enable);
+    if (!enable) {
+        ESP_ERROR_CHECK(esp_clk_tree_enable_src(SOC_MOD_CLK_PLL_F160M, false));
+    }
 }
 #endif
 
@@ -309,7 +317,7 @@ static void IRAM_ATTR modem_clock_configure_impl(modem_clock_context_t *ctx, int
 #endif
         : (dev_id == MODEM_CLOCK_ETM)                   ? modem_clock_etm_configure
 #if SOC_BT_SUPPORTED
-        : (dev_id == MODEM_CLOCK_BLE_MAC)               ? modem_clock_ble_mac_configure
+        : (dev_id == MODEM_CLOCK_BT_MAC)                ? modem_clock_ble_mac_configure
         : (dev_id == MODEM_CLOCK_BT_PERIPHERAL)         ? modem_clock_bt_peripheral_configure
         : (dev_id == MODEM_CLOCK_BT_APB)                ? modem_clock_bt_apb_configure
 #endif
@@ -342,7 +350,7 @@ static esp_err_t IRAM_ATTR modem_clock_check_impl(modem_clock_context_t *ctx, in
         : (dev_id == MODEM_CLOCK_WIFI_BB)               ? modem_clock_wifi_bb_check_enable
         : (dev_id == MODEM_CLOCK_WIFI_BB_80X1)          ? modem_clock_wifi_bb_80x1_check_enable
         : (dev_id == MODEM_CLOCK_ETM)                   ? modem_clock_etm_check_enable
-        : (dev_id == MODEM_CLOCK_BLE_MAC)               ? modem_clock_ble_mac_check_enable
+        : (dev_id == MODEM_CLOCK_BT_MAC)                ? modem_clock_ble_mac_check_enable
         : (dev_id == MODEM_CLOCK_BT_PERIPHERAL)         ? modem_clock_bt_peripheral_check_enable
         : (dev_id == MODEM_CLOCK_BT_APB)                ? modem_clock_bt_apb_check_enable
         : (dev_id == MODEM_CLOCK_BT_I154_COMMON_BB)     ? modem_clock_ble_i154_bb_check_enable

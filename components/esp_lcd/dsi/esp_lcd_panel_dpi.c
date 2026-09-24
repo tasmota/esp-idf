@@ -6,13 +6,14 @@
 #include <sys/param.h>
 #include "esp_lcd_panel_interface.h"
 #include "esp_lcd_mipi_dsi.h"
-#include "esp_async_color_convert.h"
 #include "esp_intr_alloc.h"
 #include "esp_clk_tree.h"
 #include "esp_cache.h"
 #include "mipi_dsi_priv.h"
 #include "esp_memory_utils.h"
+#include "esp_private/async_memcpy_dma2d.h"
 #include "esp_private/dw_gdma.h"
+#include "esp_private/dma2d.h"
 #include "hal/color_hal.h"
 
 typedef struct esp_lcd_dpi_panel_t esp_lcd_dpi_panel_t;
@@ -45,7 +46,7 @@ struct esp_lcd_dpi_panel_t {
     esp_lcd_panel_draw_bitmap_hook_t draw_bitmap_hook; // Draw bitmap hook function
     void* hook_ctx; // Hook context
     bool (*on_hook_end)(esp_lcd_panel_handle_t panel); // Callback to be invoked when the draw bitmap hook completes its operation
-    async_color_convert_handle_t fbcpy_handle; // Async color convert handle used for same-format DMA2D frame buffer copy
+    async_memcpy_dma2d_handle_t fbcpy_handle; // DMA2D async 2D memcpy handle used for same-format frame buffer copy
 
 #if CONFIG_PM_ENABLE
     esp_pm_lock_handle_t pm_lock;          // Power management lock
@@ -65,11 +66,11 @@ static bool dpi_panel_draw_bitmap_hook_end(esp_lcd_panel_t *panel)
     return false;
 }
 
-static bool async_fbcpy_done_cb(async_color_convert_handle_t conv_hdl, async_color_convert_event_data_t *event, void *cb_args)
+static bool async_fbcpy_done_cb(async_memcpy_dma2d_handle_t mcp, async_memcpy_dma2d_event_data_t *event, void *cb_args)
 {
     bool need_yield = false;
     esp_lcd_dpi_panel_t *dpi_panel = (esp_lcd_dpi_panel_t *)cb_args;
-    (void)conv_hdl;
+    (void)mcp;
     (void)event;
 
     if (dpi_panel->on_hook_end) {
@@ -188,6 +189,7 @@ esp_err_t esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_
     ESP_RETURN_ON_FALSE(bus && panel_config && ret_panel, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(panel_config->virtual_channel < 4, ESP_ERR_INVALID_ARG, TAG, "invalid virtual channel %d", panel_config->virtual_channel);
     ESP_RETURN_ON_FALSE(panel_config->dpi_clock_freq_mhz > 0, ESP_ERR_INVALID_ARG, TAG, "invalid DPI clock frequency %.2f", panel_config->dpi_clock_freq_mhz);
+    ESP_RETURN_ON_FALSE(panel_config->video_burst_type < MIPI_DSI_VIDEO_BURST_TYPE_MAX, ESP_ERR_INVALID_ARG, TAG, "invalid DPI video burst type");
 
     size_t num_fbs = panel_config->num_fbs;
     // if the user doesn't specify the number of frame buffers, then fallback to use one frame buffer
@@ -223,17 +225,23 @@ esp_err_t esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_
     dpi_panel->bus = bus;
     dpi_panel->num_fbs = num_fbs;
 
+    // Although the DW-GDMA can handle unaligned data, frame buffer still may be the dst of DMA2D operation.
+    // Allocate FB with DMA2D alloc alignment so address is usable as a DMA2D destination when enabled later.
+    // Line-size / window misalignment will fail later in async_color_convert's DMA2D transaction check.
+    size_t dma2d_align = dma2d_get_alloc_alignment();
+
     // allocate frame buffer from PSRAM
     size_t fb_size = panel_config->video_timing.h_size * panel_config->video_timing.v_size * bits_per_pixel / 8;
     for (int i = 0; i < num_fbs; i++) {
-        uint8_t *frame_buffer = heap_caps_calloc(1, fb_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
+        uint8_t *frame_buffer = heap_caps_aligned_calloc(dma2d_align, 1, fb_size,
+                                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
         ESP_GOTO_ON_FALSE(frame_buffer, ESP_ERR_NO_MEM, err, TAG, "no memory for frame buffer");
         dpi_panel->fbs[i] = frame_buffer;
         ESP_LOGD(TAG, "fb[%d] @%p", i, frame_buffer);
         // preset the frame buffer with black color
-        // the frame buffer address alignment is ensured by `heap_caps_calloc`
+        // the frame buffer address alignment is ensured by `heap_caps_aligned_calloc`
         // while the value of the fb_size may not be aligned to the cache line size
-        // but that's not a problem because the `heap_caps_calloc` internally allocated a buffer whose size is aligned up to the cache line size
+        // but that's not a problem because the `heap_caps_aligned_calloc` internally allocated a buffer whose size is aligned up to the cache line size
         ESP_GOTO_ON_ERROR(esp_cache_msync(frame_buffer, fb_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED),
                           err, TAG, "cache write back failed");
     }
@@ -301,27 +309,32 @@ esp_err_t esp_lcd_new_panel_dpi(esp_lcd_dsi_bus_handle_t bus, const esp_lcd_dpi_
         // commands are transmitted in low-power mode
         mipi_dsi_host_ll_dpi_enable_lp_command(hal->host, true);
     }
-    // after sending a frame, the DSI device should return an ack
-    mipi_dsi_host_ll_dpi_enable_frame_ack(hal->host, true);
-    // using the burst mode because it's energy-efficient
-    mipi_dsi_host_ll_dpi_set_video_burst_type(hal->host, MIPI_DSI_LL_VIDEO_BURST_WITH_SYNC_PULSES);
-    // configure the size of the active lin period, measured in pixels
+    // Some bridge devices don't return a frame acknowledgement.
+    mipi_dsi_host_ll_dpi_enable_frame_ack(hal->host, !panel_config->flags.disable_frame_ack);
+    mipi_dsi_host_ll_dpi_set_video_burst_type(hal->host, panel_config->video_burst_type);
+    // configure the size of the active line period, measured in pixels
     mipi_dsi_host_ll_dpi_set_video_packet_pixel_num(hal->host, panel_config->video_timing.h_size);
     // disable multi-packets
     mipi_dsi_host_ll_dpi_set_trunks_num(hal->host, 0);
     // disable "null packets"
     mipi_dsi_host_ll_dpi_set_null_packet_size(hal->host, 0);
     // set horizontal and vertical timing configuration
-    mipi_dsi_hal_host_dpi_set_horizontal_timing(hal, panel_config->video_timing.hsync_pulse_width,
-                                                panel_config->video_timing.hsync_back_porch,
-                                                panel_config->video_timing.h_size,
-                                                panel_config->video_timing.hsync_front_porch);
+    ESP_GOTO_ON_FALSE(mipi_dsi_hal_host_dpi_set_horizontal_timing(hal, panel_config->video_timing.hsync_pulse_width,
+                                                                  panel_config->video_timing.hsync_back_porch,
+                                                                  panel_config->video_timing.h_size,
+                                                                  panel_config->video_timing.hsync_front_porch),
+                      ESP_ERR_INVALID_ARG, err, TAG, "invalid compensated horizontal timing");
     mipi_dsi_hal_host_dpi_set_vertical_timing(hal, panel_config->video_timing.vsync_pulse_width,
                                               panel_config->video_timing.vsync_back_porch,
                                               panel_config->video_timing.v_size,
                                               panel_config->video_timing.vsync_front_porch);
     mipi_dsi_brg_ll_set_num_pixel_bits(hal->bridge, panel_config->video_timing.h_size * panel_config->video_timing.v_size * bits_per_pixel);
-    mipi_dsi_brg_ll_set_underrun_discard_count(hal->bridge, panel_config->video_timing.h_size);
+    // Report underruns for the whole frame: IRQ when underrun occurs and line_cnt < vtotal.
+    mipi_dsi_brg_ll_set_underrun_discard_count(hal->bridge,
+                                               panel_config->video_timing.vsync_pulse_width +
+                                               panel_config->video_timing.vsync_back_porch +
+                                               panel_config->video_timing.v_size +
+                                               panel_config->video_timing.vsync_front_porch);
     // set the in/out color formats in the DSI bridge
     mipi_dsi_brg_ll_set_input_color_format(hal->bridge, in_color_format);
     mipi_dsi_brg_ll_set_output_color_format(hal->bridge, out_color_format, 0);
@@ -484,7 +497,9 @@ static esp_err_t dpi_panel_draw_bitmap_dma2d_hook(esp_lcd_panel_t *panel, const 
     esp_lcd_dpi_panel_t *dpi_panel = __containerof(panel, esp_lcd_dpi_panel_t, base);
     (void)hook_ctx;
 
-    async_color_convert_request_t fbcpy_trans_config = {
+    // Built-in DMA2D draw hook only needs same-format 2D window copy.
+    // Use the private DMA2D async memcpy wrapper (thin layer over color convert).
+    async_memcpy_dma2d_trans_desc_t fbcpy_trans_config = {
         .src_buffer = hook_data->src_data,
         .dst_buffer = hook_data->dst_data,
         .src_stride = hook_data->src_x_size,
@@ -497,16 +512,13 @@ static esp_err_t dpi_panel_draw_bitmap_dma2d_hook(esp_lcd_panel_t *panel, const 
         .dst_y = hook_data->dst_y_start,
         .copy_width = hook_data->src_x_end - hook_data->src_x_start,
         .copy_height = hook_data->src_y_end - hook_data->src_y_start,
-        // For this DMA2D hook we only do window copy from draw buffer to frame buffer.
-        // Source and destination color formats are intentionally set to the same value to disable CSC.
-        .src_color_format = dpi_panel->in_color_format,
-        .dst_color_format = dpi_panel->in_color_format,
+        .pixel_format = dpi_panel->in_color_format,
     };
-    // The async color convert backend owns source/destination cache sync for the
-    // DMA2D copy path, so the LCD driver should not perform extra cache sync here.
+    // The DMA2D async 2D memcpy backend owns source/destination cache sync for the
+    // copy path, so the LCD driver should not perform extra cache sync here.
     // Save the completion callback and invoke it when the async frame buffer copy finishes.
     dpi_panel->on_hook_end = hook_data->on_hook_end;
-    ESP_RETURN_ON_ERROR(esp_async_color_convert(dpi_panel->fbcpy_handle, &fbcpy_trans_config, async_fbcpy_done_cb, dpi_panel), TAG, "async frame buffer copy failed");
+    ESP_RETURN_ON_ERROR(esp_async_memcpy_dma2d(dpi_panel->fbcpy_handle, &fbcpy_trans_config, async_fbcpy_done_cb, dpi_panel), TAG, "async frame buffer copy failed");
     return ESP_OK;
 }
 
@@ -531,24 +543,24 @@ esp_err_t esp_lcd_dpi_panel_enable_dma2d(esp_lcd_panel_handle_t panel)
     // Check if built-in DMA2D draw bitmap hook is registered
     ESP_RETURN_ON_FALSE(!dpi_panel->fbcpy_handle, ESP_ERR_INVALID_STATE, TAG, "draw bitmap DMA2D hook is already registered");
 
-    // Initialize the async color convert backend used by the built-in DMA2D copy hook.
+    // Initialize the DMA2D async 2D memcpy backend used by the built-in copy hook.
     // Use its default backlog to queue multiple frame buffer copy requests.
-    async_color_convert_config_t fbcpy_config = {
+    async_memcpy_dma2d_config_t fbcpy_config = {
         .dma_burst_size = 128, // for better performance
     };
-    ESP_RETURN_ON_ERROR(esp_async_color_convert_install_dma2d(&fbcpy_config, &dpi_panel->fbcpy_handle), TAG, "install async frame buffer copy backend failed");
+    ESP_RETURN_ON_ERROR(esp_async_memcpy_install_dma2d(&fbcpy_config, &dpi_panel->fbcpy_handle), TAG, "install async frame buffer copy backend failed");
 
     // Register the DMA2D draw bitmap hook
     esp_lcd_panel_hooks_t hooks = {
         .draw_bitmap_hook = dpi_panel_draw_bitmap_dma2d_hook,
     };
-    ESP_GOTO_ON_ERROR(esp_lcd_dpi_panel_register_hooks(panel, &hooks, dpi_panel->user_ctx), err, TAG, "register DMA2D draw bitmap hook failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_dpi_panel_register_hooks(panel, &hooks, NULL), err, TAG, "register DMA2D draw bitmap hook failed");
 
     return ESP_OK;
 
 err:
     if (dpi_panel->fbcpy_handle) {
-        esp_async_color_convert_uninstall(dpi_panel->fbcpy_handle);
+        esp_async_memcpy_uninstall_dma2d(dpi_panel->fbcpy_handle);
         dpi_panel->fbcpy_handle = NULL;
     }
     dpi_panel->on_hook_end = NULL;
@@ -563,14 +575,13 @@ esp_err_t esp_lcd_dpi_panel_disable_dma2d(esp_lcd_panel_handle_t panel)
     // Check if built-in DMA2D draw bitmap hook is registered
     ESP_RETURN_ON_FALSE(dpi_panel->fbcpy_handle, ESP_ERR_INVALID_STATE, TAG, "draw bitmap DMA2D hook not registered");
 
+    // Clear the hook first so new draws stop entering the DMA2D path before uninstall.
     esp_lcd_panel_hooks_t hooks = {
         .draw_bitmap_hook = NULL,
     };
     ESP_RETURN_ON_ERROR(esp_lcd_dpi_panel_register_hooks(panel, &hooks, NULL), TAG, "unregister DMA2D draw bitmap hook failed");
-    if (dpi_panel->fbcpy_handle) {
-        ESP_RETURN_ON_ERROR(esp_async_color_convert_uninstall(dpi_panel->fbcpy_handle), TAG, "uninstall DMA2D failed");
-        dpi_panel->fbcpy_handle = NULL;
-    }
+    ESP_RETURN_ON_ERROR(esp_async_memcpy_uninstall_dma2d(dpi_panel->fbcpy_handle), TAG, "uninstall DMA2D failed");
+    dpi_panel->fbcpy_handle = NULL;
     dpi_panel->on_hook_end = NULL;
 
     return ESP_OK;
@@ -600,13 +611,34 @@ static esp_err_t dpi_panel_draw_bitmap_2d(esp_lcd_panel_t *panel, int x_start, i
     size_t fb_size = dpi_panel->fb_size;
     size_t bits_per_pixel = dpi_panel->bits_per_pixel;
 
-    // clip to boundaries
     int h_res = dpi_panel->h_pixels;
     int v_res = dpi_panel->v_pixels;
+
+    // save the original coordinates before clipping
+    int unclipped_x_start = x_start;
+    int unclipped_y_start = y_start;
+    int unclipped_x_end = x_end;
+    int unclipped_y_end = y_end;
+
+    // clip to boundaries
     x_start = MAX(x_start, 0);
     x_end = MIN(x_end, h_res);
     y_start = MAX(y_start, 0);
     y_end = MIN(y_end, v_res);
+
+    // adjust the source coordinates to the clipped region
+    src_x_start += x_start - unclipped_x_start;
+    src_y_start += y_start - unclipped_y_start;
+    src_x_end -= unclipped_x_end - x_end;
+    src_y_end -= unclipped_y_end - y_end;
+
+    if (x_start >= x_end || y_start >= y_end || src_x_start >= src_x_end || src_y_start >= src_y_end) {
+        // no valid region to draw, skip
+        if (dpi_panel->on_color_trans_done) {
+            dpi_panel->on_color_trans_done(&dpi_panel->base, NULL, dpi_panel->user_ctx);
+        }
+        return ESP_OK;
+    }
 
     bool do_copy = false;
     uint8_t draw_buf_fb_index = 0;
@@ -639,7 +671,7 @@ static esp_err_t dpi_panel_draw_bitmap_2d(esp_lcd_panel_t *panel, int x_start, i
         ESP_LOGV(TAG, "copy draw buffer by draw bitmap hook");
         // Note, whether the previous draw operation is finished should be ensured by the hook.
         // For the built-in DMA2D hook, cache maintenance of the source and destination
-        // buffers is handled inside the async color convert driver.
+        // buffers is handled inside the DMA2D async 2D memcpy driver.
 
         esp_lcd_draw_bitmap_hook_data_t hook_data = {
             .dst_data = frame_buffer,

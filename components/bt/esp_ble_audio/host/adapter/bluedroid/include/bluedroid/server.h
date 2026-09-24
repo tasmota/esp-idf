@@ -76,6 +76,7 @@ static inline char *audio_chrc_uuid_to_str(uint16_t uuid)
     case BT_UUID_CSIS_SET_SIZE_VAL:             return "CSIS_SET_SIZE";
     case BT_UUID_CSIS_SET_LOCK_VAL:             return "CSIS_SET_LOCK";
     case BT_UUID_CSIS_RANK_VAL:                 return "CSIS_RANK";
+    case BT_UUID_CSIS_SET_NAME_VAL:             return "CSIS_SET_NAME";
     case BT_UUID_MCS_PLAYER_NAME_VAL:           return "MCS_PLAYER_NAME";
     case BT_UUID_MCS_ICON_OBJ_ID_VAL:           return "MCS_ICON_OBJ_ID";
     case BT_UUID_MCS_ICON_URL_VAL:              return "MCS_ICON_URL";
@@ -153,15 +154,21 @@ enum {
     TMAS_IN_PROGRESS,
     VCS_IN_PROGRESS,
     VOCS_IN_PROGRESS,
+    GMAS_IN_PROGRESS,
+    OTS_IN_PROGRESS,
 
     MAX_IN_PROGRESS,
 };
 
 void bt_le_bluedroid_audio_gatts_init(void);
 
+void bt_le_bluedroid_audio_gatts_deinit(void);
+
 int bt_le_bluedroid_set_svc_in_progress(uint8_t value);
 
 int bt_le_bluedroid_svc_init(struct bt_gatt_service *svc);
+
+int bt_le_bluedroid_svc_deinit(struct bt_gatt_service *svc);
 
 int bt_le_bluedroid_svc_start(struct bt_gatt_service *svc);
 

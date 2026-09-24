@@ -119,7 +119,8 @@ esp_err_t jpeg_new_decoder_engine(const jpeg_decode_engine_cfg_t *dec_eng_cfg, j
 
     ESP_GOTO_ON_ERROR(dma2d_acquire_pool(&dma2d_client_config, &decoder_engine->dma2d_group_handle), err, TAG, "dma2d client acquire failed");
 
-    decoder_engine->trans_desc = (dma2d_trans_t *)heap_caps_calloc(1, SIZEOF_DMA2D_TRANS_T, JPEG_MEM_ALLOC_CAPS);
+    // always allocate memory from internal memory because the dma2d transaction descriptor contains atomic variable
+    decoder_engine->trans_desc = (dma2d_trans_t *)heap_caps_calloc(1, SIZEOF_DMA2D_TRANS_T, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_GOTO_ON_FALSE(decoder_engine->trans_desc, ESP_ERR_NO_MEM, err, TAG, "No memory for dma2d descriptor");
 #if JPEG_USE_RETENTION_LINK
     if (dec_eng_cfg->flags.allow_pd != 0) {
@@ -289,8 +290,10 @@ esp_err_t jpeg_decoder_process(jpeg_decoder_handle_t decoder_engine, const jpeg_
                         "jpeg decode decode_outbuf or out_buffer size is not aligned, please use jpeg_alloc_decoder_mem to malloc your buffer");
 
     // both the bitstream and output buffer are accessed by the 2D-DMA
-    ESP_RETURN_ON_FALSE(jpeg_check_dma2d_buffer(bit_stream) && jpeg_check_dma2d_buffer(decode_outbuf), ESP_ERR_INVALID_ARG, TAG,
-                        "jpeg decode buffer is not 16-byte aligned or not in unencrypted PSRAM, please use jpeg_alloc_decoder_mem to malloc your buffer");
+    size_t bit_stream_alignment = dma2d_get_buffer_alignment_constraint(bit_stream);
+    size_t decode_outbuf_alignment = dma2d_get_buffer_alignment_constraint(decode_outbuf);
+    ESP_RETURN_ON_FALSE(bit_stream_alignment <= 1 && decode_outbuf_alignment <= 1, ESP_ERR_INVALID_ARG, TAG,
+                        "jpeg decode buffer doesn't satisfy DMA2D alignment constraints, please use jpeg_alloc_decoder_mem to malloc your buffer");
 
     esp_err_t ret = ESP_OK;
 

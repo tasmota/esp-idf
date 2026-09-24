@@ -413,7 +413,7 @@ void btm_ble_read_remote_features_complete(UINT8 *p);
 void btm_ble_write_adv_enable_complete(UINT8 *p);
 #endif // #if (BLE_42_ADV_EN == TRUE)
 
-void btm_ble_conn_complete(UINT8 *p, UINT16 evt_len, BOOLEAN enhanced);
+void btm_ble_conn_complete(UINT8 *p, UINT16 evt_len, BOOLEAN enhanced, BOOLEAN enhanced_v2);
 void btm_read_ble_local_supported_states_complete(UINT8 *p, UINT16 evt_len);
 tBTM_BLE_CONN_ST btm_ble_get_conn_st(void);
 void btm_ble_set_conn_st(tBTM_BLE_CONN_ST new_st);
@@ -480,6 +480,7 @@ void btm_ble_update_link_topology_mask(UINT8 role, BOOLEAN increase);
 /* direct connection utility */
 BOOLEAN btm_send_pending_direct_conn(void);
 void btm_ble_enqueue_direct_conn_req(void *p_param);
+void btm_ble_remove_direct_conn_req(void *p_param);
 
 /* BLE address management */
 void btm_gen_resolvable_private_addr (void *p_cmd_cplt_cback);

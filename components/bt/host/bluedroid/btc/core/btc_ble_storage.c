@@ -12,18 +12,202 @@
 #include "btc/btc_ble_storage.h"
 #include "bta/bta_gatts_co.h"
 #include "btc/btc_util.h"
+#include "stack/btm_api.h"
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+#include "stack/btm_ble_api.h"
+#endif
 
 #if (SMP_INCLUDED == TRUE)
 
 //the maximum number of bonded devices
 #define BONED_DEVICES_MAX_COUNT (BTM_SEC_MAX_BONDS)
 
+static bool btc_storage_bond_is_excepted(const char *section)
+{
+    int except = 0;
+
+    return btc_config_get_int(section, BTC_BLE_STORAGE_EXCEPT_STR, &except) && (except != 0);
+}
+
+#if (BLE_INCLUDED == TRUE)
+/* Caller must hold btc_config_lock(). Count BLE bonds with ExceptBond set. */
+static uint16_t btc_storage_count_excepted_ble_bonds(void)
+{
+    uint16_t count = 0;
+
+    for (const btc_config_section_iter_t *iter = btc_config_section_begin();
+            iter != btc_config_section_end();
+            iter = btc_config_section_next(iter)) {
+        const char *section = btc_config_section_name(iter);
+        int device_type = 0;
+
+        if (!string_is_bdaddr(section)) {
+            continue;
+        }
+        if (!btc_config_get_int(section, BTC_BLE_STORAGE_DEV_TYPE_STR, &device_type) ||
+                !(device_type & BT_DEVICE_TYPE_BLE)) {
+            continue;
+        }
+        if (btc_storage_bond_is_excepted(section)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/* Caller must hold btc_config_lock(). Warn if NVS has too many excepted bonds. */
+void btc_storage_check_excepted_bond_limit(void)
+{
+    if (BONED_DEVICES_MAX_COUNT == 0) {
+        return;
+    }
+
+    uint16_t except_count = btc_storage_count_excepted_ble_bonds();
+    uint16_t except_max = (uint16_t)(BONED_DEVICES_MAX_COUNT - 1);
+
+    if (except_count > except_max) {
+        BTC_TRACE_WARNING("ExceptBond count %u exceeds limit %u (max bonds %u)",
+                          except_count, except_max, BONED_DEVICES_MAX_COUNT);
+    }
+}
+#endif /* BLE_INCLUDED == TRUE */
+
+static bool btc_storage_bdaddr_is_connected(BD_ADDR addr)
+{
+    /* Use BTM ACL only. BTA_DmGetConnectionState() pulls bta_dm_find_peer_device
+     * from bta_dm_pm.c, which is not linked on BLE-only / no-PM builds. */
+    if (BTM_IsAclConnectionUp(addr, BT_TRANSPORT_LE)) {
+        return true;
+    }
+    if (BTM_IsAclConnectionUp(addr, BT_TRANSPORT_BR_EDR)) {
+        return true;
+    }
+    return false;
+}
+
+static bool btc_storage_bond_is_connected(const char *section)
+{
+    bt_bdaddr_t bd_addr;
+    tBTM_LE_PID_KEYS pid;
+    size_t pid_len = sizeof(pid);
+
+    if (!string_to_bdaddr(section, &bd_addr)) {
+        return false;
+    }
+    if (btc_storage_bdaddr_is_connected(bd_addr.address)) {
+        return true;
+    }
+
+    /* Section may be keyed by RPA while the live ACL uses the identity. */
+    memset(&pid, 0, sizeof(pid));
+    if (btc_config_get_bin(section, BTC_BLE_STORAGE_LE_KEY_PID_STR, (uint8_t *)&pid, &pid_len) &&
+            pid_len == sizeof(pid) &&
+            memcmp(pid.static_addr, bd_addr.address, sizeof(bd_addr.address)) != 0) {
+        if (btc_storage_bdaddr_is_connected(pid.static_addr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static uint16_t btc_storage_count_bdaddr_sections(void)
+{
+    uint16_t count = 0;
+
+    for (const btc_config_section_iter_t *iter = btc_config_section_begin();
+            iter != btc_config_section_end();
+            iter = btc_config_section_next(iter)) {
+        if (string_is_bdaddr(btc_config_section_name(iter))) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/* NVS sections are newest-first. Keep updating the match so the last one is oldest.
+ * The newest bdaddr section is never evicted (it is the bond just written / most recent). */
+static const char *btc_storage_find_evict_candidate(bool connected_ok)
+{
+    const char *candidate = NULL;
+    const char *newest = NULL;
+
+    for (const btc_config_section_iter_t *iter = btc_config_section_begin();
+            iter != btc_config_section_end();
+            iter = btc_config_section_next(iter)) {
+        const char *section = btc_config_section_name(iter);
+
+        if (!string_is_bdaddr(section)) {
+            continue;
+        }
+        if (newest == NULL) {
+            newest = section;
+            continue;
+        }
+        if (btc_storage_bond_is_excepted(section)) {
+            continue;
+        }
+        if (!connected_ok && btc_storage_bond_is_connected(section)) {
+            continue;
+        }
+        candidate = section;
+    }
+    return candidate;
+}
+
+static bool btc_storage_evict_bond_section(const char *section)
+{
+    bt_bdaddr_t bd_addr;
+    bdstr_t section_copy;
+
+    if (!section || !string_to_bdaddr(section, &bd_addr)) {
+        return false;
+    }
+
+    /* Section name is freed by remove_section; copy before mutating the list. */
+    {
+        size_t name_len = strlen(section);
+        if (name_len >= sizeof(section_copy)) {
+            return false;
+        }
+        memcpy(section_copy, section, name_len + 1);
+    }
+
+    BTA_DmRemoveDevice(bd_addr.address, BT_TRANSPORT_LE);
+    BTA_DmRemoveDevice(bd_addr.address, BT_TRANSPORT_BR_EDR);
+    if (btc_config_remove_section(section_copy)) {
+        BTIF_TRACE_WARNING("Exceeded the maximum number of bonded devices. Deleting device info: %02x:%02x:%02x:%02x:%02x:%02x",
+                           bd_addr.address[0], bd_addr.address[1], bd_addr.address[2],
+                           bd_addr.address[3], bd_addr.address[4], bd_addr.address[5]);
+        return true;
+    }
+    return false;
+}
+
+void btc_storage_evict_overflow_bonded_devices(uint16_t max_keep)
+{
+    uint16_t count = btc_storage_count_bdaddr_sections();
+
+    while (count > max_keep) {
+        const char *victim = btc_storage_find_evict_candidate(false);
+
+        if (!victim) {
+            /* No disconnected, non-excepted bond; fall back to the oldest connected one. */
+            victim = btc_storage_find_evict_candidate(true);
+        }
+        if (!victim) {
+            BTIF_TRACE_WARNING("Cannot evict bonded devices: remaining bonds are excepted (count=%u max=%u)",
+                               count, max_keep);
+            break;
+        }
+        if (!btc_storage_evict_bond_section(victim)) {
+            break;
+        }
+        count--;
+    }
+}
+
 static void _btc_storage_save(void)
 {
-    uint16_t addr_section_count = 0;
-    bt_bdaddr_t bd_addr;
-
-    const btc_config_section_iter_t *need_remove_iter = NULL;
     const btc_config_section_iter_t *iter = btc_config_section_begin();
 
     while (iter != btc_config_section_end()) {
@@ -52,33 +236,12 @@ static void _btc_storage_save(void)
             continue;
         }
 
-        if(addr_section_count == BONED_DEVICES_MAX_COUNT) {
-            need_remove_iter = iter;
-        }
-        addr_section_count ++;
         iter = btc_config_section_next(iter);
     }
-    /*exceeded the maximum number of bonded devices, delete them */
-    if (need_remove_iter) {
-        while(need_remove_iter != btc_config_section_end()) {
-            const char *need_remove_section = btc_config_section_name(need_remove_iter);
-            if (!string_is_bdaddr(need_remove_section)) {
-                need_remove_iter = btc_config_section_next(need_remove_iter);
-                continue;
-            }
-            need_remove_iter = btc_config_section_next(need_remove_iter);
-            //delete device info
-            string_to_bdaddr(need_remove_section, &bd_addr);
-            BTA_DmRemoveDevice(bd_addr.address, BT_TRANSPORT_LE);
-            BTA_DmRemoveDevice(bd_addr.address, BT_TRANSPORT_BR_EDR);
-            //delete config info
-            if (btc_config_remove_section(need_remove_section)) {
-                // The need_remove_section has been freed
-                BTIF_TRACE_WARNING("Exceeded the maximum number of bonded devices. Deleting the last device info: %02x:%02x:%02x:%02x:%02x:%02x",
-                                bd_addr.address[0], bd_addr.address[1], bd_addr.address[2], bd_addr.address[3], bd_addr.address[4], bd_addr.address[5]);
-            }
-        }
-    }
+
+    /* Bond list is newest-first in NVS. Evict oldest disconnected (then oldest
+     * connected) non-excepted devices until the count fits. */
+    btc_storage_evict_overflow_bonded_devices(BONED_DEVICES_MAX_COUNT);
     btc_config_flush();
 }
 
@@ -134,6 +297,21 @@ static bt_status_t _btc_storage_add_ble_bonding_key(bt_bdaddr_t *remote_bd_addr,
     }
 
     int ret = btc_config_set_bin(bdstr, name, (const uint8_t *)key, key_length);
+
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    /* If this bond's section is keyed by a Host pseudo address (dual local
+     * identity link, still connected at save time), flag the section so the
+     * identity-based NVS de-dup never deletes it as a "duplicate" of the other
+     * local identity's bond (which shares the same peer Identity). Normal /
+     * RPA-keyed bonds are NOT flagged and keep the native cleanup behavior. */
+    {
+        BD_ADDR real_peer;
+        if (BTM_BleGetRealPeerByPseudo(remote_bd_addr->address, real_peer)) {
+            btc_config_set_int(bdstr, BTC_BLE_STORAGE_PSEUDO_BOND_STR, 1);
+        }
+    }
+#endif
+
     _btc_storage_save();
     return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
@@ -256,6 +434,17 @@ static bt_status_t _btc_storage_remove_all_ble_keys(const char *name)
     if (btc_config_exist(name, BTC_BLE_STORAGE_LE_KEY_LID_STR)) {
         ret |= btc_config_remove(name, BTC_BLE_STORAGE_LE_KEY_LID_STR);
     }
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    /* Clear the dual-identity pseudo-bond marker together with the LE keys so
+     * a removed bond does not leave a stale flag that would shield an empty
+     * section from cleanup. */
+    if (btc_config_exist(name, BTC_BLE_STORAGE_PSEUDO_BOND_STR)) {
+        ret |= btc_config_remove(name, BTC_BLE_STORAGE_PSEUDO_BOND_STR);
+    }
+#endif
+    if (btc_config_exist(name, BTC_BLE_STORAGE_EXCEPT_STR)) {
+        ret |= btc_config_remove(name, BTC_BLE_STORAGE_EXCEPT_STR);
+    }
 
     return ret;
 }
@@ -272,6 +461,22 @@ void btc_storage_remove_unused_sections(uint8_t *cur_addr, tBTM_LE_PID_KEYS *del
     if (btc_storage_is_all_zeros(del_pid_key->static_addr, sizeof(del_pid_key->static_addr))) {
         return;
     }
+
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    /* Never use a pseudo-keyed bond as the de-dup baseline: it legitimately
+     * shares the peer Identity with a normal bond on another local identity.
+     * Symmetric with btc_storage_delete_duplicate_ble_devices() skipping pseudo
+     * baselines. The flag is only set when keys are saved, so use the live
+     * pseudo mapping rather than BTC_BLE_STORAGE_PSEUDO_BOND_STR on cur_addr.
+     * Orphan cleanup below still runs; only identity de-dup is skipped. */
+    BOOLEAN skip_identity_dedup = FALSE;
+    {
+        BD_ADDR dummy;
+        if (BTM_BleGetRealPeerByPseudo(cur_addr, dummy)) {
+            skip_identity_dedup = TRUE;
+        }
+    }
+#endif
 
     btc_config_lock();
 
@@ -303,6 +508,13 @@ void btc_storage_remove_unused_sections(uint8_t *cur_addr, tBTM_LE_PID_KEYS *del
             continue;
         }
 
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+        if (skip_identity_dedup) {
+            iter = btc_config_section_next(iter);
+            continue;
+        }
+#endif
+
         string_to_bdaddr(section, &bd_addr);
 
         char buffer[sizeof(tBTM_LE_KEY_VALUE)] = {0};
@@ -319,7 +531,14 @@ void btc_storage_remove_unused_sections(uint8_t *cur_addr, tBTM_LE_PID_KEYS *del
             if (del_pid_key->addr_type == pid_key->addr_type &&
                     !btc_storage_is_all_zeros(pid_key->static_addr, sizeof(pid_key->static_addr)) &&
                     memcmp(del_pid_key->static_addr, pid_key->static_addr, sizeof(pid_key->static_addr)) == 0 &&
-                    memcmp(cur_addr, bd_addr.address, sizeof(bd_addr.address)) != 0) {
+                    memcmp(cur_addr, bd_addr.address, sizeof(bd_addr.address)) != 0
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+                /* Dual local-identity bond isolation: a section keyed by a Host
+                 * pseudo legitimately shares the peer Identity with another
+                 * local identity's bond; never delete it as a "duplicate". */
+                && !btc_config_exist(section, BTC_BLE_STORAGE_PSEUDO_BOND_STR)
+#endif
+                    ) {
                 if (device_type == BT_DEVICE_TYPE_DUMO) {
                     btc_config_set_int(section, BTC_BLE_STORAGE_DEV_TYPE_STR, BT_DEVICE_TYPE_BREDR);
                     _btc_storage_remove_all_ble_keys(section);
@@ -360,6 +579,19 @@ void btc_storage_delete_duplicate_ble_devices(void)
             continue;
         }
 
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+        /* Dual local-identity bond isolation: never use a pseudo-keyed section
+         * as the de-dup baseline. The inner check below only protects pseudo
+         * candidates, so without this an order-dependent case remains: if a
+         * pseudo bond is visited first and becomes the baseline, a normal bond
+         * that legitimately shares the same peer Identity (no PseudoBond flag)
+         * would match and be deleted. Skipping pseudo baselines makes the
+         * protection symmetric. */
+        if (btc_config_exist(name, BTC_BLE_STORAGE_PSEUDO_BOND_STR)) {
+            continue;
+        }
+#endif
+
         string_to_bdaddr(name, &bd_addr);
         size_t pid_len = sizeof(tBTM_LE_PID_KEYS);
         bool pid_ok = btc_config_get_bin(name, BTC_BLE_STORAGE_LE_KEY_PID_STR, (uint8_t *)buffer, &pid_len);
@@ -388,7 +620,13 @@ void btc_storage_delete_duplicate_ble_devices(void)
                     temp_pid_key = (tBTM_LE_PID_KEYS *) temp_buffer;
                     if (pid_key->addr_type == temp_pid_key->addr_type &&
                             !btc_storage_is_all_zeros(temp_pid_key->static_addr, sizeof(temp_pid_key->static_addr)) &&
-                            memcmp(pid_key->static_addr, temp_pid_key->static_addr, sizeof(pid_key->static_addr)) == 0) {
+                            memcmp(pid_key->static_addr, temp_pid_key->static_addr, sizeof(pid_key->static_addr)) == 0
+#if (BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+                    /* Skip pseudo-keyed sections: a dual local-identity bond
+                     * shares the peer Identity with another bond on purpose. */
+                        && !btc_config_exist(temp_name, BTC_BLE_STORAGE_PSEUDO_BOND_STR)
+#endif
+                            ) {
                         temp_iter = btc_config_section_next(temp_iter);
                         if (temp_device_type == BT_DEVICE_TYPE_DUMO) {
                             btc_config_set_int(temp_name, BTC_BLE_STORAGE_DEV_TYPE_STR, BT_DEVICE_TYPE_BREDR);
@@ -915,8 +1153,17 @@ bt_status_t btc_storage_get_remote_addr_type(bt_bdaddr_t *remote_bd_addr,
 }
 
 #if (BLE_INCLUDED == TRUE)
+#if (SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+#define BTC_BLE_FETCH_PSEUDO_BOND_PARAM , bool is_pseudo_bond
+#define BTC_BLE_FETCH_PSEUDO_BOND_ARG     , is_pseudo_bond
+#else
+#define BTC_BLE_FETCH_PSEUDO_BOND_PARAM
+#define BTC_BLE_FETCH_PSEUDO_BOND_ARG
+#endif
+
 static void _btc_read_le_key(const uint8_t key_type, const size_t key_len, bt_bdaddr_t bd_addr,
-                 const uint8_t addr_type, const bool add_key, bool *device_added, bool *key_found)
+                 const uint8_t addr_type, const bool add_key BTC_BLE_FETCH_PSEUDO_BOND_PARAM,
+                 bool *device_added, bool *key_found)
 {
     assert(device_added);
     assert(key_found);
@@ -936,7 +1183,12 @@ static void _btc_read_le_key(const uint8_t key_type, const size_t key_len, bt_bd
                 if(_btc_storage_get_ble_dev_auth_mode(&bd_addr, &auth_mode) != BT_STATUS_SUCCESS) {
                     BTC_TRACE_WARNING("%s Failed to get auth mode from flash, please erase flash and download the firmware again", __func__);
                 }
+#if (SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+                BTA_DmAddBleDevice(bta_bd_addr, addr_type, auth_mode, BT_DEVICE_TYPE_BLE,
+                                   is_pseudo_bond ? TRUE : FALSE);
+#else
                 BTA_DmAddBleDevice(bta_bd_addr, addr_type, auth_mode, BT_DEVICE_TYPE_BLE);
+#endif
                 *device_added = true;
             }
 
@@ -956,9 +1208,11 @@ bt_status_t _btc_storage_in_fetch_bonded_ble_device(const char *remote_bd_addr, 
     uint32_t device_type = 0;
     int addr_type = BLE_ADDR_PUBLIC;
     bt_bdaddr_t bd_addr;
-    BD_ADDR bta_bd_addr;
     bool device_added = false;
     bool key_found = false;
+#if (SMP_INCLUDED == TRUE && BLE_PERIPH_PSEUDO_ADDR_BOND == TRUE)
+    const bool is_pseudo_bond = add && btc_config_exist(remote_bd_addr, BTC_BLE_STORAGE_PSEUDO_BOND_STR);
+#endif
 
     if (!btc_config_get_int(remote_bd_addr, BTC_BLE_STORAGE_DEV_TYPE_STR, (int *)&device_type)) {
         BTC_TRACE_ERROR("%s, device_type = %x", __func__, device_type);
@@ -966,7 +1220,6 @@ bt_status_t _btc_storage_in_fetch_bonded_ble_device(const char *remote_bd_addr, 
     }
 
     string_to_bdaddr(remote_bd_addr, &bd_addr);
-    bdcpy(bta_bd_addr, bd_addr.address);
 
     if (_btc_storage_get_remote_addr_type(&bd_addr, &addr_type) != BT_STATUS_SUCCESS) {
         addr_type = BLE_ADDR_PUBLIC;
@@ -974,22 +1227,22 @@ bt_status_t _btc_storage_in_fetch_bonded_ble_device(const char *remote_bd_addr, 
     }
 
     _btc_read_le_key(BTM_LE_KEY_PENC, sizeof(tBTM_LE_PENC_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     _btc_read_le_key(BTM_LE_KEY_PID, sizeof(tBTM_LE_PID_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     _btc_read_le_key(BTM_LE_KEY_LID, sizeof(tBTM_LE_PID_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     _btc_read_le_key(BTM_LE_KEY_PCSRK, sizeof(tBTM_LE_PCSRK_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     _btc_read_le_key(BTM_LE_KEY_LENC, sizeof(tBTM_LE_LENC_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     _btc_read_le_key(BTM_LE_KEY_LCSRK, sizeof(tBTM_LE_LCSRK_KEYS),
-                    bd_addr, addr_type, add, &device_added, &key_found);
+                    bd_addr, addr_type, add BTC_BLE_FETCH_PSEUDO_BOND_ARG, &device_added, &key_found);
 
     if (key_found) {
         return BT_STATUS_SUCCESS;
@@ -1080,6 +1333,87 @@ int btc_storage_get_num_ble_bond_devices(void)
     btc_config_unlock();
 
     return num_dev;
+}
+
+bt_status_t btc_storage_set_bond_except(bt_bdaddr_t *remote_bd_addr, bool except)
+{
+    bdstr_t bdstr;
+    int device_type = 0;
+    bool ret;
+
+    if (remote_bd_addr == NULL) {
+        return BT_STATUS_FAIL;
+    }
+
+    bdaddr_to_string(remote_bd_addr, bdstr, sizeof(bdstr));
+
+    btc_config_lock();
+    /* Require an existing BLE bond section so we do not create an empty
+     * bdaddr section that would consume a bond slot. */
+    if (!btc_config_has_section(bdstr)) {
+        btc_config_unlock();
+        BTC_TRACE_WARNING("%s: %s is not bonded, cannot set except=%d", __func__, bdstr, except);
+        return BT_STATUS_FAIL;
+    }
+    if (!btc_config_get_int(bdstr, BTC_BLE_STORAGE_DEV_TYPE_STR, &device_type)) {
+        btc_config_unlock();
+        BTC_TRACE_WARNING("%s: %s has no bond record, cannot set except=%d", __func__, bdstr, except);
+        return BT_STATUS_FAIL;
+    }
+    if (!(device_type & BT_DEVICE_TYPE_BLE)) {
+        btc_config_unlock();
+        BTC_TRACE_WARNING("%s: %s is not a BLE bonded device (device_type=0x%x), cannot set except=%d",
+                          __func__, bdstr, device_type, except);
+        return BT_STATUS_FAIL;
+    }
+
+    if (except) {
+        if (!btc_storage_bond_is_excepted(bdstr)) {
+            uint16_t except_count = btc_storage_count_excepted_ble_bonds();
+            uint16_t except_max = (BONED_DEVICES_MAX_COUNT > 0)
+                                  ? (uint16_t)(BONED_DEVICES_MAX_COUNT - 1) : 0;
+
+            if (except_count >= except_max) {
+                btc_config_unlock();
+                BTC_TRACE_WARNING("%s: cannot set except for %s: excepted bond count %u reached limit %u (max bonds %u)",
+                                  __func__, bdstr, except_count, except_max, BONED_DEVICES_MAX_COUNT);
+                return BT_STATUS_FAIL;
+            }
+        }
+        ret = btc_config_set_int(bdstr, BTC_BLE_STORAGE_EXCEPT_STR, 1);
+    } else if (btc_config_exist(bdstr, BTC_BLE_STORAGE_EXCEPT_STR)) {
+        ret = btc_config_remove(bdstr, BTC_BLE_STORAGE_EXCEPT_STR);
+    } else {
+        ret = true;
+    }
+
+    if (ret) {
+        btc_config_flush();
+    } else {
+        BTC_TRACE_ERROR("%s: failed to %s ExceptBond for %s", __func__,
+                        except ? "set" : "clear", bdstr);
+    }
+    btc_config_unlock();
+
+    return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
+}
+
+bt_status_t btc_storage_get_bond_except(bt_bdaddr_t *remote_bd_addr, bool *except)
+{
+    bdstr_t bdstr;
+    int except_val = 0;
+
+    if (remote_bd_addr == NULL || except == NULL) {
+        return BT_STATUS_FAIL;
+    }
+
+    bdaddr_to_string(remote_bd_addr, bdstr, sizeof(bdstr));
+
+    btc_config_lock();
+    *except = btc_config_get_int(bdstr, BTC_BLE_STORAGE_EXCEPT_STR, &except_val) && (except_val != 0);
+    btc_config_unlock();
+
+    return BT_STATUS_SUCCESS;
 }
 
 bt_status_t btc_storage_get_gatt_cl_supp_feat(bt_bdaddr_t *remote_bd_addr, uint8_t *value, int len)

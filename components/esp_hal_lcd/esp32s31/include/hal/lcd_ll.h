@@ -24,6 +24,7 @@
 #define LCD_LL_I80_BUS_NUM      1
 
 #define LCD_LL_SUPPORT_IOMUX    1
+#define LCD_LL_SUPPORT_RGB2RGB_CONV 1
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +69,7 @@ typedef enum {
  * @param group_id Group ID
  * @param enable true to enable, false to disable
  */
-static inline void lcd_ll_enable_bus_clock(int group_id, bool enable)
+static inline void _lcd_ll_enable_bus_clock(int group_id, bool enable)
 {
     (void)group_id;
     // the core clock is a shared clock for both LCD and CAM
@@ -81,7 +82,7 @@ static inline void lcd_ll_enable_bus_clock(int group_id, bool enable)
 /// the critical section needs to declare the __DECLARE_RCC_RC_ATOMIC_ENV variable in advance
 #define lcd_ll_enable_bus_clock(...) do { \
         (void)__DECLARE_RCC_RC_ATOMIC_ENV; \
-        lcd_ll_enable_bus_clock(__VA_ARGS__); \
+        _lcd_ll_enable_bus_clock(__VA_ARGS__); \
     } while(0)
 
 /**
@@ -106,6 +107,60 @@ static inline void _lcd_ll_reset_register(int group_id)
     } while(0)
 
 /**
+ * @brief Select shared core clock source for LCDCAM peripheral
+ *
+ * @param group_id Group ID
+ * @param src Core clock source
+ */
+static inline void _lcd_ll_select_core_clk_src(int group_id, soc_periph_lcd_core_clk_src_t src)
+{
+    (void)group_id;
+    switch (src) {
+    case LCD_CORE_CLK_SRC_XTAL:
+        HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0.reg_lcdcam_clk_src_sel = 0;
+        break;
+    case LCD_CORE_CLK_SRC_PLL120M:
+        HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0.reg_lcdcam_clk_src_sel = 1;
+        break;
+    case LCD_CORE_CLK_SRC_APLL:
+        HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0.reg_lcdcam_clk_src_sel = 2;
+        break;
+    default:
+        HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0.reg_lcdcam_clk_src_sel = 3;
+        break;
+    }
+}
+/// use a macro to wrap the function, force the caller to use it in a critical section
+/// the critical section needs to declare the __DECLARE_RCC_RC_ATOMIC_ENV variable in advance
+#define lcd_ll_select_core_clk_src(...) do { \
+        (void)__DECLARE_RCC_RC_ATOMIC_ENV; \
+        _lcd_ll_select_core_clk_src(__VA_ARGS__); \
+    } while(0)
+
+/**
+ * @brief Set shared core clock divider for LCDCAM peripheral
+ *
+ * @param group_id Group ID
+ * @param div_num Integer part of the divider
+ * @param div_a Denominator of the fractional part; set to 0 to disable fractional division
+ * @param div_b Numerator of the fractional part; set to 0 to disable fractional division
+ */
+static inline void _lcd_ll_set_core_clock_divider(int group_id, uint32_t div_num, uint32_t div_a, uint32_t div_b)
+{
+    (void)group_id;
+    HAL_ASSERT(div_num > 0 && div_num <= LCD_LL_CLK_FRAC_DIV_N_MAX);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0, reg_lcdcam_clk_div_num, div_num - 1);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0, reg_lcdcam_clk_div_denominator, div_a);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(HP_SYS_CLKRST.lcdcam_lcdcam_ctrl0, reg_lcdcam_clk_div_numerator, div_b);
+}
+/// use a macro to wrap the function, force the caller to use it in a critical section
+/// the critical section needs to declare the __DECLARE_RCC_RC_ATOMIC_ENV variable in advance
+#define lcd_ll_set_core_clock_divider(...) do { \
+        (void)__DECLARE_RCC_RC_ATOMIC_ENV; \
+        _lcd_ll_set_core_clock_divider(__VA_ARGS__); \
+    } while(0)
+
+/**
  * @brief Enable clock gating
  *
  * @param dev LCD register base address
@@ -120,12 +175,12 @@ static inline void lcd_ll_enable_clock(lcd_cam_dev_t *dev, bool en)
 /**
  * @brief Select clock source for LCD peripheral
  *
- * @param dev LCD register base address
+ * @param group_id Group ID
  * @param src Clock source
  */
-static inline void lcd_ll_select_clk_src(lcd_cam_dev_t *dev, lcd_clock_source_t src)
+static inline void lcd_ll_select_clk_src(int group_id, lcd_clock_source_t src)
 {
-    (void)dev;
+    (void)group_id;
     switch (src) {
     case LCD_CLK_SRC_XTAL:
         HP_SYS_CLKRST.lcdcam_lcd_ctrl0.reg_lcd_clk_src_sel = 0;
@@ -146,15 +201,15 @@ static inline void lcd_ll_select_clk_src(lcd_cam_dev_t *dev, lcd_clock_source_t 
 /**
  * @brief Set clock coefficient of LCD peripheral
  *
- * @param dev LCD register base address
+ * @param group_id Group ID
  * @param div_num Integer part of the divider
  * @param div_a denominator of the divider
  * @param div_b numerator of the divider
  */
 __attribute__((always_inline))
-static inline void lcd_ll_set_group_clock_coeff(lcd_cam_dev_t *dev, int div_num, int div_a, int div_b)
+static inline void lcd_ll_set_group_clock_coeff(int group_id, int div_num, int div_a, int div_b)
 {
-    (void)dev;
+    (void)group_id;
     // lcd_clk = module_clock_src / (div_num + div_b / div_a)
     HAL_ASSERT(div_num > 0 && div_num <= LCD_LL_CLK_FRAC_DIV_N_MAX);
     HAL_FORCE_MODIFY_U32_REG_FIELD(HP_SYS_CLKRST.lcdcam_lcd_ctrl0, reg_lcd_clk_div_num, div_num - 1);
@@ -278,17 +333,17 @@ static inline void lcd_ll_set_pixel_clock_prescale(lcd_cam_dev_t *dev, uint32_t 
 static inline void lcd_ll_enable_color_convert(lcd_cam_dev_t *dev, bool en)
 {
     dev->lcd_rgb_yuv.lcd_conv_enable = en;
+    dev->lcd_rgb_yuv.lcd_conv_mem_clk_en = !en;
 }
 
 /**
- * @brief Set convert data line width
+ * @brief Set convert input data line width for YUV<->RGB conversion
  *
  * @param dev LCD register base address
  * @param width data line width
  */
-static inline void lcd_ll_set_convert_data_width(lcd_cam_dev_t *dev, uint32_t width)
+static inline void lcd_ll_set_yuv_convert_input_data_width(lcd_cam_dev_t *dev, uint32_t width)
 {
-    HAL_ASSERT(width == 8 || width == 16);
     dev->lcd_rgb_yuv.lcd_conv_mode_8bits_on = (width == 8) ? 1 : 0;
 }
 
@@ -338,6 +393,26 @@ static inline void lcd_ll_set_yuv_convert_std(lcd_cam_dev_t *dev, lcd_yuv_conv_s
 }
 
 /**
+ * @brief Set the converter mode: RGB to RGB
+ *
+ * @param dev LCD register base address
+ * @param in_color_format Input color format
+ * @param out_color_format Output color format
+ */
+static inline void lcd_ll_set_rgb2rgb_convert_mode(lcd_cam_dev_t *dev, lcd_color_format_t in_color_format, lcd_color_format_t out_color_format)
+{
+    dev->lcd_rgb_yuv.lcd_conv_trans_mode = 0;
+    dev->lcd_rgb_yuv.lcd_conv_yuv2yuv_mode = 3;
+    if (in_color_format == LCD_COLOR_FMT_RGB888 && out_color_format == LCD_COLOR_FMT_RGB565) {
+        dev->lcd_rgb_yuv.lcd_conv_rgb2rgb_mode = 0;
+    } else if (in_color_format == LCD_COLOR_FMT_RGB565 && out_color_format == LCD_COLOR_FMT_RGB888) {
+        dev->lcd_rgb_yuv.lcd_conv_rgb2rgb_mode = 1;
+    } else {
+        abort();
+    }
+}
+
+/**
  * @brief Set the converter mode: RGB to YUV
  *
  * @param dev LCD register base address
@@ -347,6 +422,7 @@ static inline void lcd_ll_set_yuv_convert_std(lcd_cam_dev_t *dev, lcd_yuv_conv_s
 static inline void lcd_ll_set_rgb2yuv_convert_mode(lcd_cam_dev_t *dev, lcd_color_format_t in_color_format, lcd_color_format_t out_color_format)
 {
     (void)in_color_format;
+    dev->lcd_rgb_yuv.lcd_conv_rgb2rgb_mode = 2;
     dev->lcd_rgb_yuv.lcd_conv_trans_mode = 1;
     dev->lcd_rgb_yuv.lcd_conv_yuv2yuv_mode = 3;
     switch (out_color_format) {
@@ -371,6 +447,7 @@ static inline void lcd_ll_set_rgb2yuv_convert_mode(lcd_cam_dev_t *dev, lcd_color
 static inline void lcd_ll_set_yuv2rgb_convert_mode(lcd_cam_dev_t *dev, lcd_color_format_t in_color_format, lcd_color_format_t out_color_format)
 {
     (void)out_color_format;
+    dev->lcd_rgb_yuv.lcd_conv_rgb2rgb_mode = 2;
     dev->lcd_rgb_yuv.lcd_conv_trans_mode = 0;
     dev->lcd_rgb_yuv.lcd_conv_yuv2yuv_mode = 3;
     switch (in_color_format) {
@@ -394,6 +471,7 @@ static inline void lcd_ll_set_yuv2rgb_convert_mode(lcd_cam_dev_t *dev, lcd_color
  */
 static inline void lcd_ll_set_yuv2yuv_convert_mode(lcd_cam_dev_t *dev, lcd_color_format_t in_color_format, lcd_color_format_t out_color_format)
 {
+    dev->lcd_rgb_yuv.lcd_conv_rgb2rgb_mode = 2;
     dev->lcd_rgb_yuv.lcd_conv_trans_mode = 1;
     switch (in_color_format) {
     case LCD_COLOR_FMT_YUV422_UYVY:
@@ -476,9 +554,6 @@ static inline void lcd_ll_set_dma_read_stride(lcd_cam_dev_t *dev, uint32_t strid
         break;
     case 24:
         dev->lcd_user.lcd_byte_mode = 2;
-        break;
-    case 32:
-        dev->lcd_user.lcd_byte_mode = 3;
         break;
     default:
         abort();

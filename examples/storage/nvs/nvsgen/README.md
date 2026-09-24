@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # NVS Partition Image Generation on Build Example
 
@@ -52,3 +52,8 @@ I (387) example: Reading values from NVS done - all OK
 ```
 
 The logic of the example is contained in a [single source file](./main/nvsgen_example_main.c), and it should be relatively simple to match points in its execution with the log outputs above.
+
+## When to use this example
+
+- You want to pre-populate an NVS partition at build time from a CSV file and flash it with the app.
+- You need factory/default configuration baked into NVS without writing it from firmware.

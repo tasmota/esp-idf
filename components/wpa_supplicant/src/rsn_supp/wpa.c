@@ -405,7 +405,7 @@ static int wpa_supplicant_get_pmk(struct wpa_sm *sm,
          * event before receiving this 1/4 message, so try to find a
          * matching PMKSA cache entry here. */
         sm->cur_pmksa = pmksa_cache_get(sm->pmksa, src_addr, sm->own_addr,
-                pmkid, NULL);
+                pmkid, sm->network_ctx, sm->key_mgmt);
         if (sm->cur_pmksa) {
             wpa_printf(MSG_DEBUG,
                     "RSN: found matching PMKID from PMKSA cache");
@@ -474,7 +474,8 @@ static int wpa_supplicant_get_pmk(struct wpa_sm *sm,
                                      sm->network_ctx, sm->key_mgmt);
             }
             if (!sm->cur_pmksa && pmkid &&
-                pmksa_cache_get(sm->pmksa, src_addr, sm->own_addr, pmkid, NULL))
+                pmksa_cache_get(sm->pmksa, src_addr, sm->own_addr, pmkid,
+                                sm->network_ctx, sm->key_mgmt))
             {
                 wpa_printf( MSG_DEBUG,
                     "RSN: the new PMK matches with the "
@@ -2687,7 +2688,7 @@ int wpa_set_bss(uint8_t *macddr, uint8_t *bssid, uint8_t pairwise_cipher, uint8_
     struct rsn_pmksa_cache_entry *pmksa = NULL;
     if (use_pmk_cache) {
         pmksa = pmksa_cache_get(sm->pmksa, (const u8 *)bssid, sm->own_addr,
-                NULL, NULL);
+                NULL, NULL, 0);
         if (pmksa && (pmksa->akmp != sm->key_mgmt)) {
             use_pmk_cache = false;
         }
@@ -2754,7 +2755,8 @@ int wpa_set_bss(uint8_t *macddr, uint8_t *bssid, uint8_t pairwise_cipher, uint8_
         ie = wpa_bss_get_ie(bss, WLAN_EID_MOBILITY_DOMAIN);
         if (ie && ie[1] >= MOBILITY_DOMAIN_ID_LEN)
                 md = ie + 2;
-        if (os_memcmp(md, sm->mobility_domain, MOBILITY_DOMAIN_ID_LEN) != 0) {
+        if (md == NULL ||
+            os_memcmp(md, sm->mobility_domain, MOBILITY_DOMAIN_ID_LEN) != 0) {
             /* Reset Auth IE here */
             esp_wifi_unset_appie_internal(WIFI_APPIE_RAM_STA_AUTH);
             esp_wifi_unset_appie_internal(WIFI_APPIE_ASSOC_REQ);
@@ -3333,6 +3335,7 @@ struct wpabuf *owe_build_assoc_req(struct wpa_sm *sm, u16 group)
 fail:
     wpabuf_free(pub);
     crypto_ecdh_deinit(sm->owe_ecdh);
+    sm->owe_ecdh = NULL;
     return NULL;
 }
 
@@ -3376,8 +3379,10 @@ int owe_process_assoc_resp(const u8 *rsn_ie, size_t rsn_len, const uint8_t *dh_i
             wpa_sm_set_pmk_from_pmksa(sm);
             goto done;
         } else {
-            /* If PMKID mismatches, derive keys again */
+            /* If PMKID mismatches, abort assoc due to invalid pmkid*/
             wpa_printf(MSG_DEBUG, "OWE : Invalid PMKID in response");
+            os_free(parsed_rsn_data);
+            return 1;
         }
     }
 
@@ -3390,11 +3395,8 @@ int owe_process_assoc_resp(const u8 *rsn_ie, size_t rsn_len, const uint8_t *dh_i
         goto fail;
     }
 
-    /* If STA or AP does not have PMKID, or PMKID mismatches, proceed with normal association */
-    dh_len += 2;
-
+    dh_len -=1;
     dh_ie += 3;
-    dh_len -=3;
     group = WPA_GET_LE16(dh_ie);
 
     /* Only group 19 is supported */
@@ -3446,6 +3448,7 @@ int owe_process_assoc_resp(const u8 *rsn_ie, size_t rsn_len, const uint8_t *dh_i
 
     wpabuf_put_buf(hkey, pub); /* C */
     wpabuf_free(pub);
+    pub = NULL;
 
     wpabuf_put_data(hkey, dh_ie + 2, dh_len - 2); /* A */
     wpabuf_put_le16(hkey, sm->owe_group); /* group */
@@ -3458,7 +3461,9 @@ int owe_process_assoc_resp(const u8 *rsn_ie, size_t rsn_len, const uint8_t *dh_i
     hash_len = SHA256_MAC_LEN;
 
     wpabuf_free(hkey);
+    hkey = NULL;
     wpabuf_clear_free(sh_secret);
+    sh_secret = NULL;
 
     wpa_hexdump_key(MSG_DEBUG, "OWE: prk", prk, hash_len);
 

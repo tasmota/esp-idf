@@ -16,13 +16,14 @@
 #include "bluedroid/server.h"
 
 #include "common/host.h"
+#include "common/audio_attr.h"
 
 #include "../../../lib/include/audio.h"
 
 LOG_MODULE_REGISTER(LEA_CAS, CONFIG_BT_ISO_LOG_LEVEL);
 
 #if CONFIG_BT_CAP_ACCEPTOR_SET_MEMBER
-static struct inc_svc_inst inc_csis_inst;
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct inc_svc_inst inc_csis_inst;
 
 struct inc_svc_inst *cas_not_included_inst(void)
 {
@@ -78,7 +79,7 @@ int bt_le_bluedroid_cas_init(void *csis_svc_p)
     }
 #else /* CONFIG_BT_CAP_ACCEPTOR_SET_MEMBER */
     /* Insert CAS to the GATT db list */
-    err = bt_gatt_service_register_safe(cas_svc);
+    err = bt_gatt_service_register(cas_svc);
     if (err) {
         LOG_ERR("[B]CasSvcRegFail[%d]", err);
     }

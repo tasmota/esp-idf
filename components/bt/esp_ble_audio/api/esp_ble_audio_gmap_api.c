@@ -16,7 +16,12 @@ esp_err_t esp_ble_audio_gmap_cb_register(const esp_ble_audio_gmap_cb_t *cb)
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_gmap_cb_register_safe(cb);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_gmap_cb_register(cb);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -30,7 +35,7 @@ esp_err_t esp_ble_audio_gmap_discover(uint16_t conn_handle)
     void *conn;
     int err;
 
-    bt_le_host_lock();
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
 
     conn = bt_le_acl_conn_find(conn_handle);
     if (conn == NULL) {
@@ -94,27 +99,30 @@ static bool valid_gmap_features(esp_ble_audio_gmap_role_t role,
     if ((role & ESP_BLE_AUDIO_GMAP_ROLE_UGG) != 0) {
         esp_ble_audio_gmap_ugg_feat_t ugg_feat = features.ugg_feat;
 
+        /* UGG TX (multiplex / 96kbps source) configures peer Sink ASEs → ASE_SNK.
+         * UGG RX (multisink) configures peer Source ASEs → ASE_SRC.
+         * (BT_AUDIO_TX/RX: client ASE_SNK = TX, ASE_SRC = RX.) */
         if ((ugg_feat & ESP_BLE_AUDIO_GMAP_UGG_FEAT_MULTIPLEX) != 0 &&
-                CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT == 0) {
+                CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT == 0) {
             /* Cannot support ESP_BLE_AUDIO_GMAP_UGG_FEAT_MULTIPLEX with
-             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT == 0.
+             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT == 0.
              */
             return false;
         }
 
         if ((ugg_feat & ESP_BLE_AUDIO_GMAP_UGG_FEAT_96KBPS_SOURCE) != 0 &&
-                CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT == 0) {
+                CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT == 0) {
             /* Cannot support ESP_BLE_AUDIO_GMAP_UGG_FEAT_96KBPS_SOURCE with
-             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT == 0.
+             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT == 0.
              */
             return false;
         }
 
         if ((ugg_feat & ESP_BLE_AUDIO_GMAP_UGG_FEAT_MULTISINK) != 0 &&
-                (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT < 2 ||
+                (CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT < 2 ||
                  CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT < 2)) {
             /* Cannot support ESP_BLE_AUDIO_GMAP_UGG_FEAT_MULTISINK with
-             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT or
+             * CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT or
              * CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT < 2.
              */
             return false;
@@ -240,7 +248,12 @@ esp_err_t esp_ble_audio_gmap_register(esp_ble_audio_gmap_role_t role,
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_gmap_register_safe(role, features);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_gmap_register(role, features);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -258,7 +271,12 @@ esp_err_t esp_ble_audio_gmap_set_role(esp_ble_audio_gmap_role_t role,
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_gmap_set_role_safe(role, features);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_gmap_set_role(role, features);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }

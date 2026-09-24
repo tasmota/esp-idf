@@ -70,6 +70,12 @@ if(CONFIG_IDF_DOC_BUILD OR CONFIG_BT_ENABLED)
     add_subdirectory(esp_ble_audio)
     list(APPEND srcs ${ble_audio_srcs})
     list(APPEND include_dirs ${ble_audio_include_dirs})
+    list(APPEND ldscripts ${ble_audio_ldscripts})
+
+    # BLE profiles (host-agnostic profile cores + shared profile infrastructure)
+    add_subdirectory(ble_profiles)
+    list(APPEND srcs ${ble_profiles_srcs})
+    list(APPEND include_dirs ${ble_profiles_include_dirs})
 
     # When log compression is enabled, selected logs are replaced
     # by auto-generated macros that emit pre-encoded data.

@@ -40,7 +40,10 @@ IDF 监视器是一个串行终端程序，使用了 esp-idf-monitor_ 包，用�
      - 重置设备，并通过 RTS 线（如已连接）重新启动应用程序。
    * - * Ctrl + F
      - 编译并烧录此项目
-     - 暂停 idf_monitor，运行 ``flash`` 目标，然后恢复 idf_monitor。任何改动的源文件都会被重新编译，然后重新烧录。如果 idf_monitor 是以参数 ``-E`` 启动的，则会运行目标 ``encrypted-flash``。
+     - 暂停 idf_monitor，运行 ``flash`` 目标，然后恢复 idf_monitor。任何改动的源文件都会被重新编译，然后重新烧录。若存在已烧录的二进制文件，默认使用 :ref:`快速重新烧录 <flash-with-idf-py>`。如果启动 idf_monitor 时使用了参数 ``-E``，则会运行目标 ``encrypted-flash``。
+   * - * Ctrl + E (或者 E)
+     - 编译并全量烧录此项目
+     - 与 Ctrl + F 相同（运行 ``flash`` 目标），但会通过设置环境变量 ``IDF_FLASH_FULL`` 禁用快速重新烧录。等效于 ``idf.py flash -a``/``--all``。如果 idf_monitor 启动时使用了参数 ``-E``，则会运行目标 ``encrypted-flash``。需要 esp-idf-monitor 1.10.0 或更高版本。
    * - * Ctrl + A (或者 A)
      - 仅编译及烧录应用程序
      - 暂停 idf_monitor，运行 ``app-flash`` 目标，然后恢复 idf_monitor。 这与 ``flash`` 类似，但只有主应用程序被编译并被重新烧录。如果 idf_monitor 是以参数 ``-E`` 启动的，则会运行目标 ``encrypted-flash``。
@@ -240,6 +243,13 @@ ROM ELF 文件会根据 ``IDF_PATH`` 和 ``ESP_ROM_ELF_DIR`` 环境变量的路�
 .. note::
 
     将环境变量 ``ESP_MONITOR_DECODE`` 设置为 ``0`` 或者调用 esp_idf_monitor 的特定命令行选项 ``python -m esp_idf_monitor --disable-address-decoding`` 来禁止地址解码。
+
+.. _idf-monitor-target-detection:
+
+自动检测目标芯片
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+默认情况下，在项目中运行 ``idf.py monitor`` 会连接项目已配置的目标芯片。对于尚未构建、也未配置目标芯片的项目，该命令可连接任意目标芯片：执行命令后，程序会自动检测默认串口上的芯片，并将其传给监视器。因此，可以在新项目中直接运行 ``idf.py monitor``，无需先调用 ``idf.py set-target``。
 
 连接时复位目标芯片
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

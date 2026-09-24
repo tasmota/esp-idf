@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # FAT FS on External Flash example
 
@@ -16,6 +16,11 @@ The flow of the example is as follows:
 3. Register the entire area of the Flash chip as a *partition* (`esp_partition_t`). This allows other components (FATFS, SPIFFS, NVS, etc) to use the storage provided by the external flash chip.
 
 4. Do some read and write operations using C standard library functions: create a file, write to it, open it for reading, print the contents to the console.
+
+## When to use this example
+
+- You need to add FATFS storage on an *external* SPI flash chip (e.g. to extend a module with only 4 MB of internal flash).
+- You want to see how to register an external flash chip as a partition (`esp_flash_t` / `esp_partition_t`).
 
 ## How to use example
 

@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # Custom Flash Driver Example
 
@@ -8,6 +8,10 @@ This example shows how to override the default chip driver list provided by IDF.
 **CAUTION: This is only an example showing how to extend your own flash chip driver. Espressif doesn't guarantee the chip driver in the example is reliable for mass production, nor the reliability of the flash models that appear in this example. Please refer to the specification of your flash chip, or contact the flash vendor if you have any problems with the flash chip.**
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
+
+## When to use this example
+
+- You need to support a flash chip that is not covered by the default IDF chip driver list, by providing your own chip driver.
 
 ## How to use example
 

@@ -10,11 +10,19 @@
 #if CONFIG_BT_CSIP_SET_MEMBER
 void *esp_ble_audio_csip_set_member_svc_decl_get(const esp_ble_audio_csip_set_member_svc_inst_t *svc_inst)
 {
+    void *decl;
+
     if (svc_inst == NULL) {
         return NULL;
     }
 
-    return bt_csip_set_member_svc_decl_get_safe(svc_inst);
+    BT_LE_HOST_LOCK_OR_RETURN(NULL);
+
+    decl = bt_csip_set_member_svc_decl_get(svc_inst);
+
+    bt_le_host_unlock();
+
+    return decl;
 }
 
 esp_err_t esp_ble_audio_csip_set_member_register(const esp_ble_audio_csip_set_member_register_param_t *param,
@@ -43,7 +51,12 @@ esp_err_t esp_ble_audio_csip_set_member_register(const esp_ble_audio_csip_set_me
     }
 #endif /* CONFIG_BT_CSIP_SET_MEMBER_MAX_INSTANCE_COUNT > 1 */
 
-    err = bt_csip_set_member_register_safe(param, svc_inst);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_register(param, svc_inst);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -59,7 +72,16 @@ esp_err_t esp_ble_audio_csip_set_member_unregister(esp_ble_audio_csip_set_member
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_unregister_safe(svc_inst);
+    if (bt_le_csis_deinit(svc_inst)) {
+        return ESP_FAIL;
+    }
+
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_unregister(svc_inst);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -76,7 +98,12 @@ esp_err_t esp_ble_audio_csip_set_member_sirk(esp_ble_audio_csip_set_member_svc_i
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_sirk_safe(svc_inst, sirk);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_sirk(svc_inst, sirk);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -93,7 +120,35 @@ esp_err_t esp_ble_audio_csip_set_member_set_size_and_rank(esp_ble_audio_csip_set
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_set_size_and_rank_safe(svc_inst, size, rank);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_set_size_and_rank(svc_inst, size, rank);
+
+    bt_le_host_unlock();
+
+    if (err) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t esp_ble_audio_csip_set_member_set_name(esp_ble_audio_csip_set_member_svc_inst_t *svc_inst,
+                                                 const uint8_t *name, uint8_t len)
+{
+    int err;
+
+    if (svc_inst == NULL || len > ESP_BLE_AUDIO_CSIP_SET_NAME_MAX_LEN ||
+            (len > 0 && name == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_set_name(svc_inst, name, len);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -110,7 +165,12 @@ esp_err_t esp_ble_audio_csip_set_member_get_info(const esp_ble_audio_csip_set_me
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_get_info_safe(svc_inst, info);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_get_info(svc_inst, info);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -127,7 +187,12 @@ esp_err_t esp_ble_audio_csip_set_member_generate_rsi(const esp_ble_audio_csip_se
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_generate_rsi_safe(svc_inst, rsi);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_generate_rsi(svc_inst, rsi);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -144,7 +209,12 @@ esp_err_t esp_ble_audio_csip_set_member_lock(esp_ble_audio_csip_set_member_svc_i
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_member_lock_safe(svc_inst, lock, force);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_member_lock(svc_inst, lock, force);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -160,7 +230,7 @@ esp_err_t esp_ble_audio_csip_set_coordinator_discover(uint16_t conn_handle)
     void *conn;
     int err;
 
-    bt_le_host_lock();
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
 
     conn = bt_le_acl_conn_find(conn_handle);
     if (conn == NULL) {
@@ -184,7 +254,7 @@ esp_ble_audio_csip_set_coordinator_set_member_by_conn(uint16_t conn_handle)
     esp_ble_audio_csip_set_coordinator_set_member_t *ret = NULL;
     void *conn;
 
-    bt_le_host_lock();
+    BT_LE_HOST_LOCK_OR_RETURN(NULL);
 
     conn = bt_le_acl_conn_find(conn_handle);
     if (conn == NULL) {
@@ -206,13 +276,20 @@ bool esp_ble_audio_csip_set_coordinator_is_set_member(const uint8_t sirk[ESP_BLE
         .data = data,
         .data_len = data_len,
     };
+    bool is_member;
 
     if (sirk == NULL || data_type != BT_DATA_CSIS_RSI ||
             data == NULL || data_len != ESP_BLE_AUDIO_CSIP_RSI_SIZE) {
         return false;
     }
 
-    return bt_csip_set_coordinator_is_set_member_safe(sirk, &ad);
+    BT_LE_HOST_LOCK_OR_RETURN(false);
+
+    is_member = bt_csip_set_coordinator_is_set_member(sirk, &ad);
+
+    bt_le_host_unlock();
+
+    return is_member;
 }
 
 esp_err_t esp_ble_audio_csip_set_coordinator_register_cb(esp_ble_audio_csip_set_coordinator_cb_t *cb)
@@ -223,7 +300,12 @@ esp_err_t esp_ble_audio_csip_set_coordinator_register_cb(esp_ble_audio_csip_set_
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_coordinator_register_cb_safe(cb);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_coordinator_register_cb(cb);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -244,7 +326,12 @@ esp_err_t esp_ble_audio_csip_set_coordinator_ordered_access(const esp_ble_audio_
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_coordinator_ordered_access_safe(members, count, set_info, cb);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_coordinator_ordered_access(members, count, set_info, cb);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -258,11 +345,16 @@ esp_err_t esp_ble_audio_csip_set_coordinator_lock(const esp_ble_audio_csip_set_c
 {
     int err;
 
-    if (members == NULL || count > CONFIG_BT_MAX_CONN || set_info == NULL) {
+    if (members == NULL || count == 0 || count > CONFIG_BT_MAX_CONN || set_info == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_coordinator_lock_safe(members, count, set_info);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_coordinator_lock(members, count, set_info);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }
@@ -276,11 +368,16 @@ esp_err_t esp_ble_audio_csip_set_coordinator_release(const esp_ble_audio_csip_se
 {
     int err;
 
-    if (members == NULL || count > CONFIG_BT_MAX_CONN || set_info == NULL) {
+    if (members == NULL || count == 0 || count > CONFIG_BT_MAX_CONN || set_info == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = bt_csip_set_coordinator_release_safe(members, count, set_info);
+    BT_LE_HOST_LOCK_OR_RETURN(ESP_ERR_TIMEOUT);
+
+    err = bt_csip_set_coordinator_release(members, count, set_info);
+
+    bt_le_host_unlock();
+
     if (err) {
         return ESP_FAIL;
     }

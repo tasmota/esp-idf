@@ -1,9 +1,14 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # Non-Volatile Storage (NVS) Statistics Example
 
 This example demonstrates the usage of obtaining and interpreting statistics about the a given NVS partition, namely free/used/available/total entries and namespace count.
+
+## When to use this example
+
+- You want to measure NVS partition usage (free/used/available/total entries, namespace count) via `nvs_get_stats()`.
+- You need to understand blob storage overhead and fragmentation before sizing an NVS partition.
 
 The default "nvs" partition is first erased, then a mock string data configuration is written to 2 different namespaces, followed by checking the changed statistics and mainly the number of newly used NVS entries.
 

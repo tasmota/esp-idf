@@ -1,9 +1,14 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # Non-Volatile Storage (NVS) Iteration Example
 
 This example showcases how to iterate and obtain info about NVS entries of a specific (or any) NVS datatype.
+
+## When to use this example
+
+- You need to enumerate NVS entries in code, filtered by type and/or namespace (`nvs_entry_find` / `nvs_entry_info`).
+- You are building tooling that discovers keys rather than reading known keys.
 
 Default "nvs" partition is first erased to allow for clean example run, followed by writing 2 sets of key value pairs of different types to NVS storage.
 After that, iteration is performed over the individual data types, as well as the generic `NVS_TYPE_ANY`, and relevant entry info gained from iteration is verbosely logged.

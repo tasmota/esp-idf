@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # FatFS over BDL (Block Device Layer) - Wear-Levelling Stack
 
@@ -25,6 +25,11 @@ The BDL stack constructed in this example:
 The key advantage of BDL is that **the same `diskio_bdl` adapter works with any BDL device**.
 You can swap the bottom of the stack (e.g., use `sdmmc_get_blockdev()` for an SD card) without
 changing the FatFS integration code.
+
+## When to use this example
+
+- You want the newer Block Device Layer (BDL) approach to mounting FATFS instead of the legacy `wl_handle_t` API.
+- You plan to reuse the same FATFS integration across different backends (flash partition, SD card, etc.).
 
 ## How to use example
 

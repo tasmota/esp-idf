@@ -119,7 +119,7 @@ struct bt_vcp_included {
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_included_get_safe(struct bt_vcp_included *included);
+int bt_vcp_vol_rend_included_get(struct bt_vcp_included *included);
 
 /**
  * @brief Register the Volume Control Service.
@@ -131,7 +131,7 @@ int bt_vcp_vol_rend_included_get_safe(struct bt_vcp_included *included);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_register_safe(struct bt_vcp_vol_rend_register_param *param);
+int bt_vcp_vol_rend_register(struct bt_vcp_vol_rend_register_param *param);
 
 /**
  * @brief Struct to hold the Volume Renderer callbacks
@@ -183,49 +183,49 @@ struct bt_vcp_vol_rend_cb {
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_set_step_safe(uint8_t volume_step);
+int bt_vcp_vol_rend_set_step(uint8_t volume_step);
 
 /**
  * @brief Get the Volume Control Service volume state.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_get_state_safe(void);
+int bt_vcp_vol_rend_get_state(void);
 
 /**
  * @brief Get the Volume Control Service flags.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_get_flags_safe(void);
+int bt_vcp_vol_rend_get_flags(void);
 
 /**
  * @brief Turn the volume down by one step on the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_vol_down_safe(void);
+int bt_vcp_vol_rend_vol_down(void);
 
 /**
  * @brief Turn the volume up by one step on the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_vol_up_safe(void);
+int bt_vcp_vol_rend_vol_up(void);
 
 /**
  * @brief Turn the volume down and unmute the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_unmute_vol_down_safe(void);
+int bt_vcp_vol_rend_unmute_vol_down(void);
 
 /**
  * @brief Turn the volume up and unmute the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_unmute_vol_up_safe(void);
+int bt_vcp_vol_rend_unmute_vol_up(void);
 
 /**
  * @brief Set the volume on the server
@@ -234,21 +234,61 @@ int bt_vcp_vol_rend_unmute_vol_up_safe(void);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_set_vol_safe(uint8_t volume);
+int bt_vcp_vol_rend_set_vol(uint8_t volume);
 
 /**
  * @brief Unmute the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_unmute_safe(void);
+int bt_vcp_vol_rend_unmute(void);
 
 /**
  * @brief Mute the server.
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_rend_mute_safe(void);
+int bt_vcp_vol_rend_mute(void);
+
+/**
+ * @name Volume Renderer reset field selectors
+ *
+ * Bitmask values for @ref bt_vcp_vol_rend_reset_param.fields selecting
+ * which state fields a reset applies.
+ * @{
+ */
+/** Apply the volume field; also clears Volume_Setting_Persisted (persisted = 0). */
+#define BT_VCP_VOL_REND_RESET_VOLUME    BIT(0)
+/** Apply the mute field. */
+#define BT_VCP_VOL_REND_RESET_MUTE      BIT(1)
+/** @} */
+
+/** Parameters for @ref bt_vcp_vol_rend_reset_state. */
+struct bt_vcp_vol_rend_reset_param {
+    /** Bitmask of BT_VCP_VOL_REND_RESET_* selecting which fields to apply. */
+    uint32_t fields;
+
+    /** Volume setting, applied when BT_VCP_VOL_REND_RESET_VOLUME is set. */
+    uint8_t volume;
+
+    /** Mute state, applied when BT_VCP_VOL_REND_RESET_MUTE is set. */
+    uint8_t mute;
+};
+
+/**
+ * @brief Reset selected volume state fields to an initial/reset value.
+ *
+ * For each field selected in @p param->fields, sets it to the provided value
+ * without treating it as a user change. When the volume field is applied,
+ * Volume_Setting_Persisted returns to Reset Volume Setting (0) - the value is a
+ * server reset value, not a modification (VCS v1.0.1 Section 3.3.1). Unselected
+ * fields are left unchanged; no notification is emitted.
+ *
+ * @param param  Reset parameters. Must not be NULL.
+ *
+ * @return 0 if success, errno on failure.
+ */
+int bt_vcp_vol_rend_reset_state(const struct bt_vcp_vol_rend_reset_param *param);
 
 /**
  * @brief Struct to hold the Volume Controller callbacks
@@ -403,7 +443,7 @@ struct bt_vcp_vol_ctlr_cb {
  * @retval -EINVAL if @p cb is NULL
  * @retval -EALREADY if @p cb was already registered
  */
-int bt_vcp_vol_ctlr_cb_register_safe(struct bt_vcp_vol_ctlr_cb *cb);
+int bt_vcp_vol_ctlr_cb_register(struct bt_vcp_vol_ctlr_cb *cb);
 
 /**
  * @brief Unregisters the callbacks used by the Volume Controller.
@@ -414,7 +454,7 @@ int bt_vcp_vol_ctlr_cb_register_safe(struct bt_vcp_vol_ctlr_cb *cb);
  * @retval -EINVAL if @p cb is NULL
  * @retval -EALREADY if @p cb was not registered
  */
-int bt_vcp_vol_ctlr_cb_unregister_safe(struct bt_vcp_vol_ctlr_cb *cb);
+int bt_vcp_vol_ctlr_cb_unregister(struct bt_vcp_vol_ctlr_cb *cb);
 
 /**
  * @brief Discover Volume Control Service and included services.
@@ -434,8 +474,6 @@ int bt_vcp_vol_ctlr_cb_unregister_safe(struct bt_vcp_vol_ctlr_cb *cb);
  */
 int bt_vcp_vol_ctlr_discover(struct bt_conn *conn,
                              struct bt_vcp_vol_ctlr **vol_ctlr);
-int bt_vcp_vol_ctlr_discover_safe(struct bt_conn *conn,
-                                  struct bt_vcp_vol_ctlr **vol_ctlr);
 
 /**
  * @brief Get the volume controller from a connection pointer
@@ -462,8 +500,8 @@ struct bt_vcp_vol_ctlr *bt_vcp_vol_ctlr_get_by_conn(const struct bt_conn *conn);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_conn_get_safe(const struct bt_vcp_vol_ctlr *vol_ctlr,
-                                  struct bt_conn **conn);
+int bt_vcp_vol_ctlr_conn_get(const struct bt_vcp_vol_ctlr *vol_ctlr,
+                             struct bt_conn **conn);
 
 /**
  * @brief Get Volume Control Service included services.
@@ -481,8 +519,10 @@ int bt_vcp_vol_ctlr_conn_get_safe(const struct bt_vcp_vol_ctlr *vol_ctlr,
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_included_get_safe(struct bt_vcp_vol_ctlr *vol_ctlr,
-                                      struct bt_vcp_included *included);
+#if 0
+int bt_vcp_vol_ctlr_included_get(struct bt_vcp_vol_ctlr *vol_ctlr,
+                                 struct bt_vcp_included *included);
+#endif
 
 /**
  * @brief Read the volume state of a remote Volume Renderer.
@@ -491,7 +531,7 @@ int bt_vcp_vol_ctlr_included_get_safe(struct bt_vcp_vol_ctlr *vol_ctlr,
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_read_state_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_read_state(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Read the volume flags of a remote Volume Renderer.
@@ -500,7 +540,7 @@ int bt_vcp_vol_ctlr_read_state_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_read_flags_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_read_flags(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Turn the volume down one step on a remote Volume Renderer
@@ -509,7 +549,7 @@ int bt_vcp_vol_ctlr_read_flags_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_vol_down_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_vol_down(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Turn the volume up one step on a remote Volume Renderer
@@ -518,7 +558,7 @@ int bt_vcp_vol_ctlr_vol_down_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_vol_up_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_vol_up(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Turn the volume down one step and unmute on a remote Volume Renderer
@@ -527,7 +567,7 @@ int bt_vcp_vol_ctlr_vol_up_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_unmute_vol_down_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_unmute_vol_down(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Turn the volume up one step and unmute on a remote Volume Renderer
@@ -536,7 +576,7 @@ int bt_vcp_vol_ctlr_unmute_vol_down_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_unmute_vol_up_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_unmute_vol_up(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Set the absolute volume on a remote Volume Renderer
@@ -546,7 +586,7 @@ int bt_vcp_vol_ctlr_unmute_vol_up_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_set_vol_safe(struct bt_vcp_vol_ctlr *vol_ctlr, uint8_t volume);
+int bt_vcp_vol_ctlr_set_vol(struct bt_vcp_vol_ctlr *vol_ctlr, uint8_t volume);
 
 /**
  * @brief Unmute a remote Volume Renderer.
@@ -555,7 +595,7 @@ int bt_vcp_vol_ctlr_set_vol_safe(struct bt_vcp_vol_ctlr *vol_ctlr, uint8_t volum
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_unmute_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_unmute(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 /**
  * @brief Mute a remote Volume Renderer.
@@ -564,7 +604,7 @@ int bt_vcp_vol_ctlr_unmute_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_vcp_vol_ctlr_mute_safe(struct bt_vcp_vol_ctlr *vol_ctlr);
+int bt_vcp_vol_ctlr_mute(struct bt_vcp_vol_ctlr *vol_ctlr);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/common/bt_str.h>
 
 #include <../host/hci_core.h>
 #include <../host/iso_internal.h>
@@ -62,7 +63,9 @@ extern void btc_ble_5_gap_callback(tBTA_DM_BLE_5_GAP_EVENT event,
  * matching the NimBLE host contract; then both this tracker and the
  * synthesis below become dead code. */
 #define ISO_PA_SYNC_HANDLE_NONE     0xFFFF
-static uint16_t active_pa_sync_handle = ISO_PA_SYNC_HANDLE_NONE;
+/* Reset in bt_le_bluedroid_gap_init() (not static init) so a deinit/init cycle
+ * restarts from "no active sync"; static init runs only once at boot. */
+static BT_ISO_EXT_RAM_BSS_ATTR uint16_t active_pa_sync_handle;
 #endif /* BLE_50_EXTEND_SYNC_EN == TRUE */
 
 /* Fast-path BTA → iso-queue post.
@@ -104,14 +107,54 @@ static void gap_app_cb(tBTA_DM_BLE_5_GAP_EVENT event, tBTA_DM_BLE_5_GAP_CB_PARAM
     btc_ble_5_gap_callback(event, params);
 }
 
+/* Copy this peer's bonded LTK (16B) into out_ltk; true if found. Used on AUTH_CMPL as
+ * the CSIS SIRK key. The store exposes only PENC, but under LE SC PENC==LENC==link LTK.
+ * esp_ble_get_bond_device_list reads btc_storage synchronously — safe in this callback. */
+static bool bd_read_bonded_ltk(const uint8_t *addr, uint8_t out_ltk[16])
+{
+    esp_ble_bond_dev_t *list;
+    bool found = false;
+    int num;
+
+    num = esp_ble_get_bond_device_num();
+    if (num <= 0) {
+        return false;
+    }
+
+    list = calloc(num, sizeof(*list));
+    if (list == NULL) {
+        LOG_ERR("[B]LtkListAllocFail[%d]", num);
+        return false;
+    }
+
+    if (esp_ble_get_bond_device_list(&num, list) == ESP_OK) {
+        for (int i = 0; i < num; i++) {
+            if (memcmp(list[i].bd_addr, addr, sizeof(esp_bd_addr_t)) == 0) {
+                /* Identity-only bonds carry no LTK; penc_key would be zeroed. */
+                if (list[i].bond_key.key_mask & ESP_BLE_ENC_KEY_MASK) {
+                    memcpy(out_ltk, list[i].bond_key.penc_key.ltk, 16);
+                    found = true;
+                }
+                break;
+            }
+        }
+    }
+
+    if (list != NULL) {
+        free(list);
+    }
+
+    return found;
+}
+
 void bt_le_bluedroid_gap_post_event(uint16_t event, void *param)
 {
     const esp_ble_gap_cb_param_t *p = param;
     struct bt_le_gap_app_param *qev = NULL;
     int err;
 
-    qev = calloc(1, sizeof(*qev));
-    assert(qev);
+    qev = bt_le_ext_calloc(1, sizeof(*qev));
+    BT_LE_ASSERT(qev);
 
     /* Only AUTH_CMPL reaches here from the application's
      * esp_ble_gap_register_callback path. EXT_ADV_REPORT / PA_SYNC_ESTAB /
@@ -121,26 +164,17 @@ void bt_le_bluedroid_gap_post_event(uint16_t event, void *param)
     switch (event) {
     case ESP_GAP_BLE_AUTH_CMPL_EVT: {
         const esp_ble_auth_cmpl_t *a = &p->ble_security.auth_cmpl;
-        struct gatt_conn *gatt_conn;
         uint8_t sec_level;
-
-        gatt_conn = bt_le_bluedroid_find_gatt_conn_with_addr(a->addr_type, a->bd_addr, false);
-        if (gatt_conn == NULL) {
-            LOG_ERR("[B]UnknownDevForEnc");
-            free(qev);
-            return;
-        }
 
         qev->type = BT_LE_GAP_APP_PARAM_SECURITY_CHANGE;
 
         qev->security_change.status = (a->success ? 0x00 : 0xFF);
 
-        /* Populate connection identity unconditionally so failure events
-         * carry valid conn_handle / role / dst to the application. */
-        qev->security_change.conn_handle = gatt_conn->conn_handle;
-        qev->security_change.role = gatt_conn->role;
-        qev->security_change.dst.type = gatt_conn->peer.type;
-        memcpy(qev->security_change.dst.val, gatt_conn->peer.val, BT_ADDR_SIZE);
+        /* dst only: conn_handle/role are resolved from it by the iso_task handler.
+         * Looking them up here would mean reading gatt_conns[] from BTC, which
+         * iso_task mutates under host_lock - and BTC must not take that lock. */
+        qev->security_change.dst.type = a->addr_type;
+        memcpy(qev->security_change.dst.val, a->bd_addr, BT_ADDR_SIZE);
 
         if (qev->security_change.status == 0) {
             /* Derive level from auth_mode bits (mirrors NimBLE's sec_state
@@ -157,7 +191,16 @@ void bt_le_bluedroid_gap_post_event(uint16_t event, void *param)
 
             qev->security_change.sec_level = sec_level;
             qev->security_change.bonded = (a->auth_mode & ESP_LE_AUTH_BOND) ? 1 : 0;
+
+            /* Attach the bonded LTK (CSIS SIRK-encryption key K). */
+            if (bd_read_bonded_ltk(a->bd_addr, qev->security_change.ltk)) {
+                qev->security_change.ltk_present = 1;
+                LOG_INF("[B]LtkFromStore");
+            } else {
+                LOG_WRN("[B]NoLtkForEnc");
+            }
         }
+
         break;
     }
 
@@ -169,7 +212,7 @@ void bt_le_bluedroid_gap_post_event(uint16_t event, void *param)
 
     err = bt_le_iso_task_post(ISO_QUEUE_ITEM_TYPE_GAP_EVENT, qev, sizeof(*qev));
     if (err) {
-        LOG_ERR("[B]GapPostEvtFail[%d][%u]", err, qev->type);
+        ISO_POST_FAIL_LOG(err, "[B]GapPostEvtFail[%d][%u]", err, qev->type);
         free(qev);
     }
 }
@@ -181,8 +224,8 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
     enum iso_queue_item_type q_type;
     int err;
 
-    qev = calloc(1, sizeof(*qev));
-    assert(qev);
+    qev = bt_le_ext_calloc(1, sizeof(*qev));
+    BT_LE_ASSERT(qev);
 
     switch (event) {
 #if (BLE_50_EXTEND_SCAN_EN == TRUE)
@@ -205,8 +248,8 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
         qev->ext_scan_recv.data_len = r->adv_data_len;
 
         if (qev->ext_scan_recv.data_len) {
-            qev->ext_scan_recv.data = calloc(1, qev->ext_scan_recv.data_len);
-            assert(qev->ext_scan_recv.data);
+            qev->ext_scan_recv.data = bt_le_ext_calloc(1, qev->ext_scan_recv.data_len);
+            BT_LE_ASSERT(qev->ext_scan_recv.data);
             memcpy(qev->ext_scan_recv.data, r->adv_data, qev->ext_scan_recv.data_len);
         }
         break;
@@ -237,7 +280,8 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
                 LOG_WRN("[B]PaSyncEstabOverwrite[%04x->%04x]",
                         active_pa_sync_handle, e->sync_handle);
             } else {
-                LOG_INF("[B]PaSyncEstab[%04x]", e->sync_handle);
+                LOG_INF("[B]PaSyncEstab[%04x][%s]",
+                        e->sync_handle, bt_hex(e->adv_addr, BT_ADDR_SIZE));
             }
             active_pa_sync_handle = e->sync_handle;
         }
@@ -293,8 +337,8 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
         qev->pa_sync_recv.data_len = r->data_length;
 
         if (qev->pa_sync_recv.data_len) {
-            qev->pa_sync_recv.data = calloc(1, qev->pa_sync_recv.data_len);
-            assert(qev->pa_sync_recv.data);
+            qev->pa_sync_recv.data = bt_le_ext_calloc(1, qev->pa_sync_recv.data_len);
+            BT_LE_ASSERT(qev->pa_sync_recv.data);
             memcpy(qev->pa_sync_recv.data, r->data, qev->pa_sync_recv.data_len);
         }
         break;
@@ -304,16 +348,6 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
 #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
     case BTM_BLE_GAP_PERIODIC_ADV_SYNC_TRANS_RECV_EVT: {
         const tBTM_BLE_PERIOD_ADV_SYNC_TRANS_RECV *r = &params->past_recv;
-        struct gatt_conn *gatt_conn;
-
-        /* Look up the PAST-delivering ACL handle by peer BDA — past_recv
-         * doesn't carry addr type. */
-        gatt_conn = bt_le_bluedroid_find_gatt_conn_with_addr(0, r->addr, true);
-        if (gatt_conn == NULL) {
-            LOG_ERR("[B]UnknownPastSrc");
-            free(qev);
-            return;
-        }
 
         qev->type = BT_LE_GAP_APP_PARAM_PA_SYNC_PAST;
 
@@ -325,7 +359,13 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
         qev->pa_sync_past.adv_phy = r->adv_phy;
         qev->pa_sync_past.per_adv_itvl = r->adv_interval;
         qev->pa_sync_past.adv_ca = r->adv_clk_accuracy;
-        qev->pa_sync_past.conn_handle = gatt_conn->conn_handle;
+
+        /* Sender identity: HCI reports it as a Connection_Handle and carries no
+         * address for it (adv_addr_type/adv_addr above are the advertiser's).
+         * btu_hcif copies the BDA out of the LCB but drops both the handle and
+         * the address type, so .type stays unset and the handler matches on the
+         * value alone. */
+        memcpy(qev->pa_sync_past.src_addr.val, r->addr, BT_ADDR_SIZE);
 
 #if (BLE_50_EXTEND_SYNC_EN == TRUE)
         /* PAST-established syncs need tracker too: a later app-initiated
@@ -369,12 +409,8 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
 
     err = bt_le_iso_task_post(q_type, qev, sizeof(*qev));
     if (err) {
-        /* Floodable reports drop by design when the queue is full; only a
-         * failure on the reliable (normal-queue) path is a real error. */
         if (q_type == ISO_QUEUE_ITEM_TYPE_GAP_EVENT) {
-            LOG_ERR("[B]GapPostEvtBtaFail[%d][%u]", err, qev->type);
-        } else {
-            LOG_DBG("[B]GapRptDrop[%u]", qev->type);
+            ISO_POST_FAIL_LOG(err, "[B]GapPostEvtBtaFail[%d][%u]", err, qev->type);
         }
         goto free;
     }
@@ -382,26 +418,7 @@ static void bt_le_bluedroid_gap_post_event_bta(tBTA_DM_BLE_5_GAP_EVENT event,
     return;
 
 free:
-    /* Mirror nimble/gap.c cleanup: free nested data buffers carried by
-     * specific event types before freeing the qev container itself. */
-    switch (qev->type) {
-    case BT_LE_GAP_APP_PARAM_EXT_SCAN_RECV:
-        if (qev->ext_scan_recv.data) {
-            free(qev->ext_scan_recv.data);
-            qev->ext_scan_recv.data = NULL;
-        }
-        break;
-    case BT_LE_GAP_APP_PARAM_PA_SYNC_RECV:
-        if (qev->pa_sync_recv.data) {
-            free(qev->pa_sync_recv.data);
-            qev->pa_sync_recv.data = NULL;
-        }
-        break;
-    default:
-        break;
-    }
-
-    free(qev);
+    bt_le_gap_event_free(qev);
 }
 
 int bt_le_bluedroid_scan_start(const struct bt_le_scan_param *param)
@@ -506,6 +523,10 @@ int bt_le_bluedroid_scan_stop(void)
 
 int bt_le_bluedroid_gap_init(void)
 {
+#if (BLE_50_EXTEND_SYNC_EN == TRUE)
+    active_pa_sync_handle = ISO_PA_SYNC_HANDLE_NONE;
+#endif
+
     BTM_BleGapRegisterCallback(gap_app_cb);
 
     return 0;

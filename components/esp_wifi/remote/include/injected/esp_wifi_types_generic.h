@@ -199,7 +199,8 @@ typedef enum {
     .scan_time.active.min = WIFI_ACTIVE_SCAN_MIN_DEFAULT_TIME, \
     .scan_time.active.max = WIFI_ACTIVE_SCAN_MAX_DEFAULT_TIME, \
     .scan_time.passive = WIFI_PASSIVE_SCAN_DEFAULT_TIME, \
-    .home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME\
+    .home_chan_dwell_time = WIFI_SCAN_HOME_CHANNEL_DWELL_DEFAULT_TIME, \
+    .max_offchan_duration_ms = 0 \
 }
 
 /**
@@ -265,6 +266,7 @@ typedef struct {
 typedef struct {
     wifi_scan_time_t scan_time;  /**< Scan time per channel */
     uint8_t home_chan_dwell_time;/**< Time spent at home channel between scanning consecutive channels.*/
+    uint16_t max_offchan_duration_ms; /**< Maximum accumulated off-channel scan duration before returning to home channel (0 = use WIFI_ACTIVE_SCAN_MAX_DEFAULT_TIME, range: 1-4500ms). */
 } wifi_scan_default_params_t;
 
 /**
@@ -594,7 +596,25 @@ typedef struct {
     uint32_t vht_su_beamformee_disabled: 1;                       /**< Whether to disable support for operation as an VHT SU beamformee. */
     uint32_t vht_mu_beamformee_disabled: 1;                       /**< Whether to disable support for operation as an VHT MU beamformee. */
     uint32_t vht_mcs8_enabled: 1;                                 /**< Whether to support VHT-MCS8. The default value is 0. */
-    uint32_t reserved2: 19;                                       /**< Reserved for future feature set */
+    uint32_t max_bandwidth_negotiation_enabled_2g: 1;             /**< Whether to enable maximum bandwidth negotiation for the 2.4GHz band.
+                                                                        In STA-only mode, when enabled, the negotiated bandwidth depends on the negotiated protocol:
+                                                                        (1) If the negotiated protocol is 802.11ax, the negotiated bandwidth is 20 MHz.
+                                                                        (2) If the negotiated protocol is 802.11n, the negotiated bandwidth is determined by the maximum bandwidth supported by both AP and STA.
+                                                                        (3) For other negotiated protocols, the negotiated bandwidth is 20 MHz.
+                                                                        SoftAP + STA coexistence is subject to the following hardware limitations:
+                                                                        - If SoftAP is configured to 802.11ax, STA bandwidth is capped at 20 MHz.
+                                                                        - If STA is connected at 40 MHz, SoftAP cannot be configured to 802.11ax/802.11ac.
+                                                                        The default value is 0 (disabled). */
+    uint32_t max_bandwidth_negotiation_enabled_5g: 1;             /**< Whether to enable maximum bandwidth negotiation for the 5GHz band.
+                                                                        In STA-only mode, when enabled, the negotiated bandwidth depends on the negotiated protocol:
+                                                                        (1) If the negotiated protocol is 802.11ax/802.11ac, the negotiated bandwidth is 20 MHz.
+                                                                        (2) If the negotiated protocol is 802.11n/802.11an, the negotiated bandwidth is determined by the maximum bandwidth supported by both AP and STA.
+                                                                        (3) For other negotiated protocols, the negotiated bandwidth is 20 MHz.
+                                                                        SoftAP + STA coexistence is subject to the following hardware limitations:
+                                                                        - If SoftAP is configured to 802.11ax/802.11ac, STA bandwidth is capped at 20 MHz.
+                                                                        - If STA is connected at 40 MHz, SoftAP cannot be configured to 802.11ax/802.11ac.
+                                                                        The default value is 0 (disabled). */
+    uint32_t reserved2: 17;                                       /**< Reserved for future feature set */
     uint8_t sae_h2e_identifier[SAE_H2E_IDENTIFIER_LEN];           /**< Password identifier for H2E. Strings null-terminated (length < SAE_H2E_IDENTIFIER_LEN) or non-null terminated (length = SAE_H2E_IDENTIFIER_LEN) are accepted. Non-null terminated string with 0xFF for full length of SAE_H2E_IDENTIFIER_LEN is not considered a valid identifier */
 } wifi_sta_config_t;
 
@@ -814,7 +834,7 @@ typedef struct {
     wifi_action_tx_t type;      /**< ACTION TX operation type */
     uint8_t channel;            /**< Channel on which to perform ACTION TX Operation */
     wifi_second_chan_t sec_channel;    /**< Secondary channel */
-    uint32_t wait_time_ms;      /**< Duration to wait for on target channel */
+    uint32_t wait_time_ms;      /**< Duration to wait for on target channel (must be greater than 0) */
     bool no_ack;                /**< Indicates no ack required */
     wifi_action_rx_cb_t rx_cb;  /**< Rx Callback to receive action frames */
     uint8_t op_id;              /**< Unique Identifier for operation provided by wifi driver */
@@ -850,7 +870,7 @@ typedef struct {
     wifi_roc_t type;                   /**< ROC operation type */
     uint8_t channel;                   /**< Channel on which to perform ROC Operation */
     wifi_second_chan_t sec_channel;    /**< Secondary channel */
-    uint32_t wait_time_ms;             /**< Duration to wait for on target channel */
+    uint32_t wait_time_ms;             /**< Duration to wait for on target channel (must be greater than 0 for WIFI_ROC_REQ only) */
     wifi_action_rx_cb_t rx_cb;         /**< Rx Callback to receive action mgmt frames */
     uint8_t op_id;                     /**< ID of this specific ROC operation provided by wifi driver */
     wifi_action_roc_done_cb_t done_cb; /**< Callback to function that will be called upon ROC done. If assigned, WIFI_EVENT_ROC_DONE event will not be posted */

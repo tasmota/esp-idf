@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # Semihosting VFS driver example
 
@@ -13,6 +13,10 @@ This example demonstrates how to use semihosting VFS driver with ESP32. Example 
 4. Switches back to UART `stdout` using `freopen`.
 5. Opens text file on the host.
 6. Reads the file and prints its content on stdout.
+
+## When to use this example
+
+- You want the device to read/write files on the *host* PC through the debugger (semihosting), e.g. for logging or test data, without on-device storage.
 
 ## How to use example
 

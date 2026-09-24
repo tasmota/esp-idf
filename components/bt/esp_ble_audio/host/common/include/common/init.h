@@ -45,13 +45,29 @@ struct bt_le_audio_start_info {
 
 int bt_le_audio_init(void);
 
+void bt_le_audio_deinit(void);
+
 int bt_le_ascs_init(void);
 
+int bt_le_ascs_deinit(void);
+
+int bt_le_pacs_deinit(void);
+
+int bt_le_csis_deinit(const void *svc_inst);
+
 int bt_le_bass_init(void);
+
+int bt_le_bass_deinit(void);
 
 int bt_le_tmas_init(void);
 
 int bt_le_gtbs_init(void);
+
+int bt_le_gtbs_deinit(void);
+
+int bt_le_tbs_init(void);
+
+int bt_le_tbs_deinit(uint8_t bearer_index);
 
 int bt_le_has_init(void);
 
@@ -63,10 +79,10 @@ int bt_le_micp_mic_dev_init(void);
 
 int bt_le_audio_start(void *info);
 
-void ble_audio_lib_compressed_out(uint8_t log_level, uint32_t log_index, size_t arg_cnt, ...);
+void bt_le_audio_lib_compressed_out(uint8_t log_level, uint32_t log_index, size_t arg_cnt, ...);
 
-void ble_audio_lib_compressed_buf_out(uint8_t log_level, uint32_t log_index, uint8_t buf_idx,
-                                      const uint8_t *buf, size_t len);
+void bt_le_audio_lib_compressed_buf_out(uint8_t log_level, uint32_t log_index, uint8_t buf_idx,
+                                        const uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
 }

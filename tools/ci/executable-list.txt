@@ -42,16 +42,14 @@ examples/build_system/cmake/idf_as_lib/run.sh
 examples/common_components/protocol_examples_tapif_io/make_tap_netif
 examples/storage/parttool/parttool_example.py
 examples/storage/parttool/parttool_example.sh
-examples/system/app_trace_to_plot/read_trace.py
 examples/system/ota/otatool/get_running_partition.py
 examples/system/ota/otatool/otatool_example.py
 examples/system/ota/otatool/otatool_example.sh
+examples/system/tracing/app_trace_to_plot/read_trace.py
 install.fish
 install.sh
 tools/activate.py
 tools/bsasm.py
-tools/bt/ble_log_console/build.sh
-tools/bt/ble_log_console/run.sh
 tools/check_python_dependencies.py
 tools/ci/check_api_violation.sh
 tools/ci/check_build_test_rules.py

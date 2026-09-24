@@ -66,6 +66,7 @@ typedef struct dvp_platform {
 
 static dvp_platform_t s_platform;
 static const char *TAG = "dvp_cam";
+static soc_module_clk_t s_dvp_clk_src[CAP_DVP_PERIPH_NUM];
 
 /**
  * @brief Claim DVP controller
@@ -346,14 +347,23 @@ esp_err_t esp_cam_ctlr_dvp_init(int ctlr_id, cam_clock_source_t clk_src, const e
         esp_rom_gpio_connect_out_signal(pin->xclk_io, cam_periph_signals.buses[ctlr_id].clk_sig, false, false);
     }
 
+#if CONFIG_IDF_TARGET_ESP32S31
+    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)CAM_CORE_CLK_SRC_DEFAULT, true));
+#endif
+
     PERIPH_RCC_ACQUIRE_ATOMIC(cam_periph_signals.buses[ctlr_id].module, ref_count) {
         if (ref_count == 0) {
             cam_ll_enable_bus_clock(ctlr_id, true);
             cam_ll_reset_register(ctlr_id);
+#if CONFIG_IDF_TARGET_ESP32S31
+            cam_ll_select_core_clk_src(ctlr_id, CAM_CORE_CLK_SRC_DEFAULT);
+            cam_ll_set_core_clock_divider(ctlr_id, 2, 0, 0);
+#endif
         }
     }
 
     ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true));
+    s_dvp_clk_src[ctlr_id] = (soc_module_clk_t)clk_src;
     PERIPH_RCC_ATOMIC() {
         cam_ll_enable_clk(ctlr_id, true);
         cam_ll_select_clk_src(ctlr_id, clk_src);
@@ -457,6 +467,15 @@ esp_err_t esp_cam_ctlr_dvp_deinit(int ctlr_id)
             cam_ll_enable_bus_clock(ctlr_id, false);
         }
     }
+
+    if (s_dvp_clk_src[ctlr_id]) {
+        esp_clk_tree_enable_src(s_dvp_clk_src[ctlr_id], false);
+        s_dvp_clk_src[ctlr_id] = 0;
+    }
+
+#if CONFIG_IDF_TARGET_ESP32S31
+    esp_clk_tree_enable_src((soc_module_clk_t)CAM_CORE_CLK_SRC_DEFAULT, false);
+#endif
 
     return ESP_OK;
 }

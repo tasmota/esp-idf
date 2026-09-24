@@ -16,10 +16,16 @@
 #include "soc/pmu_struct.h"
 #include "hal/pmu_types.h"
 #include "hal/misc.h"
+#include "soc/efuse_struct.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+FORCE_INLINE_ATTR int32_t pmu_ll_get_dbias_vol_gap(void)
+{
+    return EFUSE.rd_mac_sys5.lp_hp_dbias_vol_gap;
+}
 
 FORCE_INLINE_ATTR uint32_t pmu_ll_lp_get_interrupt_raw(pmu_dev_t *hw)
 {
@@ -120,6 +126,24 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_cpu_stall(pmu_dev_t *hw, pmu_hp_mode_t mode
 FORCE_INLINE_ATTR void pmu_ll_hp_set_clk_power(pmu_dev_t *hw, pmu_hp_mode_t mode, uint32_t xpd_flag)
 {
     hw->hp_sys[mode].clk_power.val = xpd_flag;
+}
+
+/**
+ * @brief Set the power and isolation of the analog i2c master shared by all the PLLs
+ *
+ * @param hw Beginning address of the peripheral registers.
+ * @param mode The pmu mode
+ * @param xpd_bb_i2c Power up the analog i2c master
+ * @param iso_en Isolate the analog i2c master interface
+ * @param retention Retain the analog i2c master registers
+ *
+ * @return None
+ */
+FORCE_INLINE_ATTR void pmu_ll_hp_set_ana_i2c_power(pmu_dev_t *hw, pmu_hp_mode_t mode, bool xpd_bb_i2c, bool iso_en, bool retention)
+{
+    hw->hp_sys[mode].clk_power.xpd_bb_i2c = xpd_bb_i2c;
+    hw->hp_sys[mode].clk_power.i2c_iso_en = iso_en;
+    hw->hp_sys[mode].clk_power.i2c_retention = retention;
 }
 
 FORCE_INLINE_ATTR void pmu_ll_hp_set_xtal_xpd(pmu_dev_t *hw, pmu_hp_mode_t mode, bool xpd_xtal)

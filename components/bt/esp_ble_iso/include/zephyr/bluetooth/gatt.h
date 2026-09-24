@@ -563,7 +563,6 @@ struct bt_gatt_cpf {
  *  @return -EAGAIN if ``bt_init()`` has been called but ``settings_load()`` hasn't yet.
  */
 int bt_gatt_service_register(struct bt_gatt_service *svc);
-int bt_gatt_service_register_safe(struct bt_gatt_service *svc);
 
 /** @brief Unregister GATT service.
  *
@@ -572,7 +571,6 @@ int bt_gatt_service_register_safe(struct bt_gatt_service *svc);
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_gatt_service_unregister(struct bt_gatt_service *svc);
-int bt_gatt_service_unregister_safe(struct bt_gatt_service *svc);
 
 /** @brief to be used as return values for @ref bt_gatt_attr_func_t and @ref bt_gatt_read_func_t
  *  type callbacks.
@@ -893,7 +891,10 @@ ssize_t bt_gatt_attr_read_chrc(struct bt_conn *conn,
                            })),                         \
     BT_GATT_ATTRIBUTE(_uuid, _perm, _read, _write, _user_data)
 
-#define BT_GATT_CCC_MAX (1)
+/* Depth of each CCC's subscriber-config pool: one slot per bonded peer (subscription
+ * retained across disconnect for reconnect notify) + the active connection. A 1-deep
+ * pool made a second bonded subscriber fail with CccNoFreeCfg. */
+#define BT_GATT_CCC_MAX (CONFIG_BT_MAX_PAIRED + CONFIG_BT_MAX_CONN)
 
 /** @brief GATT CCC configuration entry.
  *
@@ -916,7 +917,8 @@ struct bt_gatt_ccc_cfg {
 /** Internal representation of CCC value */
 struct bt_gatt_ccc_managed_user_data {
     /** Configuration for each connection */
-    struct bt_gatt_ccc_cfg cfg[BT_GATT_CCC_MAX];
+    struct bt_gatt_ccc_cfg *cfg;
+    uint8_t cfg_count;
 
     /** Highest value of all connected peer's subscriptions */
     uint16_t value;
@@ -1011,13 +1013,12 @@ ssize_t bt_gatt_attr_write_ccc(struct bt_conn *conn,
  *  @param _match Configuration match callback.
  */
 #define BT_GATT_CCC_MANAGED_USER_DATA_INIT(_changed, _write, _match) \
-    {                                            \
-        .cfg = {                             \
-            [0 ... (BT_GATT_CCC_MAX - 1)] = {0}, \
-        },                                   \
-        .cfg_changed = _changed,             \
-        .cfg_write = _write,                 \
-        .cfg_match = _match,                 \
+    { \
+        .cfg = NULL, \
+        .cfg_count = 0, \
+        .cfg_changed = _changed, \
+        .cfg_write = _write, \
+        .cfg_match = _match, \
     }
 
 /**

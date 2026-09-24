@@ -243,6 +243,7 @@
 #elif CONFIG_IDF_TARGET_ESP32S31
 #define DEFAULT_SLEEP_OUT_OVERHEAD_US           (324)
 #define DEFAULT_HARDWARE_OUT_OVERHEAD_US        (780)
+#define PVT_REINIT_COST_US                      (95)
 #endif
 
 // Actually costs 80us, using the fastest slow clock 150K calculation takes about 16 ticks
@@ -1251,22 +1252,13 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
         }
     }
 #endif
-#if CONFIG_IDF_TARGET_ESP32S2
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
     /* Due to hardware limitations, on S2 the brownout detector sometimes trigger during deep sleep
        to circumvent this we disable the brownout detector before sleeping  */
     esp_brownout_disable();
-#endif //CONFIG_IDF_TARGET_ESP32S2
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET && CONFIG_ESP_BROWNOUT_DET
 
     esp_sync_timekeeping_timers();
-
-    // Must acquire all spinlocks which may be acquired during sleep process before stalling other core,
-    // otherwise deadlock may occur.
-    esp_os_enter_critical(&s_config.lock);
-#if !CONFIG_FREERTOS_UNICORE
-    extern portMUX_TYPE rtc_spinlock;
-    esp_os_enter_critical_safe(&rtc_spinlock); // Maybe acquired from temp_sensor_get_raw_value by phy_close_rf callback
-    esp_clk_private_lock(); // Maybe acquired from esp_clk_slowclk_cal_set
-#endif
 
 #if CONFIG_ESP_INT_WDT && CONFIG_ESP32_ECO3_CACHE_LOCK_FIX
     // The other core will be stalled by high-priority interrupt and spins on variables in internal RAM,
@@ -1275,10 +1267,25 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     // esp_int_wdt_livelock_workaround, which may cause deadlock.
     esp_int_wdt_livelock_workaround(false);
 #endif
+
     /* Disable interrupts and stall another core in case another task writes
      * to RTC memory while we calculate RTC memory CRC.
      */
+    esp_os_enter_critical(&s_config.lock);
+
+#if CONFIG_FREERTOS_PORT_THREAD_SAFE_CLAIM
     esp_ipc_isr_stall_other_cpu();
+#else
+    /* Retry with the lock held on success. Drop the lock on failure so the other
+     * CPU can leave its critical section (and to avoid deadlock on s_config.lock).
+     */
+    while (esp_ipc_isr_stall_other_cpu_safe() != ESP_OK) {
+        esp_os_exit_critical(&s_config.lock);
+        esp_rom_delay_us(portTICK_PERIOD_MS * 1000 / 10);
+        esp_os_enter_critical(&s_config.lock);
+    }
+#endif
+
     esp_ipc_isr_stall_pause();
 
     // record current RTC time
@@ -1369,11 +1376,13 @@ static esp_err_t FORCE_IRAM_ATTR deep_sleep_start(bool allow_sleep_rejection)
     // Configure WDT to use livelock workaround timeout after releasing other CPU
     esp_int_wdt_livelock_workaround(true);
 #endif
-#if !CONFIG_FREERTOS_UNICORE
-    esp_clk_private_unlock();
-    esp_os_exit_critical_safe(&rtc_spinlock);
-#endif
     esp_os_exit_critical(&s_config.lock);
+
+#if CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+    /* Brownout was disabled before attempting deep sleep; restore it after rejection. */
+    esp_brownout_init();
+#endif //CONFIG_IDF_TARGET_ESP32S2 && CONFIG_ESP_BROWNOUT_DET
+
     return err;
 }
 

@@ -33,6 +33,8 @@
 #include "common/wpa_common.h"
 #include "esp_wpas_glue.h"
 
+#define BTM_QUERY_REASON_LOW_RSSI 16
+
 static struct roaming_app g_roaming_app;
 extern bool current_task_is_wifi_task(void);
 
@@ -70,6 +72,8 @@ static const char *ROAMING_TAG = "ROAM";
 
 #define RSSI_THRESHOLD_DISABLED -100
 #define RSSI_THRESHOLD_MAX 10
+#define LOW_RSSI_ROAM_DIFF_MIN 1
+#define LOW_RSSI_ROAM_DIFF_MAX 99
 #define BTM_QUERY_LIST_MAX_LEN (MAX_NEIGHBOR_LEN + 96)
 #define ROAMING_PENDING_TIMEOUT_USER_DATA_MAX 16
 
@@ -158,6 +162,19 @@ static int32_t roaming_app_clamp_rssi_threshold(int threshold)
     }
 
     return threshold;
+}
+
+static uint8_t roaming_app_clamp_low_rssi_roam_diff(uint8_t diff)
+{
+    if (diff < LOW_RSSI_ROAM_DIFF_MIN) {
+        return LOW_RSSI_ROAM_DIFF_MIN;
+    }
+
+    if (diff > LOW_RSSI_ROAM_DIFF_MAX) {
+        return LOW_RSSI_ROAM_DIFF_MAX;
+    }
+
+    return diff;
 }
 
 static bool roaming_app_scan_cache_is_valid(const struct timeval *now)
@@ -593,8 +610,6 @@ static void roaming_app_set_disconnected_state(const wifi_event_sta_disconnected
     g_roaming_app.current_bss.btm_support = false;
     g_roaming_app.current_bss.rrm_support = false;
     g_roaming_app.current_bss.ap.rssi = -128;
-    g_roaming_app.current_bss.ap.authmode = WIFI_AUTH_OPEN;
-    memset(g_roaming_app.current_bss.ap.ssid, 0, sizeof(g_roaming_app.current_bss.ap.ssid));
 
     if (disconn) {
         memcpy(g_roaming_app.current_bss.ap.bssid, disconn->bssid, ETH_ALEN);
@@ -853,6 +868,23 @@ static bool roaming_app_add_manual_blacklist_entry(const uint8_t *bssid)
     return true;
 }
 
+#if CONFIG_ESP_WIFI_ROAMING_AUTO_BLACKLISTING
+static bool roaming_app_reason_is_connection_failure(uint8_t reason)
+{
+    switch (reason) {
+    case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_INVALID_PMKID:
+    case WIFI_REASON_AUTH_FAIL:
+    case WIFI_REASON_ASSOC_FAIL:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_CONNECTION_FAIL:
+        return true;
+    default:
+        return false;
+    }
+}
+#endif
+
 static void roaming_app_record_connection_failure(const uint8_t *bssid)
 {
 #if CONFIG_ESP_WIFI_ROAMING_AUTO_BLACKLISTING
@@ -1020,7 +1052,7 @@ static void roaming_app_disconnected_event_handler(void *ctx, void *data)
 
     ESP_LOGD(ROAMING_TAG, "station got disconnected reason=%d, rssi =%d", disconn->reason, disconn->rssi);
 #if CONFIG_ESP_WIFI_ROAMING_AUTO_BLACKLISTING
-    if (disconn->reason == WIFI_REASON_CONNECTION_FAIL || disconn->reason == WIFI_REASON_AUTH_FAIL) {
+    if (roaming_app_reason_is_connection_failure(disconn->reason)) {
         roaming_app_record_connection_failure(g_roaming_app.current_bss.ap.bssid);
     }
 #endif
@@ -1342,7 +1374,7 @@ static void roaming_app_rssi_low_internal_handler(void *ctx, void *data)
     if (!roaming_app_get_ap_info(&g_roaming_app.current_bss.ap)) {
         g_roaming_app.current_bss.ap.rssi = event->rssi;
     }
-    determine_best_ap(0);
+    determine_best_ap(g_roaming_app.config.low_rssi_roam_diff - 1);
     int32_t next_threshold = g_roaming_app.current_low_rssi_threshold -
                              g_roaming_app.config.rssi_threshold_reduction_offset;
     next_threshold = roaming_app_clamp_rssi_threshold(next_threshold);
@@ -1410,7 +1442,8 @@ static bool trigger_network_assisted_roam(struct cand_bss *bss)
         btm_candidates = query_list;
     }
 
-    if (esp_wnm_send_bss_transition_mgmt_query(REASON_RSSI, btm_candidates, 1) < 0) {
+    if (esp_wnm_send_bss_transition_mgmt_query((enum btm_query_reason)BTM_QUERY_REASON_LOW_RSSI,
+                                               btm_candidates, 1) < 0) {
         ESP_LOGD(ROAMING_TAG, "failed to send btm query");
         os_free(query_list);
         return false;
@@ -2097,8 +2130,11 @@ static esp_err_t init_config_params(void)
     g_roaming_app.config.backoff_time = ROAMING_BACKOFF_TIME;
 
     g_roaming_app.config.low_rssi_roam_trigger = LOW_RSSI_ROAMING_ENABLED;
+#if LOW_RSSI_ROAMING_ENABLED
     g_roaming_app.config.low_rssi_threshold = ROAMING_LOW_RSSI_THRESHOLD;
     g_roaming_app.config.rssi_threshold_reduction_offset = RSSI_THRESHOLD_REDUCTION_OFFSET;
+    g_roaming_app.config.low_rssi_roam_diff = LOW_RSSI_ROAM_DIFF;
+#endif /* LOW_RSSI_ROAMING_ENABLED */
 
     g_roaming_app.config.scan_monitor = PERIODIC_SCAN_MONITORING;
 #if PERIODIC_SCAN_MONITORING
@@ -2117,9 +2153,10 @@ static esp_err_t init_config_params(void)
 
     ESP_LOGD(ROAMING_TAG, "Roaming app config :");
 
-    ESP_LOGD(ROAMING_TAG, "backoff time=%d low_rssi_roam_trigger=%d low_rssi_threshold=%d rssi_threshold_reduction_offset=%d",
+    ESP_LOGD(ROAMING_TAG, "backoff time=%d low_rssi_roam_trigger=%d low_rssi_threshold=%d rssi_threshold_reduction_offset=%d low_rssi_roam_diff=%d",
                             g_roaming_app.config.backoff_time, g_roaming_app.config.low_rssi_roam_trigger,
-                            g_roaming_app.config.low_rssi_threshold, g_roaming_app.config.rssi_threshold_reduction_offset);
+                            g_roaming_app.config.low_rssi_threshold, g_roaming_app.config.rssi_threshold_reduction_offset,
+                            g_roaming_app.config.low_rssi_roam_diff);
 
 #if PERIODIC_SCAN_MONITORING
     ESP_LOGD(ROAMING_TAG, "scan_monitor=%d scan_interval=%d scan_rssi_threshold=%d scan_rssi_diff=%d",
@@ -2164,8 +2201,11 @@ void roam_init_app(void)
     ESP_LOGE(ROAMING_TAG, "No roaming method enabled. Roaming app cannot be initialized");
     return;
 #endif
+    if (g_roaming_app.app_active) {
+        ESP_LOGD(ROAMING_TAG, "Roaming app already initialized");
+        return;
+    }
     memset(&g_roaming_app, 0, sizeof(g_roaming_app));
-    g_roaming_app.app_active = true;
 #if LOW_RSSI_ROAMING_ENABLED
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_BSS_RSSI_LOW,
                                                &roaming_app_rssi_low_handler, NULL));
@@ -2176,6 +2216,7 @@ void roam_init_app(void)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_NEIGHBOR_REP,
                                                &roaming_app_neighbor_report_recv_handler, NULL));
 #endif /*PERIODIC_RRM_MONITORING*/
+    g_roaming_app.app_active = true;
     ESP_LOGI(ROAMING_TAG, "Roaming app initialization done");
 }
 
@@ -2209,7 +2250,6 @@ static int roaming_app_deinit_internal(void *ctx, void *data)
 {
     (void) ctx;
     (void) data;
-    g_roaming_app.app_active = false;
     roaming_app_cancel_pending_events();
     roaming_app_stop_periodic_monitors();
     roaming_app_reset_connect_hint_state();
@@ -2251,6 +2291,7 @@ void roam_deinit_app(void)
     ESP_ERROR_CHECK(esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_NEIGHBOR_REP,
                                                  &roaming_app_neighbor_report_recv_handler));
 #endif /*PERIODIC_RRM_MONITORING*/
+    g_roaming_app.app_active = false;
 }
 
 #if CONFIG_ESP_WIFI_ROAMING_BSSID_BLACKLIST
@@ -2396,6 +2437,8 @@ static int update_config_params(void *data)
                               sizeof(next_scan_filter_bssid)) != 0);
 
     g_roaming_app.config = *config;
+    g_roaming_app.config.low_rssi_roam_diff =
+        roaming_app_clamp_low_rssi_roam_diff(g_roaming_app.config.low_rssi_roam_diff);
     memset(g_roaming_app.config.scan_filter_ssid, 0, sizeof(g_roaming_app.config.scan_filter_ssid));
     memset(g_roaming_app.config.scan_filter_bssid, 0, sizeof(g_roaming_app.config.scan_filter_bssid));
     g_roaming_app.config.scan_filter_bssid_set = false;
@@ -2421,9 +2464,10 @@ static int update_config_params(void *data)
 
     ESP_LOGI(ROAMING_TAG, "Updated Roaming app config :");
 
-    ESP_LOGI(ROAMING_TAG, "backoff time=%d low_rssi_roam_trigger=%d low_rssi_threshold=%d rssi_threshold_reduction_offset=%d",
+    ESP_LOGI(ROAMING_TAG, "backoff time=%d low_rssi_roam_trigger=%d low_rssi_threshold=%d rssi_threshold_reduction_offset=%d low_rssi_roam_diff=%d",
                             g_roaming_app.config.backoff_time, g_roaming_app.config.low_rssi_roam_trigger,
-                            g_roaming_app.config.low_rssi_threshold, g_roaming_app.config.rssi_threshold_reduction_offset);
+                            g_roaming_app.config.low_rssi_threshold, g_roaming_app.config.rssi_threshold_reduction_offset,
+                            g_roaming_app.config.low_rssi_roam_diff);
 
 #if PERIODIC_SCAN_MONITORING
     ESP_LOGI(ROAMING_TAG, "scan_monitor=%d scan_interval=%d scan_rssi_threshold=%d scan_rssi_diff=%d",

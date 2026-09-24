@@ -157,12 +157,18 @@ static esp_err_t ESP_TIMER_IRAM_ATTR timer_restart(esp_timer_handle_t timer, uin
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!is_initialized() || !timer_armed(timer)) {
+    if (!is_initialized()) {
         return ESP_ERR_INVALID_STATE;
     }
 
     esp_timer_dispatch_t dispatch_method = timer->flags & FL_ISR_DISPATCH_METHOD;
     timer_list_lock(dispatch_method);
+
+    /* The timer may expire while this task is waiting for the list lock. */
+    if (!timer_armed(timer)) {
+        timer_list_unlock(dispatch_method);
+        return ESP_ERR_INVALID_STATE;
+    }
 
     const int64_t now = esp_timer_impl_get_time();
     const uint64_t period = timer->period;
@@ -476,13 +482,12 @@ static ESP_TIMER_IRAM_ATTR void timer_list_unlock(esp_timer_dispatch_t timer_typ
 }
 
 #ifdef CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-static ESP_TIMER_IRAM_ATTR bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
-#else
-static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
+ESP_TIMER_IRAM_ATTR
 #endif
+// Keep this as a standalone symbol because ldgen maps it by name.
+static void __attribute__((noinline, noclone)) timer_process_alarm(esp_timer_dispatch_t dispatch_method)
 {
     timer_list_lock(dispatch_method);
-    bool processed = false;
     esp_timer_handle_t it;
     while (1) {
         it = LIST_FIRST(&s_timers[dispatch_method]);
@@ -492,7 +497,6 @@ static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
             break;
         }
         ESP_COMPILER_DIAGNOSTIC_POP("-Wanalyzer-use-after-free")
-        processed = true;
         LIST_REMOVE(it, list_entry);
         if (it->event_id == EVENT_ID_DELETE_TIMER) {
             // It is handled only by ESP_TIMER_TASK (see esp_timer_delete()).
@@ -534,17 +538,9 @@ static bool timer_process_alarm(esp_timer_dispatch_t dispatch_method)
 #endif
         }
     } // while(1)
-    if (it) {
-        if (dispatch_method == ESP_TIMER_TASK || (dispatch_method != ESP_TIMER_TASK && processed == true)) {
-            esp_timer_impl_set_alarm_id(it->alarm, dispatch_method);
-        }
-    } else {
-        if (processed) {
-            esp_timer_impl_set_alarm_id(UINT64_MAX, dispatch_method);
-        }
-    }
+    uint64_t next_alarm = (it != NULL) ? it->alarm : UINT64_MAX;
+    esp_timer_impl_set_alarm_id(next_alarm, dispatch_method);
     timer_list_unlock(dispatch_method);
-    return processed;
 }
 
 static void timer_task(void* arg)
@@ -562,24 +558,30 @@ ESP_TIMER_IRAM_ATTR void esp_timer_isr_dispatch_need_yield(void)
     assert(xPortInIsrContext());
     s_isr_dispatch_need_yield = pdTRUE;
 }
+
 #endif
 
 static void ESP_TIMER_IRAM_ATTR timer_alarm_handler(void* arg)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    bool isr_timers_processed = false;
 
 #ifdef CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-    esp_timer_impl_try_to_set_next_alarm();
-    // process timers with ISR dispatch method
-    isr_timers_processed = timer_process_alarm(ESP_TIMER_ISR);
+    uint32_t due_alarm_mask = esp_timer_impl_claim_due_alarms();
+
+    if (due_alarm_mask & (1U << ESP_TIMER_ISR)) {
+        timer_process_alarm(ESP_TIMER_ISR);
+    }
+
     xHigherPriorityTaskWoken = s_isr_dispatch_need_yield;
     s_isr_dispatch_need_yield = pdFALSE;
-#endif
 
-    if (isr_timers_processed == false) {
+    if (due_alarm_mask & (1U << ESP_TIMER_TASK)) {
         vTaskNotifyGiveFromISR(s_timer_task, &xHigherPriorityTaskWoken);
     }
+#else
+    vTaskNotifyGiveFromISR(s_timer_task, &xHigherPriorityTaskWoken);
+#endif
+
     if (xHigherPriorityTaskWoken == pdTRUE) {
         portYIELD_FROM_ISR();
     }

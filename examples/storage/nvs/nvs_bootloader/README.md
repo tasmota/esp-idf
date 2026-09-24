@@ -1,11 +1,16 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | --------- |
 
 # NVS Bootloader
 
 The purpose of this example is to show how to use the simplified, read-only API of NVS flash that can be used as a part of bootloader.
 
 A very practical application of being able to access the NVS in the bootloader build would be faster device restoration, where-in the application stores the device's current state/configurations and post a reset it would read the NVS to restore the device's last state, without waiting for application to boot-up.
+
+## When to use this example
+
+- You need to read NVS data from the bootloader (before the app starts), e.g. for fast state restoration.
+- You want to use the simplified, read-only NVS bootloader API.
 
 ## Usage of this example:
 

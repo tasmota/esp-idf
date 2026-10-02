@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/errno.h>
+#include <errno.h>
 #include <sys/fcntl.h>
 #include <sys/lock.h>
 #include "esp_vfs_fat.h"

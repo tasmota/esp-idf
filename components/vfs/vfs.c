@@ -8,6 +8,7 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/errno.h>
+#include <errno.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/reent.h>

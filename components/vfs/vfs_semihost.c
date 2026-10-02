@@ -10,6 +10,7 @@
 #include <sys/errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "esp_cpu.h"

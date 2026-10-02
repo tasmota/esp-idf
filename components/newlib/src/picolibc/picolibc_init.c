@@ -26,6 +26,9 @@
 #include "esp_heap_caps.h"
 #include "rom/libc_stubs.h"
 
+/* Newer picolibc headers no longer declare environ. */
+extern char **environ;
+
 #if !(CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2)
 static void esp_cleanup_r(struct _reent *rptr)
 {

@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdarg.h>
 #include <sys/errno.h>
+#include <errno.h>
 #include <sys/lock.h>
 #include <sys/fcntl.h>
 #include <sys/param.h>

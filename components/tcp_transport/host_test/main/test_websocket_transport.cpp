@@ -1,8 +1,9 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstddef>
@@ -130,6 +131,41 @@ std::string make_response() {
     return std::string(response, response_length);
 }
 
+// Masking key used by make_masked_response(); none of its bytes collide with the
+// 0x42 marker used by the overflow regression test.
+constexpr std::array<unsigned char, 4> masked_response_key = {0x01, 0x02, 0x03, 0x04};
+
+// Builds the handshake response followed by a *masked* WebSocket data frame.
+// Servers must not mask frames (RFC 6455 5.1), so this simulates a malicious or
+// misbehaving server; the client must still parse it without writing the 4-byte
+// masking key past the caller's buffer.
+std::string make_masked_response() {
+    char response[WS_BUFFER_SIZE];
+    const char* expected_accept_key = "HSmrc0sMlYUkAGmm5OPpG2HaGWk=";
+    int response_length = snprintf(response, WS_BUFFER_SIZE,
+                                   "HTTP/1.1 101 Switching Protocols\r\n"
+                                   "Upgrade: websocket\r\n"
+                                   "Connection: Upgrade\r\n"
+                                   "Sec-WebSocket-Accept: %s\r\n"
+                                   "\r\n", expected_accept_key);
+
+    const char plain_payload[] = {'T', 'e', 's', 't'};
+    // First byte: FIN + text opcode. Second byte: MASK bit set + payload length.
+    unsigned char ws_frame_header[] = {0x81, static_cast<unsigned char>(0x80 | sizeof(plain_payload))};
+
+    std::memcpy(response + response_length, ws_frame_header, sizeof(ws_frame_header));
+    response_length += sizeof(ws_frame_header);
+
+    std::memcpy(response + response_length, masked_response_key.data(), masked_response_key.size());
+    response_length += masked_response_key.size();
+
+    for (size_t i = 0; i < sizeof(plain_payload); i++) {
+        response[response_length++] =
+            static_cast<char>(static_cast<unsigned char>(plain_payload[i]) ^ masked_response_key[i % 4]);
+    }
+    return std::string(response, response_length);
+}
+
 // Callback function for mock_write
 int mock_write_callback(esp_transport_handle_t transport, const char *request_sent, int len, int timeout_ms, int num_call) {
     // Assertions to validate the parameters
@@ -160,6 +196,13 @@ int mock_poll_read_callback(esp_transport_handle_t t, int timeout_ms, int num_ca
 int mock_valid_read_callback(esp_transport_handle_t transport, char *buffer, int len, int timeout_ms, int num_call)
 {
     std::string websocket_response = make_response();
+    std::memcpy(buffer, websocket_response.data(), websocket_response.size());
+    return websocket_response.size();
+}
+
+int mock_masked_read_callback(esp_transport_handle_t transport, char *buffer, int len, int timeout_ms, int num_call)
+{
+    std::string websocket_response = make_masked_response();
     std::memcpy(buffer, websocket_response.data(), websocket_response.size());
     return websocket_response.size();
 }
@@ -197,6 +240,48 @@ int mock_valid_read_fragmented_callback(esp_transport_handle_t t, char *buffer, 
 int mock_valid_poll_read_fragmented_callback(esp_transport_handle_t t, int timeout_ms, int num_call)
 {
     return mock_valid_read_fragmented_callback(t, nullptr, 0, 0, 0);
+}
+
+// Server byte stream (handshake response followed by raw WebSocket frames) served by mock_stream_read_callback
+std::string s_server_stream;
+size_t s_server_stream_offset = 0;
+int s_pong_frames_written = 0;
+
+void set_server_stream(const std::vector<uint8_t> &frames)
+{
+    s_server_stream = "HTTP/1.1 101 Switching Protocols\r\n"
+                      "Upgrade: websocket\r\n"
+                      "Connection: Upgrade\r\n"
+                      "Sec-WebSocket-Accept: HSmrc0sMlYUkAGmm5OPpG2HaGWk=\r\n"
+                      "\r\n";
+    s_server_stream.append(frames.begin(), frames.end());
+    s_server_stream_offset = 0;
+}
+
+int mock_stream_read_callback(esp_transport_handle_t t, char *buffer, int len, int timeout_ms, int num_call)
+{
+    size_t to_copy = std::min(s_server_stream.size() - s_server_stream_offset, static_cast<size_t>(len));
+    std::memcpy(buffer, s_server_stream.data() + s_server_stream_offset, to_copy);
+    s_server_stream_offset += to_copy;
+    return static_cast<int>(to_copy);
+}
+
+int mock_stream_poll_read_callback(esp_transport_handle_t t, int timeout_ms, int num_call)
+{
+    return s_server_stream_offset < s_server_stream.size() ? 1 : 0;
+}
+
+int mock_poll_write_ready_callback(esp_transport_handle_t t, int timeout_ms, int num_call)
+{
+    return 1;
+}
+
+int mock_write_count_pong_callback(esp_transport_handle_t t, const char *buffer, int len, int timeout_ms, int num_call)
+{
+    if (len > 0 && static_cast<uint8_t>(buffer[0]) == 0x8A) { // FIN | PONG
+        s_pong_frames_written++;
+    }
+    return len;
 }
 
 }
@@ -346,6 +431,46 @@ TEST_CASE("WebSocket Transport Connection", "[success]")
         esp_transport_poll_read(websocket_transport.get(), timeout);
         REQUIRE(parent_poll_calls == 1);
     }
+
+    SECTION("Masked frame does not overflow small caller buffer") {
+        // A malicious server sends a masked frame. Reading it into a buffer smaller
+        // than the 4-byte masking key must not write the mask past the buffer.
+        mock_read_Stub(mock_masked_read_callback);
+        mock_poll_read_Stub(mock_poll_read_callback);
+
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        // Fill a buffer with a distinctive marker, then only allow reading 1 byte.
+        // Before the fix, parsing the mask wrote 4 bytes into buffer[0..3], clobbering
+        // the marker bytes past the 1-byte allowed region.
+        constexpr int allowed_len = 1;
+        std::array<char, 16> buffer;
+        constexpr char marker = 0x42;
+        buffer.fill(marker);
+
+        int read_len = esp_transport_read(websocket_transport.get(), buffer.data(), allowed_len, timeout);
+        REQUIRE(read_len == allowed_len);
+        REQUIRE(buffer[0] == 'T');  // first payload byte, correctly unmasked
+
+        // Every byte past the allowed region must be untouched.
+        for (size_t i = allowed_len; i < buffer.size(); i++) {
+            REQUIRE(buffer[i] == marker);
+        }
+    }
+
+    SECTION("Masked server frame is correctly unmasked") {
+        mock_read_Stub(mock_masked_read_callback);
+        mock_poll_read_Stub(mock_poll_read_callback);
+
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        char buffer[WS_BUFFER_SIZE];
+        int read_len = esp_transport_read(websocket_transport.get(), buffer, WS_BUFFER_SIZE, timeout);
+        REQUIRE(read_len == 4);
+
+        std::string response(buffer, read_len);
+        REQUIRE(response == "Test");
+    }
 }
 
 TEST_CASE("WebSocket Transport Connection", "[failure]")
@@ -454,5 +579,153 @@ TEST_CASE("WebSocket Transport Connection", "[failure]")
 
         // Connect should now succeed even with small user buffer
         REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+    }
+}
+
+TEST_CASE("WebSocket Transport fragmented messages", "[fragmentation]")
+{
+    constexpr static auto timeout = 50;
+    constexpr static auto port = 8080;
+    constexpr static auto host = "localhost";
+    mock_destroy_IgnoreAndReturn(ESP_OK);
+    unique_transport parent_handle{esp_transport_init(), esp_transport_destroy};
+    REQUIRE(parent_handle);
+    esp_transport_set_func(parent_handle.get(), mock_connect, mock_read, mock_write, mock_close, mock_poll_read, mock_poll_write, mock_destroy);
+
+    unique_transport websocket_transport{esp_transport_ws_init(parent_handle.get()), esp_transport_destroy};
+    REQUIRE(websocket_transport);
+
+    esp_transport_ws_config_t ws_config = {
+        .ws_path = "/",
+        .sub_protocol = nullptr,
+        .user_agent = nullptr,
+        .headers = nullptr,
+        .header_hook = NULL,
+        .header_user_context = NULL,
+        .auth = nullptr,
+        .response_headers = nullptr,
+        .response_headers_len = 0,
+        .propagate_control_frames = false,
+    };
+    REQUIRE(esp_transport_ws_set_config(websocket_transport.get(), &ws_config) == ESP_OK);
+
+    mock_write_Stub(mock_write_callback);
+    mock_read_Stub(mock_stream_read_callback);
+    mock_poll_read_Stub(mock_stream_poll_read_callback);
+    mock_connect_ExpectAndReturn(parent_handle.get(), host, port, timeout, ESP_OK);
+
+    char buffer[16];
+
+    SECTION("Continuation frame completes a fragmented message") {
+        set_server_stream({
+            0x01, 0x03, 'a', 'b', 'c',  // TEXT, FIN=0
+            0x80, 0x02, 'd', 'e',       // CONT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 3);
+        REQUIRE(std::string(buffer, 3) == "abc");
+        REQUIRE(esp_transport_ws_get_read_opcode(websocket_transport.get()) == WS_TRANSPORT_OPCODES_TEXT);
+        REQUIRE_FALSE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 2);
+        REQUIRE(std::string(buffer, 2) == "de");
+        REQUIRE(esp_transport_ws_get_read_opcode(websocket_transport.get()) == WS_TRANSPORT_OPCODES_CONT);
+        REQUIRE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+    }
+
+    SECTION("Middle continuation frame keeps the fragmented message open") {
+        set_server_stream({
+            0x01, 0x01, 'a',            // TEXT, FIN=0
+            0x00, 0x01, 'b',            // CONT, FIN=0
+            0x80, 0x01, 'c',            // CONT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(buffer[0] == 'a');
+        REQUIRE_FALSE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(buffer[0] == 'b');
+        REQUIRE(esp_transport_ws_get_read_opcode(websocket_transport.get()) == WS_TRANSPORT_OPCODES_CONT);
+        REQUIRE_FALSE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(buffer[0] == 'c');
+        REQUIRE(esp_transport_ws_get_read_opcode(websocket_transport.get()) == WS_TRANSPORT_OPCODES_CONT);
+        REQUIRE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+    }
+
+    SECTION("Control frame interleaved in a fragmented message is allowed") {
+        mock_write_Stub(mock_write_count_pong_callback);
+        mock_poll_write_Stub(mock_poll_write_ready_callback);
+        s_pong_frames_written = 0;
+        set_server_stream({
+            0x01, 0x02, 'H', 'e',       // TEXT, FIN=0
+            0x89, 0x00,                 // PING, FIN=1
+            0x80, 0x01, 'y',            // CONT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 2);
+        // PING is handled internally (PONG sent) and not reported to the reader
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 0);
+        REQUIRE(s_pong_frames_written == 1);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(buffer[0] == 'y');
+        REQUIRE(esp_transport_ws_get_read_opcode(websocket_transport.get()) == WS_TRANSPORT_OPCODES_CONT);
+        REQUIRE(esp_transport_ws_get_fin_flag(websocket_transport.get()));
+    }
+
+    SECTION("Continuation frame without a fragmented message is rejected") {
+        set_server_stream({
+            0x80, 0x02, 'x', 'y',       // CONT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) < 0);
+    }
+
+    SECTION("Continuation frame after the fragmented message completed is rejected") {
+        set_server_stream({
+            0x01, 0x01, 'a',            // TEXT, FIN=0
+            0x80, 0x01, 'b',            // CONT, FIN=1
+            0x80, 0x01, 'c',            // CONT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) < 0);
+    }
+
+    SECTION("New data frame before the fragmented message completes is rejected") {
+        set_server_stream({
+            0x01, 0x01, 'a',            // TEXT, FIN=0
+            0x81, 0x01, 'b',            // TEXT, FIN=1
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) < 0);
+    }
+
+    SECTION("Reconnect clears an unfinished fragmented message") {
+        set_server_stream({
+            0x01, 0x01, 'a',            // TEXT, FIN=0
+        });
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+
+        set_server_stream({
+            0x81, 0x01, 'b',            // TEXT, FIN=1
+        });
+        mock_connect_ExpectAndReturn(parent_handle.get(), host, port, timeout, ESP_OK);
+        REQUIRE(esp_transport_connect(websocket_transport.get(), host, port, timeout) == 0);
+
+        REQUIRE(esp_transport_read(websocket_transport.get(), buffer, sizeof(buffer), timeout) == 1);
+        REQUIRE(buffer[0] == 'b');
     }
 }

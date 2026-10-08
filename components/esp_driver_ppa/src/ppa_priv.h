@@ -48,6 +48,9 @@ extern "C" {
 #define PPA_IS_CM_ALPHA(color_type_id) \
             (color_type_id == ESP_COLOR_FOURCC_ALPHA8 || color_type_id == ESP_COLOR_FOURCC_ALPHA4)
 
+#define PPA_IS_CM_CLUT(color_type_id) \
+            (color_type_id == ESP_COLOR_FOURCC_CLUT8 || color_type_id == ESP_COLOR_FOURCC_CLUT4)
+
 #define PPA_ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
 #define PPA_ALIGN_DOWN(num, align)  ((num) & ~((align) - 1))
 
@@ -62,7 +65,7 @@ struct ppa_engine_t {
     ppa_platform_t *platform;                     // PPA driver platform
     ppa_engine_type_t type;                       // Type of the PPA engine
     portMUX_TYPE spinlock;                        // Engine level spinlock
-    SemaphoreHandle_t sem;                        // Semaphore for whether the engine is processing a transaction
+    bool busy;                                    // Whether the engine has a transaction running or queued; only read/written under `spinlock`
     STAILQ_HEAD(trans, ppa_trans_s) trans_stailq; // link head of pending transactions for the PPA engine
 #if CONFIG_PM_ENABLE
     esp_pm_lock_handle_t pm_lock;                 // Power management lock
@@ -213,6 +216,7 @@ typedef struct ppa_trans_s {
     SemaphoreHandle_t sem;                        // Semaphore to block when the transaction has not finished
     ppa_client_t *client;                         // Pointer to the client who requested the transaction
     void *user_data;                              // User registered event data (per transaction)
+    bool blocking;                                // Set before enqueue when the caller will wait on `sem`; ISR must not recycle until that wait returns
 } ppa_trans_t;
 
 typedef struct {
@@ -255,6 +259,8 @@ struct ppa_platform_t {
     uint32_t dma_desc_mem_size;                 // Alignment requirement for the 2D-DMA descriptor to satisfy cache line size
     struct {
         uint32_t allow_pd: 1;                   // If set, driver allows the power domain to be powered off when system enters sleep mode
+        uint32_t bg_clut_ready: 1;              // If set, the blending engine background CLUT memory has been powered on and filled with user content
+        uint32_t fg_clut_ready: 1;              // If set, the blending engine foreground CLUT memory has been powered on and filled with user content
     } flags;                                    // Configuration flags
 };
 

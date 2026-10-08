@@ -59,6 +59,11 @@
  */
 #define MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
 
+/* In ECB mode, reject an input/output overlap that cannot be honoured, rather than returning a wrong result. */
+#ifdef MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
+#define MBEDTLS_PSA_CHECK_ECB_BUFFER_OVERLAP
+#endif // MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
+
 /**
  * \name SECTION: System support
  *
@@ -270,14 +275,18 @@
 #define MBEDTLS_MPI_PRIME_SIEVE_VARIABLE_TIME
 #endif
 
-#if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY) || defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
-#define ESP_ECDSA_DRIVER_ENABLED
-#ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY
-#define ESP_ECDSA_VERIFY_DRIVER_ENABLED
-#endif
-#if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
-#define ESP_ECDSA_SIGN_DRIVER_ENABLED
-#endif
+#if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY) || defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) \
+    || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
+    #define ESP_ECDSA_DRIVER_ENABLED
+    #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_VERIFY
+        #define ESP_ECDSA_VERIFY_DRIVER_ENABLED
+    #endif
+    #if defined(CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN) || defined(CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN)
+        #define ESP_ECDSA_SIGN_DRIVER_ENABLED
+        #ifdef SOC_ECDSA_SUPPORT_SOFTWARE_KEY
+            #define ESP_ECDSA_TRANSPARENT_SIGN_DRIVER_ENABLED
+        #endif /* SOC_ECDSA_SUPPORT_SOFTWARE_KEY */
+    #endif
 #endif
 
 #ifdef CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED
@@ -582,6 +591,10 @@
 #else
 #undef PSA_WANT_ECC_MONTGOMERY_255
 #endif
+/* ESP-IDF exposes no Curve448 option, but the TF-PSA-Crypto default config
+ * wants it. Undefine it so that the Curve448 data and code stay out of the
+ * build. */
+#undef PSA_WANT_ECC_MONTGOMERY_448
 
 /**
  * \def MBEDTLS_ECP_NIST_OPTIM

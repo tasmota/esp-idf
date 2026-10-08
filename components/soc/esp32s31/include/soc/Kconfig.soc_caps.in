@@ -1147,6 +1147,10 @@ config SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES
     bool
     default y
 
+config SOC_ECDSA_SUPPORT_SOFTWARE_KEY
+    bool
+    default y
+
 config SOC_DS_SIGNATURE_MAX_BIT_LEN
     int
     default 4096
@@ -1724,6 +1728,10 @@ config SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH
     default 12
 
 config SOC_BT_CLASSIC_SUPPORTED
+    bool
+    default y
+
+config SOC_ORCA_BREDR_CONTROLLER
     bool
     default y
 

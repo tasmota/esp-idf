@@ -570,7 +570,6 @@ TEST_CASE("HTTP client can be reused after read timeout", "[esp_http_client][err
     mock_http_transport_get_stats(mock_transport, &stats);
     /* Master does not close the connection after a fetch-header failure, so the
      * reused client never reconnects; it keeps reading on the same connection. */
-    // characterization: master behavior, see refactor spec
     TEST_ASSERT_EQUAL(0, stats.connect_calls);
     TEST_ASSERT_GREATER_THAN(0, stats.read_calls);
 
@@ -656,10 +655,12 @@ TEST_CASE("HTTP client can be reused after write failure", "[esp_http_client][er
     esp_http_client_set_post_field(client, post_data2, strlen(post_data2));
 
     /* Master leaves stale POST-body write state behind after the failed write,
-     * so the reused client fails immediately without touching the transport. */
+     * so the reused client fails immediately without touching the transport.
+     * perform() resumes at HTTP_STATE_REQ_COMPLETE_HEADER and the post data
+     * write fails, which esp_http_client_send_post_data() maps to
+     * ESP_ERR_HTTP_WRITE_DATA. */
     err = esp_http_client_perform(client);
-    // characterization: master behavior, see refactor spec
-    TEST_ASSERT_EQUAL(ESP_FAIL, err);
+    TEST_ASSERT_EQUAL(ESP_ERR_HTTP_WRITE_DATA, err);
     TEST_ASSERT_EQUAL(0, esp_http_client_get_status_code(client));
 
     ESP_LOGI("test", "Request 3 did not recover: %s", esp_err_to_name(err));
@@ -718,7 +719,6 @@ TEST_CASE("HTTP client can be reused after incomplete data", "[esp_http_client][
     /* Master does not reset the parser/connection state after the aborted read,
      * so the reused client fails header fetching without touching the transport. */
     err = esp_http_client_perform(client);
-    // characterization: master behavior, see refactor spec
     TEST_ASSERT_EQUAL(ESP_ERR_HTTP_FETCH_HEADER, err);
     TEST_ASSERT_EQUAL(-1, esp_http_client_get_status_code(client));
 
@@ -764,7 +764,6 @@ TEST_CASE("HTTP client survives multiple error/success cycles", "[esp_http_clien
     };
     /* Master recovers from a read timeout (cycle 1 -> 2) but not from an aborted
      * read (cycle 3), so the final cycle fails instead of succeeding. */
-    // characterization: master behavior, see refactor spec
     bool expected_success[] = {true, false, true, false, false};
 
     for (int i = 0; i < sizeof(sequence) / sizeof(sequence[0]); i++) {
@@ -804,6 +803,100 @@ TEST_CASE("HTTP client survives multiple error/success cycles", "[esp_http_clien
     esp_http_client_cleanup(client);
     mock_http_transport_destroy(mock_transport);
 }
+/*
+ * Bodyless responses. A 204 No Content and a 304 Not Modified never carry a
+ * body on the wire, but a server can still send a Content-Length header.
+ * RFC 9110, section 15.4.5 allows this on a 304, where the value describes the
+ * selected representation. The client must not wait for that body.
+ */
+TEST_CASE("esp_http_client_perform() treats a 304 with Content-Length as bodyless", "[ESP HTTP CLIENT]")
+{
+    /*
+     * The mock serves headers only. A client that enters the body loop reads
+     * again, gets 0 bytes, and reports ESP_ERR_HTTP_READ_TIMEOUT. A client that
+     * treats the response as bodyless returns ESP_OK after a single read and
+     * keeps the connection for the next request.
+     */
+    static const char resp_304[] =
+        "HTTP/1.1 304 Not Modified\r\nContent-Length: 10\r\nConnection: keep-alive\r\n\r\n";
+    static const char resp_full[] =
+        "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: keep-alive\r\n\r\nABCD";
+
+    mock_http_transport_config_t mock_config = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mock_config.response_data = resp_304;
+    mock_config.response_len = sizeof(resp_304) - 1;
+    esp_transport_handle_t mock = mock_http_transport_create(&mock_config);
+    TEST_ASSERT_NOT_NULL(mock);
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_queue_response(mock, resp_full, sizeof(resp_full) - 1));
+
+    esp_http_client_config_t config = { .url = "http://example.com/", .transport = mock };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    TEST_ASSERT_NOT_NULL(client);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_perform(client));
+    TEST_ASSERT_EQUAL(304, esp_http_client_get_status_code(client));
+    /* The header value stays visible to the caller. */
+    TEST_ASSERT_EQUAL(10, esp_http_client_get_content_length(client));
+
+    /* No body was expected, so the connection is kept and reused. */
+    TEST_ASSERT_EQUAL(HTTP_STATE_CONNECTED, esp_http_client_get_state(client));
+
+    mock_http_transport_stats_t stats;
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_get_stats(mock, &stats));
+    TEST_ASSERT_EQUAL(0, stats.close_calls);
+    /* One read for the headers, and no second read for a body. */
+    TEST_ASSERT_EQUAL(1, stats.read_calls);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_perform(client));
+    TEST_ASSERT_EQUAL(200, esp_http_client_get_status_code(client));
+
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_get_stats(mock, &stats));
+    TEST_ASSERT_EQUAL(1, stats.connect_calls);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_cleanup(client));
+    mock_http_transport_destroy(mock);
+}
+
+TEST_CASE("esp_http_client_read() returns 0 for a 204 with Content-Length", "[ESP HTTP CLIENT]")
+{
+    /*
+     * The streaming path must agree with perform(). A read on a 204 No Content
+     * returns 0 at once instead of a wait on the socket.
+     */
+    static const char resp_204[] =
+        "HTTP/1.1 204 No Content\r\nContent-Length: 7\r\nConnection: keep-alive\r\n\r\n";
+
+    mock_http_transport_config_t mock_config = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mock_config.response_data = resp_204;
+    mock_config.response_len = sizeof(resp_204) - 1;
+    esp_transport_handle_t mock = mock_http_transport_create(&mock_config);
+    TEST_ASSERT_NOT_NULL(mock);
+
+    esp_http_client_config_t config = { .url = "http://example.com/", .transport = mock };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    TEST_ASSERT_NOT_NULL(client);
+
+    char buf[16];
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_open(client, 0));
+    /* No bytes to read, but the declared length stays available. */
+    TEST_ASSERT_EQUAL(0, esp_http_client_fetch_headers(client));
+    TEST_ASSERT_EQUAL(204, esp_http_client_get_status_code(client));
+    TEST_ASSERT_EQUAL(7, esp_http_client_get_content_length(client));
+    TEST_ASSERT_FALSE(esp_http_client_is_chunked_response(client));
+
+    TEST_ASSERT_EQUAL(0, esp_http_client_read(client, buf, sizeof(buf)));
+    /* A second read must also return 0 and must not touch the socket. */
+    mock_http_transport_stats_t stats;
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_get_stats(mock, &stats));
+    int reads_after_first = stats.read_calls;
+    TEST_ASSERT_EQUAL(0, esp_http_client_read(client, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_get_stats(mock, &stats));
+    TEST_ASSERT_EQUAL(reads_after_first, stats.read_calls);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_cleanup(client));
+    mock_http_transport_destroy(mock);
+}
+
 #endif // CONFIG_ESP_HTTP_CLIENT_ENABLE_CUSTOM_TRANSPORT
 
 void app_main(void)

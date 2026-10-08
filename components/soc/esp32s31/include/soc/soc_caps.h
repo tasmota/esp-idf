@@ -423,6 +423,7 @@
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP      (1)
 #define SOC_ECDSA_SUPPORT_CURVE_P384                 (1)
 #define SOC_ECDSA_SUPPORT_CURVE_SPECIFIC_KEY_PURPOSES (1)  /*!< Support individual key purposes for different ECDSA curves (P192, P256, P384) */
+#define SOC_ECDSA_SUPPORT_SOFTWARE_KEY               (1)  /*!< Support software supplied private key written into the ECDSA key registers */
 
 /*-------------------------- Digital Signature CAPS ----------------------------------------*/
 #define SOC_DS_SIGNATURE_MAX_BIT_LEN    (4096)
@@ -649,6 +650,7 @@
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BT_CLASSIC_SUPPORTED                    (1)     /*!< Support Bluetooth Classic hardware */
+#define SOC_ORCA_BREDR_CONTROLLER                   (1)     /*!< Support Espressif Orca BR/EDR controller */
 #define SOC_BLE_SUPPORTED                           (1)     /*!< Support Bluetooth Low Energy hardware */
 #define SOC_BLE_MESH_SUPPORTED                      (1)     /*!< Support BLE MESH */
 #define SOC_BLE_ISO_SUPPORTED                       (1)     /*!< Support BLE ISO */

@@ -510,13 +510,16 @@ function(__project_init components_var test_components_var)
             # recognized by the build system.
             idf_build_get_property(prefix __PREFIX)
             set(main_component_target ___${prefix}_main)
-            if(NOT TARGET ${main_component_target})
+            set(src_component_target ___${prefix}_src)
+            # This line has been updated to support additional modules required by pioarduino.
+            if(NOT TARGET ${main_component_target} AND NOT TARGET ${src_component_target})
                 message(FATAL_ERROR "MINIMAL_BUILD is enabled but component main was not found. "
                     "Please ensure the main component exists (in '${CMAKE_CURRENT_LIST_DIR}/main') "
                     "or disable MINIMAL_BUILD, or explicitly set the COMPONENTS variable.")
             endif()
 
-            set(COMPONENTS main ${TEST_COMPONENTS})
+            # This line has been updated to support additional modules required by pioarduino.
+            set(COMPONENTS main src __pio_env ${TEST_COMPONENTS})
             set(minimal_build ON)
         endif()
     else()

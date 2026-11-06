@@ -6,6 +6,13 @@
 #include <errno.h>
 
 /*
+ * Picolibc exposes errno through __errno(), but this file defines the backing
+ * thread-local variable itself. Remove the public accessor macro so the
+ * variable declaration is not expanded into a function expression.
+ */
+#undef errno
+
+/*
  * Picolibc does not initialize 'errno' and places it in the TBSS section.
  *
  * To allow convenient initialization and support interoperability with Newlib,

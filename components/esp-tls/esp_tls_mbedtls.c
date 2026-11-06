@@ -153,11 +153,14 @@ esp_err_t esp_create_mbedtls_handle(const char *hostname, size_t hostlen, const 
 
     mbedtls_ssl_conf_rng(&tls->conf, mbedtls_ctr_drbg_random, &tls->ctr_drbg);
 
-#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
-    tls->esp_tls_dyn_buf_strategy = ((esp_tls_cfg_t *)cfg)->esp_tls_dyn_buf_strategy;
-#endif
-
     if (tls->role == ESP_TLS_CLIENT) {
+#if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+        /* esp_tls_dyn_buf_strategy is a client-only field. Reading it from a
+         * server configuration (esp_tls_cfg_server_t) would access memory past
+         * the end of that object. tls is calloc'd, so the server path keeps a
+         * defined default of 0 (strategy disabled). */
+        tls->esp_tls_dyn_buf_strategy = ((esp_tls_cfg_t *)cfg)->esp_tls_dyn_buf_strategy;
+#endif
         esp_ret = set_client_config(hostname, hostlen, (esp_tls_cfg_t *)cfg, tls);
         if (esp_ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to set client configurations, returned [0x%04X] (%s)", esp_ret, esp_err_to_name(esp_ret));
@@ -323,11 +326,22 @@ int esp_mbedtls_handshake(esp_tls_t *tls, const esp_tls_cfg_t *cfg)
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED);
             if (cfg->crt_bundle_attach != NULL || cfg->cacert_buf != NULL || cfg->use_global_ca_store == true) {
-                if (mbedtls_ssl_get_peer_cert(&tls->ssl) != NULL) {
-                    /* This is to check whether handshake failed due to invalid certificate*/
+                /* Check whether the handshake failed because of an invalid certificate.
+                 * Three values are not certificate failures:
+                 * - 0xFFFFFFFF is the initial value of verify_result. mbedTLS sets it in
+                 *   mbedtls_ssl_session_init() to mark the result as not available, and also
+                 *   returns it when the session context is absent.
+                 * - 0 means that the peer certificate passed verification, and that the
+                 *   handshake failed for a different reason.
+                 * - MBEDTLS_X509_BADCERT_SKIP_VERIFY means that mbedTLS did not verify a
+                 *   certificate at all. A TLS 1.3 handshake that resumes a session uses a
+                 *   PSK key exchange, and mbedTLS marks the result as skipped. */
+                uint32_t verify_result = mbedtls_ssl_get_verify_result(&tls->ssl);
+                if (verify_result != 0 && verify_result != 0xFFFFFFFF
+                        && verify_result != MBEDTLS_X509_BADCERT_SKIP_VERIFY) {
                     esp_mbedtls_verify_certificate(tls);
                 } else {
-                    ESP_LOGD(TAG, "Skipping certificate verification - no peer certificate received");
+                    ESP_LOGD(TAG, "Skipping certificate verification - handshake did not fail on the peer certificate");
                 }
             }
             tls->conn_state = ESP_TLS_FAIL;

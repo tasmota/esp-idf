@@ -51,6 +51,12 @@
 #define UC_BT_A2DP_USE_EXTERNAL_CODEC       FALSE
 #endif
 
+#ifdef CONFIG_BT_A2DP_AUDIO_STATS
+#define UC_BT_A2DP_AUDIO_STATS              CONFIG_BT_A2DP_AUDIO_STATS
+#else
+#define UC_BT_A2DP_AUDIO_STATS              FALSE
+#endif
+
 //AVRCP
 #ifdef CONFIG_BT_AVRCP_ENABLED
 #define UC_BT_AVRCP_ENABLED                 TRUE
@@ -543,6 +549,12 @@
 #define UC_BT_SMP_ENABLE                       CONFIG_BT_SMP_ENABLE
 #else
 #define UC_BT_SMP_ENABLE                       FALSE
+#endif
+
+#ifdef CONFIG_BT_SMP_CTKD_ENABLE
+#define UC_BT_SMP_CTKD_ENABLE                  CONFIG_BT_SMP_CTKD_ENABLE
+#else
+#define UC_BT_SMP_CTKD_ENABLE                  FALSE
 #endif
 
 //SMP_SLAVE_CON_PARAMS_UPD_ENABLE

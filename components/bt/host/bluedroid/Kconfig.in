@@ -1,9 +1,9 @@
-config BT_BTC_TASK_STACK_SIZE
-    int "Bluetooth event (callback to application) task stack size"
+config BT_BLUEDROID_PINNED_TO_CORE
+    int
     depends on BT_BLUEDROID_ENABLED
-    default 3072
-    help
-        This select btc task stack size
+    default 0 if BT_BLUEDROID_PINNED_TO_CORE_0
+    default 1 if BT_BLUEDROID_PINNED_TO_CORE_1
+    default 0
 
 choice BT_BLUEDROID_PINNED_TO_CORE_CHOICE
     prompt "The cpu core which Bluedroid run"
@@ -18,13 +18,6 @@ choice BT_BLUEDROID_PINNED_TO_CORE_CHOICE
         bool "Core 1 (APP CPU)"
         depends on !FREERTOS_UNICORE
 endchoice
-
-config BT_BLUEDROID_PINNED_TO_CORE
-    int
-    depends on BT_BLUEDROID_ENABLED
-    default 0 if BT_BLUEDROID_PINNED_TO_CORE_0
-    default 1 if BT_BLUEDROID_PINNED_TO_CORE_1
-    default 0
 
 config BT_BTU_TASK_STACK_SIZE
     int "Bluetooth Bluedroid Host Stack task stack size"
@@ -105,6 +98,15 @@ config BT_A2DP_USE_EXTERNAL_CODEC
         If enable, user shall register audio codec capability to A2DP and encode/decode
         audio data in application layer. The internal codec in A2DP will be remove in
         the future, it is recommend to use external codec for new design.
+
+config BT_A2DP_AUDIO_STATS
+    bool "A2DP audio glitch statistics"
+    depends on BT_A2DP_ENABLE
+    default n
+    help
+        Count A2DP audio glitches, packet totals, and lost packets, and expose
+        them through esp_a2d_get_audio_stats(). This is for testing. Leave it
+        disabled in production.
 
 config BT_AVRCP_ENABLED
     bool
@@ -1500,6 +1502,12 @@ config BT_SMP_ENABLE
     depends on BT_BLUEDROID_ENABLED
     default BT_CLASSIC_ENABLED || BT_BLE_SMP_ENABLE
 
+# No prompt on purpose: menuconfig cannot enable it until the feature is validated.
+config BT_SMP_CTKD_ENABLE
+    bool
+    depends on BT_SMP_ENABLE && BT_CLASSIC_ENABLED && BT_BLE_ENABLED
+    default n
+
 config BT_SMP_MAX_BONDS
     int "BT/BLE maximum bond device count"
     depends on BT_SMP_ENABLE
@@ -1880,14 +1888,15 @@ menu "Bluedroid L2CAP CoC"
     config BT_BLE_L2CAP_COC_MPS
         int "Default MPS (L2CAP fragment size)"
         depends on BT_BLE_L2CAP_COC_ENABLED
-        range 23 65533 if !BT_BLE_L2CAP_ENHANCED_COC
-        range 64 65533 if BT_BLE_L2CAP_ENHANCED_COC
+        range 23 4096 if !BT_BLE_L2CAP_ENHANCED_COC
+        range 64 4096 if BT_BLE_L2CAP_ENHANCED_COC
         default 247
         help
-            Default Maximum PDU Payload Size for LE CoC channels. Legacy LE Credit
-            Based Flow Control allows 23–65533 octets (section 4.22). Enhanced
-            Credit Based Flow Control (ECFC/EATT) requires 64–65533 (section 4.25).
-            When ECFC is enabled the minimum is raised to 64 automatically.
+            Default Maximum PDU Payload Size for LE CoC channels. The spec allows
+            up to 65533 octets, but the host ACL reassembly buffer
+            (BT_DEFAULT_BUFFER_SIZE) accepts at most 4096. A larger advertised
+            receive MPS makes a peer send K-frames that are dropped before LE
+            credit accounting. Legacy CoC minimum is 23; ECFC/EATT minimum is 64.
 
     config BT_BLE_L2CAP_COC_INIT_CREDITS
         int "Initial RX credit window (K-frames per channel)"

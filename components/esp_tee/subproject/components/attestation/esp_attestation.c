@@ -222,6 +222,11 @@ esp_err_t esp_att_generate_token(const uint32_t nonce, const uint32_t client_id,
         ESP_LOGE(TAG, "Failed to format the token header as JSON!");
         goto exit;
     }
+    if (hdr_len <= 0) {
+        ESP_LOGE(TAG, "The token header JSON exceeds its buffer!");
+        err = ESP_ERR_INVALID_SIZE;
+        goto exit;
+    }
     json_gen_push_object_str(&jstr, "header", hdr_json);
 
     ret = mbedtls_sha256_update(&ctx, (const unsigned char *)hdr_json, hdr_len - 1);
@@ -239,6 +244,11 @@ esp_err_t esp_att_generate_token(const uint32_t nonce, const uint32_t client_id,
         ESP_LOGE(TAG, "Failed to format the EAT data to JSON!");
         goto exit;
     }
+    if (eat_len <= 0) {
+        ESP_LOGE(TAG, "The EAT data JSON exceeds its buffer!");
+        err = ESP_ERR_INVALID_SIZE;
+        goto exit;
+    }
     json_gen_push_object_str(&jstr, "eat", eat_json);
 
     ret = mbedtls_sha256_update(&ctx, (const unsigned char *)eat_json, eat_len - 1);
@@ -253,6 +263,11 @@ esp_err_t esp_att_generate_token(const uint32_t nonce, const uint32_t client_id,
     err = esp_att_utils_pubkey_to_json(&keypair, &pubkey_json, &pubkey_len);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to format the public key data to JSON!");
+        goto exit;
+    }
+    if (pubkey_len <= 0) {
+        ESP_LOGE(TAG, "The public key data JSON exceeds its buffer!");
+        err = ESP_ERR_INVALID_SIZE;
         goto exit;
     }
     json_gen_push_object_str(&jstr, "public_key", pubkey_json);
@@ -278,12 +293,23 @@ esp_err_t esp_att_generate_token(const uint32_t nonce, const uint32_t client_id,
         ESP_LOGE(TAG, "Failed to format the token signature to JSON!");
         goto exit;
     }
+    if (sign_len <= 0) {
+        ESP_LOGE(TAG, "The token signature JSON exceeds its buffer!");
+        err = ESP_ERR_INVALID_SIZE;
+        goto exit;
+    }
     json_gen_push_object_str(&jstr, "sign", sign_json);
     free(sign_json);
     sign_json = NULL;
 
     json_gen_end_object(&jstr);
-    *token_len = json_gen_str_end(&jstr);
+    int tk_len = json_gen_str_end(&jstr);
+    if (tk_len < 0 || (size_t)tk_len > token_buf_size) {
+        ESP_LOGE(TAG, "EAT buffer too small: got %luB, need %dB", token_buf_size, tk_len);
+        err = ESP_ERR_INVALID_SIZE;
+        goto exit;
+    }
+    *token_len = tk_len;
     err = ESP_OK;
 
 exit:

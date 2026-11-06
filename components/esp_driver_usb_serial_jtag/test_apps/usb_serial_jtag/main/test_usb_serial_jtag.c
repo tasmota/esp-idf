@@ -1,10 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/param.h>
 #include "unity.h"
 #include "driver/usb_serial_jtag.h"
@@ -104,7 +105,10 @@ TEST_CASE("see if fsync appears to work", "[usb_serial_jtag]")
     fsync(0);
     end_us = esp_timer_get_time();
     printf("No data in queue: %d us\n", (int)(end_us - start_us));
-    TEST_ASSERT_LESS_THAN_INT(100, end_us - start_us);
+    // Idle path is lock + tx_mux + already-available tx_idle_sem; keep well below
+    // the active lower bound (1000 us). 100 us is too tight under dual-core noise
+    // (e.g. ~113 us observed on ESP32-H4).
+    TEST_ASSERT_LESS_THAN_INT(500, end_us - start_us);
 
     vTaskDelay(pdMS_TO_TICKS(200));
 
@@ -132,7 +136,9 @@ TEST_CASE("test rom printf work after driver installed", "[usb_serial_jtag]")
     usb_serial_jtag_vfs_use_driver();
 
     esp_rom_printf("hi, espressif1\n");
-    printf("hi, espressif2");
+    printf("hi, espressif2\n");
+    fflush(stdout);
+    fsync(fileno(stdout));
 
     usb_serial_jtag_vfs_use_nonblocking();
     usb_serial_jtag_driver_uninstall();

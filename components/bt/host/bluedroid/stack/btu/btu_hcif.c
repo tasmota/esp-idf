@@ -1833,6 +1833,11 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
                 if (p_cmd != NULL) {
                     p_cmd++;
                     STREAM_TO_BDADDR (bd_addr, p_cmd);
+#if (CLASSIC_BT_INCLUDED == TRUE)
+                    if (btm_acl_drop_failed_page(bd_addr, status)) {
+                        break;
+                    }
+#endif // (CLASSIC_BT_INCLUDED == TRUE)
 #if (SMP_INCLUDED == TRUE)
                     btm_sec_connected (bd_addr, HCI_INVALID_HANDLE, status, 0);
 #endif  ///SMP_INCLUDED == TRUE
@@ -2102,6 +2107,12 @@ static void btu_hcif_mode_change_evt (UINT8 *p)
 *******************************************************************************/
 static void btu_hcif_ssr_evt (UINT8 *p, UINT16 evt_len)
 {
+    /* status(1) + handle(2) + max_tx(2) + max_rx(2) + min_remote(2) + min_local(2) */
+    if (evt_len < 11) {
+        HCI_TRACE_ERROR("%s: invalid len %d", __func__, evt_len);
+        return;
+    }
+
 #if (BTM_SSR_INCLUDED == TRUE)
     btm_pm_proc_ssr_evt(p, evt_len);
 #endif

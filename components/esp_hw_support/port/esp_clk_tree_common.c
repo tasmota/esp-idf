@@ -57,6 +57,45 @@ static esp_clk_tree_calibrated_freq_t s_calibrated_freq = {};
                                            // the divider factor internally in rtc_clk_cal, so the time to spend on calibrating RC_FAST
                                            // is always (10000 / f_rc_fast)
 
+static uint32_t s_clk_src_accuracy_ppm[SOC_ROOT_CLK_SRC_NUM][ESP_CLK_TREE_ACCURACY_DURATION_NUM] = {
+    [SOC_ROOT_CLK_INT_RC_FAST] = SOC_CLK_RC_FAST_ACCURACY_PPM_DEFAULTS,
+    [SOC_ROOT_CLK_INT_RC_SLOW] = SOC_CLK_RC_SLOW_ACCURACY_PPM_DEFAULTS,
+    [SOC_ROOT_CLK_EXT_XTAL] = SOC_CLK_CRYSTAL_ACCURACY_PPM_DEFAULTS,
+#if SOC_CLK_XTAL32K_SUPPORTED
+    [SOC_ROOT_CLK_EXT_XTAL32K] = SOC_CLK_CRYSTAL_ACCURACY_PPM_DEFAULTS,
+#endif
+};
+
+esp_err_t esp_clk_tree_root_clock_set_accuracy_ppm(soc_root_clk_t clk_src,
+                                                   esp_clk_tree_accuracy_duration_t duration,
+                                                   uint32_t ppm)
+{
+    ESP_RETURN_ON_FALSE(clk_src < SOC_ROOT_CLK_SRC_NUM, ESP_ERR_INVALID_ARG, TAG,
+                        "invalid clk src %d", (int)clk_src);
+    ESP_RETURN_ON_FALSE(duration < ESP_CLK_TREE_ACCURACY_DURATION_NUM, ESP_ERR_INVALID_ARG, TAG,
+                        "invalid duration %d", (int)duration);
+
+    s_clk_src_accuracy_ppm[clk_src][duration] = ppm;
+    return ESP_OK;
+}
+
+esp_err_t esp_clk_tree_root_clock_get_accuracy_ppm(soc_root_clk_t clk_src,
+                                                   uint32_t duration_sec,
+                                                   uint32_t *clk_drift)
+{
+    ESP_RETURN_ON_FALSE(clk_src < SOC_ROOT_CLK_SRC_NUM, ESP_ERR_INVALID_ARG, TAG,
+                        "invalid clk src %d", (int)clk_src);
+    ESP_RETURN_ON_FALSE(duration_sec > 0, ESP_ERR_INVALID_ARG, TAG,
+                        "invalid duration %u", duration_sec);
+    ESP_RETURN_ON_FALSE(clk_drift, ESP_ERR_INVALID_ARG, TAG, "clk_drift must not be NULL");
+
+    if (duration_sec <= 60) {
+        *clk_drift = s_clk_src_accuracy_ppm[clk_src][ESP_CLK_TREE_ACCURACY_DURATION_TO_IDX(duration_sec)];
+    } else {
+        *clk_drift = s_clk_src_accuracy_ppm[clk_src][ESP_CLK_TREE_ACCURACY_DURATION_60S] * (((duration_sec + 59) / 60));
+    }
+    return ESP_OK;
+}
 
 /**
  * Performs a frequency calibration to RTC slow clock
@@ -213,104 +252,6 @@ uint32_t esp_clk_tree_lp_fast_get_freq_hz(esp_clk_tree_src_freq_precision_t prec
         return 0;
     }
 }
-
-#if SOC_CLK_APLL_SUPPORTED
-// Current APLL frequency, in HZ. Zero if APLL is not enabled.
-static portMUX_TYPE __attribute__((unused)) s_periph_apll_spinlock = portMUX_INITIALIZER_UNLOCKED;
-static uint32_t s_cur_apll_freq_hz = 0;
-static int s_apll_ref_cnt = 0;
-
-// Pending APLL coefficients: calibration requires APLL to be powered on,
-// so if freq is set before acquire, we defer rtc_clk_apll_coeff_set until enable.
-static bool s_apll_coeff_pending = false;
-static uint32_t s_apll_pending_o_div = 0;
-static uint32_t s_apll_pending_sdm0 = 0;
-static uint32_t s_apll_pending_sdm1 = 0;
-static uint32_t s_apll_pending_sdm2 = 0;
-
-void esp_clk_tree_apll_acquire(void)
-{
-    bool apply_pending = false;
-    uint32_t o_div, sdm0, sdm1, sdm2;
-
-    esp_os_enter_critical(&s_periph_apll_spinlock);
-    s_apll_ref_cnt++;
-    if (s_apll_ref_cnt == 1) {
-        rtc_clk_apll_enable(true);
-        if (s_apll_coeff_pending) {
-            apply_pending = true;
-            o_div = s_apll_pending_o_div;
-            sdm0 = s_apll_pending_sdm0;
-            sdm1 = s_apll_pending_sdm1;
-            sdm2 = s_apll_pending_sdm2;
-            s_apll_coeff_pending = false;
-        }
-    }
-    esp_os_exit_critical(&s_periph_apll_spinlock);
-
-    if (apply_pending) {
-        rtc_clk_apll_coeff_set(o_div, sdm0, sdm1, sdm2);
-    }
-}
-
-void esp_clk_tree_apll_release(void)
-{
-    esp_os_enter_critical(&s_periph_apll_spinlock);
-    assert(s_apll_ref_cnt > 0);
-    s_apll_ref_cnt--;
-    if (s_apll_ref_cnt == 0) {
-        s_cur_apll_freq_hz = 0;
-        s_apll_coeff_pending = false;
-        rtc_clk_apll_enable(false);
-    }
-    esp_os_exit_critical(&s_periph_apll_spinlock);
-}
-
-esp_err_t esp_clk_tree_apll_freq_set(uint32_t expt_freq_hz, uint32_t *real_freq_hz)
-{
-    uint32_t o_div = 0;
-    uint32_t sdm0 = 0;
-    uint32_t sdm1 = 0;
-    uint32_t sdm2 = 0;
-
-    uint32_t apll_freq = rtc_clk_apll_coeff_calc(expt_freq_hz, &o_div, &sdm0, &sdm1, &sdm2);
-    ESP_RETURN_ON_FALSE(apll_freq, ESP_ERR_INVALID_ARG, TAG, "APLL coefficients calculate failed");
-    bool need_config = true;
-    bool apll_enabled = false;
-    esp_os_enter_critical(&s_periph_apll_spinlock);
-    /* If APLL is not in use or only one peripheral in use, its frequency can be changed as will
-     * But when more than one peripheral refers APLL, its frequency is not allowed to change once it is set */
-    if (s_cur_apll_freq_hz == 0 || s_apll_ref_cnt < 2) {
-        s_cur_apll_freq_hz = apll_freq;
-        apll_enabled = (s_apll_ref_cnt > 0);
-        if (!apll_enabled) {
-            // APLL not yet powered on, defer coeff_set (which includes calibration) until acquire
-            s_apll_coeff_pending = true;
-            s_apll_pending_o_div = o_div;
-            s_apll_pending_sdm0 = sdm0;
-            s_apll_pending_sdm1 = sdm1;
-            s_apll_pending_sdm2 = sdm2;
-        }
-    } else {
-        apll_freq = s_cur_apll_freq_hz;
-        need_config = false;
-    }
-    esp_os_exit_critical(&s_periph_apll_spinlock);
-    if (real_freq_hz != NULL) {
-        *real_freq_hz = apll_freq;
-    }
-    if (need_config) {
-        ESP_LOGD(TAG, "APLL works at %"PRIu32" Hz with coefficients [sdm0] %"PRIu32" [sdm1] %"PRIu32" [sdm2] %"PRIu32" [o_div] %"PRIu32"",
-                 apll_freq, sdm0, sdm1, sdm2, o_div);
-        if (apll_enabled) {
-            rtc_clk_apll_coeff_set(o_div, sdm0, sdm1, sdm2);
-        }
-    } else {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return ESP_OK;
-}
-#endif /* SOC_CLK_APLL_SUPPORTED */
 
 #if SOC_CLK_MPLL_SUPPORTED
 static portMUX_TYPE __attribute__((unused)) s_periph_mpll_spinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -677,11 +618,7 @@ bool esp_clk_tree_is_power_on(soc_root_clk_circuit_t clk_circuit)
 #endif
 #if SOC_CLK_APLL_SUPPORTED
     if (clk_circuit == SOC_ROOT_CIRCUIT_CLK_APLL) {
-        bool on;
-        esp_os_enter_critical(&s_periph_apll_spinlock);
-        on = s_apll_ref_cnt > 0;
-        esp_os_exit_critical(&s_periph_apll_spinlock);
-        return on;
+        return esp_clk_tree_apll_is_power_on();
     }
 #endif
     return esp_clk_tree_port_is_power_on(clk_circuit);

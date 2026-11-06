@@ -559,10 +559,6 @@ config SOC_CPU_HAS_FPU
     bool
     default y
 
-config SOC_CPU_HAS_FPU_EXT_ILL_BUG
-    bool
-    default y
-
 config SOC_CPU_HAS_HWLOOP
     bool
     default y
@@ -624,6 +620,10 @@ config SOC_GDMA_SUPPORT_ETM
     default y
 
 config SOC_GDMA_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION
     bool
     default y
 
@@ -1159,6 +1159,10 @@ config SOC_ECC_SUPPORT_CURVE_P384
     bool
     default y
 
+config SOC_ECC_SUPPORT_CURVE_SM2
+    bool
+    default y
+
 config SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
     bool
     default y
@@ -1235,7 +1239,15 @@ config SOC_EFUSE_XTS_AES_KEY_256
     bool
     default y
 
+config SOC_EFUSE_DIS_SM_CRYPT
+    bool
+    default y
+
 config SOC_HUK_SUPPORTED
+    bool
+    default y
+
+config SOC_HUK_MEM_NEEDS_RECHARGE
     bool
     default y
 

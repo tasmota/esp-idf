@@ -186,7 +186,6 @@
 #define SOC_BRANCH_PREDICTOR_SUPPORTED  1
 #define SOC_CPU_COPROC_NUM              3
 #define SOC_CPU_HAS_FPU                 1
-#define SOC_CPU_HAS_FPU_EXT_ILL_BUG     1       // EXT_ILL CSR doesn't support FLW/FSW
 #define SOC_CPU_HAS_HWLOOP              1
 /* PIE coprocessor assembly is only supported with GCC compiler  */
 #define SOC_CPU_HAS_PIE                 1
@@ -214,6 +213,7 @@
 #define SOC_AHB_GDMA_VERSION                2
 #define SOC_GDMA_SUPPORT_ETM                1
 #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
+#define SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION   1
 
 /*-------------------------- MODEM CAPS --------------------------------------*/
 #define SOC_MODEM_SUPPORT_ETM               1
@@ -428,6 +428,7 @@
 /*--------------------------- ECC CAPS ---------------------------------------*/
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 #define SOC_ECC_SUPPORT_CURVE_P384      (1)
+#define SOC_ECC_SUPPORT_CURVE_SM2       (1)
 
 /*--------------------------- ECDSA CAPS ---------------------------------------*/
 #define SOC_ECDSA_SUPPORT_EXPORT_PUBKEY              (1)
@@ -455,9 +456,12 @@
 #define SOC_EFUSE_ECDSA_KEY_P384 1
 #define SOC_EFUSE_XTS_AES_KEY_128 1
 #define SOC_EFUSE_XTS_AES_KEY_256 1
+/* Capability to disable all the SM crypto functions (SM2, SM3) */
+#define SOC_EFUSE_DIS_SM_CRYPT 1
 
 /*-------------------------- HUK CAPS----------------------------*/
 #define SOC_HUK_SUPPORTED                       1
+#define SOC_HUK_MEM_NEEDS_RECHARGE              1 /*!< HUK memory needs to be recharged on invalid HUK generation */
 
 /*-------------------------- Key Manager CAPS----------------------------*/
 #define SOC_KEY_MANAGER_SUPPORTED                   0

@@ -235,6 +235,14 @@ config SOC_ECDSA_SUPPORTED
     bool
     default y
 
+config SOC_KEY_MANAGER_SUPPORTED
+    bool
+    default n
+
+config SOC_HUK_SUPPORTED
+    bool
+    default y
+
 config SOC_SPIRAM_SUPPORTED
     bool
     default y
@@ -399,10 +407,6 @@ config SOC_CPU_HAS_FPU
     bool
     default y
 
-config SOC_CPU_HAS_FPU_EXT_ILL_BUG
-    bool
-    default n
-
 config SOC_CPU_HAS_DSP
     bool
     default y
@@ -476,6 +480,10 @@ config SOC_GDMA_SUPPORT_ETM
     default y
 
 config SOC_GDMA_SUPPORT_SLEEP_RETENTION
+    bool
+    default y
+
+config SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION
     bool
     default y
 
@@ -843,6 +851,10 @@ config SOC_ECC_SUPPORT_CURVE_P384
     bool
     default y
 
+config SOC_ECC_SUPPORT_CURVE_SM2
+    bool
+    default y
+
 config SOC_ECDSA_SUPPORT_EXPORT_PUBKEY
     bool
     default y
@@ -999,10 +1011,6 @@ config SOC_EFUSE_DIS_DOWNLOAD_MSPI
     bool
     default y
 
-config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
-    bool
-    default y
-
 config SOC_EFUSE_ECDSA_KEY
     bool
     default y
@@ -1019,7 +1027,31 @@ config SOC_EFUSE_XTS_AES_KEY_128
     bool
     default y
 
-config SOC_EFUSE_XTS_AES_KEY_256
+config SOC_HUK_MEM_NEEDS_RECHARGE
+    bool
+    default y
+
+config SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT
+    bool
+    default y
+
+config SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
+    bool
+    default y
+
+config SOC_KEY_MANAGER_FE_KEY_DEPLOY
+    bool
+    default y
+
+config SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_128
+    bool
+    default y
+
+config SOC_KEY_MANAGER_FE_KEY_DEPLOY_XTS_AES_256
+    bool
+    default y
+
+config SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
     bool
     default y
 

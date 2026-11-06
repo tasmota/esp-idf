@@ -57,7 +57,7 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
 
 以下代码展示了应用程序控制确认 (:ref:`CONFIG_BOOTLOADER_APP_ROLLBACK_CONFIRM_BY_APP <CONFIG_BOOTLOADER_APP_ROLLBACK_CONFIRM_BY_APP>`)。OTA 更新后的首次启动时，应用程序会检查其状态并执行检测。如果检测成功，应用程序调用 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback` 函数，确认应用运行成功。如果检测失败，应用程序调用 :cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot` 函数，回滚至之前的应用版本。
 
-如果应用程序由于中止、重启或掉电无法启动或运行上述代码，引导加载程序在下一次启动尝试中会将该应用程序的状态标记为 ``ESP_OTA_IMG_INVALID``，并回滚至之前的应用版本。
+如果应用程序由于中止、重启或掉电无法启动或运行上述代码，引导加载程序在下一次启动尝试中会将该应用程序的状态标记为 ``ESP_OTA_IMG_ABORTED``，并回滚至之前的应用版本。
 
 .. code:: c
 
@@ -95,7 +95,8 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
  ESP_OTA_IMG_UNDEFINED         没有限制，可以选取。
  ESP_OTA_IMG_INVALID           不会选取。
  ESP_OTA_IMG_ABORTED           不会选取。
- ESP_OTA_IMG_NEW               如使能应用程序回滚，则仅会选取一次。在引导加载程序中，状态立即变为
+ ESP_OTA_IMG_NEW               如使能应用程序回滚，则
+                               仅会选取一次。在引导加载程序中，状态立即变为
                                ``ESP_OTA_IMG_PENDING_VERIFY``。
  ESP_OTA_IMG_PENDING_VERIFY    如使能应用程序回滚，则不会选取，状态变为
                                ``ESP_OTA_IMG_ABORTED``。
@@ -122,6 +123,21 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
 * 若未通过自测，则调用函数 :cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot`，回滚至之前能正常工作的应用程序版本，同时将无效的新版本应用程序设置为 ``ESP_OTA_IMG_INVALID``。
 * 如果新版应用程序可操作性没有确认，则状态一直为 ``ESP_OTA_IMG_PENDING_VERIFY``。下一次启动时，状态变更为 ``ESP_OTA_IMG_ABORTED``，阻止其再次启动，之后回滚到之前的版本。
 
+当正在运行的应用程序需要将状态设为 ``ESP_OTA_IMG_INVALID`` 并继续执行时（例如记录失败原因或停止外设），调用 :cpp:func:`esp_ota_mark_app_invalid_rollback`，然后再调用 :cpp:func:`esp_restart`。引导加载程序会在下次启动时选取之前正常运行的应用程序。:cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot` 会调用 :cpp:func:`esp_ota_mark_app_invalid_rollback`，若该调用成功，再调用 :cpp:func:`esp_restart`。
+
+下图展示了应用程序控制确认期间 OTA 镜像状态的变化：
+
+.. mermaid::
+
+    flowchart TD
+        SET["esp_ota_set_boot_partition()"] -->|"已使能应用程序回滚"| NEW["ESP_OTA_IMG_NEW"]
+        NEW -->|"首次启动：引导加载程序选取该镜像并写入 PENDING_VERIFY"| PEND["ESP_OTA_IMG_PENDING_VERIFY"]
+        PEND -->|"esp_ota_mark_app_valid_cancel_rollback()"| VALID["ESP_OTA_IMG_VALID<br/>后续启动会选取该镜像"]
+        PEND -->|"esp_ota_mark_app_invalid_rollback()<br/>或 esp_ota_mark_app_invalid_rollback_and_reboot()"| INV["ESP_OTA_IMG_INVALID"]
+        PEND -->|"确认前复位、崩溃或掉电"| ABRT["ESP_OTA_IMG_ABORTED<br/>由引导加载程序在下次启动时写入"]
+        INV -->|"下次启动：引导加载程序不会选取该镜像"| PREV["启动之前正常运行的应用程序"]
+        ABRT -->|"引导加载程序不会选取该镜像"| PREV
+
 .. _ota_auto_confirm:
 
 自动确认 OTA 应用程序
@@ -131,11 +147,13 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
 
 在此模式下，ESP-IDF 会在系统启动即将完成时，即 IDF 组件初始化完成后、调用 ``app_main`` 前，调用 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback`。到达此处即视为首次启动成功。如果在此之前启动失败，应用程序将保持未确认状态，引导加载程序会在下次启动时选择之前正常运行的应用程序。
 
-自动确认不会验证在 ``app_main`` 中执行的应用程序特定初始化或诊断。自动确认还会在应用程序代码运行前将 OTA 状态更改为 ``ESP_OTA_IMG_VALID``。因此，应用程序代码无法使用 :cpp:func:`esp_ota_get_state_partition` 判断当前是否为新应用程序的首次启动。如需通过检查 ``ESP_OTA_IMG_PENDING_VERIFY`` 检测首次启动、执行自测，然后调用 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback` 或 :cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot`，请选择应用程序控制确认。应用程序也可以自行维护持久化标记，记录上次运行的应用程序镜像。
+自动确认不会验证在 ``app_main`` 中执行的应用程序特定初始化或诊断。自动确认还会在应用程序代码运行前将 OTA 状态更改为 ``ESP_OTA_IMG_VALID``。因此，应用程序代码无法使用 :cpp:func:`esp_ota_get_state_partition` 判断当前是否为新应用程序的首次启动。
+
+请选择应用程序控制确认，状态为 ``ESP_OTA_IMG_PENDING_VERIFY`` 即表示首次启动，再执行自测，然后调用 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback` 或 :cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot`。应用程序也可以自行维护持久化标记，记录上次运行的应用程序镜像。
 
 .. note::
 
-  防回滚机制不支持自动确认。使用防回滚机制的应用程序必须在自行定义的检查点显式确认新版本。
+    防回滚机制不支持自动确认。使用防回滚机制的应用程序必须在自行定义的检查点显式确认新版本。
 
 意外复位
 ^^^^^^^^
@@ -192,7 +210,7 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
 - 运行函数 :cpp:func:`esp_ota_set_boot_partition`，将新版应用程序设为可启动。如果新版应用程序的安全版本号低于芯片中的应用安全版本号，新版应用程序会被擦除，无法更新到新固件。
 - 重新启动。
 - 在引导加载程序中选取安全版本号等于或高于芯片中应用安全版本号的应用程序。如果 otadata 处于初始阶段，通过串行通道加载了安全版本号高于芯片中应用安全版本号的固件，则引导加载程序中 eFuse 的安全版本号会立即更新。
-- 新版应用程序启动，之后进行可操作性检测，如果通过检测，则调用函数 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback`，将应用程序标记为 ``ESP_OTA_IMG_VALID``，更新芯片中应用程序的安全版本号。注意，如果调用了函数 :cpp:func:`esp_ota_mark_app_invalid_rollback` 或 :cpp:func:`esp_ota_mark_app_invalid_rollback_with_reboot`，也可能会因为设备中没有可启动的应用程序而回滚失败，返回 ``ESP_ERR_OTA_ROLLBACK_FAILED`` 错误，应用程序状态一直处于 ``ESP_OTA_IMG_PENDING_VERIFY`` 状态。
+- 新版应用程序启动，之后进行可操作性检测，如果通过检测，则调用函数 :cpp:func:`esp_ota_mark_app_valid_cancel_rollback`，将应用程序标记为 ``ESP_OTA_IMG_VALID``，更新芯片中应用程序的安全版本号。注意，如果调用了函数 :cpp:func:`esp_ota_mark_app_invalid_rollback` 或 :cpp:func:`esp_ota_mark_app_invalid_rollback_and_reboot`，也可能会因为设备中没有可启动的应用程序而回滚失败，返回 ``ESP_ERR_OTA_ROLLBACK_FAILED`` 错误，应用程序状态一直处于 ``ESP_OTA_IMG_PENDING_VERIFY`` 状态。
 - 如果运行的应用程序处于 ``ESP_OTA_IMG_VALID`` 状态，则可再次更新。
 
 建议：
@@ -233,7 +251,7 @@ OTA 数据分区的容量是 2 个 flash 扇区的大小（0x2000 字节），�
 
     - ``secure_version`` 字段最多有 {IDF_TARGET_SECURE_VERSION_EFUSE_BITS} 位。也就是说，防回滚最多可以做 {IDF_TARGET_SECURE_VERSION_EFUSE_BITS} 次。用户可以使用 :menuitem:`CONFIG_BOOTLOADER_APP_SEC_VER_SIZE_EFUSE_FIELD` 减少该 eFuse 字段的长度。
     :esp32: - 防回滚仅在 eFuse 编码机制设置为 ``NONE`` 时生效。
-    - 防回滚不支持工厂和测试分区，因此分区表中不应有设置为 ``工厂`` 或 ``测试`` 的分区。
+    - 防回滚不支持工厂和测试分区，因此分区表中不应有 SubType 设置为 ``factory`` 或 ``test`` 的分区。
     :TARGET_SUPPORT_ESP_TEE: - 启用 :ref:`TEE 防回滚 <tee-anti-rollback>` 功能后，``secure_version`` eFuse 字段的最高 3 位保留给 TEE 安全版本号，应用程序可用的位数相应减少 3 位。
 
 ``security_version``:
@@ -400,11 +418,6 @@ Python API
 
 - :example:`system/ota/otatool` 演示了如何使用 OTA 工具执行读取、写入和擦除 OTA 分区、切换启动分区以及切换到工厂分区等操作。详情请参阅 :example_file:`system/ota/otatool/README.md`。
 
-API 参考
---------
-
-.. include-build-file:: inc/esp_ota_ops.inc
-
 OTA 升级失败排查
 ------------------
 
@@ -415,3 +428,8 @@ OTA 升级失败排查
     :figclass: align-center
 
     OTA 升级失败时如何排查（点击放大）
+
+API 参考
+--------
+
+.. include-build-file:: inc/esp_ota_ops.inc

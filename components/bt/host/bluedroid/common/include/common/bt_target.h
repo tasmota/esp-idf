@@ -106,6 +106,9 @@
 #define BTC_AV_CA_INCLUDED          TRUE
 #define AVRC_CA_INCLUDED            TRUE
 #endif /* UC_BT_AVRCP_CT_COVER_ART_ENABLED */
+#if (UC_BT_A2DP_AUDIO_STATS == TRUE)
+#define BTC_A2DP_AUDIO_STATS        TRUE
+#endif
 #endif /* UC_BT_A2DP_ENABLED */
 
 #if (UC_BT_SPP_ENABLED == TRUE)
@@ -768,6 +771,10 @@
 #define BTC_AV_INCLUDED FALSE
 #endif
 
+#ifndef BTC_A2DP_AUDIO_STATS
+#define BTC_A2DP_AUDIO_STATS FALSE
+#endif
+
 #ifndef BTC_AV_CA_INCLUDED
 #define BTC_AV_CA_INCLUDED FALSE
 #endif
@@ -1057,6 +1064,12 @@
 #ifndef BT_DEFAULT_BUFFER_SIZE
 #define BT_DEFAULT_BUFFER_SIZE          (4096 + 16)
 #endif
+
+/* Largest L2CAP information payload the HCI fragmenter will reassemble.
+ * LE CoC receive MPS must not be advertised above this: a larger K-frame is
+ * dropped before credit accounting. */
+#define L2CAP_MAX_RX_PAYLOAD \
+    (BT_DEFAULT_BUFFER_SIZE - L2CAP_PKT_OVERHEAD - HCI_ACL_PREAMBLE_SIZE - BT_HDR_SIZE)
 
 #ifndef BT_SMALL_BUFFER_SIZE
 #define BT_SMALL_BUFFER_SIZE            660
@@ -1570,12 +1583,16 @@
 #define BTM_OOB_INCLUDED                TRUE
 #endif
 
-/* TRUE to include Sniff Subrating */
-#if (BTA_DM_PM_INCLUDED == TRUE)
+/* TRUE to include Sniff Subrating. Only when HID Host or HID Device is built in. */
+#if (BTA_DM_PM_INCLUDED == TRUE) && ((HID_HOST_INCLUDED == TRUE) || (HID_DEV_INCLUDED == TRUE))
+#ifndef BTM_SSR_INCLUDED
+#define BTM_SSR_INCLUDED                TRUE
+#endif
+#else
 #ifndef BTM_SSR_INCLUDED
 #define BTM_SSR_INCLUDED                FALSE
 #endif
-#endif /* BTA_DM_PM_INCLUDED */
+#endif
 
 /*************************
 ** End of Lisbon Features

@@ -20,8 +20,14 @@
  * - esp_http_client_event_t::error hands the handler the same esp_err_t that the
  *   failing call returns, for a failed header read, a body cut short, and a
  *   failed read on the streaming path.
+ * - A parser error inside read() fails the call and leaves no state behind
+ *   that a later read() or a reused handle would act on.
+ * - esp_http_client_flush_response() leaves nothing that the next request on
+ *   the handle reads as its body, with or without close() in between, and
+ *   also when the flush fails part way.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include "esp_http_client.h"
 #include "unity.h"
@@ -262,6 +268,233 @@ TEST_CASE("HTTP_EVENT_ERROR carries the code of a failed streaming read", "[esp_
     TEST_ASSERT_EQUAL(-1, esp_http_client_read(client, buf, sizeof(buf)));
     TEST_ASSERT_EQUAL(1, s_error_events);
     TEST_ASSERT_EQUAL_HEX32(ESP_ERR_HTTP_CONNECTION_CLOSED, s_event_error);
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+/*
+ * Parser error inside esp_http_client_read().
+ *
+ * With buffer_size 128, fetch_headers() reads the 47-byte head plus the first
+ * 77 body bytes, which are cached. read() serves those, then reads the rest
+ * itself: 23 more body bytes decode into the caller's buffer, and the bad
+ * chunk size "ZZ" stops the parser. At that point the client holds a pointer
+ * into the caller's buffer and a count of the bytes copied into it.
+ *
+ * Padding after "ZZ" keeps bytes on the wire past that first read(), so a
+ * later read() reaches the parser instead of the mock's EOF, which reads as a
+ * transport timeout.
+ */
+#define BAD_CHUNK_BODY_LEN 100
+#define BAD_CHUNK_TAIL_PAD 128
+#define BAD_CHUNK_READ_LEN 256
+#define BAD_CHUNK_SENTINEL 0xA5
+
+static char s_bad_chunk_resp[320];
+
+static const char *bad_chunk_response(void)
+{
+    char *p = s_bad_chunk_resp;
+    p += sprintf(p, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n%x\r\n", BAD_CHUNK_BODY_LEN);
+    memset(p, 'a', BAD_CHUNK_BODY_LEN);
+    p += BAD_CHUNK_BODY_LEN;
+    p += sprintf(p, "\r\nZZ\r\n");
+    memset(p, 'x', BAD_CHUNK_TAIL_PAD);
+    p[BAD_CHUNK_TAIL_PAD] = '\0';
+    return s_bad_chunk_resp;
+}
+
+/* Opens a GET on `mock` and runs read() into `buf` until the parser error. */
+static esp_http_client_handle_t read_until_parser_error(esp_transport_handle_t mock, char *buf, int *read_ret)
+{
+    esp_http_client_config_t cfg = {
+        .url = "http://test-server.local/bad-chunk",
+        .buffer_size = 128,
+        .transport = mock,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    TEST_ASSERT_NOT_NULL(client);
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_open(client, 0));
+    TEST_ASSERT_EQUAL(0, esp_http_client_fetch_headers(client));
+    *read_ret = esp_http_client_read(client, buf, BAD_CHUNK_READ_LEN);
+    return client;
+}
+
+static esp_transport_handle_t bad_chunk_mock_create(void)
+{
+    mock_http_transport_config_t mc = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mc.response_data = bad_chunk_response();
+    esp_transport_handle_t mock = mock_http_transport_create(&mc);
+    TEST_ASSERT_NOT_NULL(mock);
+    return mock;
+}
+
+TEST_CASE("read returns ESP_FAIL on a parser error even after copying body bytes", "[esp_http_client][streaming][p0][negative]")
+{
+    /* static: on a broken client this buffer may be written after the call */
+    static char buf[BAD_CHUNK_READ_LEN];
+    esp_transport_handle_t mock = bad_chunk_mock_create();
+    int ret = 0;
+    esp_http_client_handle_t client = read_until_parser_error(mock, buf, &ret);
+
+    /* 100 body bytes reached buf before the error; none of them may be
+     * reported as valid data from a response that turned out malformed. */
+    TEST_ASSERT_EQUAL(ESP_FAIL, ret);
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+TEST_CASE("read after a parser error in read does not use stale state", "[esp_http_client][streaming][p0][negative]")
+{
+    static char buf[BAD_CHUNK_READ_LEN];
+    esp_transport_handle_t mock = bad_chunk_mock_create();
+    int ret = 0;
+    esp_http_client_handle_t client = read_until_parser_error(mock, buf, &ret);
+    TEST_ASSERT_EQUAL(ESP_FAIL, ret);
+
+    /* A stale byte count with no cache behind it makes this copy from NULL.
+     * Without it, the parser's error is sticky, so this read fails too. */
+    char again[BAD_CHUNK_READ_LEN];
+    TEST_ASSERT_EQUAL(ESP_FAIL, esp_http_client_read(client, again, sizeof(again)));
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+TEST_CASE("reuse after a parser error in read does not write to the old buffer", "[esp_http_client][streaming][p0][negative]")
+{
+    /* static so that a stale write lands somewhere harmless and observable */
+    static char old_buf[BAD_CHUNK_READ_LEN];
+    esp_transport_handle_t mock = bad_chunk_mock_create();
+    int ret = 0;
+    esp_http_client_handle_t client = read_until_parser_error(mock, old_buf, &ret);
+    TEST_ASSERT_EQUAL(ESP_FAIL, ret);
+    memset(old_buf, BAD_CHUNK_SENTINEL, sizeof(old_buf));
+
+    /* Second request on the same handle; its body arrives with its head, so
+     * fetch_headers() decodes it while the first read()'s pointer is live. */
+    mock_http_transport_set_response(mock, resp_200, 0);
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_close(client));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_open(client, 0));
+    TEST_ASSERT_EQUAL(5, esp_http_client_fetch_headers(client));
+
+    TEST_ASSERT_EACH_EQUAL_UINT8(BAD_CHUNK_SENTINEL, old_buf, sizeof(old_buf));
+
+    char buf[16] = {0};
+    TEST_ASSERT_EQUAL(5, esp_http_client_read(client, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("hello", buf);
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+/* Response 1 for the flush cases: a 300-byte body read through a 64-byte buffer.
+ * The 40 header bytes leave 24 body bytes cached by fetch_headers(); the rest is
+ * still on the transport for esp_http_client_flush_response() to discard. */
+#define FLUSH_HEADERS       "HTTP/1.1 200 OK\r\nContent-Length: 300\r\n\r\n"
+#define FLUSH_BODY_LEN      300
+#define FLUSH_BUFFER_SIZE   64
+#define FLUSH_CACHED        (FLUSH_BUFFER_SIZE - (int)(sizeof(FLUSH_HEADERS) - 1))
+
+static char s_flush_resp[sizeof(FLUSH_HEADERS) + FLUSH_BODY_LEN];
+
+/* Fills s_flush_resp: the body repeats "0123456789", so any slice can be checked. */
+static const char *flush_resp(void)
+{
+    size_t off = strlen(FLUSH_HEADERS);
+    memcpy(s_flush_resp, FLUSH_HEADERS, off);
+    for (int i = 0; i < FLUSH_BODY_LEN; i++) {
+        s_flush_resp[off + i] = (char)('0' + i % 10);
+    }
+    s_flush_resp[off + FLUSH_BODY_LEN] = '\0';
+    return s_flush_resp;
+}
+
+static esp_http_client_handle_t flush_client_create(esp_transport_handle_t mock)
+{
+    esp_http_client_config_t cfg = {
+        .url = "http://test-server.local/flush",
+        .transport = mock,
+        .buffer_size = FLUSH_BUFFER_SIZE,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    TEST_ASSERT_NOT_NULL(client);
+    return client;
+}
+
+/* Request 1: read all the cached body bytes, which frees the cache, then flush
+ * the rest from the transport. Returns what the flush returned. */
+static esp_err_t flush_after_cached_read(esp_http_client_handle_t client)
+{
+    char buf[FLUSH_CACHED];
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_open(client, 0));
+    TEST_ASSERT_EQUAL(FLUSH_BODY_LEN, esp_http_client_fetch_headers(client));
+    TEST_ASSERT_EQUAL(FLUSH_CACHED, esp_http_client_read(client, buf, sizeof(buf)));
+    return esp_http_client_flush_response(client, NULL);
+}
+
+/* Request 2: its body bytes arrive with its headers, so fetch_headers() caches
+ * them. read() must return exactly those bytes, not a count left by the flush. */
+static void read_next_body(esp_http_client_handle_t client, const char *expected, int expected_len)
+{
+    char buf[FLUSH_BUFFER_SIZE] = {0};
+    TEST_ASSERT_EQUAL(ESP_OK, esp_http_client_open(client, 0));
+    TEST_ASSERT_TRUE(esp_http_client_fetch_headers(client) >= 0);
+    TEST_ASSERT_EQUAL(expected_len, esp_http_client_read(client, buf, expected_len));
+    TEST_ASSERT_EQUAL_MEMORY(expected, buf, expected_len);
+}
+
+TEST_CASE("a flushed response leaves no bytes for the next request", "[esp_http_client][streaming][p0]")
+{
+    mock_http_transport_config_t mc = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mc.response_data = flush_resp();
+    esp_transport_handle_t mock = mock_http_transport_create(&mc);
+    TEST_ASSERT_NOT_NULL(mock);
+    TEST_ASSERT_EQUAL(ESP_OK, mock_http_transport_queue_response(mock, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", 0));
+    esp_http_client_handle_t client = flush_client_create(mock);
+
+    TEST_ASSERT_EQUAL(ESP_OK, flush_after_cached_read(client));
+    /* Kept alive: the queued response answers the next request. */
+    read_next_body(client, "ok", 2);
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+TEST_CASE("a flushed response leaves no bytes for a request after close()", "[esp_http_client][streaming][p0]")
+{
+    mock_http_transport_config_t mc = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mc.response_data = flush_resp();
+    esp_transport_handle_t mock = mock_http_transport_create(&mc);
+    TEST_ASSERT_NOT_NULL(mock);
+    esp_http_client_handle_t client = flush_client_create(mock);
+
+    TEST_ASSERT_EQUAL(ESP_OK, flush_after_cached_read(client));
+    esp_http_client_close(client);
+    /* The mock answers the new connection with response 1 again. */
+    read_next_body(client, flush_resp() + strlen(FLUSH_HEADERS), FLUSH_CACHED);
+
+    esp_http_client_cleanup(client);
+    mock_http_transport_destroy(mock);
+}
+
+TEST_CASE("a failed flush leaves no bytes for the next request", "[esp_http_client][streaming][p0][negative]")
+{
+    mock_http_transport_config_t mc = MOCK_HTTP_TRANSPORT_DEFAULT_CONFIG();
+    mc.response_data = flush_resp();
+    /* The connection drops 100 body bytes in, during the flush. */
+    mc.mode = MOCK_TRANSPORT_MODE_INCOMPLETE_READ;
+    mc.read_bytes_before_error = (int)strlen(FLUSH_HEADERS) + 100;
+    esp_transport_handle_t mock = mock_http_transport_create(&mc);
+    TEST_ASSERT_NOT_NULL(mock);
+    esp_http_client_handle_t client = flush_client_create(mock);
+
+    TEST_ASSERT_EQUAL(ESP_FAIL, flush_after_cached_read(client));
+    /* The rest of response 1 never arrived: the connection is broken, close it. */
+    esp_http_client_close(client);
+    read_next_body(client, flush_resp() + strlen(FLUSH_HEADERS), FLUSH_CACHED);
 
     esp_http_client_cleanup(client);
     mock_http_transport_destroy(mock);

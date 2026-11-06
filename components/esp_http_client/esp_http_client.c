@@ -344,9 +344,6 @@ static int http_on_header_value(http_parser *parser, const char *at, size_t leng
 #endif
     if (strcasecmp(client->current_header_key, "Location") == 0) {
         HTTP_RET_ON_FALSE_DBG(http_utils_append_string(&client->location, at, length), -1, TAG, "Failed to append string");
-    } else if (strcasecmp(client->current_header_key, "Transfer-Encoding") == 0
-               && memcmp(at, "chunked", length) == 0) {
-        client->response->is_chunked = true;
     } else if (strcasecmp(client->current_header_key, "WWW-Authenticate") == 0) {
         HTTP_RET_ON_FALSE_DBG(http_utils_append_string(&client->auth_header, at, length), -1, TAG, "Failed to append string");
     }
@@ -379,6 +376,11 @@ static int http_on_headers_complete(http_parser *parser)
     client->response->status_code = parser->status_code;
     client->response->data_offset = parser->nread;
     client->response->content_length = parser->content_length;
+    /* Take chunked framing from the parser, which matches the coding without
+     * regard to case or trailing whitespace and across split reads. Set here,
+     * before any body bytes, so ON_HEADERS_COMPLETE and the first ON_DATA
+     * handlers already see it. */
+    client->response->is_chunked = (parser->flags & F_CHUNKED) != 0;
     client->response->data_process = 0;
     ESP_LOGD(TAG, "http_on_headers_complete, status=%d, offset=%d, nread=%" PRId32, parser->status_code, client->response->data_offset, parser->nread);
     client->state = HTTP_STATE_RES_COMPLETE_HEADER;
@@ -1588,7 +1590,10 @@ int esp_http_client_read(esp_http_client_handle_t client, char *buffer, int len)
         }
         res_buffer->output_ptr = buffer + ridx;
         http_parser_execute(client->parser, client->parser_settings, res_buffer->data, rlen);
-        HTTP_PARSER_RETURN_ON_ERROR(TAG, client->parser, ESP_FAIL);
+        if (HTTP_PARSER_ERRNO(client->parser) != HPE_OK) {
+            ESP_LOGE(TAG, "HTTP parser error: %s", http_errno_description(HTTP_PARSER_ERRNO(client->parser)));
+            goto parse_error;
+        }
         ridx += res_buffer->raw_len;
         need_read -= res_buffer->raw_len;
 
@@ -1597,6 +1602,14 @@ int esp_http_client_read(esp_http_client_handle_t client, char *buffer, int len)
     }
 
     return ridx;
+
+parse_error:
+    /* output_ptr points into the caller's buffer, which is only valid for this
+     * call, and raw_len counts the bytes copied into it. Drop both so a reused
+     * handle neither writes to that buffer nor reads from a NULL raw_data. */
+    res_buffer->output_ptr = NULL;
+    res_buffer->raw_len = 0;
+    return ESP_FAIL;
 }
 
 esp_err_t esp_http_client_perform(esp_http_client_handle_t client)
@@ -2308,12 +2321,20 @@ esp_err_t esp_http_client_flush_response(esp_http_client_handle_t client, int *l
         return ESP_ERR_INVALID_ARG;
     }
     int read_len = 0;
+    esp_err_t err = ESP_OK;
     while (!esp_http_client_is_complete_data_received(client)) {
         int data_read = esp_http_client_get_data(client);
         if (data_read < 0) {
-            return ESP_FAIL;
+            err = ESP_FAIL;
+            break;
         }
         read_len += data_read;
+    }
+    /* The flushed bytes are gone: reset the counter so the next request
+     * can start cleanly */
+    client->response->buffer->raw_len = 0;
+    if (err != ESP_OK) {
+        return err;
     }
     if (len) {
         *len = read_len;

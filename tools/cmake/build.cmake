@@ -165,7 +165,6 @@ function(__build_get_idf_git_revision)
     endif()
     # cut IDF_VER to required 32 characters.
     string(SUBSTRING "${idf_ver_t}" 0 31 idf_ver)
-    idf_build_set_property(COMPILE_DEFINITIONS "IDF_VER=\"${idf_ver}\"" APPEND)
     git_submodule_check("${idf_path}")
     idf_build_set_property(IDF_VER ${idf_ver})
 endfunction()
@@ -254,10 +253,10 @@ function(__build_init idf_path)
 
     # Set the Python path (which may be passed in via -DPYTHON=) and store in a build property
     set_default(PYTHON "python")
-    file(TO_CMAKE_PATH ${PYTHON} PYTHON)
-    idf_build_set_property(PYTHON ${PYTHON})
+    file(TO_CMAKE_PATH "${PYTHON}" PYTHON)
+    idf_build_set_property(PYTHON "${PYTHON}")
 
-    idf_build_set_property(IDF_PATH ${idf_path})
+    idf_build_set_property(IDF_PATH "${idf_path}")
 
     idf_build_set_property(__PREFIX idf)
     idf_build_set_property(__CHECK_PYTHON 1)
@@ -268,14 +267,14 @@ function(__build_init idf_path)
     # Add internal components to the build
     idf_build_get_property(idf_path IDF_PATH)
     idf_build_get_property(prefix __PREFIX)
-    file(GLOB component_dirs ${idf_path}/components/*)
+    file(GLOB component_dirs "${idf_path}/components/*")
     list(SORT component_dirs)
     foreach(component_dir ${component_dirs})
         # A potential component must be a directory
-        if(IS_DIRECTORY ${component_dir})
-            __component_dir_quick_check(is_component ${component_dir})
+        if(IS_DIRECTORY "${component_dir}")
+            __component_dir_quick_check(is_component "${component_dir}")
             if(is_component)
-                __component_add(${component_dir} ${prefix} "idf_components")
+                __component_add("${component_dir}" ${prefix} "idf_components")
             endif()
         endif()
     endforeach()
@@ -427,7 +426,7 @@ function(__build_write_properties output_file)
         idf_build_get_property(val ${property})
         set(build_properties_text "${build_properties_text}\nset(${property} \"${val}\")")
     endforeach()
-    file(WRITE ${output_file} "${build_properties_text}")
+    file(WRITE "${output_file}" "${build_properties_text}")
 endfunction()
 
 #
@@ -458,7 +457,7 @@ macro(__build_process_project_includes)
     # Include the sdkconfig cmake file, since the following operations require
     # knowledge of config values.
     idf_build_get_property(sdkconfig_cmake SDKCONFIG_CMAKE)
-    include(${sdkconfig_cmake})
+    include("${sdkconfig_cmake}")
 
     # Make each build property available as a read-only variable
     idf_build_get_property(build_properties __BUILD_PROPERTIES)
@@ -474,11 +473,11 @@ macro(__build_process_project_includes)
         __component_get_property(dir ${component_target} COMPONENT_DIR)
         __component_get_property(_name ${component_target} COMPONENT_NAME)
         set(COMPONENT_NAME ${_name})
-        set(COMPONENT_DIR ${dir})
-        set(COMPONENT_PATH ${dir})  # this is deprecated, users are encouraged to use COMPONENT_DIR;
+        set(COMPONENT_DIR "${dir}")
+        set(COMPONENT_PATH "${dir}")  # this is deprecated, users are encouraged to use COMPONENT_DIR;
                                     # retained for compatibility
-        if(EXISTS ${COMPONENT_DIR}/project_include.cmake)
-            include(${COMPONENT_DIR}/project_include.cmake)
+        if(EXISTS "${COMPONENT_DIR}/project_include.cmake")
+            include("${COMPONENT_DIR}/project_include.cmake")
         endif()
     endforeach()
 endmacro()
@@ -522,7 +521,7 @@ function(__build_import_configs)
     # Include the sdkconfig cmake file, since the following operations require
     # knowledge of config values.
     idf_build_get_property(sdkconfig_cmake SDKCONFIG_CMAKE)
-    include(${sdkconfig_cmake})
+    include("${sdkconfig_cmake}")
 
     idf_build_set_property(__CONFIG_VARIABLES "${CONFIGS_LIST}")
     foreach(config ${CONFIGS_LIST})
@@ -637,7 +636,7 @@ macro(idf_build_process target)
             endif()
         endforeach()
 
-        file(WRITE ${local_components_list_file} "${__contents}")
+        file(WRITE "${local_components_list_file}" "${__contents}")
 
         # Call for the component manager to prepare remote dependencies
         __component_manager_get_command(component_manager_cmd)
@@ -674,15 +673,15 @@ macro(idf_build_process target)
 
 
 
-        include(${managed_components_list_file})
+        include("${managed_components_list_file}")
 
         # Add managed components to list of all components
         # `managed_components` contains the list of components installed by the component manager
         # It is defined in the temporary managed_components_list_file file
         set(__COMPONENTS "${__COMPONENTS};${managed_components}")
 
-        file(REMOVE ${managed_components_list_file})
-        file(REMOVE ${local_components_list_file})
+        file(REMOVE "${managed_components_list_file}")
+        file(REMOVE "${local_components_list_file}")
     else()
         message(VERBOSE "IDF Component manager was explicitly disabled by setting IDF_COMPONENT_MANAGER=0")
 
@@ -764,6 +763,14 @@ macro(idf_build_process target)
 
     __build_import_configs()
 
+    # CONFIG_* is only available after sdkconfig is imported. Adding IDF_VER
+    # earlier would ignore APP_BUILD_DEFINE_IDF_VER.
+    idf_build_get_config(define_idf_ver CONFIG_APP_BUILD_DEFINE_IDF_VER)
+    if(define_idf_ver)
+        idf_build_get_property(idf_ver IDF_VER)
+        idf_build_set_property(COMPILE_DEFINITIONS "IDF_VER=\"${idf_ver}\"" APPEND)
+    endif()
+
     if(result EQUAL 0)
         # All targets built under this scope is with the ESP-IDF build system
         set(ESP_PLATFORM 1)
@@ -781,7 +788,7 @@ macro(idf_build_process target)
         __build_process_project_includes()
 
         idf_build_get_property(idf_path IDF_PATH)
-        add_subdirectory(${idf_path} ${build_dir}/esp-idf)
+        add_subdirectory("${idf_path}" "${build_dir}/esp-idf")
 
         unset(ESP_PLATFORM)
     else()

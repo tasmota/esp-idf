@@ -299,6 +299,9 @@ extern int r_btdm_hci_rd_local_supp_codec_cap_handler(const uint8_t *cmdbuf, uin
                                                       uint8_t *rspbuf, uint8_t *rsplen);
 extern int r_btdm_hci_rd_local_supp_ctrl_delay_handler(const uint8_t *cmdbuf, uint8_t len,
                                                        uint8_t *rspbuf, uint8_t *rsplen);
+extern int r_btdm_coex_hci_vs_wr_coex_status_cmd_handler(const uint8_t *cmdbuf, uint8_t len,
+                                                         uint8_t *rspbuf, uint8_t *rsplen);
+
 extern int r_ble_ll_hci_rd_local_version(uint8_t *rspbuf, uint8_t *rsplen);
 extern int r_ble_ll_hci_rd_local_supp_cmd(uint8_t *rspbuf, uint8_t *rsplen);
 extern int r_ble_ll_hci_rd_local_supp_feat(uint8_t *rspbuf, uint8_t *rsplen);
@@ -673,8 +676,6 @@ extern int api_pcl_hci_setRssiThresh(const uint8_t *cmdbuf, uint8_t len, uint8_t
                                      uint8_t *rsplen);
 extern int api_ble_ll_hci_vs_csa_set(const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
                                      uint8_t *rsplen);
-extern int api_internalTest_hci_procVsCmds(const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
-                                           uint8_t *rsplen);
 extern int api_ble_log_hci_vs_cmd_proc(const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
                                        uint8_t *rsplen);
 extern int api_hci_stack_setVsEventMask(const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
@@ -1427,6 +1428,7 @@ hci_cmd_proc_le_cmds(uint16_t ocf, const uint8_t *cmdbuf, uint8_t len, uint8_t *
 
     return rc;
 }
+#endif // UC_BT_CTRL_BLE_IS_ENABLE
 
 static int
 hci_cmd_proc_vendor_specific_cmds(uint16_t ocf, const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
@@ -1467,9 +1469,6 @@ hci_cmd_proc_vendor_specific_cmds(uint16_t ocf, const uint8_t *cmdbuf, uint8_t l
         break;
     case ESP_BT_VS_ENABLE_CSA2_OCF:
         rc = api_ble_ll_hci_vs_csa_set(cmdbuf, len, rspbuf, rsplen);
-        break;
-    case ESP_BT_VS_CFG_TEST_RELATED_OCF:
-        rc = api_internalTest_hci_procVsCmds(cmdbuf, len, rspbuf, rsplen);
         break;
     case ESP_BT_VS_SET_LOG_PARAMS_OCF:
         rc = api_ble_log_hci_vs_cmd_proc(cmdbuf, len, rspbuf, rsplen);
@@ -1541,16 +1540,22 @@ hci_cmd_proc_vendor_specific_cmds(uint16_t ocf, const uint8_t *cmdbuf, uint8_t l
         break;
 #endif // UC_BT_CTRL_LE_VS_ADI_FILTER_ENABLED
 #endif // UC_BT_CTRL_LE_VS_CMD_EVT_ENABLED
+#if CONFIG_SW_COEXIST_ENABLE
+    case ESP_BT_VS_SET_COEX_STATUS_OCF:
+        rc = r_btdm_coex_hci_vs_wr_coex_status_cmd_handler(cmdbuf, len, rspbuf, rsplen);
+        break;
+#endif
     default:
+#if UC_BT_CTRL_BLE_IS_ENABLE
         extern int r_ble_ll_hci_vs_cmd_proc(const uint8_t *cmdbuf, uint8_t len, uint16_t ocf,
                                             uint8_t *rspbuf, uint8_t *rsplen);
         rc = r_ble_ll_hci_vs_cmd_proc(cmdbuf, len, ocf, rspbuf, rsplen);
+#endif // #if UC_BT_CTRL_BLE_IS_ENABLE
         break;
     }
 
     return rc;
 }
-#endif // UC_BT_CTRL_BLE_IS_ENABLE
 
 static int
 hci_cmd_proc_handler(uint16_t opcode, const uint8_t *cmdbuf, uint8_t len, uint8_t *rspbuf,
@@ -1582,10 +1587,10 @@ hci_cmd_proc_handler(uint16_t opcode, const uint8_t *cmdbuf, uint8_t len, uint8_
     case HCI_CMD_OGF_BLE_CMDS:
         rc = hci_cmd_proc_le_cmds(ocf, cmdbuf, len, rspbuf, rsplen);
         break;
+#endif // UC_BT_CTRL_BLE_IS_ENABLE
     case HCI_CMD_OGF_VENDOR_SPECIFIC:
         rc = hci_cmd_proc_vendor_specific_cmds(ocf, cmdbuf, len, rspbuf, rsplen);
         break;
-#endif // UC_BT_CTRL_BLE_IS_ENABLE
     }
 
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE

@@ -22,6 +22,19 @@ extern "C" {
 //
 
 /**
+ * @brief Set Classic Bluetooth minimum encryption key size (OCF: 0x0182)
+ *
+ * @note The init function is `bt_stack_enableSecCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_SET_MIN_ENC_KEY_SIZE_OCF                          (0x0182)
+/**
+* @brief Set bt minimum encryption key size cmd parameters
+*/
+struct bt_hci_vs_set_min_enc_key_size {
+    uint8_t size; /*!< the minimum encryption key size */
+};
+
+/**
 * @brief This event indicates legacy authentication is completed by remote device (EVTCODE: 0xFF, SUBCODE: 0x03)
 *
 * @note The init function is `bt_stack_enableSecCtrlVsCmd(true)`
@@ -98,9 +111,44 @@ struct bt_hci_vs_legacy_rem_auth_evt {
 #define ESP_BT_VS_PCA_OCF                                           (0x0190)
 
 /**
-* @note The init function is `bt_stack_enableInternalDbgVsCmd(true)`
-*/
-#define ESP_BT_VS_DISCARD_PING_OCF                                  (0x0191)
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_RD_NEW_CONN_TX_PWR_LVL_OCF                        (0x0192)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_NEW_CONN_TX_PWR_LVL_OCF                        (0x0193)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_RD_PAGE_TX_PWR_LVL_OCF                            (0x0194)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_PAGE_TX_PWR_LVL_OCF                            (0x0195)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_RD_PSCAN_TX_PWR_LVL_OCF                           (0x0196)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_PSCAN_TX_PWR_LVL_OCF                           (0x0197)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_RD_INQ_TX_PWR_LVL_OCF                             (0x0198)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_ISCAN_TX_PWR_LVL_OCF                           (0x0199)
 
 /**
 * @note The init function is `bt_stack_enableInternalDbgVsCmd(true)`
@@ -116,6 +164,41 @@ struct bt_hci_vs_legacy_rem_auth_evt {
 * @note The init function is `bt_stack_enableInternalDbgVsCmd(true)`
 */
 #define ESP_BT_VS_LMP_DBG_SAVE_OCF                                  (0x019c)
+
+/**
+* @note The init function is `bt_stack_enableInternalDbgVsCmd(true)`
+*/
+#define ESP_BT_VS_DISCARD_PING_OCF                                  (0x019d)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_RD_CONN_TX_PWR_LVL_OCF                            (0x019e)
+
+/**
+ * @note The init function is `bt_stack_enablePwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_CONN_TX_PWR_LVL_OCF                            (0x019f)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_PWR_CTRL_REQ_EN_OCF                            (0x1a0)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_WR_ENH_PWR_CTRL_REQ_EN_OCF                        (0x1a1)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_SEND_PWR_CTRL_REQ_OCF                             (0x1a2)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_SEND_ENH_PWR_CTRL_REQ_OCF                         (0x1a3)
 
 //
 // @brief HCI VS Events for Espressif's Internal-Use Debugging
@@ -154,6 +237,26 @@ struct bt_hci_vs_legacy_rem_auth_evt {
 * @note The init function is `bt_stack_enableInternalDbgVsCmd(true)`
 */
 #define ESP_BT_VS_LMP_DBG_ENTERED_EVT_SUBCODE                       (0x0c)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_REM_PWR_REQ_EVT_SUBCODE                           (0x0d)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_REM_PWR_RSP_EVT_SUBCODE                           (0x0e)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_REM_ENH_PWR_REQ_EVT_SUBCODE                       (0x0f)
+
+/**
+ * @note The init function is `bt_stack_enableLMPPwrCtrlVsCmd(true)`
+ */
+#define ESP_BT_VS_REM_ENH_PWR_RSP_EVT_SUBCODE                       (0x10)
 
 #ifdef __cplusplus
 }

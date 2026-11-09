@@ -25,6 +25,7 @@
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_ADC_SUPPORTED               1
 #define SOC_ANA_CMPR_SUPPORTED          1
+// #define SOC_DAC_SUPPORTED               1  // TODO: [ESP32S31] IDF-14767
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_UART_SUPPORTED              1
 #define SOC_GDMA_SUPPORTED              1
@@ -131,6 +132,7 @@
 #define SOC_USB_OTG_PERIPH_NUM          (1U)
 #define SOC_USB_FSLS_PHY_NUM            (0U)
 #define SOC_USB_UTMI_PHY_NUM            (1U)
+#define SOC_USB_OTG_PSRAM_DMA_CAPABLE   (1)                 /*!< USB OTG Peripheral's internal DMA can access PSRAM */
 #define SOC_PM_SUPPORT_USB_WAKEUP       (1U)
 
 #define SOC_PHY_SUPPORTED                1
@@ -168,6 +170,12 @@
 
 /*!< ADC power control is shared by PWDET, TempSensor */
 #define SOC_ADC_SHARED_POWER                    1
+
+/*-------------------------- DAC CAPS ----------------------------------------*/
+#define SOC_DAC_CHAN_NUM                        (2)
+#define SOC_DAC_HS_RESOLUTION                   (10)
+#define SOC_DAC_RESOLUTION                      (12)
+#define SOC_DAC_SUPPORT_BUFFER_CFG              1
 
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_CACHE_WRITEBACK_SUPPORTED           1
@@ -649,6 +657,7 @@
 
 /*---------------------------------- Bluetooth CAPS ----------------------------------*/
 #define SOC_BT_CLASSIC_SUPPORTED                    (1)     /*!< Support Bluetooth Classic hardware */
+#define SOC_ORCA_BREDR_CONTROLLER                   (1)     /*!< Support Espressif Orca BR/EDR controller */
 #define SOC_BLE_SUPPORTED                           (1)     /*!< Support Bluetooth Low Energy hardware */
 #define SOC_BLE_MESH_SUPPORTED                      (1)     /*!< Support BLE MESH */
 #define SOC_BLE_ISO_SUPPORTED                       (1)     /*!< Support BLE ISO */
@@ -663,6 +672,7 @@
 #define SOC_BLE_CTE_SUPPORTED                       (1)     /*!< Support Bluetooth LE Constant Tone Extension (CTE) */
 #define SOC_BLE_SUBRATE_SUPPORTED                   (1)     /*!< Support Bluetooth LE Connection Subrating */
 #define SOC_BLE_PERIODIC_ADV_WITH_RESPONSE          (1)     /*!< Support Bluetooth LE Periodic Advertising with Response (PAwR) */
+#define SOC_BT_H2C_ENC_KEY_CTRL_ENH_VSC_SUPPORTED   (1)     /*!< Support Bluetooth Classic encryption key size configuration through vendor-specific HCI command */
 
 /*-------------------------- I2S CAPS ----------------------------------------*/
 #define SOC_I2S_HW_VERSION_2                  (1)

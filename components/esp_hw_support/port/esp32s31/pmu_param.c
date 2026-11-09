@@ -36,11 +36,18 @@ ESP_HW_LOG_ATTR_TAG(TAG, "pmu_param");
         .top_pd_en          = 0  \
     }, \
     .clk_power = {            \
+        .xpd_xtalx2    = 0,   \
         .i2c_iso_en    = 0,   \
         .i2c_retention = 0,   \
-        .xpd_bb_i2c    = 0,   \
-        .xpd_pll_i2c   = 0x3, \
-        .xpd_pll       = 0x3  \
+        .xpd_bb_i2c    = 1,   \
+        .xpd_cpll_i2c  = 1,   \
+        .xpd_bbpll_i2c = 1,   \
+        .xpd_apll_i2c  = 0,   \
+        .xpd_mpll_i2c  = 0,   \
+        .xpd_cpll      = 1,   \
+        .xpd_bbpll     = 1,   \
+        .xpd_apll      = 0,   \
+        .xpd_mpll      = 0,   \
     }, \
     .xtal = {                 \
         .xpd_xtal      = 1    \
@@ -62,9 +69,15 @@ ESP_HW_LOG_ATTR_TAG(TAG, "pmu_param");
     .clk_power = {            \
         .i2c_iso_en    = 1,   \
         .i2c_retention = 1,   \
-        .xpd_bb_i2c    = 0,   \
-        .xpd_pll_i2c   = 0x3, \
-        .xpd_pll       = 0x3  \
+        .xpd_bb_i2c    = 1,   \
+        .xpd_cpll_i2c  = 1,   \
+        .xpd_bbpll_i2c = 1,   \
+        .xpd_apll_i2c  = 0,   \
+        .xpd_mpll_i2c  = 0,   \
+        .xpd_cpll      = 1,   \
+        .xpd_bbpll     = 1,   \
+        .xpd_apll      = 0,   \
+        .xpd_mpll      = 0,   \
     }, \
     .xtal = {                 \
         .xpd_xtal      = 1    \
@@ -87,8 +100,14 @@ ESP_HW_LOG_ATTR_TAG(TAG, "pmu_param");
         .i2c_iso_en    = 1,   \
         .i2c_retention = 1,   \
         .xpd_bb_i2c    = 0,   \
-        .xpd_pll_i2c   = 0, \
-        .xpd_pll       = 0  \
+        .xpd_cpll_i2c  = 0,   \
+        .xpd_bbpll_i2c = 0,   \
+        .xpd_apll_i2c  = 0,   \
+        .xpd_mpll_i2c  = 0,   \
+        .xpd_cpll      = 0,   \
+        .xpd_bbpll     = 0,   \
+        .xpd_apll      = 0,   \
+        .xpd_mpll      = 0,   \
     }, \
     .xtal = {                 \
         .xpd_xtal      = 0    \
@@ -123,7 +142,8 @@ const pmu_hp_system_power_param_t * pmu_hp_system_power_param_default(pmu_hp_mod
 
 #define PMU_HP_MODEM_CLOCK_CONFIG_DEFAULT() {               \
     .icg_func.clock[0] = 0,                                 \
-    .icg_func.clock[1] = 0,                                 \
+    .icg_func.clock[1] = BIT(PMU_ICG_FUNC_ENA_ETM - 32)     \
+                         | BIT(PMU_ICG_FUNC_ENA_BUS - 32),  \
     .icg_apb.clock[0] = 0,                                  \
     .icg_apb.clock[1] = 0,                                  \
     .icg_modem.code = PMU_HP_ICG_MODEM_CODE_MODEM,          \
@@ -132,6 +152,7 @@ const pmu_hp_system_power_param_t * pmu_hp_system_power_param_default(pmu_hp_mod
         .icg_sysclk_en      = 1,                            \
         .sysclk_slp_sel     = 1,                            \
         .icg_slp_sel        = 1,                            \
+        /* Default: dig_sysclk uses XTAL. For PLL, update divider coeffs and release PLL lock. */ \
         .dig_sysclk_sel     = SOC_CPU_CLK_SRC_XTAL          \
     } \
 }
@@ -178,27 +199,21 @@ const pmu_hp_system_clock_param_t * pmu_hp_system_clock_param_default(pmu_hp_mod
     .syscntl = {                \
         .c_channel       = 1,   \
         .uart_wakeup_en  = 0,   \
-        .lp_pad_hold_all = 0,   \
-        .hp_pad_hold_all = 0,   \
-        .dig_pad_slp_sel = 1,   \
+        .lp_pad_hold_all = 1,   \
+        .hp_pad_hold_all = 1,   \
+        .dig_pad_slp_sel = 0,   \
         .dig_pause_wdt   = 1,   \
         .dig_cpu_stall   = 1    \
     } \
 }
 
-/**
- * - hp_pad_hold_all:
- *   - when top off: must set to 1;
- *   - when top on: 0 if use pad; 1 if not use pad
- * - dig_pad_slp_sel: must set to 1 when sleep
- */
 #define PMU_HP_SLEEP_DIGITAL_CONFIG_DEFAULT() { \
     .syscntl = {                \
         .c_channel       = 0,   \
         .uart_wakeup_en  = 1,   \
-        .lp_pad_hold_all = 0,   \
+        .lp_pad_hold_all = 1,   \
         .hp_pad_hold_all = 1,   \
-        .dig_pad_slp_sel = 1,   \
+        .dig_pad_slp_sel = 0,   \
         .dig_pause_wdt   = 1,   \
         .dig_cpu_stall   = 1    \
     } \

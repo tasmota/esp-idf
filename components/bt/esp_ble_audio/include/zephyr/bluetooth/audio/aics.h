@@ -125,7 +125,10 @@ extern "C" {
 #define BT_AICS_ERR_GAIN_MODE_NOT_ALLOWED          0x84
 /** @} */
 
-/** @brief Opaque Audio Input Control Service instance. */
+/**
+ * @struct bt_aics
+ * @brief Opaque Audio Input Control Service instance.
+ */
 struct bt_aics;
 
 /** @brief Structure for initializing a Audio Input Control Service instance. */
@@ -185,7 +188,7 @@ struct bt_aics_discover_param {
  *
  * @return Audio Input Control Service instance in case of success or NULL in case of error.
  */
-struct bt_aics *bt_aics_free_instance_get_safe(void);
+struct bt_aics *bt_aics_free_instance_get(void);
 
 /**
  * @brief Get the service declaration attribute.
@@ -196,7 +199,7 @@ struct bt_aics *bt_aics_free_instance_get_safe(void);
  *
  * @return Pointer to the attributes of the service.
  */
-void *bt_aics_svc_decl_get_safe(struct bt_aics *aics);
+void *bt_aics_svc_decl_get(struct bt_aics *aics);
 
 /**
  * @brief Get the connection pointer of a client instance
@@ -219,7 +222,7 @@ int bt_aics_client_conn_get(const struct bt_aics *aics, struct bt_conn **conn);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_aics_register_safe(struct bt_aics *aics, struct bt_aics_register_param *param);
+int bt_aics_register(struct bt_aics *aics, struct bt_aics_register_param *param);
 
 /**
  * @brief Callback function for writes.
@@ -364,8 +367,6 @@ struct bt_aics_cb {
  */
 int bt_aics_discover(struct bt_conn *conn, struct bt_aics *inst,
                      const struct bt_aics_discover_param *param);
-int bt_aics_discover_safe(struct bt_conn *conn, struct bt_aics *inst,
-                          const struct bt_aics_discover_param *param);
 
 /**
  * @brief Deactivates a Audio Input Control Service instance.
@@ -377,7 +378,7 @@ int bt_aics_discover_safe(struct bt_conn *conn, struct bt_aics *inst,
  *
  * @return 0 if success, errno on failure.
  */
-int bt_aics_deactivate_safe(struct bt_aics *inst);
+int bt_aics_deactivate(struct bt_aics *inst);
 
 /**
  * @brief Activates a Audio Input Control Service instance.
@@ -390,7 +391,7 @@ int bt_aics_deactivate_safe(struct bt_aics *inst);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_aics_activate_safe(struct bt_aics *inst);
+int bt_aics_activate(struct bt_aics *inst);
 
 /**
  * @brief Read the Audio Input Control Service input state.
@@ -399,7 +400,7 @@ int bt_aics_activate_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_state_get_safe(struct bt_aics *inst);
+int bt_aics_state_get(struct bt_aics *inst);
 
 /**
  * @brief Read the Audio Input Control Service gain settings.
@@ -408,7 +409,7 @@ int bt_aics_state_get_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_gain_setting_get_safe(struct bt_aics *inst);
+int bt_aics_gain_setting_get(struct bt_aics *inst);
 
 /**
  * @brief Read the Audio Input Control Service input type.
@@ -417,7 +418,7 @@ int bt_aics_gain_setting_get_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_type_get_safe(struct bt_aics *inst);
+int bt_aics_type_get(struct bt_aics *inst);
 
 /**
  * @brief Read the Audio Input Control Service input status.
@@ -426,7 +427,7 @@ int bt_aics_type_get_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_status_get_safe(struct bt_aics *inst);
+int bt_aics_status_get(struct bt_aics *inst);
 
 /**
  * @brief Disable mute in the Audio Input Control Service.
@@ -438,7 +439,7 @@ int bt_aics_status_get_safe(struct bt_aics *inst);
  *
  * @return 0 on success, errno value on fail.
  */
-int bt_aics_disable_mute_safe(struct bt_aics *inst);
+int bt_aics_disable_mute(struct bt_aics *inst);
 
 /**
  * @brief Unmute the Audio Input Control Service input.
@@ -447,7 +448,7 @@ int bt_aics_disable_mute_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_unmute_safe(struct bt_aics *inst);
+int bt_aics_unmute(struct bt_aics *inst);
 
 /**
  * @brief Mute the Audio Input Control Service input.
@@ -456,7 +457,7 @@ int bt_aics_unmute_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_mute_safe(struct bt_aics *inst);
+int bt_aics_mute(struct bt_aics *inst);
 
 /**
  * @brief Set manual only gain mode in Audio Input Control Service.
@@ -465,7 +466,7 @@ int bt_aics_mute_safe(struct bt_aics *inst);
  *
  * @return 0 on success, errno value on fail.
  */
-int bt_aics_gain_set_manual_only_safe(struct bt_aics *inst);
+int bt_aics_gain_set_manual_only(struct bt_aics *inst);
 
 /**
  * @brief Set automatic only gain mode in Audio Input Control Service.
@@ -477,7 +478,7 @@ int bt_aics_gain_set_manual_only_safe(struct bt_aics *inst);
  *
  * @return 0 on success, errno value on fail.
  */
-int bt_aics_gain_set_auto_only_safe(struct bt_aics *inst);
+int bt_aics_gain_set_auto_only(struct bt_aics *inst);
 
 /**
  * @brief Set input gain to manual.
@@ -486,7 +487,7 @@ int bt_aics_gain_set_auto_only_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_manual_gain_set_safe(struct bt_aics *inst);
+int bt_aics_manual_gain_set(struct bt_aics *inst);
 
 /**
  * @brief Set the input gain to automatic.
@@ -495,7 +496,7 @@ int bt_aics_manual_gain_set_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_automatic_gain_set_safe(struct bt_aics *inst);
+int bt_aics_automatic_gain_set(struct bt_aics *inst);
 
 /**
  * @brief Set the input gain.
@@ -506,7 +507,7 @@ int bt_aics_automatic_gain_set_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_gain_set_safe(struct bt_aics *inst, int8_t gain);
+int bt_aics_gain_set(struct bt_aics *inst, int8_t gain);
 
 /**
  * @brief Read the Audio Input Control Service description.
@@ -515,7 +516,7 @@ int bt_aics_gain_set_safe(struct bt_aics *inst, int8_t gain);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_description_get_safe(struct bt_aics *inst);
+int bt_aics_description_get(struct bt_aics *inst);
 
 /**
  * @brief Set the Audio Input Control Service description.
@@ -525,14 +526,14 @@ int bt_aics_description_get_safe(struct bt_aics *inst);
  *
  * @return 0 on success, GATT error value on fail.
  */
-int bt_aics_description_set_safe(struct bt_aics *inst, const char *description);
+int bt_aics_description_set(struct bt_aics *inst, const char *description);
 
 /**
  * @brief Get a new Audio Input Control Service client instance.
  *
  * @return Pointer to the instance, or NULL if no free instances are left.
  */
-struct bt_aics *bt_aics_client_free_instance_get_safe(void);
+struct bt_aics *bt_aics_client_free_instance_get(void);
 
 /**
  * @brief Registers the callbacks for the Audio Input Control Service client.
@@ -540,7 +541,7 @@ struct bt_aics *bt_aics_client_free_instance_get_safe(void);
  * @param inst      The instance pointer.
  * @param cb        Pointer to the callback structure.
  */
-void bt_aics_client_cb_register_safe(struct bt_aics *inst, struct bt_aics_cb *cb);
+void bt_aics_client_cb_register(struct bt_aics *inst, struct bt_aics_cb *cb);
 
 #ifdef __cplusplus
 }

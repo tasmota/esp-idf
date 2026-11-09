@@ -26,6 +26,7 @@ set(srcs
     "src/termios.c"
     "src/stdatomic.c"
     "src/time.c"
+    "src/timespec_get.c"
     "src/timekeeping.c"
     "src/sysconf.c"
     "src/realpath.c"
@@ -33,18 +34,6 @@ set(srcs
     "src/syscalls.c"
     "src/reent_syscalls.c"
     "src/port/esp_time_impl.c")
-
-# TODO IDF-15041: remove this block and sources
-if(CONFIG_LIBC_PICOLIBC AND CONFIG_SPIRAM_CACHE_WORKAROUND)
-    list(APPEND srcs "src/picolibc/esp32_psram/memcpy.S")
-    list(APPEND srcs "src/picolibc/esp32_psram/memset.S")
-    list(APPEND srcs "src/picolibc/esp32_psram/strcpy.S")
-    list(APPEND srcs "src/picolibc/esp32_psram/strncpy.S")
-    list(APPEND EXTRA_LINK_FLAGS "-u esp_libc_include_memcpy_impl")
-    list(APPEND EXTRA_LINK_FLAGS "-u esp_libc_include_memset_impl")
-    list(APPEND EXTRA_LINK_FLAGS "-u esp_libc_include_strcpy_impl")
-    list(APPEND EXTRA_LINK_FLAGS "-u esp_libc_include_strncpy_impl")
-endif()
 
 if(CONFIG_STDATOMIC_S32C1I_SPIRAM_WORKAROUND)
     list(APPEND srcs "src/port/xtensa/stdatomic_s32c1i.c")
@@ -77,13 +66,9 @@ else()
     list(APPEND srcs
          "src/picolibc/picolibc_init.c"
          "src/picolibc/rand.c"
-         "src/picolibc/open_memstream.c"
-         "src/picolibc/errno.c"
-         "src/picolibc/bufio_setvbuf.c") # TODO IDF-15494: remove this and the following lines
-         list(APPEND EXTRA_LINK_FLAGS "-Wl,--wrap=__bufio_setvbuf")
+         "src/picolibc/errno.c")
     if(CONFIG_LIBC_PICOLIBC_NEWLIB_COMPATIBILITY)
         list(APPEND srcs "src/picolibc/getreent.c")
-        list(APPEND srcs "src/picolibc/fopencookie.c")
     endif()
 endif()
 
@@ -97,7 +82,7 @@ else()
     list(APPEND ldfragments src/picolibc/libc.lf)
 endif()
 
-set(priv_reqs soc spi_flash)
+set(priv_reqs soc esp_mspi)
 
 if(IDF_BUILD_V2)
     if(CONFIG_VFS_SUPPORT_IO)
@@ -116,15 +101,6 @@ idf_component_get_property(esp_libc esp_libc COMPONENT_LIB)
 target_link_libraries(${COMPONENT_LIB} INTERFACE c m ${CONFIG_COMPILER_RT_LIB_NAME} "$<TARGET_FILE:${esp_libc}>")
 
 set_source_files_properties(heap.c PROPERTIES COMPILE_FLAGS -fno-builtin)
-
-# TODO IDF-15041: remove this block and sources
-if(CONFIG_LIBC_PICOLIBC AND CONFIG_SPIRAM_CACHE_WORKAROUND)
-    set_source_files_properties("src/picolibc/esp32_psram/memcpy.S"
-                                "src/picolibc/esp32_psram/memset.S"
-                                "src/picolibc/esp32_psram/strcpy.S"
-                                "src/picolibc/esp32_psram/strncpy.S"
-                                PROPERTIES COMPILE_FLAGS "-DXTENSA_ESP32_PSRAM_CACHE_FIX=1")
-endif()
 
 if(CONFIG_STDATOMIC_S32C1I_SPIRAM_WORKAROUND)
     set_source_files_properties("src/port/xtensa/stdatomic_s32c1i.c"
@@ -158,6 +134,9 @@ if(CONFIG_LIBC_NEWLIB_NANO_FORMAT)
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         set(libc_dir_cmd ${CMAKE_C_COMPILER})
         string(REPLACE " " ";" cflags_list ${CMAKE_C_FLAGS})
+        # execute_process() quotes every argument, so we need to unquote response file path
+        # otherwise it will be treated in wrong way and clang will ignore it
+        string(REGEX REPLACE "@\"([^\"]*)\"" "@\\1" cflags_list ${cflags_list})
         list(APPEND libc_dir_cmd ${cflags_list} "-print-file-name=libc.a")
         execute_process(
             COMMAND ${libc_dir_cmd}

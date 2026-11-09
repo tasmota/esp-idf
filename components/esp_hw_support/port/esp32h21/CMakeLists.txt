@@ -7,8 +7,11 @@ set(srcs "rtc_clk.c"
 if(CONFIG_SOC_PMU_SUPPORTED)
     list(APPEND srcs "pmu_param.c"
                      "pmu_init.c"
-                     "pmu_sleep.c"
         )
+endif()
+
+if(NOT BOOTLOADER_BUILD)
+    list(APPEND srcs "sar_periph_ctrl.c")
 endif()
 
 add_prefix(srcs "${CMAKE_CURRENT_LIST_DIR}/" "${srcs}")

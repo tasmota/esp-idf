@@ -75,9 +75,9 @@ Application Examples
 HTTPS Server Cert Selection Hook
 --------------------------------
 
-The ESP HTTPS Server component provides an option to set the server certification selection hook. This feature allows you to configure and use a certificate selection callback during server handshake. The callback helps to select a certificate to present to the client based on the TLS extensions supplied in the client hello message, such as ALPN and SNI.
+The ESP HTTPS Server component provides an option to set the server certificate selection hook. This feature allows you to configure and use a certificate selection callback during the server handshake. The callback helps to select a certificate to present to the client based on the TLS extensions supplied in the client hello message, such as ALPN and SNI.
 
-To enable this feature, please enable :ref:`CONFIG_ESP_HTTPS_SERVER_CERT_SELECT_HOOK` in the ESP HTTPS Server menuconfig. Please note that the ESP-TLS option is only available when Mbedtls is used as the TLS stack for ESP-TLS (default behaviour).
+To enable this feature, please enable :menuitem:`CONFIG_ESP_HTTPS_SERVER_CERT_SELECT_HOOK` in the ESP HTTPS Server menuconfig. Please note that the ESP-TLS option is only available when MbedTLS is used as the TLS stack for ESP-TLS (default behavior).
 
 When enabled, you can set the certificate selection callback using the :cpp:member:`httpd_ssl_config::cert_select_cb` member of the :cpp:type:`httpd_ssl_config_t` structure.
 
@@ -90,9 +90,25 @@ When enabled, you can set the certificate selection callback using the :cpp:memb
     }
 
     httpd_ssl_config_t cfg = {
-        cert_select_cb = cert_section_callback,
+        .cert_select_cb = cert_selection_callback,
     };
 
+
+TLS Ciphersuites and Supported Groups
+-------------------------------------
+
+The ciphersuites and the supported groups of the server can be set in :cpp:type:`httpd_ssl_config_t`. Both lists apply to this server instance only. Please refer to the **TLS Ciphersuites** section and to the **TLS Supported Groups** section in the :doc:`/api-reference/protocols/esp_tls` for more details.
+
+The server keeps a pointer to each array. It does not copy the arrays. Each array must end with 0 and must stay valid for the lifetime of the server.
+
+.. code-block:: c
+
+    static const int ciphersuites_list[] = {MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0};
+    static const uint16_t groups_list[] = {MBEDTLS_SSL_IANA_TLS_GROUP_X25519, MBEDTLS_SSL_IANA_TLS_GROUP_SECP256R1, 0};
+
+    httpd_ssl_config_t cfg = HTTPD_SSL_CONFIG_DEFAULT();
+    cfg.ciphersuites_list = ciphersuites_list;
+    cfg.groups_list = groups_list;
 
 API Reference
 -------------

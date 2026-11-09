@@ -45,6 +45,8 @@
 
 #define GPIO_LL_INTR_SOURCE0   ETS_GPIO_INTR0_SOURCE
 
+#define GPIO_LL_CLK_SRC_SELECTABLE 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -295,6 +297,9 @@ static inline void gpio_ll_pin_input_hysteresis_enable(gpio_dev_t *hw, uint32_t 
     uint64_t bit_mask = 1ULL << gpio_num;
     if (!(bit_mask & SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK)) {
         // GPIO0-15
+        // On esp32p4, hysteresis of rtcio has different design.
+        // It share same suite of registers with LP control instead of independent registers.
+        // The `rtcio_ll_function_select` don't affect the hysteresis config.
         uint32_t hys_mask = HAL_FORCE_READ_U32_REG_FIELD(LP_IOMUX.lp_pad_hys, reg_lp_gpio_hys);
         hys_mask |= bit_mask;
         HAL_FORCE_MODIFY_U32_REG_FIELD(LP_IOMUX.lp_pad_hys, reg_lp_gpio_hys, hys_mask);
@@ -671,6 +676,7 @@ static inline void gpio_ll_set_output_enable_ctrl(gpio_dev_t *hw, uint8_t gpio_n
  * @param signal_idx Peripheral signal index (tagged as output attribute). Particularly, `SIG_GPIO_OUT_IDX` means disconnect GPIO and other peripherals. Only the GPIO driver can control the output level.
  * @param out_inv True if the signal output needs to be inverted, otherwise False.
  */
+__attribute__((always_inline))
 static inline void gpio_ll_set_output_signal_matrix_source(gpio_dev_t *hw, uint32_t gpio_num, uint32_t signal_idx, bool out_inv)
 {
     hw->func_out_sel_cfg[gpio_num].out_sel = signal_idx;
@@ -864,6 +870,15 @@ __attribute__((always_inline))
 static inline void gpio_ll_sleep_output_enable(gpio_dev_t *hw, uint32_t gpio_num)
 {
     IO_MUX.gpio[gpio_num].mcu_oe = 1;
+}
+
+/**
+ * @brief Clear all GPIO dedicated control signals
+ */
+__attribute__((always_inline))
+static inline void gpio_ll_clear_dedicated_ctrl(void)
+{
+    // no dedicated ctrl pad
 }
 
 #ifdef __cplusplus

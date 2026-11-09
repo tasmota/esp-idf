@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -361,17 +361,22 @@ typedef struct {
 /**
  * @brief Defines the GATT authentication request types.
  *
- * This enumeration lists the types of authentication requests that can be made.
- * It corresponds to the `BTA_GATT_AUTH_REQ_xxx` values defined in `bta/bta_gatt_api.h`.
- * The types include options for no authentication, unauthenticated encryption, authenticated encryption,
- * and both signed versions with and without MITM (Man-In-The-Middle) protection.
+ * Used as the `auth_req` argument in GATT client read/write APIs. It specifies the
+ * link security level required before the ATT request is sent, and is independent
+ * of server-side attribute permission flags (`ESP_GATT_PERM_xxx`).
+ *
+ * @note If `auth_req` is not `ESP_GATT_AUTH_REQ_NONE`, the stack may start link
+ *       encryption or SMP pairing before the GATT operation. Handle
+ *       `ESP_GAP_BLE_PASSKEY_REQ_EVT` and call `esp_ble_passkey_reply()` if needed.
+ *
+ * Corresponds to the `BTA_GATT_AUTH_REQ_xxx` values defined in `bta/bta_gatt_api.h`.
  */
 typedef enum {
     ESP_GATT_AUTH_REQ_NONE                  = 0, /*!< No authentication required. Corresponds to BTA_GATT_AUTH_REQ_NONE. */
     ESP_GATT_AUTH_REQ_NO_MITM               = 1, /*!< Unauthenticated encryption. Corresponds to BTA_GATT_AUTH_REQ_NO_MITM. */
     ESP_GATT_AUTH_REQ_MITM                  = 2, /*!< Authenticated encryption (MITM protection). Corresponds to BTA_GATT_AUTH_REQ_MITM. */
-    ESP_GATT_AUTH_REQ_SIGNED_NO_MITM        = 3, /*!< Signed data, no MITM protection. Corresponds to BTA_GATT_AUTH_REQ_SIGNED_NO_MITM. */
-    ESP_GATT_AUTH_REQ_SIGNED_MITM           = 4, /*!< Signed data with MITM protection. Corresponds to BTA_GATT_AUTH_REQ_SIGNED_MITM. */
+    ESP_GATT_AUTH_REQ_SIGNED_NO_MITM        = 3, /*!< CSRK signed write, no MITM. Use with `ESP_GATT_WRITE_TYPE_NO_RSP` on a bonded, unencrypted link. */
+    ESP_GATT_AUTH_REQ_SIGNED_MITM           = 4, /*!< CSRK signed write with MITM. Use with `ESP_GATT_WRITE_TYPE_NO_RSP` on a bonded, unencrypted link. */
 } esp_gatt_auth_req_t;
 
 
@@ -405,10 +410,10 @@ typedef enum {
 /** @brief Permission to write to the attribute with encrypted MITM protection. Corresponds to BTA_GATT_PERM_WRITE_ENC_MITM. */
 #define ESP_GATT_PERM_WRITE_ENC_MITM        (1 << 6)
 
-/** @brief Permission for signed writes to the attribute. Corresponds to BTA_GATT_PERM_WRITE_SIGNED. */
+/** @brief Signed write without link encryption (CSRK). Requires `ESP_GATT_CHAR_PROP_BIT_AUTH`. Corresponds to BTA_GATT_PERM_WRITE_SIGNED. */
 #define ESP_GATT_PERM_WRITE_SIGNED          (1 << 7)
 
-/** @brief Permission for signed writes to the attribute with MITM protection. Corresponds to BTA_GATT_PERM_WRITE_SIGNED_MITM. */
+/** @brief Signed write with MITM-protected CSRK. Requires `ESP_GATT_CHAR_PROP_BIT_AUTH`. Corresponds to BTA_GATT_PERM_WRITE_SIGNED_MITM. */
 #define ESP_GATT_PERM_WRITE_SIGNED_MITM     (1 << 8)
 
 /** @brief Permission to read the attribute with authorization. */
@@ -458,7 +463,7 @@ typedef uint16_t esp_gatt_perm_t; ///< Type to represent GATT attribute permissi
 /** @brief Ability to indicate.Corresponds to BTA_GATT_CHAR_PROP_BIT_INDICATE. */
 #define ESP_GATT_CHAR_PROP_BIT_INDICATE     (1 << 5)
 
-/** @brief Ability to authenticate.Corresponds to BTA_GATT_CHAR_PROP_BIT_AUTH. */
+/** @brief Authenticated Signed Writes (ATT Signed Write Command, 0xD2). Requires matching `ESP_GATT_PERM_WRITE_SIGNED`. Corresponds to BTA_GATT_CHAR_PROP_BIT_AUTH. */
 #define ESP_GATT_CHAR_PROP_BIT_AUTH         (1 << 6)
 
 /** @brief Has extended properties.Corresponds to BTA_GATT_CHAR_PROP_BIT_EXT_PROP. */
@@ -687,13 +692,39 @@ typedef struct {
     esp_bd_addr_t remote_bda;                              /*!< The Bluetooth address of the remote device */
     esp_ble_addr_type_t remote_addr_type;                  /*!< Address type of the remote device */
     bool is_direct;                                        /*!< Direct connection or background auto connection(by now, background auto connection is not supported */
-    bool is_aux;                                           /*!< Set to true for BLE 5.0 or higher to enable auxiliary connections; set to false for BLE 4.2 or lower. */
+    bool is_aux;                                           /*!< Determines whether to use BLE 5.0 or BLE 4.2 create connection interface.
+                                                                - If set to true, the BLE 5.0 interface (extended connection) will be used.
+                                                                - If set to false, the BLE 4.2 interface (legacy connection) will be used.
+                                                                - Note: When connecting to a legacy advertising device using BLE 5.0 interface, is_aux should be set to true.
+                                                                - Auto-setting (handled in L2CAP layer): The system will automatically set this parameter based on the enabled BLE features:
+                                                                  * If only BLE 4.2 feature is enabled, is_aux will be automatically set to false.
+                                                                  * If only BLE 5.0 feature is enabled, is_aux will be automatically set to true.
+                                                                  * If both BLE 4.2 and BLE 5.0 features are enabled (not recommended), the stack will automatically
+                                                                    infer whether to use BLE 5.0 or BLE 4.2 interface based on previously used APIs.
+                                                                    Otherwise, the user-specified value will be used.
+                                                                - Note: It is strongly recommended NOT to enable both BLE 4.2 and BLE 5.0 features simultaneously. */
     esp_ble_addr_type_t own_addr_type;                     /*!< Specifies the address type used in the connection request. Set to 0xFF if the address type is unknown. */
     esp_ble_phy_mask_t phy_mask;                           /*!< Indicates which PHY connection parameters will be used. When is_aux is false, only the connection params for 1M PHY can be specified */
     const esp_ble_conn_params_t *phy_1m_conn_params;       /*!< Connection parameters for the LE 1M PHY */
     const esp_ble_conn_params_t *phy_2m_conn_params;       /*!< Connection parameters for the LE 2M PHY */
-    const esp_ble_conn_params_t *phy_coded_conn_params;    /*!< Connection parameters for the LE Coded PHY */
+    const esp_ble_conn_params_t *phy_coded_conn_params;    /*!< Connection parameters for the LE Coded PHY.
+                                                                Note: Establishing an ACL connection over the LE Coded PHY
+                                                                will significantly degrade Wi-Fi performance, because the
+                                                                on-air transmission time of a Coded PHY packet (S=2 or S=8)
+                                                                is much longer than that of a 1M/2M PHY packet, so the
+                                                                Bluetooth controller occupies the radio for a longer time
+                                                                and leaves less airtime for Wi-Fi. In Bluetooth/Wi-Fi
+                                                                coexistence scenarios, it is recommended to use the LE 2M
+                                                                PHY or LE 1M PHY first, and only fall back to the LE Coded
+                                                                PHY when the long-range capability is really required. */
 } esp_ble_gatt_creat_conn_params_t;
+
+#if (CONFIG_BT_BLE_FEAT_PAWR_EN)
+/** @brief Invalid Advertising_Handle in PAwR connection complete events. */
+#define ESP_BLE_PAWR_ADV_HANDLE_NONE    0xFF
+/** @brief Invalid Sync_Handle in PAwR connection complete events. */
+#define ESP_BLE_PAWR_SYNC_HANDLE_NONE   0xFFFF
+#endif // (CONFIG_BT_BLE_FEAT_PAWR_EN)
 
 /** @brief Represents a creat connection element. */
 typedef struct {
@@ -705,7 +736,16 @@ typedef struct {
     esp_ble_phy_mask_t phy_mask;                           /*!< Indicates which PHY connection parameters will be used. When is_aux is false, only the connection params for 1M PHY can be specified */
     const esp_ble_conn_params_t *phy_1m_conn_params;       /*!< Connection parameters for the LE 1M PHY */
     const esp_ble_conn_params_t *phy_2m_conn_params;       /*!< Connection parameters for the LE 2M PHY */
-    const esp_ble_conn_params_t *phy_coded_conn_params;    /*!< Connection parameters for the LE Coded PHY */
+    const esp_ble_conn_params_t *phy_coded_conn_params;    /*!< Connection parameters for the LE Coded PHY.
+                                                                Note: Establishing an ACL connection over the LE Coded PHY
+                                                                will significantly degrade Wi-Fi performance, because the
+                                                                on-air transmission time of a Coded PHY packet (S=2 or S=8)
+                                                                is much longer than that of a 1M/2M PHY packet, so the
+                                                                Bluetooth controller occupies the radio for a longer time
+                                                                and leaves less airtime for Wi-Fi. In Bluetooth/Wi-Fi
+                                                                coexistence scenarios, it is recommended to use the LE 2M
+                                                                PHY or LE 1M PHY first, and only fall back to the LE Coded
+                                                                PHY when the long-range capability is really required. */
 } esp_ble_gatt_pawr_conn_params_t;
 
 #ifdef __cplusplus

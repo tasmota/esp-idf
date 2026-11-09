@@ -61,7 +61,12 @@
 #include "hal/wdt_hal.h"
 #endif // CONFIG_BT_CTRL_LE_LOG_STORAGE_EN
 #include "esp_rom_gpio.h"
+
+#include "hci_uart_h4.h"
+
 #if CONFIG_BT_ENABLED
+#include "esp_private/sleep_modem.h"
+
 
 /* Macro definition
  ************************************************************************
@@ -309,6 +314,7 @@ extern void ets_backup_dma_copy(uint32_t reg, uint32_t mem_addr, uint32_t num, b
 
 extern void btdm_cca_feature_enable(void);
 extern void btdm_aa_check_enhance_enable(void);
+extern void ble_min_conn_interval_enable(uint16_t min_interval);
 
 /* BLE Log module */
 #if CONFIG_BT_CTRL_LE_LOG_EN
@@ -758,7 +764,7 @@ void esp_bt_read_ctrl_log_from_flash(bool output)
 
     print_len = 0;
     max_print_len = 4096;
-    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA, &mapped_ptr, &mmap_handle);
+    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, &mapped_ptr, &mmap_handle);
     if (err != ESP_OK) {
         ESP_LOGE("FLASH", "Mmap failed: %s", esp_err_to_name(err));
         return;
@@ -1348,6 +1354,9 @@ static void btdm_funcs_table_ready_wrapper(void)
 #if BLE_CTRL_CHECK_CONNECT_IND_ACCESS_ADDRESS_ENABLED
     btdm_aa_check_enhance_enable();
 #endif
+#if CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE
+    ble_min_conn_interval_enable(3); // 3 * 1.25 = 3.75ms
+#endif
 #if CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY
     // do nothing
 #else
@@ -1846,7 +1855,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 #if CONFIG_MAC_BB_PD
     esp_mac_bb_pd_mem_init();
 #endif
-    esp_phy_modem_init();
+    esp_phy_modem_init(SLEEP_MODEM_BT);
     esp_bt_power_domain_on();
 
     btdm_controller_mem_init();
@@ -1862,6 +1871,11 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     }
 
     ESP_LOGI(BT_LOG_TAG, "BT controller compile version [%s]", btdm_controller_get_compile_version());
+
+#ifndef CONFIG_BT_CTRL_CHECK_CONFIG_EFF
+    ESP_LOGW(BT_LOG_TAG, "CONFIG_BT_CTRL_CHECK_CONFIG_EFF is not defined; "
+             "using compile-time default BLE controller feature options");
+#endif
 
 #if (CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY)
     ESP_LOGI(BT_LOG_TAG,"Put all controller code in flash");
@@ -1908,6 +1922,23 @@ if ((err = btdm_low_power_mode_init(cfg)) != ESP_OK) {
         goto error;
     }
 #endif // CONFIG_BT_CTRL_LE_LOG_EN
+
+#if CONFIG_BT_CTRL_HCI_MODE_UART_H4 && CONFIG_BT_CTRL_HCI_UART_INIT_BY_CONTROLLER
+    if (cfg->hci_tl_funcs == NULL) {
+        err = btdm_hci_uart_tl_install();
+        if (err != ESP_OK) {
+            goto error;
+        }
+        cfg->hci_tl_funcs = btdm_hci_uart_tl_get_funcs();
+    }
+#elif CONFIG_BT_CTRL_HCI_MODE_UART_H4
+    if (cfg->hci_tl_funcs == NULL) {
+        ESP_LOGE(BT_LOG_TAG, "HCI UART transport missing, either set cfg->hci_tl_funcs or enable "
+                 "CONFIG_BT_CTRL_HCI_UART_INIT_BY_CONTROLLER");
+        err = ESP_ERR_INVALID_ARG;
+        goto error;
+    }
+#endif
 
     err = btdm_controller_init(cfg);
 
@@ -2032,6 +2063,10 @@ static void btdm_low_power_mode_deinit(void)
 
 static void bt_controller_deinit_internal(void)
 {
+#if CONFIG_BT_CTRL_HCI_MODE_UART_H4 && CONFIG_BT_CTRL_HCI_UART_INIT_BY_CONTROLLER
+    btdm_hci_uart_tl_uninstall();
+#endif
+
     periph_module_disable(PERIPH_BT_MODULE);
 
     btdm_low_power_mode_deinit();
@@ -2040,7 +2075,7 @@ static void bt_controller_deinit_internal(void)
 #if CONFIG_MAC_BB_PD
     esp_mac_bb_pd_mem_deinit();
 #endif
-    esp_phy_modem_deinit();
+    esp_phy_modem_deinit(SLEEP_MODEM_BT);
 
 #if CONFIG_BT_CTRL_LE_LOG_EN
     esp_bt_controller_log_deinit();

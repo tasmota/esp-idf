@@ -56,7 +56,10 @@ extern "C" {
 /** Preset name maximum length */
 #define BT_HAS_PRESET_NAME_MAX 40
 
-/** @brief Opaque Hearing Access Service object. */
+/**
+ * @struct bt_has
+ * @brief Opaque Hearing Access Service object.
+ */
 struct bt_has;
 
 /** Hearing Aid device type */
@@ -224,7 +227,7 @@ struct bt_has_client_cb {
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_cb_register_safe(const struct bt_has_client_cb *cb);
+int bt_has_client_cb_register(const struct bt_has_client_cb *cb);
 
 /**
  * @brief Discover Hearing Access Service on a remote device.
@@ -238,7 +241,6 @@ int bt_has_client_cb_register_safe(const struct bt_has_client_cb *cb);
  * @return 0 if success, errno on failure.
  */
 int bt_has_client_discover(struct bt_conn *conn);
-int bt_has_client_discover_safe(struct bt_conn *conn);
 
 /**
  * @brief Get the Bluetooth connection object of the service object.
@@ -251,7 +253,7 @@ int bt_has_client_discover_safe(struct bt_conn *conn);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_conn_get_safe(const struct bt_has *has, struct bt_conn **conn);
+int bt_has_client_conn_get(const struct bt_has *has, struct bt_conn **conn);
 
 /**
  * @brief Read Preset Records.
@@ -266,7 +268,7 @@ int bt_has_client_conn_get_safe(const struct bt_has *has, struct bt_conn **conn)
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_presets_read_safe(struct bt_has *has, uint8_t index, uint8_t max_count);
+int bt_has_client_presets_read(struct bt_has *has, uint8_t index, uint8_t max_count);
 
 /**
  * @brief Set Active Preset.
@@ -280,7 +282,7 @@ int bt_has_client_presets_read_safe(struct bt_has *has, uint8_t index, uint8_t m
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_preset_set_safe(struct bt_has *has, uint8_t index, bool sync);
+int bt_has_client_preset_set(struct bt_has *has, uint8_t index, bool sync);
 
 /**
  * @brief Activate Next Preset.
@@ -293,7 +295,7 @@ int bt_has_client_preset_set_safe(struct bt_has *has, uint8_t index, bool sync);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_preset_next_safe(struct bt_has *has, bool sync);
+int bt_has_client_preset_next(struct bt_has *has, bool sync);
 
 /**
  * @brief Activate Previous Preset.
@@ -306,7 +308,21 @@ int bt_has_client_preset_next_safe(struct bt_has *has, bool sync);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_client_preset_prev_safe(struct bt_has *has, bool sync);
+int bt_has_client_preset_prev(struct bt_has *has, bool sync);
+
+/**
+ * @brief Write Preset Name.
+ *
+ * Client procedure to change the name of the preset identified by @p index.
+ * The result is reflected by the server via a Preset Changed notification.
+ *
+ * @param has Pointer to the Hearing Access Service object.
+ * @param index Preset index whose name to change.
+ * @param name New preset name (BT_HAS_PRESET_NAME_MIN..BT_HAS_PRESET_NAME_MAX octets).
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int bt_has_client_preset_name_write(struct bt_has *has, uint8_t index, const char *name);
 
 /** @brief Preset operations structure. */
 struct bt_has_preset_ops {
@@ -375,7 +391,7 @@ struct bt_has_preset_register_param {
  *
  * @return 0 if success, errno on failure.
  */
-int bt_has_register_safe(const struct bt_has_features_param *features);
+int bt_has_register(const struct bt_has_features_param *features);
 
 /**
  * @brief Register preset.
@@ -387,7 +403,7 @@ int bt_has_register_safe(const struct bt_has_features_param *features);
  *
  * @return 0 if success, errno on failure.
  */
-int bt_has_preset_register_safe(const struct bt_has_preset_register_param *param);
+int bt_has_preset_register(const struct bt_has_preset_register_param *param);
 
 /**
  * @brief Unregister Preset.
@@ -398,7 +414,7 @@ int bt_has_preset_register_safe(const struct bt_has_preset_register_param *param
  *
  * @return 0 if success, errno on failure.
  */
-int bt_has_preset_unregister_safe(uint8_t index);
+int bt_has_preset_unregister(uint8_t index);
 
 /**
  * @brief Set the preset as available.
@@ -410,7 +426,7 @@ int bt_has_preset_unregister_safe(uint8_t index);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_preset_available_safe(uint8_t index);
+int bt_has_preset_available(uint8_t index);
 
 /**
  * @brief Set the preset as unavailable.
@@ -422,15 +438,7 @@ int bt_has_preset_available_safe(uint8_t index);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_preset_unavailable_safe(uint8_t index);
-
-/** Enum for return values for @ref bt_has_preset_func_t functions */
-enum {
-    /** Stop iterating */
-    BT_HAS_PRESET_ITER_STOP = 0,
-    /** Continue iterating */
-    BT_HAS_PRESET_ITER_CONTINUE,
-};
+int bt_has_preset_unavailable(uint8_t index);
 
 /**
  * @typedef bt_has_preset_func_t
@@ -441,11 +449,11 @@ enum {
  * @param name Preset name.
  * @param user_data Data given.
  *
- * @return BT_HAS_PRESET_ITER_CONTINUE if should continue to the next preset.
- * @return BT_HAS_PRESET_ITER_STOP to stop.
+ * @retval true Continue iterating.
+ * @retval false Stop iterating.
  */
-typedef uint8_t (*bt_has_preset_func_t)(uint8_t index, enum bt_has_properties properties,
-                                        const char *name, void *user_data);
+typedef bool (*bt_has_preset_func_t)(uint8_t index, enum bt_has_properties properties,
+                                     const char *name, void *user_data);
 
 /**
  * @brief Preset iterator.
@@ -455,8 +463,12 @@ typedef uint8_t (*bt_has_preset_func_t)(uint8_t index, enum bt_has_properties pr
  * @param index Preset index, passing @ref BT_HAS_PRESET_INDEX_NONE skips index matching.
  * @param func Callback function.
  * @param user_data Data to pass to the callback.
+ *
+ * @retval 0 Success
+ * @retval -ECANCELED Iteration was stopped by the callback function before complete.
+ * @retval -EINVAL @p func was NULL.
  */
-void bt_has_preset_foreach_safe(uint8_t index, bt_has_preset_func_t func, void *user_data);
+int bt_has_preset_foreach(uint8_t index, bt_has_preset_func_t func, void *user_data);
 
 /**
  * @brief Set active preset.
@@ -468,7 +480,7 @@ void bt_has_preset_foreach_safe(uint8_t index, bt_has_preset_func_t func, void *
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_preset_active_set_safe(uint8_t index);
+int bt_has_preset_active_set(uint8_t index);
 
 /**
  * @brief Get active preset.
@@ -477,7 +489,7 @@ int bt_has_preset_active_set_safe(uint8_t index);
  *
  * @return Active preset index.
  */
-uint8_t bt_has_preset_active_get_safe(void);
+uint8_t bt_has_preset_active_get(void);
 
 /**
  * @brief Clear out active preset.
@@ -486,9 +498,9 @@ uint8_t bt_has_preset_active_get_safe(void);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-static inline int bt_has_preset_active_clear_safe(void)
+static inline int bt_has_preset_active_clear(void)
 {
-    return bt_has_preset_active_set_safe(BT_HAS_PRESET_INDEX_NONE);
+    return bt_has_preset_active_set(BT_HAS_PRESET_INDEX_NONE);
 }
 
 /**
@@ -501,7 +513,7 @@ static inline int bt_has_preset_active_clear_safe(void)
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_preset_name_change_safe(uint8_t index, const char *name);
+int bt_has_preset_name_change(uint8_t index, const char *name);
 
 /**
  * @brief Change the Hearing Aid Features.
@@ -512,7 +524,7 @@ int bt_has_preset_name_change_safe(uint8_t index, const char *name);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_has_features_set_safe(const struct bt_has_features_param *features);
+int bt_has_features_set(const struct bt_has_features_param *features);
 
 #ifdef __cplusplus
 }

@@ -196,6 +196,11 @@ tSMP_STATUS SMP_Pair (BD_ADDR bd_addr)
 #if (CLASSIC_BT_INCLUDED == TRUE)
 tSMP_STATUS SMP_BR_PairWith (BD_ADDR bd_addr)
 {
+#if (SMP_CTKD_INCLUDED == FALSE)
+    UNUSED(bd_addr);
+    SMP_TRACE_WARNING("%s CTKD disabled", __func__);
+    return SMP_XTRANS_DERIVE_NOT_ALLOW;
+#else
     tSMP_CB   *p_cb = &smp_cb;
     UINT8     status = SMP_PAIR_INTERNAL_ERR;
 
@@ -217,11 +222,12 @@ tSMP_STATUS SMP_BR_PairWith (BD_ADDR bd_addr)
 
     if (!L2CA_ConnectFixedChnl (L2CAP_SMP_BR_CID, bd_addr, BLE_ADDR_UNKNOWN_TYPE, FALSE, FALSE, 0xFF, 0xFF)) {
         SMP_TRACE_ERROR("%s: L2C connect fixed channel failed.", __FUNCTION__);
-        smp_br_state_machine_event(p_cb, SMP_BR_AUTH_CMPL_EVT, &status);
+        smp_reset_control_value(p_cb);
         return status;
     }
 
     return SMP_STARTED;
+#endif  ///SMP_CTKD_INCLUDED
 }
 #endif  ///CLASSIC_BT_INCLUDED == TRUE
 
@@ -440,6 +446,17 @@ void SMP_OobDataReply(BD_ADDR bd_addr, tSMP_STATUS res, UINT8 len, UINT8 *p_data
 
     /* If timeout already expired or has been canceled, ignore the reply */
     if (p_cb->state != SMP_STATE_WAIT_APP_RSP || p_cb->cb_evt != SMP_OOB_REQ_EVT) {
+        return;
+    }
+
+    /* Reject an OOB reply that does not match the device currently pairing. */
+    if (memcmp(bd_addr, p_cb->pairing_bda, BD_ADDR_LEN) != 0) {
+        SMP_TRACE_ERROR("%s() - Wrong BD Addr", __func__);
+        return;
+    }
+
+    if (btm_find_dev(bd_addr) == NULL) {
+        SMP_TRACE_ERROR("%s() - no dev CB", __func__);
         return;
     }
 

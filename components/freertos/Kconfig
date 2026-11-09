@@ -106,6 +106,7 @@ menu "FreeRTOS"
 
         config FREERTOS_USE_IDLE_HOOK
             bool "configUSE_IDLE_HOOK"
+            default y if IDF_TARGET="linux" && ESP_TASK_WDT_EN=y
             default n
             help
                 Enables the idle task application hook (see configUSE_IDLE_HOOK documentation for more details).
@@ -132,6 +133,7 @@ menu "FreeRTOS"
 
         config FREERTOS_USE_TICK_HOOK
             bool "configUSE_TICK_HOOK"
+            default y if IDF_TARGET="linux" && ESP_INT_WDT=y
             default n
             help
                 Enables the tick hook (see configUSE_TICK_HOOK documentation for more details).
@@ -330,6 +332,10 @@ menu "FreeRTOS"
                 Note that timers created using esp_timer APIs may prevent the system from entering sleep mode, even
                 when no tasks need to run. To skip unnecessary wake-up initialize a timer with the
                 "skip_unhandled_events" option as true.
+
+                While the OS tick interrupt is suppressed during tickless idle, tick hooks are not invoked
+                for those suppressed ticks. This applies to esp_register_freertos_tick_hook() callbacks and
+                to configUSE_TICK_HOOK.
 
                 If disabled, automatic light sleep support will be disabled.
 
@@ -566,6 +572,47 @@ menu "FreeRTOS"
                 If enabled, context of port*_CRITICAL calls (ISR or Non-ISR) would be checked to be in compliance with
                 Vanilla FreeRTOS. e.g Calling port*_CRITICAL from ISR context would cause assert failure
 
+        config FREERTOS_DEBUG_TASK_PIE_BLACKLIST
+            bool "Abort when a blacklisted task executes PIE instructions"
+            depends on SOC_CPU_HAS_PIE && !FREERTOS_SMP
+            default n
+            help
+                Enables per-task PIE blacklisting. Tagged tasks abort if they execute a PIE
+                instruction, instead of being silently pinned to a PIE-capable core.
+
+                Use vTaskSetPieBlacklisted() to tag tasks that must not use PIE. This is a
+                debug aid for finding accidental PIE use, for example from deep call stacks
+                that pull in PIE helpers.
+
+                The flag is consulted only in the coprocessor trap. PIE stays enabled while
+                its owner keeps running, so instructions issued before that task is switched
+                out do not trap. After a switch, the next PIE instruction traps and a
+                blacklisted task aborts even if it still owns the coprocessor.
+
+        config FREERTOS_DEBUG_TASK_PIE_BLACKLIST_MAX
+            int "Maximum number of PIE-blacklisted tasks"
+            depends on FREERTOS_DEBUG_TASK_PIE_BLACKLIST
+            range 1 512
+            default 16
+            help
+                Size of the handle table that records blacklisted tasks.
+                vTaskSetPieBlacklisted() logs an error if the table is full.
+
+        config FREERTOS_PORT_THREAD_SAFE_CLAIM
+            bool "Enable xPortThreadSafeClaim/xPortThreadSafeDisclaim APIs"
+            default y if SOC_BRANCH_PREDICTOR_SUPPORTED
+            default n
+            help
+                Enables the xPortThreadSafeClaim() and xPortThreadSafeDisclaim() APIs, which allow a caller to
+                declare that it has already ensured thread safety (e.g. by disabling interrupts and stalling all
+                other cores), causing subsequent vPortEnterCritical/vPortExitCritical calls to become no-ops for
+                the duration of the claim.
+
+                This feature adds a branch check to every port-layer critical-section enter/exit path. On chips
+                with a hardware branch predictor (SOC_BRANCH_PREDICTOR_SUPPORTED) the branch is predicted-not-taken
+                and has negligible overhead. On older chips without a branch predictor the branch has a measurable
+                per-critical-section cost, so this option defaults to disabled.
+
     endmenu # Port
 
     menu "Extra"
@@ -592,6 +639,30 @@ menu "FreeRTOS"
                 If you have a task that needs a large amount of stack and does not call on ROM code in any way
                 (no direct calls, but also no Bluetooth/WiFi), you can try enable this to
                 cause xTaskCreateStatic to allow tasks stack in external memory.
+
+        config FREERTOS_PLACE_TASK_STACKS_IN_EXT_RAM
+            bool "Place dynamic task stacks in PSRAM by default"
+            depends on FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+            default n
+            help
+                When enabled, task stacks allocated by xTaskCreate() / xTaskCreatePinnedToCore() are
+                placed in PSRAM (with internal RAM as fallback). TCBs are still allocated from internal RAM.
+
+                Restrictions that still require user attention:
+
+                - Flash operations cannot be called from tasks a PSRAM stack as they will
+                  run while cache is disabled. This includes all filesystem access and NVS.
+                  The recommended approach here is to use esp-flash-dispatcher,
+
+                  idf.py add-dependency "espressif/esp_flash_dispatcher"
+
+                  which automatically routes all flash API calls to a dedicated task
+                  placed in internal RAM.
+                - Deep-sleep requests issued from a task with a PSRAM stack are rejected at runtime. Auto-light-sleep
+                  is unaffected because it runs from the idle task, whose stack is always in internal RAM.
+                - Components that spawn tasks via xTaskCreate and require cache-disabled-safe stacks
+                  should use xTaskCreateWithCaps(..., MALLOC_CAP_INTERNAL) instead.
+                - xTaskCreateStatic is unaffected; the caller always decides where the stack lives.
 
     endmenu  # Extra
 

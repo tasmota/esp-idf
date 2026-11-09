@@ -67,6 +67,10 @@ config ESP_ROM_HAS_NEWLIB_NANO_FORMAT
     bool
     default y
 
+config ESP_ROM_HAS_LIBGCC
+    bool
+    default y
+
 config ESP_ROM_NEEDS_SET_CACHE_MMU_SIZE
     bool
     default y
@@ -114,3 +118,7 @@ config ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY
 config ESP_ROM_HAS_REGI2C_IMPL
     bool
     default y
+
+config ESP_ROM_BOOTLOADER_OFFSET_FLASH
+    hex
+    default 0x0

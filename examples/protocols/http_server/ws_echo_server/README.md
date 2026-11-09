@@ -69,12 +69,37 @@ httpd_ws_recv_frame(req, &ws_pkt, MAX_PAYLOAD_LEN);
   2) Allocate the size based on the received packet length
   3) Call `httpd_ws_recv_frame()` with the allocated buffer
 
+#### Fragmented messages
+
+The WebSocket HTTP server does not support fragmented messages, as [RFC6455, section 5.4](https://tools.ietf.org/html/rfc6455#section-5.4) defines them.
+
+On receive, the server passes each frame to the handler on its own. It does not join the fragments of one message. A handler that gets a message in three fragments sees three separate frames. Use the `final` and `fragmented` fields of `httpd_ws_frame_t` to detect a fragment, and join the payloads in the application.
+
+The server also does not validate the fragment sequence. It accepts a CONTINUE frame that continues no message. It also accepts a new TEXT or BINARY frame while a fragmented message is still open. RFC 6455 requires a close with status code 1002 in both cases.
+
+`CONFIG_HTTPD_WS_STRICTER_RFC6455` validates the UTF-8 of a complete, unfragmented TEXT frame only. It does not validate a TEXT message that arrives in fragments. Join the fragments and call `httpd_ws_validate_utf8()` on the result.
+
+This example echoes each frame as a complete message, so it does not handle fragments either.
+
 #### Handling outgoing data
 
-Please note that the WebSocket HTTP server does not automatically fragment messages.
+On transmit, the server does not automatically fragment messages.
 Each outgoing frame has the FIN flag set by default.
 In case an application wants to send fragmented data, it must be done manually by setting the
 `fragmented` option and using the `final` flag as described in [RFC6455, section 5.4](https://tools.ietf.org/html/rfc6455#section-5.4).
+
+#### Handling control frames
+
+By default the server replies to control frames (PING, CLOSE) automatically. Setting `handle_ws_control_frames = true` alone routes control frames to the data handler instead, which then has to receive them and send the protocol replies itself.
+
+This example registers a dedicated control-frame handler on the `/ws` endpoint (see `CONFIG_EXAMPLE_ENABLE_WS_CONTROL_FRAME_HANDLER`, enabled by default):
+
+```c
+        .handle_ws_control_frames = true,
+        .ws_control_handler = ws_control_frame_handler,  // handles PING/PONG/CLOSE
+```
+
+Control frames then go to `ws_control_frame_handler()` instead of the data handler, so `echo_handler()` only deals with TEXT/BINARY frames. The server receives the control frame body for the handler but does not reply, so the handler sends the protocol reply itself (a PONG echoing the payload for a PING, an empty CLOSE for a CLOSE). Send the text message `Ping` to the server to watch the full heartbeat round trip: the server sends a PING and the client's PONG response is logged by the control-frame handler.
 
 
 ### Hardware Required

@@ -29,10 +29,6 @@ void esp_console_repl_task(void *args)
      * function is called. */
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (repl_com->state_mux != NULL) {
-        xSemaphoreTake(repl_com->state_mux, portMAX_DELAY);
-    }
-
     /* Change standard input and output of the task if the requested UART is
      * NOT the default one. This block will replace stdin, stdout and stderr.
      */
@@ -72,8 +68,12 @@ void esp_console_repl_task(void *args)
     while (repl_com->state == CONSOLE_REPL_STATE_START) {
         char *line = linenoise(repl_com->prompt);
         if (line == NULL) {
-            ESP_LOGD(TAG, "empty line");
-            /* Ignore empty lines */
+            /*
+             * Avoid spinning when the input backend is disconnected or
+             * temporarily unavailable. This can happen for USB console
+             * backends after host loss.
+             */
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         /* Add the command to the history */
@@ -169,16 +169,22 @@ __attribute__((weak)) esp_err_t esp_console_internal_set_event_fd(esp_console_re
     return ESP_OK;
 }
 
-esp_err_t esp_console_common_init(size_t max_cmdline_length, esp_console_repl_com_t *repl_com)
+esp_err_t esp_console_common_init(size_t max_cmdline_length, size_t max_cmdline_args, esp_console_repl_com_t *repl_com)
 {
     esp_err_t ret = ESP_OK;
     /* Initialize the console */
     esp_console_config_t console_config = ESP_CONSOLE_CONFIG_DEFAULT();
     repl_com->max_cmdline_length = console_config.max_cmdline_length;
+    repl_com->max_cmdline_args = console_config.max_cmdline_args;
     /* Replace the default command line length if passed as a parameter */
     if (max_cmdline_length != 0) {
         console_config.max_cmdline_length = max_cmdline_length;
         repl_com->max_cmdline_length = max_cmdline_length;
+    }
+    /* Replace the default command line args if passed as a parameter */
+    if (max_cmdline_args != 0) {
+        console_config.max_cmdline_args = max_cmdline_args;
+        repl_com->max_cmdline_args = max_cmdline_args;
     }
 
 #if CONFIG_LOG_COLORS
@@ -267,6 +273,7 @@ esp_err_t esp_console_new_repl_stdio(const esp_console_repl_config_t *repl_confi
 {
     esp_err_t ret = ESP_OK;
     esp_console_repl_universal_t *universal_repl = NULL;
+    bool io_driver_installed = false;
     if (!repl_config || !ret_repl) {
         ret = ESP_ERR_INVALID_ARG;
         goto _exit;
@@ -283,15 +290,22 @@ esp_err_t esp_console_new_repl_stdio(const esp_console_repl_config_t *repl_confi
     fflush(stdout);
     fsync(fileno(stdout));
 
-    /* the IO related initialization will be performed within the task
-     * created to run esp_console_repl_task */
-
     /* initialize console, common part */
     ret = esp_console_common_init(repl_config->max_cmdline_length,
+                                  repl_config->max_cmdline_args,
                                   &universal_repl->repl_com);
     if (ret != ESP_OK) {
         goto _exit;
     }
+
+    /* Must happen before esp_console_setup_prompt(): the terminal probe it runs
+     * needs a working stdin to read the reply back. Some backends (USB Serial
+     * JTAG) cannot be read from at all until their driver is installed. */
+    ret = esp_stdio_install_io_driver();
+    if (ret != ESP_OK) {
+        goto _exit;
+    }
+    io_driver_installed = true;
 
     /* setup history */
     ret = esp_console_setup_history(repl_config->history_save_path, repl_config->max_history_len, &universal_repl->repl_com);
@@ -301,11 +315,6 @@ esp_err_t esp_console_new_repl_stdio(const esp_console_repl_config_t *repl_confi
 
     /* setup prompt */
     ret = esp_console_setup_prompt(repl_config->prompt, &universal_repl->repl_com);
-    if (ret != ESP_OK) {
-        goto _exit;
-    }
-
-    ret = esp_stdio_install_io_driver();
     if (ret != ESP_OK) {
         goto _exit;
     }
@@ -325,8 +334,15 @@ esp_err_t esp_console_new_repl_stdio(const esp_console_repl_config_t *repl_confi
     *ret_repl = &universal_repl->repl_com.repl_core;
     return ESP_OK;
 _exit:
+    if (io_driver_installed) {
+        esp_stdio_uninstall_io_driver();
+    }
     if (universal_repl) {
         esp_console_deinit();
+        /* Only common_deinit() deletes state_mux, and the weak set_event_fd() never creates it. */
+        if (universal_repl->repl_com.state_mux) {
+            vSemaphoreDelete(universal_repl->repl_com.state_mux);
+        }
         free(universal_repl);
     }
     if (ret_repl) {

@@ -13,7 +13,7 @@ This document provides an architecture overview of the Bluetooth Low Energy (Blu
 
     {IDF_TARGET_NAME} supports Bluetooth 5.0 (LE) and is certified for Bluetooth LE 5.4.
 
-.. only:: esp32c2 or esp32c6 or esp32h2 or esp32c5 or esp32c61
+.. only:: esp32c2 or esp32c6 or esp32h2 or esp32h21 or esp32c5 or esp32c61
 
     {IDF_TARGET_NAME} supports Bluetooth 5.0 (LE) and is certified for Bluetooth LE 5.3.
 
@@ -37,7 +37,7 @@ The Bluetooth LE stack in ESP-IDF is a layered architecture that enables Bluetoo
 
         {IDF_TARGET_NAME} Bluetooth LE Stack Architecture
 
-.. only:: esp32h2
+.. only:: esp32h2 or esp32h21
 
     .. figure:: ../../../_static/bluetooth-architecture-no-blufi.png
         :align: center
@@ -227,6 +227,17 @@ Above the host stacks are the profile implementations by Espressif and some comm
 
   - :doc:`BluFi documentation <blufi>`
   - :example:`Application examples <bluetooth/blufi>`
+
+
+.. only:: SOC_BLE_AUDIO_SUPPORTED
+
+  ESP-BLE-AUDIO
+  ^^^^^^^^^^^^^
+
+  Bluetooth LE Audio is the audio architecture introduced in Bluetooth Core Specification 5.2. ESP-BLE-AUDIO provides the Generic Audio Framework profiles and services, built on top of the ESP-BLE-ISO transport. Both run on either ESP-Bluedroid or ESP-NimBLE.
+
+  - :doc:`ESP-IDF LE Audio documentation <../esp-ble-audio/ble-audio-index>`: standard overview, architecture, feature support status, etc.
+  - :example:`Application examples <bluetooth/esp_ble_audio>`
 
 
 Applications

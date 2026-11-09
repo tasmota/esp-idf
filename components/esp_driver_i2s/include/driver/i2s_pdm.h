@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -103,6 +103,7 @@ extern "C" {
     .mclk_multiple = I2S_MCLK_MULTIPLE_256, \
     .dn_sample_mode = I2S_PDM_DSR_8S, \
     .bclk_div = 8, \
+    .flags = {}, \
 }
 
 /**
@@ -117,7 +118,7 @@ typedef struct {
     /* Particular fields */
     i2s_pdm_slot_mask_t     slot_mask;          /*!< Choose the slots to activate */
     i2s_pdm_data_fmt_t      data_fmt;           /*!< The data format of PDM RX mode. It determines what kind of data format is read in software.
-                                                 *   Typically, set this field to I2S_PDM_DATA_FMT_PCM when PCM2PDM filter is supported in the hardware,
+                                                 *   Typically, set this field to I2S_PDM_DATA_FMT_PCM when PDM2PCM filter is supported in the hardware,
                                                  *   so that the hardware PDM2PCM filter will help to convert the raw PDM data on the line into PCM format,
                                                  *   And then you can read PCM format data in software. Otherwise if this field is set to I2S_PDM_DATA_FMT_RAW,
                                                  *   The data read in software are still in raw PDM format, you may need to convert the raw PDM data into PCM format manually by a software filter.
@@ -148,6 +149,9 @@ typedef struct {
     i2s_pdm_dsr_t           dn_sample_mode;     /*!< Down-sampling rate mode */
     uint32_t                bclk_div;           /*!< The division from MCLK to BCLK. The typical and minimum value is I2S_PDM_RX_BCLK_DIV_MIN.
                                                  *   It will be set to I2S_PDM_RX_BCLK_DIV_MIN by default if it is smaller than I2S_PDM_RX_BCLK_DIV_MIN */
+    struct {
+        uint32_t            clk_src_adjustable : 1; /*!< Set to enable clock source frequency adjustment. Only supported for `I2S_CLK_SRC_APLL` for now */
+    } flags;                                    /*!< I2S clock configuration flags */
 } i2s_pdm_rx_clk_config_t;
 
 /**
@@ -402,6 +406,7 @@ esp_err_t i2s_channel_reconfig_pdm_rx_gpio(i2s_chan_handle_t handle, const i2s_p
     .up_sample_fp = 960, \
     .up_sample_fs = 480, \
     .bclk_div = 8, \
+    .flags = {}, \
 }
 
 /**
@@ -422,6 +427,7 @@ esp_err_t i2s_channel_reconfig_pdm_rx_gpio(i2s_chan_handle_t handle, const i2s_p
     .up_sample_fp = 960, \
     .up_sample_fs = (rate) / 100, \
     .bclk_div = 13, \
+    .flags = {}, \
 }
 
 /*
@@ -490,6 +496,9 @@ typedef struct {
     uint32_t                up_sample_fs;       /*!< Up-sampling param fs, not allowed to be greater than 480 */
     uint32_t                bclk_div;           /*!< The division from MCLK to BCLK. The minimum value is I2S_PDM_TX_BCLK_DIV_MIN.
                                                  *   It will be set to I2S_PDM_TX_BCLK_DIV_MIN by default if it is smaller than I2S_PDM_TX_BCLK_DIV_MIN */
+    struct {
+        uint32_t            clk_src_adjustable : 1; /*!< Set to enable clock source frequency adjustment. Only supported for `I2S_CLK_SRC_APLL` for now */
+    } flags;                                    /*!< I2S clock configuration flags */
 } i2s_pdm_tx_clk_config_t;
 
 /**

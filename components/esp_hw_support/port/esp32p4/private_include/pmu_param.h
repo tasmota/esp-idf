@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <esp_types.h>
+#include "soc/soc_caps.h"
 #include "soc/pmu_struct.h"
 #include "hal/pmu_hal.h"
 #include "sdkconfig.h"
@@ -19,6 +20,21 @@
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+/* Enabled when this chip needs any pmu_sleep_data_t priv slot; conditions differ per chip. */
+#define PMU_SLEEP_PRIV_ENABLED (SOC_PM_SLEEP_CLK_ICG_USE_REGDMA)
+#if PMU_SLEEP_PRIV_ENABLED
+enum {
+#if SOC_PM_SLEEP_CLK_ICG_USE_REGDMA
+    PMU_SLEEP_PRIV_SW_ICG_CLK,
+#endif
+    PMU_SLEEP_PRIV_MAX,
+};
+
+typedef struct {
+    void *func[PMU_SLEEP_PRIV_MAX];
+} pmu_sleep_data_t;
 #endif
 
 #define HP_CALI_ACTIVE_DCM_VSET_DEFAULT     27 // For DCDC, about 1.25v
@@ -117,7 +133,7 @@ const pmu_lp_system_analog_param_t* pmu_lp_system_analog_param_default(pmu_lp_mo
 
 
 #if SOC_PM_SLEEP_CLK_ICG_USE_REGDMA && !defined(CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
-void pmu_sleep_clock_icg_config(void *icg_context, const uint32_t icg_func);
+void pmu_sleep_clock_icg_config(void *data, const uint32_t icg_func);
 #endif
 
 
@@ -237,7 +253,7 @@ typedef struct {
 typedef struct {
     uint16_t    digital_power_supply_wait_cycle;
     uint8_t     min_slp_slow_clk_cycle;
-    uint8_t     analog_wait_target_cycle;
+    uint16_t    analog_wait_target_cycle;
     uint8_t     digital_power_down_wait_cycle;
     uint8_t     digital_power_up_wait_cycle;
 } pmu_lp_param_t;
@@ -357,7 +373,7 @@ typedef struct {
         .lp_pad_hold_all = (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) ? 1 : 0, \
         .dig_pause_wdt = ((sleep_flags) & RTC_SLEEP_USE_RTC_WDT) ? 0 : 1, \
     },                                                                  \
-    .icg_func = { 0, clk_flags }                                        \
+    .icg_func = { (clk_flags)[1], (clk_flags)[0] }                            \
 }
 #else // !CONFIG_ESP32P4_SELECTS_REV_LESS_V3
 #define PMU_SLEEP_DIGITAL_DSLP_CONFIG_DEFAULT(sleep_flags, clk_flags) { \
@@ -373,7 +389,7 @@ typedef struct {
         .dig_pad_slp_sel = 0,                                           \
         .dig_pause_wdt = ((sleep_flags) & RTC_SLEEP_USE_RTC_WDT) ? 0 : 1, \
     },                                                                  \
-    .icg_func = { 0, clk_flags }                                        \
+    .icg_func = { (clk_flags)[1], (clk_flags)[0] }                            \
 }
 #endif
 
@@ -526,11 +542,21 @@ typedef struct pmu_sleep_machine_constant {
 // DCDC startup, which saves more power compared to waiting in the Active state.
 #define PMU_HP_ANA_WAIT_TIME_PU_TOP_US      (PMU_HP_ANA_WAIT_TIME_PD_TOP_US + PMU_REGDMA_S2A_WORK_TIME_US) // 945
 
+#ifndef MAX
+#define MAX(a, b)       (((a) > (b)) ? (a) : (b))
+#endif
+
+#if CONFIG_ESP_VBAT_CONTROL_MAIN_POWER_IN_DSLP
+#define PMU_LP_ANA_WAIT_TIME_US MAX(154, CONFIG_ESP_VBAT_MAIN_POWER_WAKEUP_ADVANCE_US)
+#else
+#define PMU_LP_ANA_WAIT_TIME_US 154
+#endif
+
 #define PMU_SLEEP_MC_DEFAULT()      {           \
     .lp = {                                     \
         .min_slp_time_us                = 450,  \
         .wakeup_wait_cycle              = 4,    \
-        .analog_wait_time_us            = 154,  \
+        .analog_wait_time_us            = PMU_LP_ANA_WAIT_TIME_US,  \
         .xtal_wait_stable_time_us       = 250,  \
         .clk_switch_cycle               = 1,    \
         .clk_power_on_wait_cycle        = 1,    \

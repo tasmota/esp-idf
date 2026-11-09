@@ -800,6 +800,100 @@ TEST_CASE("readonly handle fails on writing", "[nvs]")
     TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
 }
 
+TEST_CASE("readonly handle reports inconsistent data without modifying flash", "[nvs][readonly]")
+{
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ro_ns", NVS_READWRITE, &handle));
+    TEST_ESP_OK(nvs_set_u32(handle, "broken", 1));
+    TEST_ESP_OK(nvs_set_u32(handle, "valid", 2));
+    TEST_ESP_OK(nvs_set_str(handle, "broken_str", "original"));
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+
+    NVSPartitionTestHelper partition(TEST_3SEC_PARTITION_NAME, false);
+    uint32_t corruptedCrc = 0;
+    // Entry zero contains the namespace, entry one contains "broken".
+    TEST_ESP_OK(partition.write_raw(3 * nvs::Page::ENTRY_SIZE + offsetof(nvs::Item, crc32),
+            &corruptedCrc, sizeof(corruptedCrc)));
+    uint32_t corruptedData;
+    TEST_ESP_OK(partition.read_raw(6 * nvs::Page::ENTRY_SIZE, &corruptedData, sizeof(corruptedData)));
+    corruptedData &= 0xf000000f;
+    TEST_ESP_OK(partition.write_raw(6 * nvs::Page::ENTRY_SIZE, &corruptedData, sizeof(corruptedData)));
+
+    NVSPartitionTestHelper::clear_stats();
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+    CHECK(NVSPartitionTestHelper::get_write_ops() == 0);
+    CHECK(NVSPartitionTestHelper::get_erase_ops() == 0);
+
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ro_ns", NVS_READONLY, &handle));
+    uint32_t value = 0;
+    NVSPartitionTestHelper::clear_stats();
+    TEST_ESP_ERR(nvs_get_u32(handle, "broken", &value), ESP_ERR_NVS_NOT_FOUND);
+    char str[16];
+    size_t strSize = sizeof(str);
+    TEST_ESP_ERR(nvs_get_str(handle, "broken_str", str, &strSize), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(NVSPartitionTestHelper::get_write_ops() == 0);
+    CHECK(NVSPartitionTestHelper::get_erase_ops() == 0);
+    TEST_ESP_OK(nvs_get_u32(handle, "valid", &value));
+    CHECK(value == 2);
+    nvs_close(handle);
+
+    // A read-write open performs deferred recovery before accepting a replacement.
+    NVSPartitionTestHelper::clear_stats();
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ro_ns", NVS_READWRITE, &handle));
+    CHECK(NVSPartitionTestHelper::get_write_ops() > 0);
+    TEST_ESP_OK(nvs_set_u32(handle, "broken", 3));
+    TEST_ESP_OK(nvs_set_str(handle, "broken_str", "replacement"));
+    TEST_ESP_OK(nvs_get_u32(handle, "broken", &value));
+    CHECK(value == 3);
+    strSize = sizeof(str);
+    TEST_ESP_OK(nvs_get_str(handle, "broken_str", str, &strSize));
+    CHECK(strcmp(str, "replacement") == 0);
+    nvs_close(handle);
+
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("readonly handle lookups use the hash index on a consistent partition", "[nvs][readonly]")
+{
+    // Read-only lookups must not scan every entry of every page when the key is not in the hash list.
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ro_perf", NVS_READWRITE, &handle));
+    for (uint32_t i = 0; i < 20; ++i) {
+        char key[16];
+        snprintf(key, sizeof(key), "key%u", (unsigned) i);
+        TEST_ESP_OK(nvs_set_u32(handle, key, i));
+    }
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ro_perf", NVS_READONLY, &handle));
+    uint32_t value = 0;
+
+    NVSPartitionTestHelper::clear_stats();
+    TEST_ESP_ERR(nvs_get_u32(handle, "missing", &value), ESP_ERR_NVS_NOT_FOUND);
+    const size_t missingReads = NVSPartitionTestHelper::get_read_ops();
+
+    NVSPartitionTestHelper::clear_stats();
+    TEST_ESP_OK(nvs_get_u32(handle, "key19", &value));
+    CHECK(value == 19);
+    const size_t existingReads = NVSPartitionTestHelper::get_read_ops();
+
+    INFO("missing key reads: " << missingReads << ", existing key reads: " << existingReads);
+    CHECK(missingReads == 0);
+    CHECK(existingReads < 10);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
 TEST_CASE("nvs api tests", "[nvs]")
 {
     // TC verifies that NVS API works as expected.
@@ -897,6 +991,27 @@ TEST_CASE("deinit partition doesn't affect other partition's open handles", "[nv
     nvs_close(handle_1);
 
     TEST_ESP_OK(nvs_flash_deinit_partition(TEST_SECONDARY_PARTITION_NAME));
+}
+
+TEST_CASE("deinit with open handles frees them", "[nvs]")
+{
+    // nvs_flash_deinit_partition must delete leftover open
+    // handles (same as nvs_close), not only erase them from the C API handle list.
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle_1;
+    nvs_handle_t handle_2;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns1", NVS_READWRITE, &handle_1));
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns2", NVS_READWRITE, &handle_2));
+    CHECK(nvs::NVSPartitionManager::get_instance()->open_handles_size() == 2);
+
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+    CHECK(nvs::NVSPartitionManager::get_instance()->open_handles_size() == 0);
+
+    // Stale handle ids must be harmless after deinit already freed the entries.
+    nvs_close(handle_1);
+    nvs_close(handle_2);
 }
 
 TEST_CASE("nvs iterator nvs_entry_find invalid parameter test", "[nvs]")
@@ -4616,9 +4731,14 @@ TEST_CASE("nvs multiple write with same key but different types", "[nvs]")
 }
 
 #ifndef CONFIG_NVS_LEGACY_DUP_KEYS_COMPATIBILITY
-// Following test case is not valid for new behavior not leading to multiple active values under the same key
+// Following test case not valid for new behavior not leading to multiple active values under the same key
 TEST_CASE("nvs multiple write with same key blob and string involved", "[nvs]")
 {
+    // Test case sequentially stores data under the same key and verifies, that only recent data type used is retrieved
+    // Attempts to retrieve different data types under the same key shall fail with ESP_ERR_NVS_NOT_FOUND
+    // Variable length data types allow to read the length of the data stored if it is present under the key by supplying NULL buffer and pointer to the length
+    // If value is not present under the key, the value of buffer length may not be modified by the function call
+
     // Erase the partition before testing
     TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
 
@@ -4633,50 +4753,110 @@ TEST_CASE("nvs multiple write with same key blob and string involved", "[nvs]")
     int32_t v32;
     int8_t v8;
 
-    // string
+    // String
     #define str_data_len 64
+    #define probe_str_len str_data_len/2
     const char str_data[] = "string data";
     char str_buf[str_data_len] = {0};
-    size_t str_len = str_data_len;
+    size_t str_len = 0;
 
-    // blob
+    // Blob
     #define blob_data_len 64
+    #define probe_blob_data_len blob_data_len/2
     uint8_t blob_data[blob_data_len] = {0};
     uint8_t blob_buf[blob_data_len] = {0};
-    size_t blob_read_size;
+    size_t blob_read_size = 0;
+    memset(blob_data, 0x11, sizeof(blob_data));
 
-    // first write is i32
+    // First write is i32
     TEST_ESP_OK(nvs_set_i32(handle_1, key_name, (int32_t)12345678));
 
     TEST_ESP_ERR(nvs_get_i8(handle_1, key_name, &v8), ESP_ERR_NVS_NOT_FOUND);
     TEST_ESP_OK(nvs_get_i32(handle_1, key_name, &v32));
+
+    // Variable length datatypes validation
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of string's length parameter
+    str_len = probe_str_len;
+    TEST_ESP_ERR(nvs_get_str(handle_1, key_name, NULL, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == probe_str_len);
+    str_len = sizeof(str_buf);
     TEST_ESP_ERR(nvs_get_str(handle_1, key_name, str_buf, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == sizeof(str_buf));
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of blob's length parameter
+    blob_read_size = probe_blob_data_len;
+    TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, NULL, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == probe_blob_data_len);
+    blob_read_size = sizeof(blob_buf);
     TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, blob_buf, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == sizeof(blob_buf));
 
-
-    // second write is string
+    // Second write is string
     TEST_ESP_OK(nvs_set_str(handle_1, key_name, str_data));
 
     TEST_ESP_ERR(nvs_get_i8(handle_1, key_name, &v8), ESP_ERR_NVS_NOT_FOUND);
     TEST_ESP_ERR(nvs_get_i32(handle_1, key_name, &v32), ESP_ERR_NVS_NOT_FOUND);
-    TEST_ESP_OK(nvs_get_str(handle_1, key_name, str_buf, &str_len));
-    TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, blob_buf, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
 
-    // third write is blob
+    // Variable length datatypes validation
+    // ESP_OK when searching the string populates the length
+    str_len = 0;
+    TEST_ESP_OK(nvs_get_str(handle_1, key_name, NULL, &str_len));
+    CHECK(str_len == sizeof(str_data));
+    str_len = sizeof(str_buf);
+    TEST_ESP_OK(nvs_get_str(handle_1, key_name, str_buf, &str_len));
+    CHECK(str_len == sizeof(str_data));
+    CHECK(memcmp(str_buf, str_data, sizeof(str_data)) == 0);
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of blob's length parameter
+    blob_read_size = probe_blob_data_len;
+    TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, NULL, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == probe_blob_data_len);
+    blob_read_size = sizeof(blob_buf);
+    TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, blob_buf, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == sizeof(blob_buf));
+
+    // Third write is blob
     TEST_ESP_OK(nvs_set_blob(handle_1, key_name, blob_data, blob_data_len));
 
     TEST_ESP_ERR(nvs_get_i8(handle_1, key_name, &v8), ESP_ERR_NVS_NOT_FOUND);
     TEST_ESP_ERR(nvs_get_i32(handle_1, key_name, &v32), ESP_ERR_NVS_NOT_FOUND);
+
+    // Variable length datatypes validation
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of string's length parameter
+    str_len = probe_str_len;
+    TEST_ESP_ERR(nvs_get_str(handle_1, key_name, NULL, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == probe_str_len);
+    str_len = sizeof(str_buf);
     TEST_ESP_ERR(nvs_get_str(handle_1, key_name, str_buf, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == sizeof(str_buf));
+    // ESP_OK when searching the blob populates the length
+    blob_read_size = 0;
+    TEST_ESP_OK(nvs_get_blob(handle_1, key_name, NULL, &blob_read_size));
+    CHECK(blob_read_size == sizeof(blob_data));
+    blob_read_size = sizeof(blob_buf);
     TEST_ESP_OK(nvs_get_blob(handle_1, key_name, blob_buf, &blob_read_size));
+    CHECK(blob_read_size == sizeof(blob_data));
+    CHECK(memcmp(blob_buf, blob_data, sizeof(blob_data)) == 0);
 
     // fourth write is i8
     TEST_ESP_OK(nvs_set_i8(handle_1, key_name, (int8_t)12));
 
     TEST_ESP_OK(nvs_get_i8(handle_1, key_name, &v8));
     TEST_ESP_ERR(nvs_get_i32(handle_1, key_name, &v32), ESP_ERR_NVS_NOT_FOUND);
+
+    // Variable length datatypes validation
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of string's length parameter
+    str_len = probe_str_len;
+    TEST_ESP_ERR(nvs_get_str(handle_1, key_name, NULL, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == probe_str_len);
+    str_len = sizeof(str_buf);
     TEST_ESP_ERR(nvs_get_str(handle_1, key_name, str_buf, &str_len), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(str_len == sizeof(str_buf));
+    // ESP_ERR_NVS_NOT_FOUND doesn't touch the value of blob's length parameter
+    blob_read_size = probe_blob_data_len;
+    TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, NULL, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == probe_blob_data_len);
+    blob_read_size = sizeof(blob_buf);
     TEST_ESP_ERR(nvs_get_blob(handle_1, key_name, blob_buf, &blob_read_size), ESP_ERR_NVS_NOT_FOUND);
+    CHECK(blob_read_size == sizeof(blob_buf));
 
     nvs_close(handle_1);
 
@@ -5518,6 +5698,80 @@ TEST_CASE("nvs multiple write with same key float then double", "[nvs]")
 #endif
 
     nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+
+TEST_CASE("nvs_set_str rejects NULL value", "[nvs]")
+{
+    // TC verifies that a NULL string is rejected instead of being dereferenced.
+    // - nvs_set_str with a NULL value returns ESP_ERR_INVALID_ARG
+    // - no entry is created for that key
+
+    TEST_ESP_OK(nvs_flash_erase_partition(TEST_3SEC_PARTITION_NAME));
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_handle_t handle;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "ns_null_str", NVS_READWRITE, &handle));
+
+    TEST_ESP_ERR(nvs_set_str(handle, "key", nullptr), ESP_ERR_INVALID_ARG);
+
+    size_t len = 0;
+    TEST_ESP_ERR(nvs_get_str(handle, "key", nullptr, &len), ESP_ERR_NVS_NOT_FOUND);
+
+    nvs_close(handle);
+    TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
+}
+TEST_CASE("init recovers from power loss during page freeing when no free page is left", "[nvs][readonly]")
+{
+    // Garbage collection with a single spare page takes the last free page as the new active page
+    // and only then erases the freeing page. A power loss in between leaves no free page in flash.
+    // Initialization recovers the freeing page, which yields a free page and drops the duplicate copy.
+    {
+        NVSPartitionTestHelper h(TEST_3SEC_PARTITION_NAME, true);
+
+        nvs::Page full;
+        TEST_ESP_OK(full.load(&h, 2));
+        TEST_ESP_OK(full.setSeqNumber(0));
+        TEST_ESP_OK(full.writeItem<uint8_t>(nvs::Page::NS_INDEX, "gc_ns", 1));
+        TEST_ESP_OK(full.writeItem<uint32_t>(1, "kept", 0x1234));
+        TEST_ESP_OK(full.markFull());
+
+        nvs::Page freeing;
+        TEST_ESP_OK(freeing.load(&h, 0));
+        TEST_ESP_OK(freeing.setSeqNumber(1));
+        TEST_ESP_OK(freeing.writeItem<uint32_t>(1, "moved", 0x5678));
+        TEST_ESP_OK(freeing.markFreeing());
+
+        // New active page holds a partial copy of the freeing page.
+        nvs::Page active;
+        TEST_ESP_OK(active.load(&h, 1));
+        TEST_ESP_OK(active.setSeqNumber(2));
+        TEST_ESP_OK(active.writeItem<uint32_t>(1, "moved", 0x5678));
+    }
+
+    TEST_ESP_OK(nvs_flash_init_partition(TEST_3SEC_PARTITION_NAME));
+
+    nvs_stats_t stats;
+    TEST_ESP_OK(nvs_get_stats(TEST_3SEC_PARTITION_NAME, &stats));
+
+    nvs_handle_t handle;
+    uint32_t value = 0;
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "gc_ns", NVS_READONLY, &handle));
+    TEST_ESP_OK(nvs_get_u32(handle, "kept", &value));
+    CHECK(value == 0x1234);
+    TEST_ESP_OK(nvs_get_u32(handle, "moved", &value));
+    CHECK(value == 0x5678);
+    size_t usedEntries = 0;
+    TEST_ESP_OK(nvs_get_used_entry_count(handle, &usedEntries));
+    CHECK(usedEntries == 2);
+    nvs_close(handle);
+
+    TEST_ESP_OK(nvs_open_from_partition(TEST_3SEC_PARTITION_NAME, "gc_ns", NVS_READWRITE, &handle));
+    TEST_ESP_OK(nvs_set_u32(handle, "new", 0x9abc));
+    TEST_ESP_OK(nvs_get_u32(handle, "moved", &value));
+    CHECK(value == 0x5678);
+    nvs_close(handle);
+
     TEST_ESP_OK(nvs_flash_deinit_partition(TEST_3SEC_PARTITION_NAME));
 }
 

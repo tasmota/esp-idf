@@ -11,10 +11,13 @@
 
 #include "psa_crypto_driver_esp_rsa_ds.h"
 #include "psa_crypto_driver_esp_rsa_ds_contexts.h"
+#include "psa_crypto_driver_esp_opaque_common.h"
 #include "include/psa_crypto_driver_esp_rsa_ds_utilities.h"
 
+#include "mbedtls/platform_util.h"
 #include "esp_log.h"
 #include "esp_efuse.h"
+#include "esp_assert.h"
 #include "soc/soc_caps.h"
 
 #if SOC_KEY_MANAGER_SUPPORTED
@@ -27,6 +30,281 @@ static const char *TAG = "PSA_RSA_DS";
 
 static SemaphoreHandle_t s_ds_lock = NULL;
 static int s_timeout_ms = 0;
+
+/*
+ * Per-source storage structs — internal to the driver.
+ * These are what actually get persisted to NVS, not the user-facing esp_rsa_ds_opaque_key_t.
+ *
+ * All storage structs share a common prefix: [version][key_source]
+ * so that the driver can identify the key source at operation time.
+ */
+typedef enum {
+    ESP_RSA_DS_KEY_STORAGE_VERSION_INVALID = 0,
+    ESP_RSA_DS_KEY_STORAGE_VERSION_V1 = 1,
+    ESP_RSA_DS_KEY_STORAGE_VERSION_MAX = 2,
+} esp_rsa_ds_key_storage_version_t;
+
+typedef enum {
+    ESP_RSA_DS_KEY_SOURCE_EFUSE = 0,
+    ESP_RSA_DS_KEY_SOURCE_KEY_MGR = 1,
+} esp_rsa_ds_key_source_t;
+
+/* Storage structs use uint8_t for key_source instead of enum
+ * to ensure stable serialized size across compilers. */
+
+typedef struct __attribute__((packed)) {
+    uint8_t version;
+    uint8_t key_source;             /* esp_rsa_ds_key_source_t */
+} esp_rsa_ds_common_key_storage_metadata_t;
+
+ESP_STATIC_ASSERT(sizeof(esp_rsa_ds_common_key_storage_metadata_t) == 2 * sizeof(uint8_t),
+                  "esp_rsa_ds_common_key_storage_metadata_t must be exactly 2 bytes");
+
+/* esp_ds_data_t is serialised verbatim into NVS as part of the persistent storage structs,
+ * and its first field is an enum (esp_digital_signature_length_t). esp_ds.h documents that
+ * "in IDF, the enum type length is the same as of type unsigned" — assert it here so a
+ * future toolchain change that shrinks enums fails the build instead of silently making
+ * existing stored DS keys unreadable. */
+ESP_STATIC_ASSERT(sizeof(esp_digital_signature_length_t) == sizeof(unsigned),
+                  "esp_digital_signature_length_t must be sized as unsigned for stable NVS layout of esp_ds_data_t");
+
+/**
+ * Pointer-based storage for volatile keys.
+ * The caller must keep all referenced data valid until psa_destroy_key().
+ * This avoids deep-copying esp_ds_data_t (~1600 bytes), preserving the
+ * heap savings of mmap'd flash data from esp_secure_cert_mgr.
+ */
+typedef struct {
+    esp_rsa_ds_common_key_storage_metadata_t metadata;
+    esp_ds_data_ctx_t *ds_data_ctx;
+#if SOC_KEY_MANAGER_SUPPORTED
+    esp_key_mgr_key_recovery_info_t *key_recovery_info;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+} esp_rsa_ds_volatile_key_storage_t;
+
+/**
+ * Inline storage for persistent eFuse DS keys.
+ * All data is deep-copied — no external references.
+ */
+typedef struct {
+    esp_rsa_ds_common_key_storage_metadata_t metadata;
+    uint8_t efuse_key_id;
+    uint8_t reserved;               /* explicit padding */
+    uint16_t rsa_length_bits;
+    uint8_t reserved2[2];           /* explicit padding for ds_data 4-byte alignment */
+    esp_ds_data_t ds_data;
+} esp_rsa_ds_efuse_key_storage_t;
+
+ESP_STATIC_ASSERT(offsetof(esp_rsa_ds_efuse_key_storage_t, ds_data) % 4 == 0,
+                  "ds_data must be 4-byte aligned in esp_rsa_ds_efuse_key_storage_t");
+
+#if SOC_KEY_MANAGER_SUPPORTED
+/**
+ * Inline storage for persistent Key Manager DS keys.
+ * All data is deep-copied — no external references.
+ */
+typedef struct {
+    esp_rsa_ds_common_key_storage_metadata_t metadata;
+    uint16_t rsa_length_bits;
+    esp_ds_data_t ds_data;
+    esp_key_mgr_key_recovery_info_t key_recovery_info;
+} esp_rsa_ds_km_key_storage_t;
+
+ESP_STATIC_ASSERT(offsetof(esp_rsa_ds_km_key_storage_t, ds_data) % 4 == 0,
+                  "ds_data must be 4-byte aligned in esp_rsa_ds_km_key_storage_t");
+ESP_STATIC_ASSERT(offsetof(esp_rsa_ds_km_key_storage_t, key_recovery_info) % 4 == 0,
+                  "key_recovery_info must be 4-byte aligned in esp_rsa_ds_km_key_storage_t");
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+/**
+ * @brief Read the key_source tag from any storage struct.
+ *
+ * All storage structs share the layout: [version(1)][key_source(1)][...]
+ */
+static inline esp_rsa_ds_key_source_t rsa_ds_storage_get_key_source(const uint8_t *key_buffer)
+{
+    return (esp_rsa_ds_key_source_t)key_buffer[1];
+}
+
+/**
+ * @brief Calculate the storage buffer size for an import operation.
+ *
+ * For volatile keys: returns pointer-based storage size (small).
+ * For persistent keys: inspects the user struct to determine key source
+ * and returns the corresponding inline storage struct size (large).
+ */
+static size_t esp_rsa_ds_get_storage_size(const esp_rsa_ds_opaque_key_t *key, bool persistent)
+{
+    if (!persistent) {
+        return sizeof(esp_rsa_ds_volatile_key_storage_t);
+    }
+
+#if SOC_KEY_MANAGER_SUPPORTED
+    if (key->key_recovery_info) {
+        return sizeof(esp_rsa_ds_km_key_storage_t);
+    }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    (void)key;
+    return sizeof(esp_rsa_ds_efuse_key_storage_t);
+}
+
+/**
+ * @brief Calculate the expected storage size from an already-serialized storage buffer.
+ *
+ * @param key_buffer        The storage buffer.
+ * @param key_buffer_size   Size of @p key_buffer in bytes.
+ * @param persistent        true if the key is persistent (inline data), false if volatile.
+ * @param[out] expected_storage_size  The expected minimum buffer size.
+ */
+static psa_status_t esp_rsa_ds_get_expected_storage_size(const uint8_t *key_buffer,
+                                                         size_t key_buffer_size,
+                                                         bool persistent,
+                                                         size_t *expected_storage_size)
+{
+    if (key_buffer_size < sizeof(esp_rsa_ds_common_key_storage_metadata_t)) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (key_buffer[0] == ESP_RSA_DS_KEY_STORAGE_VERSION_INVALID || key_buffer[0] >= ESP_RSA_DS_KEY_STORAGE_VERSION_MAX) {
+        return PSA_ERROR_DATA_INVALID;
+    }
+
+    *expected_storage_size = 0;
+
+    if (!persistent) {
+        *expected_storage_size = sizeof(esp_rsa_ds_volatile_key_storage_t);
+        return PSA_SUCCESS;
+    }
+
+    esp_rsa_ds_key_source_t key_source = rsa_ds_storage_get_key_source(key_buffer);
+
+    switch (key_source) {
+#if SOC_KEY_MANAGER_SUPPORTED
+        case ESP_RSA_DS_KEY_SOURCE_KEY_MGR:
+            *expected_storage_size = sizeof(esp_rsa_ds_km_key_storage_t);
+            return PSA_SUCCESS;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+        case ESP_RSA_DS_KEY_SOURCE_EFUSE:
+            *expected_storage_size = sizeof(esp_rsa_ds_efuse_key_storage_t);
+            return PSA_SUCCESS;
+        default:
+            return PSA_ERROR_DATA_INVALID;
+    }
+}
+
+/**
+ * @brief Validate a storage buffer and extract the per-source DS parameters.
+ *
+ * Centralises the metadata + size validation and the per-source pointer/value extraction
+ * shared by the sign-hash and asymmetric-decrypt entry points. On success, all out-params
+ * are filled. On failure, out-params are left untouched.
+ *
+ * @param key_buffer        The PSA storage buffer.
+ * @param key_buffer_size   Size of @p key_buffer in bytes.
+ * @param is_persistent     Persistence flag derived from the PSA key attributes.
+ * @param[out] key_source   Storage key source tag (eFuse / Key Manager).
+ * @param[out] rsa_length_bits  RSA key length in bits, taken from the storage struct.
+ * @param[out] ds_data      Pointer to the in-storage @c esp_ds_data_t (volatile: caller's
+ *                          mmap'd flash buffer; persistent: the inline copy).
+ * @param[out] hmac_key_id  HMAC key id for the DS peripheral.
+ * @param[out] km_ri        Pointer to the @c esp_key_mgr_key_recovery_info_t to pass to
+ *                          @c esp_key_mgr_activate_key, or NULL when the key source is
+ *                          not Key Manager. Only present on KM-capable SoCs.
+ *
+ * @return PSA_SUCCESS, or a PSA error if validation fails.
+ */
+static psa_status_t esp_rsa_ds_extract_storage(
+    const uint8_t *key_buffer,
+    size_t key_buffer_size,
+    bool is_persistent,
+    esp_rsa_ds_key_source_t *key_source,
+    uint16_t *rsa_length_bits,
+    const esp_ds_data_t **ds_data,
+    hmac_key_id_t *hmac_key_id
+#if SOC_KEY_MANAGER_SUPPORTED
+    , esp_key_mgr_key_recovery_info_t **km_ri
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+)
+{
+    size_t expected_storage_size = 0;
+    psa_status_t status = esp_rsa_ds_get_expected_storage_size(key_buffer, key_buffer_size,
+                                                               is_persistent, &expected_storage_size);
+    if (status != PSA_SUCCESS) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (key_buffer_size < expected_storage_size) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    esp_rsa_ds_key_source_t src = rsa_ds_storage_get_key_source(key_buffer);
+    uint16_t bits = 0;
+    const esp_ds_data_t *data = NULL;
+    hmac_key_id_t hmac_id = 0;
+#if SOC_KEY_MANAGER_SUPPORTED
+    esp_key_mgr_key_recovery_info_t *ri = NULL;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    if (!is_persistent) {
+        const esp_rsa_ds_volatile_key_storage_t *ptr_st =
+            (const esp_rsa_ds_volatile_key_storage_t *)key_buffer;
+        bits = ptr_st->ds_data_ctx->rsa_length_bits;
+        data = ptr_st->ds_data_ctx->esp_ds_data;
+        hmac_id = ptr_st->ds_data_ctx->efuse_key_id;
+#if SOC_KEY_MANAGER_SUPPORTED
+        if (src == ESP_RSA_DS_KEY_SOURCE_KEY_MGR) {
+            hmac_id = HMAC_KEY_KM;
+            ri = ptr_st->key_recovery_info;
+        }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+    } else {
+        switch (src) {
+            case ESP_RSA_DS_KEY_SOURCE_EFUSE: {
+                const esp_rsa_ds_efuse_key_storage_t *efuse_st =
+                    (const esp_rsa_ds_efuse_key_storage_t *)key_buffer;
+                bits = efuse_st->rsa_length_bits;
+                data = &efuse_st->ds_data;
+                hmac_id = efuse_st->efuse_key_id;
+                break;
+            }
+#if SOC_KEY_MANAGER_SUPPORTED
+            case ESP_RSA_DS_KEY_SOURCE_KEY_MGR: {
+                const esp_rsa_ds_km_key_storage_t *km_st =
+                    (const esp_rsa_ds_km_key_storage_t *)key_buffer;
+                bits = km_st->rsa_length_bits;
+                data = &km_st->ds_data;
+                hmac_id = HMAC_KEY_KM;
+                /* esp_key_mgr_activate_key() takes a non-const pointer for API compatibility
+                 * but does not modify the recovery info. The cast away const is therefore safe;
+                 * if that contract ever changes, copy the recovery info to a local first. */
+                ri = (esp_key_mgr_key_recovery_info_t *)&km_st->key_recovery_info;
+                break;
+            }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+            default:
+                return PSA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    if (bits % 32 != 0 || bits < 1024 || bits > SOC_DS_SIGNATURE_MAX_BIT_LEN) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (data->rsa_length != (bits / 32) - 1) {
+        return PSA_ERROR_DATA_INVALID;
+    }
+
+    *key_source = src;
+    *rsa_length_bits = bits;
+    *ds_data = data;
+    *hmac_key_id = hmac_id;
+#if SOC_KEY_MANAGER_SUPPORTED
+    *km_ri = ri;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    return PSA_SUCCESS;
+}
 
 void esp_rsa_ds_release_ds_lock(void);
 
@@ -69,7 +347,7 @@ void esp_rsa_ds_release_ds_lock(void)
     }
 }
 
-static int esp_rsa_ds_validate_opaque_key(const esp_rsa_ds_opaque_key_t *opaque_key)
+static psa_status_t esp_rsa_ds_validate_opaque_key(const esp_rsa_ds_opaque_key_t *opaque_key)
 {
     if (opaque_key == NULL) {
         return PSA_ERROR_INVALID_ARGUMENT;
@@ -114,6 +392,111 @@ static int esp_rsa_ds_validate_opaque_key(const esp_rsa_ds_opaque_key_t *opaque_
     return PSA_SUCCESS;
 }
 
+/**
+ * Serialize an already-validated opaque key into the persistent inline
+ * storage layout (eFuse or Key Manager, selected from key_recovery_info).
+ * Internal helper — does not validate inputs.
+ */
+static psa_status_t rsa_ds_format_persistent_key_buffer_internal(
+    const esp_rsa_ds_opaque_key_t *opaque_key,
+    uint8_t *buf, size_t buf_size, size_t *out_len)
+{
+#if SOC_KEY_MANAGER_SUPPORTED
+    if (opaque_key->key_recovery_info) {
+        if (buf_size < sizeof(esp_rsa_ds_km_key_storage_t)) {
+            return PSA_ERROR_BUFFER_TOO_SMALL;
+        }
+        esp_rsa_ds_km_key_storage_t *storage = (esp_rsa_ds_km_key_storage_t *)buf;
+        memset(storage, 0, sizeof(*storage));
+        storage->metadata.version = ESP_RSA_DS_KEY_STORAGE_VERSION_V1;
+        storage->metadata.key_source = ESP_RSA_DS_KEY_SOURCE_KEY_MGR;
+        storage->rsa_length_bits = opaque_key->ds_data_ctx->rsa_length_bits;
+        memcpy(&storage->ds_data, opaque_key->ds_data_ctx->esp_ds_data, sizeof(esp_ds_data_t));
+        memcpy(&storage->key_recovery_info, opaque_key->key_recovery_info,
+               sizeof(esp_key_mgr_key_recovery_info_t));
+        *out_len = sizeof(esp_rsa_ds_km_key_storage_t);
+        return PSA_SUCCESS;
+    }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    if (buf_size < sizeof(esp_rsa_ds_efuse_key_storage_t)) {
+        return PSA_ERROR_BUFFER_TOO_SMALL;
+    }
+    esp_rsa_ds_efuse_key_storage_t *storage = (esp_rsa_ds_efuse_key_storage_t *)buf;
+    memset(storage, 0, sizeof(*storage));
+    storage->metadata.version = ESP_RSA_DS_KEY_STORAGE_VERSION_V1;
+    storage->metadata.key_source = ESP_RSA_DS_KEY_SOURCE_EFUSE;
+    storage->efuse_key_id = opaque_key->ds_data_ctx->efuse_key_id;
+    storage->rsa_length_bits = opaque_key->ds_data_ctx->rsa_length_bits;
+    memcpy(&storage->ds_data, opaque_key->ds_data_ctx->esp_ds_data, sizeof(esp_ds_data_t));
+    *out_len = sizeof(esp_rsa_ds_efuse_key_storage_t);
+    return PSA_SUCCESS;
+}
+
+size_t esp_rsa_ds_persistent_key_buffer_size(const esp_rsa_ds_opaque_key_t *opaque_key)
+{
+    if (opaque_key == NULL) {
+        return 0;
+    }
+    return esp_rsa_ds_get_storage_size(opaque_key, true);
+}
+
+psa_status_t esp_rsa_ds_format_persistent_key_buffer(const esp_rsa_ds_opaque_key_t *opaque_key,
+                                                 uint8_t *buf, size_t buf_size,
+                                                 size_t *out_len)
+{
+    if (opaque_key == NULL || buf == NULL || out_len == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    psa_status_t ret = esp_rsa_ds_validate_opaque_key(opaque_key);
+    if (ret != PSA_SUCCESS) {
+        return ret;
+    }
+
+    return rsa_ds_format_persistent_key_buffer_internal(opaque_key, buf, buf_size, out_len);
+}
+
+psa_status_t esp_rsa_ds_parse_persistent_key_buffer(const uint8_t *buf, size_t buf_len,
+                                                    esp_rsa_ds_opaque_key_t *out)
+{
+    if (buf == NULL || out == NULL || out->ds_data_ctx == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    esp_rsa_ds_key_source_t key_source = ESP_RSA_DS_KEY_SOURCE_EFUSE;
+    uint16_t rsa_length_bits = 0;
+    const esp_ds_data_t *ds_data = NULL;
+    hmac_key_id_t hmac_id = 0;
+#if SOC_KEY_MANAGER_SUPPORTED
+    esp_key_mgr_key_recovery_info_t *km_ri = NULL;
+#endif
+
+    psa_status_t status = esp_rsa_ds_extract_storage(
+        buf, buf_len, /* is_persistent = */ true,
+        &key_source, &rsa_length_bits, &ds_data, &hmac_id
+#if SOC_KEY_MANAGER_SUPPORTED
+        , &km_ri
+#endif
+    );
+    if (status != PSA_SUCCESS) {
+        return status;
+    }
+
+    /* Aliases into buf — caller must not write through these pointers and
+     * must keep buf alive for as long as out is used. */
+    out->ds_data_ctx->esp_ds_data     = (esp_ds_data_t *)ds_data;
+    out->ds_data_ctx->efuse_key_id    = (uint8_t)hmac_id;
+    out->ds_data_ctx->rsa_length_bits = rsa_length_bits;
+#if SOC_KEY_MANAGER_SUPPORTED
+    out->key_recovery_info = km_ri;
+#else
+    (void)key_source;
+#endif
+
+    return PSA_SUCCESS;
+}
+
 psa_status_t esp_rsa_ds_opaque_sign_hash_start(
     esp_rsa_ds_opaque_sign_hash_operation_t *operation,
     const psa_key_attributes_t *attributes,
@@ -129,49 +512,89 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_start(
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (key_buffer_size < sizeof(esp_rsa_ds_opaque_key_t)) {
-        return PSA_ERROR_INVALID_ARGUMENT;
-    }
+    bool is_persistent = esp_opaque_key_is_persistent(attributes);
 
     if (!PSA_ALG_IS_RSA_PKCS1V15_SIGN(alg) && !PSA_ALG_IS_RSA_PSS(alg)) {
         return PSA_ERROR_NOT_SUPPORTED;
     }
 
-    operation->alg = alg;
-
-    const esp_rsa_ds_opaque_key_t *opaque_key = (const esp_rsa_ds_opaque_key_t *)key_buffer;
-    operation->esp_rsa_ds_opaque_key = opaque_key;
-
-    if (esp_rsa_ds_validate_opaque_key(opaque_key) != PSA_SUCCESS) {
-        return PSA_ERROR_INVALID_ARGUMENT;
+#if !defined(CONFIG_MBEDTLS_SSL_PROTO_TLS1_3)
+    if (PSA_ALG_IS_RSA_PSS(alg)) {
+        /* PSS encode is only compiled under TLS1.3; fail up front before any
+         * peripheral lock / allocation. */
+        return PSA_ERROR_NOT_SUPPORTED;
     }
+#endif /* !defined(CONFIG_MBEDTLS_SSL_PROTO_TLS1_3) */
+
+    /* Cross-check the supplied hash_length against PSA_ALG_GET_HASH(alg).
+     * For PKCS1V15_SIGN_RAW the hash field is opaque-length data; skip. */
+    {
+        psa_algorithm_t hash_alg_check = PSA_ALG_SIGN_GET_HASH(alg);
+        if (hash_alg_check != PSA_ALG_NONE) {
+            size_t expected = PSA_HASH_LENGTH(hash_alg_check);
+            if (expected == 0 || hash_length != expected) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
+
+    esp_rsa_ds_key_source_t key_source = ESP_RSA_DS_KEY_SOURCE_EFUSE;
+    uint16_t rsa_length_bits = 0;
+    const esp_ds_data_t *ds_data = NULL;
+    hmac_key_id_t hmac_key_id = 0;
+#if SOC_KEY_MANAGER_SUPPORTED
+    esp_key_mgr_key_recovery_info_t *km_ri = NULL;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    psa_status_t status = esp_rsa_ds_extract_storage(
+        key_buffer, key_buffer_size, is_persistent,
+        &key_source, &rsa_length_bits, &ds_data, &hmac_key_id
+#if SOC_KEY_MANAGER_SUPPORTED
+        , &km_ri
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+    );
+    if (status != PSA_SUCCESS) {
+        return status;
+    }
+
+    operation->alg = alg;
+    operation->key_buffer = key_buffer;
 
     if ((xSemaphoreTake(s_ds_lock, s_timeout_ms / portTICK_PERIOD_MS) != pdTRUE)) {
         return PSA_ERROR_GENERIC_ERROR;
     }
 
     esp_rsa_ds_padding_t padding = ESP_RSA_DS_PADDING_INVALID;
-    if (PSA_ALG_IS_RSA_PSS(operation->alg)) {
+    if (PSA_ALG_IS_RSA_PSS(alg)) {
         padding = ESP_RSA_DS_PADDING_PSS;
-    } else if (PSA_ALG_IS_RSA_PKCS1V15_SIGN(operation->alg)) {
+    } else if (PSA_ALG_IS_RSA_PKCS1V15_SIGN(alg)) {
         padding = ESP_RSA_DS_PADDING_PKCS_V15;
     }
 
-    psa_algorithm_t hash_alg = PSA_ALG_SIGN_GET_HASH(operation->alg);
+    psa_algorithm_t hash_alg = PSA_ALG_SIGN_GET_HASH(alg);
 
-    const size_t words_len = (opaque_key->ds_data_ctx->rsa_length_bits / 32);
+    const size_t words_len = rsa_length_bits / 32;
     const size_t rsa_len_bytes = words_len * 4;
     operation->sig_buffer_size = rsa_len_bytes;
     operation->sig_buffer = NULL;
 
     unsigned char *em = heap_caps_malloc_prefer(rsa_len_bytes, 1, MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
     if (em == NULL) {
-        esp_rsa_ds_release_ds_lock();
-        return PSA_ERROR_INSUFFICIENT_MEMORY;
+        status = PSA_ERROR_INSUFFICIENT_MEMORY;
+        goto error;
     }
 
-    psa_status_t status = esp_rsa_ds_pad(
-        padding, hash_alg, hash_length, hash, -1, em, rsa_len_bytes);
+    /* Derive PSS salt length from the alg: -1 (MBEDTLS_RSA_SALT_LEN_ANY) for
+     * PSS_ANY_SALT, else the standard FIPS 186-4 fixed length. */
+    int saltlen = -1;
+    if (PSA_ALG_IS_RSA_PSS(alg) && !PSA_ALG_IS_RSA_PSS_ANY_SALT(alg)) {
+        int klen = (int) rsa_len_bytes;
+        int hlen = (int) hash_length;
+        int room = klen - 2 - hlen;
+        saltlen = (room < 0) ? 0 : ((room > hlen) ? hlen : room);
+    }
+    status = esp_rsa_ds_pad(
+        padding, hash_alg, hash_length, hash, saltlen, em, rsa_len_bytes);
     if (status != PSA_SUCCESS) {
         goto error;
     }
@@ -188,24 +611,21 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_start(
         sig_words[i] = SWAP_INT32(em_words[words_len - (i + 1)]);
     }
 
-    hmac_key_id_t hmac_key_id = opaque_key->ds_data_ctx->efuse_key_id;
-
 #if SOC_KEY_MANAGER_SUPPORTED
-    esp_key_mgr_key_recovery_info_t *km_key_recovery_info = operation->esp_rsa_ds_opaque_key->key_recovery_info;
-    if (km_key_recovery_info) {
-        err = esp_key_mgr_activate_key(km_key_recovery_info);
+    if (key_source == ESP_RSA_DS_KEY_SOURCE_KEY_MGR) {
+        err = esp_key_mgr_activate_key(km_ri);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to activate key: 0x%x", err);
             status = PSA_ERROR_INVALID_HANDLE;
             goto error;
         }
-        hmac_key_id = HMAC_KEY_KM;
         operation->is_km_key_active = true;
+        operation->km_ri = km_ri;
     }
 #endif /* SOC_KEY_MANAGER_SUPPORTED */
 
     err = esp_ds_start_sign((const void *)operation->sig_buffer,
-                            opaque_key->ds_data_ctx->esp_ds_data,
+                            ds_data,
                             hmac_key_id,
                             &operation->esp_rsa_ds_ctx);
     if (err != ESP_OK) {
@@ -215,8 +635,12 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_start(
 
 error:
     if (em) {
+        mbedtls_platform_zeroize(em, rsa_len_bytes);
         heap_caps_free(em);
         em = NULL;
+    }
+    if (status != PSA_SUCCESS) {
+        esp_rsa_ds_opaque_sign_hash_abort(operation);
     }
 
     return status;
@@ -239,15 +663,17 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_complete(
         return PSA_ERROR_BAD_STATE;
     }
 
-    int expected_signature_size = operation->esp_rsa_ds_opaque_key->ds_data_ctx->rsa_length_bits / 8;
+    size_t expected_signature_size = operation->sig_buffer_size;
     if (signature_size < expected_signature_size) {
         return PSA_ERROR_BUFFER_TOO_SMALL;
     }
 
+    psa_status_t status;
     esp_err_t err = esp_ds_finish_sign((void *)operation->sig_buffer, operation->esp_rsa_ds_ctx);
     operation->esp_rsa_ds_ctx = NULL;
     if (err != ESP_OK) {
-        return PSA_ERROR_GENERIC_ERROR;
+        status = PSA_ERROR_GENERIC_ERROR;
+        goto cleanup;
     }
 
     unsigned int words_len = expected_signature_size / 4;
@@ -258,16 +684,11 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_complete(
     }
 
     *signature_length = expected_signature_size;
+    status = PSA_SUCCESS;
 
-    esp_rsa_ds_release_ds_lock();
-
-    if (operation->sig_buffer) {
-        memset(operation->sig_buffer, 0, operation->sig_buffer_size);
-        heap_caps_free(operation->sig_buffer);
-        operation->sig_buffer = NULL;
-    }
-
-    return PSA_SUCCESS;
+cleanup:
+    (void)esp_rsa_ds_opaque_sign_hash_abort(operation);
+    return status;
 }
 
 psa_status_t esp_rsa_ds_opaque_sign_hash_abort(
@@ -277,15 +698,15 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_abort(
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (operation->esp_rsa_ds_opaque_key) {
 #if SOC_KEY_MANAGER_SUPPORTED
-        esp_key_mgr_key_recovery_info_t *km_key_recovery_info = operation->esp_rsa_ds_opaque_key->key_recovery_info;
-        if (km_key_recovery_info && operation->is_km_key_active) {
-            esp_key_mgr_deactivate_key(km_key_recovery_info->key_type);
-            operation->is_km_key_active = false;
-        }
+    if (operation->is_km_key_active) {
+        esp_key_mgr_deactivate_key(operation->km_ri->key_type);
+        operation->is_km_key_active = false;
+    }
 #endif /* SOC_KEY_MANAGER_SUPPORTED */
-        operation->esp_rsa_ds_opaque_key = NULL;
+
+    if (operation->key_buffer) {
+        operation->key_buffer = NULL;
     }
 
     if (operation->esp_rsa_ds_ctx) {
@@ -297,7 +718,7 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_abort(
 
     // Free allocated memory if exists
     if (operation->sig_buffer) {
-        memset(operation->sig_buffer, 0, operation->sig_buffer_size);
+        mbedtls_platform_zeroize(operation->sig_buffer, operation->sig_buffer_size);
         heap_caps_free(operation->sig_buffer);
         operation->sig_buffer = NULL;
     }
@@ -306,7 +727,7 @@ psa_status_t esp_rsa_ds_opaque_sign_hash_abort(
     esp_rsa_ds_release_ds_lock();
 
     // Clear the operation structure
-    memset(operation, 0, sizeof(esp_rsa_ds_opaque_sign_hash_operation_t));
+    mbedtls_platform_zeroize(operation, sizeof(esp_rsa_ds_opaque_sign_hash_operation_t));
 
     return PSA_SUCCESS;
 }
@@ -334,7 +755,6 @@ psa_status_t esp_rsa_ds_opaque_signature_sign_hash(
         hash_length
     );
     if (status != PSA_SUCCESS) {
-        esp_rsa_ds_opaque_sign_hash_abort(&operation);
         return status;
     }
 
@@ -362,33 +782,74 @@ psa_status_t esp_rsa_ds_opaque_import_key(
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (key_buffer_size < sizeof(esp_rsa_ds_opaque_key_t)) {
-        return PSA_ERROR_BUFFER_TOO_SMALL;
-    }
-
     const esp_rsa_ds_opaque_key_t *opaque_key = (const esp_rsa_ds_opaque_key_t *)data;
-    int ret = esp_rsa_ds_validate_opaque_key(opaque_key);
+    psa_status_t ret = esp_rsa_ds_validate_opaque_key(opaque_key);
     if (ret != PSA_SUCCESS) {
         return ret;
     }
 
-    /* Shallow copy: key buffer holds the context; esp_ds_data points to the caller's data.
-     * The key material (esp_rsa_ds_opaque_key_t and the esp_ds_data_t it points to) must remain
-     * valid until psa_destroy_key() is called on this key. */
-    memcpy(key_buffer, opaque_key, sizeof(esp_rsa_ds_opaque_key_t));
-    *key_buffer_length = sizeof(esp_rsa_ds_opaque_key_t);
+    bool is_persistent = esp_opaque_key_is_persistent(attributes);
+
+    esp_rsa_ds_key_source_t key_source = ESP_RSA_DS_KEY_SOURCE_EFUSE;
+#if SOC_KEY_MANAGER_SUPPORTED
+    if (opaque_key->key_recovery_info) {
+        key_source = ESP_RSA_DS_KEY_SOURCE_KEY_MGR;
+    }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+
+    if (!is_persistent) {
+        /* Volatile: store pointers only — caller keeps data alive.
+         * This preserves the heap savings of mmap'd flash data from esp_secure_cert_mgr. */
+        if (key_buffer_size < sizeof(esp_rsa_ds_volatile_key_storage_t)) {
+            return PSA_ERROR_BUFFER_TOO_SMALL;
+        }
+
+        esp_rsa_ds_volatile_key_storage_t *storage = (esp_rsa_ds_volatile_key_storage_t *)key_buffer;
+        storage->metadata.version = ESP_RSA_DS_KEY_STORAGE_VERSION_V1;
+        storage->metadata.key_source = key_source;
+        storage->ds_data_ctx = opaque_key->ds_data_ctx;
+#if SOC_KEY_MANAGER_SUPPORTED
+        storage->key_recovery_info = opaque_key->key_recovery_info;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+        *key_buffer_length = sizeof(esp_rsa_ds_volatile_key_storage_t);
+    } else {
+        /* Persistent: deep-copy all data into self-contained storage struct */
+        psa_status_t status = rsa_ds_format_persistent_key_buffer_internal(
+            opaque_key, key_buffer, key_buffer_size, key_buffer_length);
+        if (status != PSA_SUCCESS) {
+            return status;
+        }
+    }
+
     *bits = opaque_key->ds_data_ctx->rsa_length_bits;
     return PSA_SUCCESS;
 }
 
 size_t esp_rsa_ds_opaque_size_function(
+    const psa_key_attributes_t *attributes,
     psa_key_type_t key_type,
-    size_t key_bits)
+    const uint8_t *data,
+    size_t data_length)
 {
     (void)key_type;
-    (void)key_bits;
 
-    return sizeof(esp_rsa_ds_opaque_key_t);
+    bool is_persistent = esp_opaque_key_is_persistent(attributes);
+
+    if (!data || data_length < sizeof(esp_rsa_ds_opaque_key_t)) {
+        /* Data too short to inspect the user struct — return the largest possible
+         * size for the persistence flavor so import has enough room to write whichever
+         * variant ends up being needed. import_key() does the real validation. */
+        if (!is_persistent) {
+            return sizeof(esp_rsa_ds_volatile_key_storage_t);
+        }
+#if SOC_KEY_MANAGER_SUPPORTED
+        return sizeof(esp_rsa_ds_km_key_storage_t);
+#else
+        return sizeof(esp_rsa_ds_efuse_key_storage_t);
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+    }
+
+    return esp_rsa_ds_get_storage_size((const esp_rsa_ds_opaque_key_t *)data, is_persistent);
 }
 
 void esp_rsa_ds_opaque_set_session_timeout(int timeout_ms)
@@ -411,13 +872,19 @@ psa_status_t esp_rsa_ds_opaque_asymmetric_decrypt(
     size_t input_length, const uint8_t *salt, size_t salt_length,
     uint8_t *output, size_t output_size, size_t *output_length)
 {
-    (void)salt;
-    (void)salt_length;
-
+    psa_status_t ret = PSA_ERROR_CORRUPTION_DETECTED;
     esp_err_t err = ESP_FAIL;
+    uint32_t *em_words = NULL;
+    uint32_t *out_tmp = NULL;
+    size_t data_len = 0;
+    bool lock_held = false;
+    esp_ds_context_t *ds_ctx = NULL;
+#if SOC_KEY_MANAGER_SUPPORTED
+    bool is_km_key_active = false;
+    esp_key_mgr_key_recovery_info_t *km_ri = NULL;
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
 
-    if (!attributes || !key || key_length < sizeof(esp_rsa_ds_opaque_key_t) ||
-        !input || input_length < 1 || !output || !output_length) {
+    if (!attributes || !key || !input || input_length < 1 || !output || !output_length) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
@@ -425,14 +892,40 @@ psa_status_t esp_rsa_ds_opaque_asymmetric_decrypt(
         return PSA_ERROR_NOT_SUPPORTED;
     }
 
-    const esp_rsa_ds_opaque_key_t *opaque_key = (const esp_rsa_ds_opaque_key_t *)key;
+    /* Decrypt requires a private key. The PSA core enforces this via key
+     * usage, but check the type here as defense-in-depth. */
+    if (!PSA_KEY_TYPE_IS_RSA(psa_get_key_type(attributes)) ||
+        !PSA_KEY_TYPE_IS_KEY_PAIR(psa_get_key_type(attributes))) {
+        return PSA_ERROR_NOT_SUPPORTED;
+    }
 
-    if (esp_rsa_ds_validate_opaque_key(opaque_key) != PSA_SUCCESS) {
+    /* PKCS1V15_CRYPT has no label; reject any non-empty salt. */
+    if (alg == PSA_ALG_RSA_PKCS1V15_CRYPT && salt_length != 0) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (salt == NULL && salt_length != 0) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
-    size_t key_bits = opaque_key->ds_data_ctx->rsa_length_bits;
-    if (input_length != (key_bits / 8)) {
+    bool is_persistent = esp_opaque_key_is_persistent(attributes);
+
+    esp_rsa_ds_key_source_t key_source = ESP_RSA_DS_KEY_SOURCE_EFUSE;
+    uint16_t rsa_length_bits = 0;
+    const esp_ds_data_t *ds_data = NULL;
+    hmac_key_id_t hmac_key_id = 0;
+
+    ret = esp_rsa_ds_extract_storage(
+        key, key_length, is_persistent,
+        &key_source, &rsa_length_bits, &ds_data, &hmac_key_id
+#if SOC_KEY_MANAGER_SUPPORTED
+        , &km_ri
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+    );
+    if (ret != PSA_SUCCESS) {
+        return ret;
+    }
+
+    if (input_length != (rsa_length_bits / 8)) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
@@ -446,79 +939,53 @@ psa_status_t esp_rsa_ds_opaque_asymmetric_decrypt(
     if (xSemaphoreTake(s_ds_lock, s_timeout_ms / portTICK_PERIOD_MS) != pdTRUE) {
         return PSA_ERROR_GENERIC_ERROR;
     }
+    lock_held = true;
 
-    size_t ilen = key_bits / 8;
-    size_t data_len = ilen / 4;
-    uint32_t *em_words = heap_caps_malloc_prefer(sizeof(uint32_t) * data_len, 1, MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    size_t ilen = rsa_length_bits / 8;
+    data_len = ilen / 4;
+    em_words = heap_caps_malloc_prefer(sizeof(uint32_t) * data_len, 1, MALLOC_CAP_32BIT | MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
     if (em_words == NULL) {
-        esp_rsa_ds_release_ds_lock();
-        return PSA_ERROR_INSUFFICIENT_MEMORY;
+        ret = PSA_ERROR_INSUFFICIENT_MEMORY;
+        goto exit;
     }
 
     for (unsigned int i = 0; i < (data_len); i++) {
         em_words[i] = SWAP_INT32(((uint32_t *)input)[(data_len) - (i + 1)]);
     }
 
-    esp_rsa_ds_opaque_sign_hash_operation_t operation = {0};
-    operation.alg = alg;
-    operation.esp_rsa_ds_opaque_key = opaque_key;
-    operation.sig_buffer = em_words;
-
-    hmac_key_id_t hmac_key_id = opaque_key->ds_data_ctx->efuse_key_id;
 #if SOC_KEY_MANAGER_SUPPORTED
-    esp_key_mgr_key_recovery_info_t *km_key_recovery_info = opaque_key->key_recovery_info;
-    if (km_key_recovery_info) {
-        err = esp_key_mgr_activate_key(km_key_recovery_info);
+    if (key_source == ESP_RSA_DS_KEY_SOURCE_KEY_MGR) {
+        err = esp_key_mgr_activate_key(km_ri);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to activate key: 0x%x", err);
-            heap_caps_free(em_words);
-            esp_rsa_ds_release_ds_lock();
-            return PSA_ERROR_INVALID_HANDLE;
+            ret = PSA_ERROR_INVALID_HANDLE;
+            goto exit;
         }
-        hmac_key_id = HMAC_KEY_KM;
-        operation.is_km_key_active = true;
+        is_km_key_active = true;
     }
 #endif /* SOC_KEY_MANAGER_SUPPORTED */
 
     err = esp_ds_start_sign((const void *)em_words,
-                            opaque_key->ds_data_ctx->esp_ds_data,
+                            ds_data,
                             hmac_key_id,
-                            &operation.esp_rsa_ds_ctx);
+                            &ds_ctx);
     if (err != ESP_OK) {
-        heap_caps_free(em_words);
-#if SOC_KEY_MANAGER_SUPPORTED
-    if (km_key_recovery_info && operation.is_km_key_active) {
-        esp_key_mgr_deactivate_key(km_key_recovery_info->key_type);
-        operation.is_km_key_active = false;
-    }
-#endif /* SOC_KEY_MANAGER_SUPPORTED */
-        esp_rsa_ds_release_ds_lock();
-        return PSA_ERROR_GENERIC_ERROR;
+        ret = PSA_ERROR_GENERIC_ERROR;
+        goto exit;
     }
 
-    err = esp_ds_finish_sign((void *)em_words, operation.esp_rsa_ds_ctx);
-
-#if SOC_KEY_MANAGER_SUPPORTED
-    if (km_key_recovery_info && operation.is_km_key_active) {
-        esp_key_mgr_deactivate_key(km_key_recovery_info->key_type);
-        operation.is_km_key_active = false;
-    }
-#endif /* SOC_KEY_MANAGER_SUPPORTED */
-
+    err = esp_ds_finish_sign((void *)em_words, ds_ctx);
+    ds_ctx = NULL;
     if (err != ESP_OK) {
-        heap_caps_free(em_words);
-        esp_rsa_ds_release_ds_lock();
-        return PSA_ERROR_GENERIC_ERROR;
+        ret = PSA_ERROR_GENERIC_ERROR;
+        goto exit;
     }
-
-    esp_rsa_ds_release_ds_lock();
 
     // Remove padding
-    uint32_t *out_tmp = heap_caps_malloc_prefer(sizeof(uint32_t) * data_len, 1, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    out_tmp = heap_caps_malloc_prefer(sizeof(uint32_t) * data_len, 1, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
     if (out_tmp == NULL) {
-        memset(em_words, 0, sizeof(uint32_t) * data_len);
-        heap_caps_free(em_words);
-        return PSA_ERROR_INSUFFICIENT_MEMORY;
+        ret = PSA_ERROR_INSUFFICIENT_MEMORY;
+        goto exit;
     }
 
     for (unsigned int i = 0; i < (data_len); i++) {
@@ -526,13 +993,12 @@ psa_status_t esp_rsa_ds_opaque_asymmetric_decrypt(
     }
 
     size_t unpadded_len = 0;
-    psa_status_t ret = PSA_ERROR_NOT_SUPPORTED;
     if (padding == ESP_RSA_DS_PADDING_PKCS_V15) {
         ret = esp_rsa_ds_pad_v15_unpad((unsigned char *)out_tmp, ilen, (unsigned char *)out_tmp, ilen, &unpadded_len);
     }
 #if CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
     else if (padding == ESP_RSA_DS_PADDING_OAEP) {
-        ret = esp_rsa_ds_pad_oaep_unpad((unsigned char *)out_tmp, ilen, (unsigned char *)out_tmp, ilen, &unpadded_len, PSA_ALG_RSA_OAEP_GET_HASH(alg));
+        ret = esp_rsa_ds_pad_oaep_unpad((unsigned char *)out_tmp, ilen, (unsigned char *)out_tmp, ilen, &unpadded_len, PSA_ALG_RSA_OAEP_GET_HASH(alg), salt, salt_length);
     }
 #endif /* CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 */
     else {
@@ -555,9 +1021,21 @@ psa_status_t esp_rsa_ds_opaque_asymmetric_decrypt(
     ret = PSA_SUCCESS;
 
 exit:
-    memset(em_words, 0, sizeof(uint32_t) * data_len);
-    memset(out_tmp, 0, sizeof(uint32_t) * data_len);
-    heap_caps_free(em_words);
-    heap_caps_free(out_tmp);
+#if SOC_KEY_MANAGER_SUPPORTED
+    if (is_km_key_active && km_ri) {
+        esp_key_mgr_deactivate_key(km_ri->key_type);
+    }
+#endif /* SOC_KEY_MANAGER_SUPPORTED */
+    if (em_words != NULL) {
+        mbedtls_platform_zeroize(em_words, sizeof(uint32_t) * data_len);
+        heap_caps_free(em_words);
+    }
+    if (out_tmp != NULL) {
+        mbedtls_platform_zeroize(out_tmp, sizeof(uint32_t) * data_len);
+        heap_caps_free(out_tmp);
+    }
+    if (lock_held) {
+        esp_rsa_ds_release_ds_lock();
+    }
     return ret;
 }

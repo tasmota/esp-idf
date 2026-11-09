@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -24,18 +24,18 @@
 #include "esp_bt_main.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "ble_ead.h"
+#include "esp_ble_ead.h"
 
 #define TAG "ENC_ADV_CENT_SIMPLE"
 
-/* Custom service UUID to identify target device */
-#define CUSTOM_SERVICE_UUID     0x2C01
+/* GAP Service UUID advertised by enc_adv_data_prph (Key Material lives in GAP) */
+#define GAP_SERVICE_UUID        0x1800
 
 /*
  * Pre-shared Key Material - MUST match the Peripheral!
  * In real applications, this would be provisioned securely.
  */
-static const ble_ead_key_material_t pre_shared_key = {
+static const esp_ble_ead_key_material_t pre_shared_key = {
     .session_key = {
         0x19, 0x6a, 0x0a, 0xd1, 0x2a, 0x61, 0x20, 0x1e,
         0x13, 0x6e, 0x2e, 0xd1, 0x12, 0xda, 0xa9, 0x57
@@ -67,10 +67,14 @@ static bool is_target_device(const uint8_t *adv_data, uint8_t adv_len)
 
         uint8_t type = adv_data[offset + 1];
         if (type == ESP_BLE_AD_TYPE_16SRV_CMPL || type == ESP_BLE_AD_TYPE_16SRV_PART) {
-            for (int i = 0; i < len - 1; i += 2) {
-                uint16_t uuid = adv_data[offset + 2 + i] | (adv_data[offset + 3 + i] << 8);
-                if (uuid == CUSTOM_SERVICE_UUID) {
-                    return true;
+            /* Octets after AD type = len - 1; each 16-bit UUID needs 2 payload bytes */
+            int payload_len = (int)len - 1;
+            if (payload_len >= 2) {
+                for (int i = 0; i + 1 < payload_len; i += 2) {
+                    uint16_t uuid = adv_data[offset + 2 + i] | (adv_data[offset + 3 + i] << 8);
+                    if (uuid == GAP_SERVICE_UUID) {
+                        return true;
+                    }
                 }
             }
         }
@@ -108,43 +112,66 @@ static void decrypt_adv_data_no_connect(const uint8_t *adv_data, uint8_t adv_len
             ESP_LOGI(TAG, "Found encrypted advertising data (%d bytes)", enc_data_len);
             ESP_LOG_BUFFER_HEX(TAG, enc_data, enc_data_len);
 
-            if (enc_data_len < BLE_EAD_RANDOMIZER_SIZE + BLE_EAD_MIC_SIZE) {
+            if (enc_data_len < ESP_BLE_EAD_RANDOMIZER_SIZE + ESP_BLE_EAD_MIC_SIZE) {
                 ESP_LOGW(TAG, "Encrypted data too short");
                 break;
             }
 
             /* Decrypt using pre-shared key */
             uint8_t dec_data[32];
-            size_t dec_len = BLE_EAD_DECRYPTED_PAYLOAD_SIZE(enc_data_len);
+            size_t dec_len = ESP_BLE_EAD_DECRYPTED_PAYLOAD_SIZE(enc_data_len);
+            if (dec_len > sizeof(dec_data)) {
+                ESP_LOGW(TAG, "Encrypted AD would yield %zu plaintext bytes; example buffer is %zu — skip",
+                         dec_len, sizeof(dec_data));
+                return;
+            }
 
-            int rc = ble_ead_decrypt(
+            esp_err_t rc = esp_ble_ead_decrypt(
                 pre_shared_key.session_key,
                 pre_shared_key.iv,
                 enc_data, enc_data_len,
-                dec_data);
+                dec_data, sizeof(dec_data));
 
-            if (rc == 0) {
-                ESP_LOGI(TAG, "✅ Decryption successful (no connection needed!)");
-                ESP_LOGI(TAG, "Decrypted data (%d bytes):", dec_len);
-                ESP_LOG_BUFFER_HEX(TAG, dec_data, dec_len);
+            if (rc == ESP_OK) {
+                size_t safe_dec_len = dec_len;
+                if (safe_dec_len > sizeof(dec_data)) {
+                    ESP_LOGW(TAG, "dec_len %zu > buffer %zu, clamping for log/parse",
+                             dec_len, sizeof(dec_data));
+                    safe_dec_len = sizeof(dec_data);
+                }
+                ESP_LOGI(TAG, "Decryption successful (no connection needed!)");
+                ESP_LOGI(TAG, "Decrypted data (%zu bytes):", safe_dec_len);
+                ESP_LOG_BUFFER_HEX(TAG, dec_data, safe_dec_len);
 
-                /* Parse the decrypted advertising structure */
-                if (dec_len >= 2) {
-                    uint8_t inner_len = dec_data[0];
-                    uint8_t inner_type = dec_data[1];
-
-                    if (inner_type == ESP_BLE_AD_TYPE_NAME_CMPL ||
-                        inner_type == ESP_BLE_AD_TYPE_NAME_SHORT) {
-                        char name[32] = {0};
-                        size_t name_len = inner_len - 1;
-                        if (name_len < sizeof(name) && name_len <= dec_len - 2) {
-                            memcpy(name, &dec_data[2], name_len);
-                            ESP_LOGI(TAG, "📛 Decrypted device name: \"%s\"", name);
+                /* Parse decrypted AD (do not trust length octet past plaintext) */
+                if (safe_dec_len >= 2) {
+                    if (dec_data[0] == 0) {
+                        ESP_LOGW(TAG, "Malformed decrypted AD: zero inner length");
+                    } else {
+                        const size_t inner_total = 1U + (size_t)dec_data[0];
+                        if (inner_total > safe_dec_len) {
+                            ESP_LOGW(TAG,
+                                     "Malformed decrypted AD: inner len claims %zu octets, have %zu",
+                                     inner_total, safe_dec_len);
+                        } else {
+                            uint8_t inner_type = dec_data[1];
+                            if (inner_type == ESP_BLE_AD_TYPE_NAME_CMPL ||
+                                inner_type == ESP_BLE_AD_TYPE_NAME_SHORT) {
+                                char name[32] = {0};
+                                size_t name_len = (size_t)dec_data[0] - 1U;
+                                const size_t name_copy_end = 2U + name_len;
+                                if (name_len < sizeof(name) &&
+                                    name_copy_end <= sizeof(dec_data) &&
+                                    name_copy_end <= safe_dec_len) {
+                                    memcpy(name, &dec_data[2], name_len);
+                                    ESP_LOGI(TAG, "Decrypted device name: \"%s\"", name);
+                                }
+                            }
                         }
                     }
                 }
             } else {
-                ESP_LOGE(TAG, "❌ Decryption failed (rc=%d) - wrong key?", rc);
+                ESP_LOGE(TAG, "Decryption failed (rc=%d) - wrong key?", rc);
             }
             return;  /* Found and processed encrypted data */
         }
@@ -167,8 +194,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
 
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
         if (param->scan_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGI(TAG, "🔍 Scanning started (no connection mode)");
-            ESP_LOGI(TAG, "Looking for devices with UUID 0x%04X...", CUSTOM_SERVICE_UUID);
+            ESP_LOGI(TAG, "Scanning started (no connection mode)");
+            ESP_LOGI(TAG, "Looking for devices with UUID 0x%04X...", GAP_SERVICE_UUID);
         } else {
             ESP_LOGE(TAG, "Scan start failed: %d", param->scan_start_cmpl.status);
         }
@@ -226,14 +253,14 @@ void app_main(void)
     /* Display pre-shared key */
     ESP_LOGI(TAG, "Using pre-shared key material:");
     ESP_LOGI(TAG, "  Session Key:");
-    ESP_LOG_BUFFER_HEX(TAG, pre_shared_key.session_key, BLE_EAD_KEY_SIZE);
+    ESP_LOG_BUFFER_HEX(TAG, pre_shared_key.session_key, ESP_BLE_EAD_KEY_SIZE);
     ESP_LOGI(TAG, "  IV:");
-    ESP_LOG_BUFFER_HEX(TAG, pre_shared_key.iv, BLE_EAD_IV_SIZE);
+    ESP_LOG_BUFFER_HEX(TAG, pre_shared_key.iv, ESP_BLE_EAD_IV_SIZE);
 
     /* Start scanning */
     ESP_ERROR_CHECK(esp_ble_gap_set_scan_params(&ble_scan_params));
 
     ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "⚡ This example decrypts WITHOUT connecting!");
-    ESP_LOGI(TAG, "   Key must be pre-shared with peripheral.");
+    ESP_LOGI(TAG, "This example decrypts WITHOUT connecting!");
+    ESP_LOGI(TAG, "Key must be pre-shared with peripheral.");
 }

@@ -8,8 +8,16 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
+#include <stdbool.h>
 #include <errno.h>
+
+#include "sdkconfig.h"
+
+#if CONFIG_BT_BLUEDROID_ENABLED
+#include "esp_bt_defs.h"
+#else
+#include "nimble/ble.h"
+#endif
 
 #include "cap_acceptor.h"
 
@@ -17,13 +25,8 @@
 #define TARGET_DEVICE_NAME      "CAP Broadcast Source"
 #define TARGET_DEVICE_NAME_LEN  (sizeof(TARGET_DEVICE_NAME) - 1)
 #define TARGET_BROADCAST_CODE   "1234"
-
-#define SCAN_INTERVAL           160     /* 100ms */
-#define SCAN_WINDOW             160     /* 100ms */
 #endif /* CONFIG_EXAMPLE_SCAN_SELF */
 
-#define PA_SYNC_SKIP            0
-#define PA_SYNC_TIMEOUT         1000    /* 1000 * 10ms = 10s */
 #define PA_SYNC_HANDLE_INIT     UINT16_MAX
 
 enum broadcast_flag {
@@ -33,103 +36,73 @@ enum broadcast_flag {
     FLAG_BROADCAST_SYNCABLE,
     FLAG_BROADCAST_SYNCING,
     FLAG_BROADCAST_SYNCED,
+    FLAG_BROADCAST_RESYNC_PENDING,
+    /* Set when the last BIS stream stops; cleared in stopped_cb.
+     * Bridges the window where EPs are IDLE but big_stopped has not yet cleared
+     * BASS bis_sync — pa_lost must not rem_src/delete during that window.
+     */
+    FLAG_BROADCAST_STOP_PENDING,
     FLAG_BASE_RECEIVED,
     FLAG_PA_SYNCING,
     FLAG_PA_SYNCED,
     FLAG_SCANNING,
-    FLAG_NUM,
 };
-ATOMIC_DEFINE(flags, FLAG_NUM);
+static uint32_t flags;
+
+static inline bool flag_test(uint8_t bit)
+{
+    return (flags & (1u << bit)) != 0;
+}
+
+static inline void flag_set(uint8_t bit)
+{
+    flags |= (1u << bit);
+}
+
+static inline void flag_clear(uint8_t bit)
+{
+    flags &= ~(1u << bit);
+}
+
+static inline bool flag_test_and_set(uint8_t bit)
+{
+    bool was = flag_test(bit);
+    flag_set(bit);
+    return was;
+}
 
 static struct broadcast_sink {
+    esp_ble_audio_cap_stream_t cap_streams[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
     const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state;
     uint8_t broadcast_code[ESP_BLE_ISO_BROADCAST_CODE_SIZE];
     esp_ble_audio_bap_broadcast_sink_t *sink;
-    esp_ble_audio_cap_stream_t cap_stream;
     uint8_t received_base[UINT8_MAX];
     uint32_t requested_bis_sync;
     uint32_t broadcast_id;
     uint16_t sync_handle;
+    uint8_t active_streams;
 } broadcast_sink = {
     .sync_handle = PA_SYNC_HANDLE_INIT,
 };
 
-static example_audio_rx_metrics_t rx_metrics;
-
-static int pa_sync_create(const bt_addr_le_t *addr, uint8_t adv_sid)
-{
-    struct ble_gap_periodic_sync_params params = {0};
-    ble_addr_t sync_addr = {0};
-
-    sync_addr.type = addr->type;
-    memcpy(sync_addr.val, addr->a.val, sizeof(sync_addr.val));
-    params.skip = PA_SYNC_SKIP;
-    params.sync_timeout = PA_SYNC_TIMEOUT;
-
-    return ble_gap_periodic_adv_sync_create(&sync_addr, adv_sid, &params,
-                                            example_audio_gap_event_cb, NULL);
-}
-
-static int pa_sync_terminate(void)
-{
-    int err;
-
-    err = ble_gap_periodic_adv_sync_terminate(broadcast_sink.sync_handle);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to terminate PA sync, err %d", err);
-    }
-
-    return err;
-}
+static example_audio_rx_metrics_t rx_metrics[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
 
 #if CONFIG_EXAMPLE_SCAN_SELF
-static int ext_scan_start(void)
-{
-    struct ble_gap_disc_params params = {0};
-    uint8_t own_addr_type;
-    int err;
-
-    err = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to determine own addr type, err %d", err);
-        return err;
-    }
-
-    params.passive = 1;
-    params.itvl = SCAN_INTERVAL;
-    params.window = SCAN_WINDOW;
-
-    err = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &params,
-                       example_audio_gap_event_cb, NULL);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start scanning, err %d", err);
-        return err;
-    }
-
-    ESP_LOGI(TAG, "Extended scan started");
-    return 0;
-}
-
-static int ext_scan_stop(void)
-{
-    return ble_gap_disc_cancel();
-}
-
 int check_start_scan(void)
 {
     int err;
 
-    if (atomic_test_bit(flags, FLAG_SCANNING)) {
+    if (flag_test(FLAG_SCANNING)) {
         ESP_LOGW(TAG, "FLAG_SCANNING");
         return -EALREADY;
     }
 
-    if (atomic_test_bit(flags, FLAG_PA_SYNCED)) {
+    if (flag_test(FLAG_PA_SYNCED)) {
         ESP_LOGW(TAG, "FLAG_PA_SYNCED");
         return -EALREADY;
     }
 
-    if (atomic_test_bit(flags, FLAG_BROADCAST_SYNCED)) {
+    if (flag_test(FLAG_BROADCAST_SYNCED)) {
         ESP_LOGW(TAG, "FLAG_BROADCAST_SYNCED");
         return -EALREADY;
     }
@@ -139,357 +112,11 @@ int check_start_scan(void)
         return err;
     }
 
-    atomic_set_bit(flags, FLAG_SCANNING);
-
-    return 0;
-}
-#endif /* CONFIG_EXAMPLE_SCAN_SELF */
-
-static void broadcast_stream_started_cb(esp_ble_audio_bap_stream_t *stream)
-{
-    ESP_LOGI(TAG, "Broadcast stream %p started", stream);
-
-    example_audio_rx_metrics_reset(&rx_metrics);
-
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCING);
-    atomic_set_bit(flags, FLAG_BROADCAST_SYNCED);
-}
-
-static void broadcast_stream_stopped_cb(esp_ble_audio_bap_stream_t *stream, uint8_t reason)
-{
-    ESP_LOGI(TAG, "Broadcast stream %p stopped, reason 0x%02x", stream, reason);
-
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCING);
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCED);
-
-#if CONFIG_EXAMPLE_SCAN_SELF
-    check_start_scan();
-#endif /* CONFIG_EXAMPLE_SCAN_SELF */
-}
-
-static void broadcast_stream_recv_cb(esp_ble_audio_bap_stream_t *stream,
-                                     const esp_ble_iso_recv_info_t *info,
-                                     const uint8_t *data, uint16_t len)
-{
-
-    rx_metrics.last_sdu_len = len;
-    example_audio_rx_metrics_on_recv(info, &rx_metrics, TAG, "stream", stream);
-}
-
-static int create_broadcast_sink(void)
-{
-    int err;
-
-    if (broadcast_sink.sink) {
-        return -EALREADY;
-    }
-
-    ESP_LOGI(TAG, "Creating broadcast sink for broadcast ID 0x%06X",
-             broadcast_sink.broadcast_id);
-
-    err = esp_ble_audio_bap_broadcast_sink_create(broadcast_sink.sync_handle,
-                                                  broadcast_sink.broadcast_id,
-                                                  &broadcast_sink.sink);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to create broadcast sink, err %d", err);
-        return err;
-    }
+    flag_set(FLAG_SCANNING);
 
     return 0;
 }
 
-static void check_sync_broadcast(void)
-{
-    esp_ble_audio_bap_stream_t *sync_stream = &broadcast_sink.cap_stream.bap_stream;
-    uint32_t sync_bitfield;
-    int err;
-
-    if (atomic_test_bit(flags, FLAG_BASE_RECEIVED) == false) {
-        ESP_LOGI(TAG, "FLAG_BASE_RECEIVED");
-        return;
-    }
-
-    if (atomic_test_bit(flags, FLAG_BROADCAST_SYNCABLE) == false) {
-        ESP_LOGI(TAG, "FLAG_BROADCAST_SYNCABLE");
-        return;
-    }
-
-    if (atomic_test_bit(flags, FLAG_BROADCAST_CODE_REQUIRED) &&
-            atomic_test_bit(flags, FLAG_BROADCAST_CODE_RECEIVED) == false) {
-        ESP_LOGI(TAG, "FLAG_BROADCAST_CODE_REQUIRED");
-        return;
-    }
-
-    if (atomic_test_bit(flags, FLAG_BROADCAST_SYNC_REQUESTED) == false) {
-        ESP_LOGI(TAG, "FLAG_BROADCAST_SYNC_REQUESTED");
-        return;
-    }
-
-    if (atomic_test_bit(flags, FLAG_PA_SYNCED) == false) {
-        ESP_LOGI(TAG, "FLAG_PA_SYNCED");
-        return;
-    }
-
-    if (atomic_test_bit(flags, FLAG_BROADCAST_SYNCED) ||
-            atomic_test_bit(flags, FLAG_BROADCAST_SYNCING)) {
-        ESP_LOGI(TAG, "FLAG_BROADCAST_SYNCED");
-        return;
-    }
-
-    if (broadcast_sink.requested_bis_sync == ESP_BLE_AUDIO_BAP_BIS_SYNC_NO_PREF) {
-        uint32_t base_bis;
-
-        /* Get the first BIS index from the BASE */
-        err = esp_ble_audio_bap_base_get_bis_indexes(
-                  (esp_ble_audio_bap_base_t *)broadcast_sink.received_base, &base_bis);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to get BIS indexes from BASE, err %d", err);
-            return;
-        }
-
-        sync_bitfield = 0;
-
-        for (uint8_t i = ESP_BLE_ISO_BIS_INDEX_MIN; i <= ESP_BLE_ISO_BIS_INDEX_MAX; i++) {
-            if (base_bis & ESP_BLE_ISO_BIS_INDEX_BIT(i)) {
-                sync_bitfield = ESP_BLE_ISO_BIS_INDEX_BIT(i);
-                break;
-            }
-        }
-
-        if (sync_bitfield == 0) {
-            ESP_LOGE(TAG, "No valid BIS index found in BASE");
-            return;
-        }
-    } else {
-        sync_bitfield = broadcast_sink.requested_bis_sync;
-    }
-
-    ESP_LOGI(TAG, "Syncing to broadcast with bitfield 0x%08X", sync_bitfield);
-
-    /* Sync the BIG */
-    err = esp_ble_audio_bap_broadcast_sink_sync(broadcast_sink.sink,
-                                                sync_bitfield, &sync_stream,
-                                                broadcast_sink.broadcast_code);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to sync the broadcast sink, err %d", err);
-        return;
-    }
-
-    atomic_set_bit(flags, FLAG_BROADCAST_SYNCING);
-}
-
-static void base_recv_cb(esp_ble_audio_bap_broadcast_sink_t *sink,
-                         const esp_ble_audio_bap_base_t *base,
-                         size_t base_size)
-{
-    if (base_size > sizeof(broadcast_sink.received_base)) {
-        ESP_LOGE(TAG, "Too large BASE (%u > %u)",
-                 base_size, sizeof(broadcast_sink.received_base));
-        return;
-    }
-
-    memcpy(broadcast_sink.received_base, base, base_size);
-
-    if (!atomic_test_and_set_bit(flags, FLAG_BASE_RECEIVED)) {
-        ESP_LOGI(TAG, "BASE received");
-
-        check_sync_broadcast();
-    }
-}
-
-static void syncable_cb(esp_ble_audio_bap_broadcast_sink_t *sink,
-                        const esp_ble_iso_biginfo_t *biginfo)
-{
-    if (biginfo->encryption == false) {
-        atomic_clear_bit(flags, FLAG_BROADCAST_CODE_REQUIRED);
-    } else {
-        atomic_set_bit(flags, FLAG_BROADCAST_CODE_REQUIRED);
-
-#if CONFIG_EXAMPLE_SCAN_SELF
-        /* If self-scanning is enabled, local broadcast code will be used */
-        memset(broadcast_sink.broadcast_code, 0, ESP_BLE_ISO_BROADCAST_CODE_SIZE);
-        memcpy(broadcast_sink.broadcast_code, TARGET_BROADCAST_CODE,
-               MIN(ESP_BLE_ISO_BROADCAST_CODE_SIZE, strlen(TARGET_BROADCAST_CODE)));
-
-        atomic_set_bit(flags, FLAG_BROADCAST_CODE_RECEIVED);
-#endif /* CONFIG_EXAMPLE_SCAN_SELF */
-    }
-
-    if (!atomic_test_and_set_bit(flags, FLAG_BROADCAST_SYNCABLE)) {
-        ESP_LOGI(TAG, "BIGInfo received");
-
-        check_sync_broadcast();
-    }
-}
-
-static int pa_sync_without_past(const bt_addr_le_t *addr, uint8_t adv_sid)
-{
-    int err;
-
-    err = pa_sync_create(addr, adv_sid);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to create PA sync without past, err %d", err);
-    }
-
-    return err;
-}
-
-static void recv_state_updated_cb(esp_ble_conn_t *conn,
-                                  const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state)
-{
-    ESP_LOGI(TAG, "Receive state updated, pa_sync 0x%02x encrypt 0x%02x",
-             recv_state->pa_sync_state, recv_state->encrypt_state);
-
-    for (uint8_t i = 0; i < recv_state->num_subgroups; i++) {
-        ESP_LOGI(TAG, "subgroup %d bis_sync: 0x%08x", i, recv_state->subgroups[i].bis_sync);
-    }
-
-    if (recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_SYNCED) {
-        broadcast_sink.recv_state = recv_state;
-    }
-}
-
-static int pa_sync_req_cb(esp_ble_conn_t *conn,
-                          const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
-                          bool past_available, uint16_t pa_interval)
-{
-    int err;
-
-    ESP_LOGI(TAG, "Received request to sync to PA (PAST %savailble): %u",
-             past_available ? "" : "not ", recv_state->pa_sync_state);
-
-    broadcast_sink.recv_state = recv_state;
-
-    if (recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_SYNCED ||
-            recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_INFO_REQ ||
-            broadcast_sink.sync_handle != PA_SYNC_HANDLE_INIT) {
-        /* Already syncing */
-        ESP_LOGW(TAG, "Rejecting PA sync request");
-        return -EALREADY;
-    }
-
-    if (past_available) {
-        ESP_LOGW(TAG, "Currently not support PAST");
-        return -ENOTSUP;
-    } else {
-        err = pa_sync_without_past(&recv_state->addr, recv_state->adv_sid);
-        if (err) {
-            return err;
-        }
-
-        ESP_LOGI(TAG, "Syncing without PAST");
-    }
-
-    broadcast_sink.broadcast_id = recv_state->broadcast_id;
-    atomic_set_bit(flags, FLAG_PA_SYNCING);
-
-    return 0;
-}
-
-static int pa_sync_term_req_cb(esp_ble_conn_t *conn,
-                               const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state)
-{
-    int err;
-
-    ESP_LOGI(TAG, "Received request to terminate PA sync");
-
-    broadcast_sink.recv_state = recv_state;
-
-    err = pa_sync_terminate();
-    if (err) {
-        return -EIO;
-    }
-
-    broadcast_sink.sync_handle = PA_SYNC_HANDLE_INIT;
-
-    return 0;
-}
-
-static void broadcast_code_cb(esp_ble_conn_t *conn,
-                              const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
-                              const uint8_t broadcast_code[ESP_BLE_ISO_BROADCAST_CODE_SIZE])
-{
-    ESP_LOGI(TAG, "Broadcast code received for %p", recv_state);
-
-    broadcast_sink.recv_state = recv_state;
-
-    memcpy(broadcast_sink.broadcast_code, broadcast_code,
-           ESP_BLE_ISO_BROADCAST_CODE_SIZE);
-
-    atomic_set_bit(flags, FLAG_BROADCAST_CODE_RECEIVED);
-}
-
-static uint32_t get_req_bis_sync(const uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS])
-{
-    uint32_t bis_sync = 0;
-
-    for (size_t i = 0; i < CONFIG_BT_BAP_BASS_MAX_SUBGROUPS; i++) {
-        bis_sync |= bis_sync_req[i];
-    }
-
-    return bis_sync;
-}
-
-static int bis_sync_req_cb(esp_ble_conn_t *conn,
-                           const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
-                           const uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS])
-{
-    const uint32_t new_bis_sync_req = get_req_bis_sync(bis_sync_req);
-    esp_err_t err;
-
-    ESP_LOGI(TAG, "BIS sync request received for %p: 0x%08lx", recv_state, bis_sync_req[0]);
-
-    if (new_bis_sync_req != ESP_BLE_AUDIO_BAP_BIS_SYNC_NO_PREF &&
-            __builtin_popcount(new_bis_sync_req) > 1) {
-        ESP_LOGW(TAG, "Rejecting BIS sync request for 0x%08lx as we do not support that",
-                 new_bis_sync_req);
-        return -ENOTSUP;
-    }
-
-    if (broadcast_sink.requested_bis_sync == new_bis_sync_req) {
-        return 0; /* no op */
-    }
-
-    if (atomic_test_bit(flags, FLAG_BROADCAST_SYNCED)) {
-        /* If the BIS sync request is received while we are already
-         * synced, it means that the requested BIS sync has changed.
-         */
-
-        /* The stream stopped callback will be called as part of this,
-         * and we do not need to wait for any events from the controller.
-         * Thus, when this returns, the broadcast sink is stopped.
-         */
-        err = esp_ble_audio_bap_broadcast_sink_stop(broadcast_sink.sink);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to stop Broadcast Sink, err %d", err);
-            return -EIO;
-        }
-
-        err = esp_ble_audio_bap_broadcast_sink_delete(broadcast_sink.sink);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to delete Broadcast Sink, err %d", err);
-            return -EIO;
-        }
-
-        broadcast_sink.sink = NULL;
-
-        atomic_clear_bit(flags, FLAG_BROADCAST_SYNCED);
-    }
-
-    broadcast_sink.requested_bis_sync = new_bis_sync_req;
-
-    if (broadcast_sink.requested_bis_sync != 0) {
-        atomic_set_bit(flags, FLAG_BROADCAST_SYNC_REQUESTED);
-
-        check_sync_broadcast();
-    } else {
-        atomic_clear_bit(flags, FLAG_BROADCAST_SYNC_REQUESTED);
-    }
-
-    return 0;
-}
-
-#if CONFIG_EXAMPLE_SCAN_SELF
 struct scan_recv_data {
     bool target_matched;
     bool broadcast_id_found;
@@ -531,7 +158,6 @@ static bool data_cb(uint8_t type, const uint8_t *data,
 void broadcast_scan_recv(esp_ble_audio_gap_app_event_t *event)
 {
     struct scan_recv_data sr = {0};
-    bt_addr_le_t addr;
     int err;
 
     /* Periodic advertising interval. 0 if no periodic advertising. */
@@ -547,7 +173,7 @@ void broadcast_scan_recv(esp_ble_audio_gap_app_event_t *event)
         return;
     }
 
-    if (atomic_test_bit(flags, FLAG_PA_SYNCING) == false &&
+    if (flag_test(FLAG_PA_SYNCING) == false &&
             broadcast_sink.recv_state == NULL) {
         /* Since we are scanning ourselves, we consider this as
          * broadcast sync has been requested.
@@ -555,35 +181,626 @@ void broadcast_scan_recv(esp_ble_audio_gap_app_event_t *event)
         broadcast_sink.requested_bis_sync = ESP_BLE_AUDIO_BAP_BIS_SYNC_NO_PREF;
         broadcast_sink.broadcast_id = sr.broadcast_id;
 
-        addr.type = event->ext_scan_recv.addr.type;
-        memcpy(addr.a.val, event->ext_scan_recv.addr.val, sizeof(addr.a.val));
-
-        err = pa_sync_create(&addr, event->ext_scan_recv.sid);
+        err = pa_sync_create(event->ext_scan_recv.addr.type,
+                             event->ext_scan_recv.addr.val,
+                             event->ext_scan_recv.sid);
         if (err) {
-            ESP_LOGE(TAG, "Failed to create PA sync, err %d", err);
             return;
         }
 
         ESP_LOGI(TAG, "Syncing without PAST from scan");
 
-        atomic_set_bit(flags, FLAG_PA_SYNCING);
-        atomic_set_bit(flags, FLAG_BROADCAST_SYNC_REQUESTED);
+        flag_set(FLAG_PA_SYNCING);
+        flag_set(FLAG_BROADCAST_SYNC_REQUESTED);
     }
 }
 #endif /* CONFIG_EXAMPLE_SCAN_SELF */
 
-void broadcast_pa_synced(esp_ble_audio_gap_app_event_t *event)
+static void sink_availability_update(bool receiving);
+
+static void broadcast_sink_reset(void)
 {
-    bt_addr_le_t addr = {0};
+    /* Reception is over however we got here (Remove Source, PA loss, ACL drop),
+     * so the sink pool is free again even if no receive state said so.
+     */
+    sink_availability_update(false);
+
+    broadcast_sink.recv_state = NULL;
+    broadcast_sink.sink = NULL;
+    broadcast_sink.requested_bis_sync = 0;
+    broadcast_sink.sync_handle = PA_SYNC_HANDLE_INIT;
+    broadcast_sink.active_streams = 0;
+
+    flag_clear(FLAG_BROADCAST_SYNCABLE);
+    flag_clear(FLAG_BROADCAST_SYNCING);
+    flag_clear(FLAG_BROADCAST_SYNCED);
+    flag_clear(FLAG_PA_SYNCED);
+    flag_clear(FLAG_PA_SYNCING);
+    flag_clear(FLAG_BASE_RECEIVED);
+    flag_clear(FLAG_BROADCAST_CODE_REQUIRED);
+    flag_clear(FLAG_BROADCAST_CODE_RECEIVED);
+    flag_clear(FLAG_BROADCAST_SYNC_REQUESTED);
+    flag_clear(FLAG_BROADCAST_RESYNC_PENDING);
+    flag_clear(FLAG_BROADCAST_STOP_PENDING);
+    flag_clear(FLAG_SCANNING);
+
+#if CONFIG_EXAMPLE_SCAN_SELF
+    check_start_scan();
+#endif /* CONFIG_EXAMPLE_SCAN_SELF */
+}
+
+struct base_subgroup_pick {
+    uint32_t bis_indexes;
+    bool found;
+};
+
+static bool base_pick_subgroup_cb(const esp_ble_audio_bap_base_subgroup_t *subgroup,
+                                  void *user_data)
+{
+    struct base_subgroup_pick *pick = user_data;
+
+    /* Keep the first subgroup only. BIS of different subgroups carry different
+     * codec configurations, so a sink synchronizes within one subgroup.
+     */
+    if (pick->found == false &&
+            esp_ble_audio_bap_base_subgroup_get_bis_indexes(subgroup,
+                                                            &pick->bis_indexes) == ESP_OK) {
+        pick->found = true;
+    }
+
+    /* Always continue: stopping early makes the iterator return -ECANCELED. */
+    return true;
+}
+
+static void check_sync_broadcast(void)
+{
+    esp_ble_audio_bap_stream_t *streams[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
+    uint32_t sync_bitfield;
+    uint8_t stream_count;
     int err;
 
-    addr.type = event->pa_sync.addr.type;
-    memcpy(addr.a.val, event->pa_sync.addr.val, sizeof(addr.a.val));
+    if (flag_test(FLAG_BASE_RECEIVED) == false) {
+        ESP_LOGI(TAG, "Waiting for BASE");
+        return;
+    }
+
+    if (flag_test(FLAG_BROADCAST_SYNCABLE) == false) {
+        ESP_LOGI(TAG, "Waiting for BIGInfo");
+        return;
+    }
+
+    if (flag_test(FLAG_BROADCAST_CODE_REQUIRED) &&
+            flag_test(FLAG_BROADCAST_CODE_RECEIVED) == false) {
+        ESP_LOGI(TAG, "Waiting for broadcast code");
+        return;
+    }
+
+    if (flag_test(FLAG_BROADCAST_SYNC_REQUESTED) == false) {
+        ESP_LOGI(TAG, "Waiting for sync request");
+        return;
+    }
+
+    if (flag_test(FLAG_PA_SYNCED) == false) {
+        ESP_LOGI(TAG, "Waiting for PA sync");
+        return;
+    }
+
+    if (flag_test(FLAG_BROADCAST_SYNCING)) {
+        ESP_LOGI(TAG, "Already syncing");
+        return;
+    }
+
+    if (flag_test(FLAG_BROADCAST_SYNCED)) {
+        ESP_LOGI(TAG, "Already synced");
+        return;
+    }
+
+    if (broadcast_sink.requested_bis_sync == ESP_BLE_AUDIO_BAP_BIS_SYNC_NO_PREF) {
+        struct base_subgroup_pick pick = {0};
+        uint32_t base_bis;
+
+        /* Get the BIS indexes offered by the first subgroup of the BASE */
+        err = esp_ble_audio_bap_base_foreach_subgroup(
+                  (esp_ble_audio_bap_base_t *)broadcast_sink.received_base,
+                  base_pick_subgroup_cb, &pick);
+        if (err || pick.found == false) {
+            ESP_LOGE(TAG, "Failed to get BIS indexes from BASE, err %d", err);
+            return;
+        }
+
+        base_bis = pick.bis_indexes;
+        sync_bitfield = 0;
+
+        /* No Broadcast Assistant told us what to sync to, so take as many BIS as
+         * this sink has streams for: a stereo source advertises one BIS per
+         * channel and syncing to only the first would drop the other channel.
+         */
+        for (uint8_t i = ESP_BLE_ISO_BIS_INDEX_MIN; i <= ESP_BLE_ISO_BIS_INDEX_MAX; i++) {
+            if (base_bis & ESP_BLE_ISO_BIS_INDEX_BIT(i)) {
+                sync_bitfield |= ESP_BLE_ISO_BIS_INDEX_BIT(i);
+
+                if (__builtin_popcount(sync_bitfield) >=
+                        CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT) {
+                    break;
+                }
+            }
+        }
+
+        if (sync_bitfield == 0) {
+            ESP_LOGE(TAG, "No valid BIS index found in BASE");
+            return;
+        }
+    } else {
+        sync_bitfield = broadcast_sink.requested_bis_sync;
+    }
+
+    stream_count = __builtin_popcount(sync_bitfield);
+    if (stream_count > CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT) {
+        ESP_LOGE(TAG, "Bitfield 0x%08X needs %u streams, have %u",
+                 sync_bitfield, stream_count, CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT);
+        return;
+    }
+
+    for (uint8_t i = 0; i < stream_count; i++) {
+        streams[i] = &broadcast_sink.cap_streams[i].bap_stream;
+    }
+
+    ESP_LOGI(TAG, "Syncing to broadcast %p with bitfield 0x%08X (%u streams)",
+             broadcast_sink.sink, sync_bitfield, stream_count);
+
+    /* Sync the BIG */
+    err = esp_ble_audio_bap_broadcast_sink_sync(broadcast_sink.sink,
+                                                sync_bitfield, streams,
+                                                broadcast_sink.broadcast_code);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to sync the broadcast sink, err %d", err);
+        return;
+    }
+
+    flag_set(FLAG_BROADCAST_SYNCING);
+}
+
+static uint8_t broadcast_stream_idx(const esp_ble_audio_bap_stream_t *stream)
+{
+    for (uint8_t i = 0; i < CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT; i++) {
+        if (&broadcast_sink.cap_streams[i].bap_stream == stream) {
+            return i;
+        }
+    }
+    return 0xFF;
+}
+
+static void broadcast_stream_started_cb(esp_ble_audio_bap_stream_t *stream)
+{
+    uint8_t idx = broadcast_stream_idx(stream);
+
+    ESP_LOGI(TAG, "[SNK #%u] Stream started", idx);
+
+    if (idx < ARRAY_SIZE(rx_metrics)) {
+        example_audio_rx_metrics_reset(&rx_metrics[idx]);
+    }
+
+    broadcast_sink.active_streams++;
+    flag_clear(FLAG_BROADCAST_SYNCING);
+    flag_set(FLAG_BROADCAST_SYNCED);
+}
+
+static void broadcast_stream_stopped_cb(esp_ble_audio_bap_stream_t *stream, uint8_t reason)
+{
+    ESP_LOGI(TAG, "[SNK #%u] Stream stopped, reason 0x%02x",
+             broadcast_stream_idx(stream), reason);
+
+    if (broadcast_sink.active_streams > 0) {
+        broadcast_sink.active_streams--;
+    }
+
+    /* Multi-BIS: defer teardown / re-sync until every stream of this sink
+     * has stopped. Calling _delete or _sync while another BIS is still
+     * active hits the lib's "sink not idle" path.
+     */
+    if (broadcast_sink.active_streams > 0) {
+        return;
+    }
+
+    flag_clear(FLAG_BROADCAST_SYNCING);
+    flag_clear(FLAG_BROADCAST_SYNCED);
+    /* Mark BIG teardown in progress until stopped_cb runs
+     * (after update_recv_state_big_cleared). Do not delete here — that
+     * races rem_src while bis_sync is still non-zero.
+     */
+    flag_set(FLAG_BROADCAST_STOP_PENDING);
+
+    if (flag_test(FLAG_PA_SYNCED) == false) {
+        /* Both PA and BIS are gone — stopped_cb deletes. */
+        return;
+    }
+
+    /* PA still synced. Drive the re-sync only when WE initiated the stop
+     * for a bitmap change (bis_sync_req_cb sets FLAG_BROADCAST_RESYNC_PENDING). On
+     * spontaneous BIG drops per BASS § 3.2.1.9 we just expose the loss via
+     * BIS_Sync_State and wait for the assistant to act (Modify Source).
+     */
+    if (flag_test(FLAG_BROADCAST_RESYNC_PENDING)) {
+        flag_clear(FLAG_BROADCAST_RESYNC_PENDING);
+        check_sync_broadcast();
+    }
+}
+
+static void stopped_cb(esp_ble_audio_bap_broadcast_sink_t *sink,
+                                      uint8_t reason)
+{
+    esp_err_t err;
+
+    ESP_LOGI(TAG, "Broadcast sink stopped, reason 0x%02x", reason);
+
+    flag_clear(FLAG_BROADCAST_STOP_PENDING);
+
+    /* Keep the sink when PA is still synced (assistant pause, BIS bitmap
+     * resync, or spontaneous BIG drop with PA alive).
+     */
+    if (flag_test(FLAG_PA_SYNCED)) {
+        return;
+    }
+
+    if (broadcast_sink.sink == NULL) {
+        return;
+    }
+
+    err = esp_ble_audio_bap_broadcast_sink_delete(broadcast_sink.sink);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to delete broadcast sink, err %d", err);
+        return;
+    }
+
+    broadcast_sink_reset();
+}
+
+static void broadcast_stream_recv_cb(esp_ble_audio_bap_stream_t *stream,
+                                     const esp_ble_iso_recv_info_t *info,
+                                     const uint8_t *data, uint16_t len)
+{
+    uint8_t idx = broadcast_stream_idx(stream);
+    char obj_name[10];
+
+    if (idx >= ARRAY_SIZE(rx_metrics)) {
+        return;
+    }
+
+    rx_metrics[idx].last_sdu = data;
+
+    rx_metrics[idx].last_sdu_len = len;
+    snprintf(obj_name, sizeof(obj_name), "SNK #%u", idx);
+    example_audio_rx_metrics_on_recv(info, &rx_metrics[idx], TAG, obj_name);
+}
+
+static void base_recv_cb(esp_ble_audio_bap_broadcast_sink_t *sink,
+                         const esp_ble_audio_bap_base_t *base,
+                         size_t base_size)
+{
+    if (base_size > sizeof(broadcast_sink.received_base)) {
+        ESP_LOGE(TAG, "Too large BASE (%u > %u)",
+                 base_size, sizeof(broadcast_sink.received_base));
+        return;
+    }
+
+    memcpy(broadcast_sink.received_base, base, base_size);
+
+    if (!flag_test_and_set(FLAG_BASE_RECEIVED)) {
+        ESP_LOGI(TAG, "BASE received");
+
+        check_sync_broadcast();
+    }
+}
+
+static void syncable_cb(esp_ble_audio_bap_broadcast_sink_t *sink,
+                        const esp_ble_iso_biginfo_t *biginfo)
+{
+    if (biginfo->encryption == false) {
+        flag_clear(FLAG_BROADCAST_CODE_REQUIRED);
+    } else {
+        flag_set(FLAG_BROADCAST_CODE_REQUIRED);
+
+#if CONFIG_EXAMPLE_SCAN_SELF
+        /* If self-scanning is enabled, local broadcast code will be used */
+        memset(broadcast_sink.broadcast_code, 0, ESP_BLE_ISO_BROADCAST_CODE_SIZE);
+        memcpy(broadcast_sink.broadcast_code, TARGET_BROADCAST_CODE,
+               MIN(ESP_BLE_ISO_BROADCAST_CODE_SIZE, strlen(TARGET_BROADCAST_CODE)));
+
+        flag_set(FLAG_BROADCAST_CODE_RECEIVED);
+#endif /* CONFIG_EXAMPLE_SCAN_SELF */
+    }
+
+    if (!flag_test_and_set(FLAG_BROADCAST_SYNCABLE)) {
+        ESP_LOGI(TAG, "BIGInfo received");
+
+        check_sync_broadcast();
+    }
+}
+
+/* CAP 7.3.1.8 / 7.3.1.9: "Start of reception can affect an Acceptor's
+ * availability for unicast Audio Streams. In this case, the Acceptor will
+ * update its Available Audio Contexts characteristic."
+ *
+ * It does affect us: stream_alloc() hands unicast and broadcast the same sink
+ * pool, so while every sink stream carries a BIS there is none left to accept a
+ * unicast Config. Saying so keeps the Initiator's view honest instead of
+ * letting it discover the shortage through a NO_MEM.
+ *
+ * Driven off BIS_Sync rather than off a local "broadcasting" flag because that
+ * is the field the Assistant clears first when it stops our reception - which
+ * puts the restore well ahead of the unicast Config that follows in a
+ * broadcast-to-unicast handover.
+ */
+static void sink_availability_update(bool receiving)
+{
+    static bool reported_unavailable;
+    esp_ble_audio_context_t context;
+    esp_err_t err;
+
+    if (receiving == reported_unavailable) {
+        return;
+    }
+
+    context = receiving ? ESP_BLE_AUDIO_CONTEXT_TYPE_NONE : SINK_CONTEXT;
+
+    err = esp_ble_audio_pacs_set_available_contexts(ESP_BLE_AUDIO_DIR_SINK, context);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to update sink available contexts, err %d", err);
+        return;
+    }
+
+    reported_unavailable = receiving;
+
+    ESP_LOGI(TAG, "Sink available contexts now 0x%04x (%s broadcast)",
+             context, receiving ? "receiving" : "not receiving");
+}
+
+static void recv_state_updated_cb(esp_ble_conn_t *conn,
+                                  const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state)
+{
+    bool receiving = false;
+
+    ESP_LOGI(TAG, "Receive state updated, pa_sync 0x%02x encrypt 0x%02x",
+             recv_state->pa_sync_state, recv_state->encrypt_state);
+
+    for (uint8_t i = 0; i < recv_state->num_subgroups; i++) {
+        ESP_LOGI(TAG, "subgroup %d bis_sync 0x%08x", i, recv_state->subgroups[i].bis_sync);
+
+        /* BIS_SYNC_FAILED is non-zero but carries no BIS (BASS 3.1.1.5). */
+        if (recv_state->subgroups[i].bis_sync != 0 &&
+                recv_state->subgroups[i].bis_sync != ESP_BLE_AUDIO_BAP_BIS_SYNC_FAILED) {
+            receiving = true;
+        }
+    }
+
+    sink_availability_update(receiving);
+
+    if (recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_SYNCED) {
+        broadcast_sink.recv_state = recv_state;
+    }
+}
+
+static uint8_t addr_type_bass_to_host(uint8_t type)
+{
+#if CONFIG_BT_BLUEDROID_ENABLED
+    return (type == BT_ADDR_LE_PUBLIC ||
+            type == BT_ADDR_LE_PUBLIC_ID) ? BLE_ADDR_TYPE_PUBLIC : BLE_ADDR_TYPE_RANDOM;
+#else
+    return (type == BT_ADDR_LE_PUBLIC ||
+            type == BT_ADDR_LE_PUBLIC_ID) ? BLE_ADDR_PUBLIC : BLE_ADDR_RANDOM;
+#endif
+}
+
+static int pa_sync_req_cb(esp_ble_conn_t *conn,
+                          const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
+                          bool past_available, uint16_t pa_interval)
+{
+    int err;
+
+    ESP_LOGI(TAG, "Received request to sync to PA (PAST %savailable): %u",
+             past_available ? "" : "not ", recv_state->pa_sync_state);
+
+    broadcast_sink.recv_state = recv_state;
+
+    if (recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_SYNCED ||
+            recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_INFO_REQ ||
+            broadcast_sink.sync_handle != PA_SYNC_HANDLE_INIT) {
+        /* Already syncing */
+        ESP_LOGW(TAG, "Rejecting PA sync request");
+        return -EALREADY;
+    }
+
+    if (past_available) {
+        err = pa_sync_with_past(conn->handle,
+                                addr_type_bass_to_host(recv_state->addr.type),
+                                recv_state->addr.a.val);
+        if (err) {
+            return -EIO;
+        }
+
+        /* Tell the Assistant we are waiting for PAST so it sends
+         * HCI_LE_Periodic_Advertising_Sync_Transfer. */
+        err = esp_ble_audio_bap_scan_delegator_set_pa_state(recv_state->src_id,
+                                                            ESP_BLE_AUDIO_BAP_PA_STATE_INFO_REQ);
+        if (err) {
+            ESP_LOGE(TAG, "Failed to set PA state to INFO_REQ, err %d", err);
+            /* Disarm the PAST receive we just enabled — Assistant was never
+             * notified, so any late-arriving PAST would land on stale state
+             * (broadcast_id=0, FLAG_PA_SYNCING unset). */
+            pa_past_cancel(conn->handle);
+            return -EIO;
+        }
+
+        ESP_LOGI(TAG, "Waiting for PAST...");
+    } else {
+        uint8_t addr[6];
+
+        memcpy(addr, recv_state->addr.a.val, sizeof(addr));
+
+        err = pa_sync_create(addr_type_bass_to_host(recv_state->addr.type),
+                             addr, recv_state->adv_sid);
+        if (err) {
+            return err;
+        }
+
+        ESP_LOGI(TAG, "Syncing without PAST");
+    }
+
+    broadcast_sink.broadcast_id = recv_state->broadcast_id;
+    flag_set(FLAG_PA_SYNCING);
+
+    return 0;
+}
+
+static int pa_sync_term_req_cb(esp_ble_conn_t *conn,
+                               const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state)
+{
+    int err;
+
+    ESP_LOGI(TAG, "Received request to terminate PA sync");
+
+    broadcast_sink.recv_state = recv_state;
+
+    /* Nothing to terminate if PAST/PA-sync never landed (e.g., PAST setup failed
+     * earlier). Issuing the HCI terminate with the sentinel handle gets 0x12
+     * (Invalid HCI Command Parameters) back from the controller. */
+    if (broadcast_sink.sync_handle == PA_SYNC_HANDLE_INIT) {
+        ESP_LOGI(TAG, "PA sync never established, skip terminate");
+        return 0;
+    }
+
+    err = pa_sync_terminate(broadcast_sink.sync_handle);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to terminate PA sync, err %d", err);
+        return -EIO;
+    }
+
+    /* Let BLE_GAP_EVENT_PERIODIC_SYNC_LOST drive cleanup via broadcast_pa_lost
+     * (it gates on the original sync_handle). Resetting sync_handle here would
+     * make that gate miss and leak broadcast_sink.sink.
+     */
+    return 0;
+}
+
+static void broadcast_code_cb(esp_ble_conn_t *conn,
+                              const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
+                              const uint8_t broadcast_code[ESP_BLE_ISO_BROADCAST_CODE_SIZE])
+{
+    ESP_LOGI(TAG, "Broadcast code received (src_id %u)", recv_state->src_id);
+
+    broadcast_sink.recv_state = recv_state;
+
+    memcpy(broadcast_sink.broadcast_code, broadcast_code,
+           ESP_BLE_ISO_BROADCAST_CODE_SIZE);
+
+    flag_set(FLAG_BROADCAST_CODE_RECEIVED);
+
+    /* If BIGInfo arrived before the code, nothing else will retry the sync. */
+    check_sync_broadcast();
+}
+
+static uint32_t get_req_bis_sync(const uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS])
+{
+    uint32_t bis_sync = 0;
+
+    for (size_t i = 0; i < CONFIG_BT_BAP_BASS_MAX_SUBGROUPS; i++) {
+        bis_sync |= bis_sync_req[i];
+    }
+
+    return bis_sync;
+}
+
+static int bis_sync_req_cb(esp_ble_conn_t *conn,
+                           const esp_ble_audio_bap_scan_delegator_recv_state_t *recv_state,
+                           const uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS])
+{
+    const uint32_t new_bis_sync_req = get_req_bis_sync(bis_sync_req);
+    esp_err_t err;
+
+    ESP_LOGI(TAG, "BIS sync request received (src_id %u): 0x%08lx",
+             recv_state->src_id, bis_sync_req[0]);
+
+    if (new_bis_sync_req != ESP_BLE_AUDIO_BAP_BIS_SYNC_NO_PREF &&
+            __builtin_popcount(new_bis_sync_req) > CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT) {
+        ESP_LOGW(TAG, "Rejecting BIS sync 0x%08lx: needs %u streams, max %u",
+                 new_bis_sync_req, __builtin_popcount(new_bis_sync_req),
+                 CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT);
+        return -ENOMEM;
+    }
+
+    if (broadcast_sink.requested_bis_sync == new_bis_sync_req) {
+        ESP_LOGI(TAG, "BIS sync request unchanged (0x%08lx), no-op", new_bis_sync_req);
+        return 0;
+    }
+
+    /* Update requested state BEFORE calling _stop. The lib can fire
+     * stream_stopped_cb synchronously from within _stop, and that
+     * callback drives the deferred re-sync via check_sync_broadcast.
+     * Updating first ensures the callback reads the new bitfield rather
+     * than the stale one.
+     */
+    ESP_LOGI(TAG, "BIS sync request 0x%08lx -> 0x%08lx",
+             broadcast_sink.requested_bis_sync, new_bis_sync_req);
+
+    broadcast_sink.requested_bis_sync = new_bis_sync_req;
+
+    if (broadcast_sink.requested_bis_sync != 0) {
+        flag_set(FLAG_BROADCAST_SYNC_REQUESTED);
+    } else {
+        flag_clear(FLAG_BROADCAST_SYNC_REQUESTED);
+    }
+
+    if (flag_test(FLAG_BROADCAST_SYNCED)) {
+        /* BIS sync request changed while streaming. Stop the BIG sync but
+         * keep the sink object: BIGINFO_RECEIVED / qos / BASE are still
+         * valid for the next sync on the same PA + broadcast_id.
+         *
+         * Leave FLAG_BROADCAST_SYNCED set; stream_stopped_cb clears it.
+         * If the new bitmap is non-zero, mark FLAG_BROADCAST_RESYNC_PENDING so that
+         * stream_stopped_cb drives a re-sync once BIG teardown completes.
+         * Otherwise (bitmap = 0, assistant unsubscribed) there is nothing
+         * to re-sync to.
+         */
+        if (broadcast_sink.requested_bis_sync != 0) {
+            flag_set(FLAG_BROADCAST_RESYNC_PENDING);
+        }
+        err = esp_ble_audio_bap_broadcast_sink_stop(broadcast_sink.sink);
+        if (err) {
+            flag_clear(FLAG_BROADCAST_RESYNC_PENDING);
+            ESP_LOGE(TAG, "Failed to stop Broadcast Sink, err %d", err);
+            return -EIO;
+        }
+    } else if (flag_test(FLAG_BROADCAST_SYNC_REQUESTED)) {
+        check_sync_broadcast();
+    }
+
+    return 0;
+}
+
+/* BASS address types collapse identity variants to public or random. */
+static uint8_t addr_type_host_to_bass(uint8_t type)
+{
+#if CONFIG_BT_BLUEDROID_ENABLED
+    return (type == BLE_ADDR_TYPE_PUBLIC ||
+            type == BLE_ADDR_TYPE_RPA_PUBLIC) ? BT_ADDR_LE_PUBLIC : BT_ADDR_LE_RANDOM;
+#else
+    return (type == BLE_ADDR_PUBLIC ||
+            type == BLE_ADDR_PUBLIC_ID) ? BT_ADDR_LE_PUBLIC : BT_ADDR_LE_RANDOM;
+#endif
+}
+
+void broadcast_pa_synced(esp_ble_audio_gap_app_event_t *event)
+{
+    uint8_t addr_type = addr_type_host_to_bass(event->pa_sync.addr.type);
+    uint8_t addr[6];
+    int err;
+
+    memcpy(addr, event->pa_sync.addr.val, sizeof(addr));
 
     if (broadcast_sink.sync_handle == PA_SYNC_HANDLE_INIT ||
             (broadcast_sink.recv_state &&
-             broadcast_sink.recv_state->addr.type == addr.type &&
-             memcmp(broadcast_sink.recv_state->addr.a.val, addr.a.val, sizeof(addr.a.val)) == 0 &&
+             broadcast_sink.recv_state->addr.type == addr_type &&
+             memcmp(broadcast_sink.recv_state->addr.a.val, addr, sizeof(addr)) == 0 &&
              broadcast_sink.recv_state->adv_sid == event->pa_sync.sid)) {
         ESP_LOGI(TAG, "PA sync %u synced for broadcast sink", event->pa_sync.sync_handle);
 
@@ -591,8 +808,8 @@ void broadcast_pa_synced(esp_ble_audio_gap_app_event_t *event)
             broadcast_sink.sync_handle = event->pa_sync.sync_handle;
         }
 
-        atomic_set_bit(flags, FLAG_PA_SYNCED);
-        atomic_clear_bit(flags, FLAG_PA_SYNCING);
+        flag_set(FLAG_PA_SYNCED);
+        flag_clear(FLAG_PA_SYNCING);
 
 #if CONFIG_EXAMPLE_SCAN_SELF
         err = ext_scan_stop();
@@ -600,64 +817,118 @@ void broadcast_pa_synced(esp_ble_audio_gap_app_event_t *event)
             ESP_LOGE(TAG, "Failed to stop scanning, err %d", err);
             /* Continue anyway - scan stop failure should not block sink creation */
         } else {
-            atomic_clear_bit(flags, FLAG_SCANNING);
+            flag_clear(FLAG_SCANNING);
         }
 #endif /* CONFIG_EXAMPLE_SCAN_SELF */
 
-        err = create_broadcast_sink();
-        if (err && err != -EALREADY) {
-            ESP_LOGE(TAG, "Failed to create broadcast sink, err %d", err);
-            return;
+        if (broadcast_sink.sink == NULL) {
+            ESP_LOGI(TAG, "Creating broadcast sink for broadcast ID 0x%06X",
+                     broadcast_sink.broadcast_id);
+
+            err = esp_ble_audio_bap_broadcast_sink_create(broadcast_sink.sync_handle,
+                                                          broadcast_sink.broadcast_id,
+                                                          &broadcast_sink.sink);
+            if (err) {
+                ESP_LOGE(TAG, "Failed to create broadcast sink, err %d", err);
+                return;
+            }
         }
 
         check_sync_broadcast();
     }
 }
 
-void broadcast_pa_lost(esp_ble_audio_gap_app_event_t *event)
+void broadcast_pa_sync_failed(esp_ble_audio_gap_app_event_t *event)
 {
+    esp_ble_audio_bap_pa_state_t pa_state;
     esp_err_t err;
 
-    if (event->pa_sync_lost.sync_handle != broadcast_sink.sync_handle) {
+    (void)event;
+
+    flag_clear(FLAG_PA_SYNCING);
+
+    if (broadcast_sink.recv_state == NULL) {
+        ESP_LOGI(TAG, "PA sync failed with no recv_state to report to");
         return;
     }
 
-    if (broadcast_sink.recv_state) {
+    /* BASS § 3.2.1.7: report failure to the Assistant. Use NO_PAST when
+     * we were waiting for an Assistant-driven PAST (recv state had
+     * pa_sync_state = INFO_REQ), FAILED otherwise.
+     */
+    if (broadcast_sink.recv_state->pa_sync_state == ESP_BLE_AUDIO_BAP_PA_STATE_INFO_REQ) {
+        pa_state = ESP_BLE_AUDIO_BAP_PA_STATE_NO_PAST;
+    } else {
+        pa_state = ESP_BLE_AUDIO_BAP_PA_STATE_FAILED;
+    }
+
+    err = esp_ble_audio_bap_scan_delegator_set_pa_state(broadcast_sink.recv_state->src_id,
+                                                        pa_state);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to set PA state on sync failure, err %d", err);
+    }
+}
+
+void broadcast_pa_lost(uint16_t sync_handle)
+{
+    esp_err_t err;
+
+    if (sync_handle != broadcast_sink.sync_handle) {
+        return;
+    }
+
+    /* Per BASS § 3.2.1.6 / § 3.2.1.9: PA_Sync_State and BIS_Sync_State are
+     * independent. PA loss only requires updating PA_Sync_State; the BIG
+     * keeps running as long as the broadcaster still transmits it.
+     *
+     * Skip set_pa_state when an Assistant-driven Modify Source already moved
+     * the state to NOT_SYNCED (BASS updates recv_state in place before
+     * PERIODIC_SYNC_LOST fires) — calling it again hits the lib's
+     * "no state by SID" error path.
+     */
+    if (broadcast_sink.recv_state &&
+            broadcast_sink.recv_state->pa_sync_state != ESP_BLE_AUDIO_BAP_PA_STATE_NOT_SYNCED) {
         err = esp_ble_audio_bap_scan_delegator_set_pa_state(broadcast_sink.recv_state->src_id,
                                                             ESP_BLE_AUDIO_BAP_PA_STATE_NOT_SYNCED);
         if (err) {
             ESP_LOGE(TAG, "Failed to set PA state to ESP_BLE_AUDIO_BAP_PA_STATE_NOT_SYNCED, err %d", err);
         }
-
-        err = esp_ble_audio_bap_scan_delegator_rem_src(broadcast_sink.recv_state->src_id);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to remove receive state source, err %d", err);
-        }
-
-        if (broadcast_sink.sink) {
-            err = esp_ble_audio_bap_broadcast_sink_delete(broadcast_sink.sink);
-            if (err) {
-                ESP_LOGE(TAG, "Failed to delete broadcast sink, err %d", err);
-            }
-        }
     }
 
-    broadcast_sink.recv_state = NULL;
-    broadcast_sink.sink = NULL;
-    broadcast_sink.requested_bis_sync = 0;
     broadcast_sink.sync_handle = PA_SYNC_HANDLE_INIT;
+    flag_clear(FLAG_PA_SYNCED);
+    flag_clear(FLAG_PA_SYNCING);
 
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCABLE);
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCING);
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNCED);
-    atomic_clear_bit(flags, FLAG_PA_SYNCED);
-    atomic_clear_bit(flags, FLAG_PA_SYNCING);
-    atomic_clear_bit(flags, FLAG_BASE_RECEIVED);
-    atomic_clear_bit(flags, FLAG_BROADCAST_CODE_REQUIRED);
-    atomic_clear_bit(flags, FLAG_BROADCAST_CODE_RECEIVED);
-    atomic_clear_bit(flags, FLAG_BROADCAST_SYNC_REQUESTED);
+    /* BIS still active or BIG teardown pending → leave the sink;
+     * stopped_cb will tear it down when bis_sync is clear.
+     * Otherwise the sink is bound to a dead PA handle and its cached
+     * BASE / BIGInfo are stale: delete the sink and clear the PA-derived
+     * flags so the next PA sync creates a fresh sink and lets the lib
+     * redeliver BASE / BIGInfo.
+     */
+    if (flag_test(FLAG_BROADCAST_SYNCING) || flag_test(FLAG_BROADCAST_SYNCED) ||
+            flag_test(FLAG_BROADCAST_STOP_PENDING)) {
+        return;
+    }
+
+    if (broadcast_sink.sink) {
+        err = esp_ble_audio_bap_broadcast_sink_delete(broadcast_sink.sink);
+        if (err) {
+            ESP_LOGW(TAG, "Deferred sink delete pending after PA loss, err %d", err);
+            return;
+        }
+        broadcast_sink.sink = NULL;
+    }
+
+    flag_clear(FLAG_BASE_RECEIVED);
+    flag_clear(FLAG_BROADCAST_SYNCABLE);
+    flag_clear(FLAG_BROADCAST_CODE_REQUIRED);
 
 #if CONFIG_EXAMPLE_SCAN_SELF
+    /* Clear cached recv_state so broadcast_scan_recv's gate can drive
+     * a fresh PA sync. */
+    broadcast_sink.recv_state = NULL;
+
     check_start_scan();
 #endif /* CONFIG_EXAMPLE_SCAN_SELF */
 }
@@ -678,6 +949,7 @@ int cap_acceptor_broadcast_init(void)
         static esp_ble_audio_bap_broadcast_sink_cb_t broadcast_sink_cbs = {
             .base_recv = base_recv_cb,
             .syncable  = syncable_cb,
+            .stopped   = stopped_cb,
         };
         static esp_ble_audio_bap_stream_ops_t broadcast_stream_ops = {
             .started = broadcast_stream_started_cb,
@@ -697,11 +969,19 @@ int cap_acceptor_broadcast_init(void)
             return err;
         }
 
-        esp_ble_audio_cap_stream_ops_register(&broadcast_sink.cap_stream,
-                                              &broadcast_stream_ops);
+        for (uint8_t i = 0; i < CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT; i++) {
+            err = esp_ble_audio_cap_stream_ops_register(&broadcast_sink.cap_streams[i],
+                                                        &broadcast_stream_ops);
+            if (err) {
+                ESP_LOGE(TAG, "Failed to register broadcast stream ops [%u], err %d", i, err);
+                return err;
+            }
+        }
 
         cbs_registered = true;
     }
+
+    ESP_LOGI(TAG, "CAP acceptor broadcast initialized");
 
     return 0;
 }

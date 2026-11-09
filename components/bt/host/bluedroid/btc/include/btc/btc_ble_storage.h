@@ -34,6 +34,13 @@
 #define BTC_BLE_STORAGE_LE_KEY_LID_STR              "LE_KEY_LID"
 #define BTC_BLE_STORAGE_LE_KEY_LCSRK_STR            "LE_KEY_LCSRK"
 #define BTC_BLE_STORAGE_LE_AUTH_MODE_STR            "AuthMode"
+/* Marks a bond whose section is keyed by a Host pseudo address (dual local
+ * identity feature). Such sections legitimately share the peer Identity with
+ * another (local,peer) bond and must be exempt from identity-based de-dup. */
+#define BTC_BLE_STORAGE_PSEUDO_BOND_STR             "PseudoBond"
+/* Marks a bond that must not be auto-evicted when the bond list is full.
+ * Explicit removal via esp_ble_remove_bond_device() is still allowed. */
+#define BTC_BLE_STORAGE_EXCEPT_STR                  "ExceptBond"
 
 #define BTC_BLE_STORAGE_LOCAL_ADAPTER_STR           "Adapter"
 #define BTC_BLE_STORAGE_LE_LOCAL_KEY_IR_STR         "LE_LOCAL_KEY_IR"
@@ -93,6 +100,20 @@ int btc_storage_get_num_ble_bond_devices(void);
 void btc_storage_delete_duplicate_ble_devices(void);
 
 void btc_storage_remove_unused_sections(uint8_t *cur_addr, tBTM_LE_PID_KEYS *del_pid_key);
+
+/* Caller must hold btc_config_lock(). Evict bonds until bdaddr section count
+ * is <= max_keep. Excepted bonds are never evicted. Disconnected bonds are
+ * preferred over connected ones; NVS list order (oldest last) is the age key. */
+void btc_storage_evict_overflow_bonded_devices(uint16_t max_keep);
+
+#if (BLE_INCLUDED == TRUE)
+/* Caller must hold btc_config_lock(). Check except count against bond limit. */
+void btc_storage_check_excepted_bond_limit(void);
+#endif /* BLE_INCLUDED == TRUE */
+
+bt_status_t btc_storage_set_bond_except(bt_bdaddr_t *remote_bd_addr, bool except);
+
+bt_status_t btc_storage_get_bond_except(bt_bdaddr_t *remote_bd_addr, bool *except);
 
 #endif  ///SMP_INCLUDED == TRUE
 

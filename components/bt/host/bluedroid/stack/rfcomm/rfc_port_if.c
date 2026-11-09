@@ -31,6 +31,7 @@
 #include "port_int.h"
 #include "rfc_int.h"
 #include "common/bt_defs.h"
+#include "osi/allocator.h"
 
 #if (defined RFCOMM_INCLUDED && RFCOMM_INCLUDED == TRUE)
 
@@ -359,7 +360,7 @@ void RFCOMM_LineStatusReq (tRFC_MCB *p_mcb, UINT8 dlci, UINT8 status)
 *******************************************************************************/
 void RFCOMM_DlcReleaseReq (tRFC_MCB *p_mcb, UINT8 dlci)
 {
-    rfc_port_sm_execute(port_find_mcb_dlci_port (p_mcb, dlci), RFC_EVENT_CLOSE, 0);
+    rfc_port_sm_execute(port_find_mcb_dlci_port (p_mcb, dlci), RFC_EVENT_CLOSE, NULL);
 }
 
 
@@ -372,7 +373,14 @@ void RFCOMM_DlcReleaseReq (tRFC_MCB *p_mcb, UINT8 dlci)
 *******************************************************************************/
 void RFCOMM_DataReq (tRFC_MCB *p_mcb, UINT8 dlci, BT_HDR *p_buf)
 {
-    rfc_port_sm_execute(port_find_mcb_dlci_port (p_mcb, dlci), RFC_EVENT_DATA, p_buf);
+    tPORT *p_port = port_find_mcb_dlci_port (p_mcb, dlci);
+    if (p_port == NULL) {
+        RFCOMM_TRACE_WARNING("%s Unable to find DLCI port dlci:%d", __func__,
+                             dlci);
+        osi_free(p_buf);
+        return;
+    }
+    rfc_port_sm_execute(p_port, RFC_EVENT_DATA, p_buf);
 }
 
 

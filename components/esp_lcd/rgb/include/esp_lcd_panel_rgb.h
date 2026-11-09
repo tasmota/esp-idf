@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -97,7 +97,7 @@ typedef bool (*esp_lcd_rgb_panel_general_cb_t)(esp_lcd_panel_handle_t panel, con
 typedef esp_lcd_rgb_panel_general_cb_t esp_lcd_rgb_panel_draw_buf_complete_cb_t;
 
 /**
- * @brief Declare the prototype of the function that will be invoked when a whole frame buffer is sent to the LCD DMA.
+ * @brief Declare the prototype of the function that will be invoked when a whole frame buffer can be reused safely.
  *        The LCD hardware may still need some blank time to finish the refresh.
  */
 typedef esp_lcd_rgb_panel_general_cb_t esp_lcd_rgb_panel_frame_buf_complete_cb_t;
@@ -132,7 +132,7 @@ typedef struct {
                                                                       But doesn't mean the draw buffer finishes the refreshing to the screen. */
     esp_lcd_rgb_panel_vsync_cb_t on_vsync;                         /*!< VSYNC event callback */
     esp_lcd_rgb_panel_bounce_buf_fill_cb_t on_bounce_empty;        /*!< Bounce buffer empty callback. */
-    esp_lcd_rgb_panel_frame_buf_complete_cb_t on_frame_buf_complete;  /*!< A whole frame buffer was just sent to the LCD DMA */
+    esp_lcd_rgb_panel_frame_buf_complete_cb_t on_frame_buf_complete;  /*!< Invoked when the frame buffer can be reused safely */
 } esp_lcd_rgb_panel_event_callbacks_t;
 
 /**
@@ -150,7 +150,7 @@ typedef struct {
     void *user_fbs[ESP_RGB_LCD_PANEL_MAX_FB_NUM];              /*!< Array of user-provided frame buffers. If not NULL, the driver will use these buffers instead of allocating its own */
     size_t bounce_buffer_size_px; /*!< If it's non-zero, the driver allocates two DRAM bounce buffers for DMA use.
                                        DMA fetching from DRAM bounce buffer is much faster than PSRAM frame buffer. */
-    size_t dma_burst_size;        /*!< DMA burst size, in bytes */
+    size_t dma_burst_size;        /*!< DMA burst size, in bytes, must be a power of 2. Set to 0 to use the driver default. Set to 1 to disable the data burst. */
     gpio_num_t hsync_gpio_num;    /*!< GPIO used for HSYNC signal */
     gpio_num_t vsync_gpio_num;    /*!< GPIO used for VSYNC signal */
     gpio_num_t de_gpio_num;       /*!< GPIO used for DE signal, set to -1 if it's not used */
@@ -215,6 +215,7 @@ esp_err_t esp_lcd_rgb_panel_set_pclk(esp_lcd_panel_handle_t panel, uint32_t freq
 /**
  * @brief Restart the LCD transmission
  *
+ * @note This function is only supported on ESP32-S3.
  * @note This function can be useful when the LCD controller is out of sync with the DMA because of insufficient bandwidth.
  *       To save the screen from a permanent shift, you can call this function to restart the LCD DMA.
  * @note This function doesn't restart the DMA immediately but to set a flag internally.
@@ -225,7 +226,8 @@ esp_err_t esp_lcd_rgb_panel_set_pclk(esp_lcd_panel_handle_t panel, uint32_t freq
  * @param[in] panel panel LCD panel handle, returned from `esp_lcd_new_rgb_panel`
  * @return
  *      - ESP_ERR_INVALID_ARG: Restart the LCD failed because of invalid argument
- *      - ESP_ERR_INVALID_STATE: Restart the LCD failed because the LCD diver is working in refresh-on-demand mode
+ *      - ESP_ERR_INVALID_STATE: Restart the LCD failed because the LCD driver is working in refresh-on-demand mode
+ *      - ESP_ERR_NOT_SUPPORTED: Restarting the LCD is not supported on this target
  *      - ESP_OK: Restart the LCD successfully
  */
 esp_err_t esp_lcd_rgb_panel_restart(esp_lcd_panel_handle_t panel);
@@ -279,6 +281,52 @@ void *esp_lcd_rgb_alloc_draw_buffer(esp_lcd_panel_handle_t panel, size_t size, u
  *      - ESP_OK: Configure RGB-YUV conversion successfully
  */
 esp_err_t esp_lcd_rgb_panel_set_yuv_conversion(esp_lcd_panel_handle_t panel, const esp_lcd_color_conv_yuv_config_t *config);
+
+/**
+ * @brief Register panel hooks to the RGB panel
+ *
+ * @note You can register panel hooks to implement custom operations like scaling, rotation, color space conversion, etc.
+ *       with hardware accelerators like PPA or DMA2D.
+ *       The hook will be overridden when this function is called multiple times.
+ * @note If software rotation is enabled by mirror or swap_xy, the RGB panel driver bypasses the draw bitmap hook and
+ *       falls back to the CPU copy path to apply the rotation transform.
+ *
+ * @param[in] panel LCD RGB panel handle, which is returned from esp_lcd_new_rgb_panel()
+ * @param[in] hooks Panel hooks
+ * @param[in] hook_ctx Hook context
+ * @return
+ *      - ESP_OK: Register hooks successfully
+ *      - Other error codes on failure
+ */
+esp_err_t esp_lcd_rgb_panel_register_hooks(esp_lcd_panel_handle_t panel, const esp_lcd_panel_hooks_t *hooks, void *hook_ctx);
+
+#if SOC_DMA2D_SUPPORTED
+/**
+ * @brief Enable DMA2D for RGB panel
+ *
+ * @note The function will register a built-in DMA2D draw bitmap hook to perform bitmap copy using DMA2D.
+ * @note If software rotation is enabled by mirror or swap_xy, the RGB panel driver bypasses the built-in DMA2D hook and
+ *       falls back to the CPU copy path, because the built-in DMA2D hook does not apply rotation transforms.
+ *
+ * @param[in] panel LCD RGB panel handle, which is returned from esp_lcd_new_rgb_panel()
+ * @return
+ *      - ESP_OK: Enable DMA2D successfully
+ *      - Other error codes on failure
+ */
+esp_err_t esp_lcd_rgb_panel_enable_dma2d(esp_lcd_panel_handle_t panel);
+
+/**
+ * @brief Disable DMA2D for RGB panel
+ *
+ * @note The function will unregister the built-in DMA2D draw bitmap hook.
+ *
+ * @param[in] panel LCD RGB panel handle, which is returned from esp_lcd_new_rgb_panel()
+ * @return
+ *      - ESP_OK: Disable DMA2D successfully
+ *      - Other error codes on failure
+ */
+esp_err_t esp_lcd_rgb_panel_disable_dma2d(esp_lcd_panel_handle_t panel);
+#endif // SOC_DMA2D_SUPPORTED
 
 #endif // SOC_LCD_RGB_SUPPORTED
 

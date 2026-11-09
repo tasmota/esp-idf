@@ -264,6 +264,13 @@ Supported line modes for {IDF_TARGET_NAME} are listed as follows, to make use of
            SPI_TRANS_MULTILINE_CMD
          - SPICOMMON_BUSFLAG_OCTAL
 
+.. only:: SOC_SPI_SUPPORT_DDR_CLOCK
+
+    DDR Clock
+    ^^^^^^^^^
+
+    Set :c:macro:`SPI_TRANS_DDRCLK` in :cpp:member:`spi_transaction_t::flags` to use double data rate mode for the current transaction. In this mode, the command, address, and data phases are sent/sampled on both the rising and falling edges of the clock. If this flag is not set, the transaction uses the traditional single data rate mode. DDRCLK mode is supported in 2/4/8 line modes as well.
+
 Command and Address Phases
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -361,6 +368,10 @@ The example code for the SPI Master driver can be found in the :example:`periphe
     {IDF_TARGET_NAME} supports GPSPI Master with DMA transferring data from/to PSRAM directly without extra internal copy process, which saves memory, by adding :c:macro:`SPI_TRANS_DMA_USE_PSRAM` flag to the transaction.
 
     Note that this feature shares bandwidth (bus frequency * bus bits width) with MSPI bus, so GPSPI transfer bandwidth should be less than PSRAM bandwidth, **otherwise transmission data may be lost**. You can check the return value or :c:macro:`SPI_TRANS_DMA_RX_FAIL` and :c:macro:`SPI_TRANS_DMA_TX_FAIL` flags after the transaction is finished to check if error occurs during the transmission. If the transaction returns :c:macro:`ESP_ERR_INVALID_STATE` error, the transaction fails.
+
+    .. note::
+
+        When encryption is enabled, there are stricter alignment requirements for PSRAM buffer transfers, usually only supporting 16-byte alignment. For unaligned transfers, :c:macro:`ESP_ERR_INVALID_ARG` error will be returned. You can switch to internal memory or remove the :c:macro:`SPI_TRANS_DMA_USE_PSRAM` flag.
 
 Transactions with Data Not Exceeding 32 Bits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -464,6 +475,10 @@ To have better control of the calling sequence of functions, send mixed transact
 
 GPIO Matrix and IO_MUX
 ^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    Enabling :c:macro:`SPICOMMON_BUSFLAG_DATA_OUT_INV` forces all configured SPI bus signals through the GPIO Matrix, even when dedicated IO_MUX pins are selected. Since the GPIO Matrix and IO_MUX have target-specific timing and frequency differences, consider the limitations described below when selecting the SPI clock frequency.
 
 .. only:: esp32
 
@@ -580,7 +595,7 @@ The typical transaction duration for one byte of data is given below.
 - Polling Transaction via DMA: {IDF_TARGET_MAX_TRANS_TIME_POLL_DMA} µs.
 - Polling Transaction via CPU: {IDF_TARGET_MAX_TRANS_TIME_POLL_CPU} µs.
 
-Note that these data are tested with :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` enabled. SPI transaction related code are placed in the internal memory. If this option is turned off (for example, for internal memory optimization), the transaction duration may be affected.
+Note that these data are tested with :menuitem:`CONFIG_SPI_MASTER_ISR_IN_IRAM` enabled. SPI transaction related code are placed in the internal memory. If this option is turned off (for example, for internal memory optimization), the transaction duration may be affected.
 
 SPI Clock Frequency
 ^^^^^^^^^^^^^^^^^^^
@@ -636,11 +651,11 @@ The transfer speed calculation of other phases (Command, Address, Dummy) is simi
 Cache Missing
 ^^^^^^^^^^^^^
 
-The default config puts only the ISR into the IRAM. Other SPI-related functions, including the driver itself and the callback, might suffer from cache misses and need to wait until the code is read from flash. Select :ref:`CONFIG_SPI_MASTER_IN_IRAM` to put the whole SPI driver into IRAM and put the entire callback(s) and its callee functions into IRAM to prevent cache missing.
+The default config puts only the ISR into the IRAM. Other SPI-related functions, including the driver itself and the callback, might suffer from cache misses and need to wait until the code is read from flash. Select :menuitem:`CONFIG_SPI_MASTER_IN_IRAM` to put the whole SPI driver into IRAM and put the entire callback(s) and its callee functions into IRAM to prevent cache missing.
 
 .. note::
 
-    SPI driver implementation is based on FreeRTOS APIs, to use :ref:`CONFIG_SPI_MASTER_IN_IRAM`, you should enable :ref:`CONFIG_FREERTOS_IN_IRAM`.
+    SPI driver implementation is based on FreeRTOS APIs, to use :menuitem:`CONFIG_SPI_MASTER_IN_IRAM`, you should enable :menuitem:`CONFIG_FREERTOS_IN_IRAM`.
 
 For an interrupt transaction, the overall cost is **20+8n/Fspi[MHz]** [µs] for n bytes transferred in one transaction. Hence, the transferring speed is: **n/(20+8n/Fspi)**. An example of transferring speed at 8 MHz clock speed is given in the following table.
 
@@ -681,7 +696,7 @@ For an interrupt transaction, the overall cost is **20+8n/Fspi[MHz]** [µs] for 
 
 When a transaction length is short, the cost of the transaction interval is high. If possible, try to squash several short transactions into one transaction to achieve a higher transfer speed.
 
-Please note that the ISR is disabled during flash operation by default. To keep sending transactions during flash operations, enable :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` and set :c:macro:`ESP_INTR_FLAG_IRAM` in the member :cpp:member:`spi_bus_config_t::intr_flags`. In this case, all the transactions queued before starting flash operations are handled by the ISR in parallel. Also note that the callback of each Device and their ``callee`` functions should be in IRAM, or your callback will crash due to cache missing. For more details, see :ref:`iram-safe-interrupt-handlers`.
+Please note that the ISR is disabled during flash operation by default. To keep sending transactions during flash operations, enable :menuitem:`CONFIG_SPI_MASTER_ISR_IN_IRAM` and set :c:macro:`ESP_INTR_FLAG_IRAM` in the member :cpp:member:`spi_bus_config_t::intr_flags`. In this case, all the transactions queued before starting flash operations are handled by the ISR in parallel. Also note that the callback of each Device and their ``callee`` functions should be in IRAM, or your callback will crash due to cache missing. For more details, see :ref:`iram-safe-interrupt-handlers`.
 
 .. only:: esp32h2
 

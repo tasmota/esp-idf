@@ -15,7 +15,7 @@ FreeRTOS (IDF)
 
 原始 FreeRTOS（下文称 Vanilla FreeRTOS）是一款小巧高效的实时操作系统，适用于许多单核 MCU 和 SoC。但为了支持双核 ESP 芯片，如 ESP32、ESP32-S3、ESP32-P4，ESP-IDF 特别提供了支持双核对称多处理 (SMP) 的 FreeRTOS 实现（下文称 IDF FreeRTOS）。
 
-IDF FreeRTOS 源代码基于 Vanilla FreeRTOS v10.5.1，但内核行为和 API 都有重大修改，以支持双核 SMP。不过用户也可以启用 :ref:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核，详情请参阅 :ref:`freertos-idf-single-core`。
+IDF FreeRTOS 源代码基于 Vanilla FreeRTOS v10.5.1，但内核行为和 API 都有重大修改，以支持双核 SMP。不过用户也可以启用 :menuitem:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核，详情请参阅 :ref:`freertos-idf-single-core`。
 
 .. note::
 
@@ -47,7 +47,7 @@ IDF FreeRTOS 源代码基于 Vanilla FreeRTOS v10.5.1，但内核行为和 API �
 ESP 芯片上的 SMP
 ^^^^^^^^^^^^^^^^
 
-ESP32、ESP32-S3、ESP32-P4 和 ESP32-H4 等 ESP 芯片是双核 SMP SoC，具有以下硬件特性以支持 SMP：
+具有双高性能核的 ESP 芯片具备以下硬件特性以支持 SMP：
 
 - 具有两个完全相同的核，分别称为核 0 和核 1。代码段无论在哪个核上运行，都有相同的执行效果。
 - 具有对称内存（除了少数例外情况）。
@@ -382,6 +382,19 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
   #. 核通过清除自旋锁的所有者值释放自旋锁。
   #. 核重新启用中断或中断嵌套。
 
+线程安全 Port 临界区旁路
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``xPortThreadSafeClaim()`` 与 ``xPortThreadSafeDisclaim()`` （``portmacro.h``） 使当前核上 port 层临界区进入/退出变为 no-op。**Claim 与 Disclaim 之间的线程安全须由调用方保证。**
+
+.. warning::
+
+    - 调用方保证 Claim–Disclaim 窗口内的线程安全（含多核）。
+    - 仅在当前核已关中断时 Claim；全局至多一个 Claim；所有路径须与 Disclaim 成对。
+    - ``xPortEnterCriticalTimeout()`` 返回 ``pdPASS`` 不表示已获取 ``mux``。
+
+不能替代 ``taskENTER_CRITICAL(&spinlock)``。
+
 限制与注意事项
 ^^^^^^^^^^^^^^
 
@@ -412,7 +425,7 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
     - 核寄存器的当前状态保存到要切出的任务栈中
     - 核寄存器的先前保存状态从要切入的任务栈中加载
 
-    然而，IDF FreeRTOS 为核的浮点运算单元 (FPU) 寄存器实现了延迟上下文切换。换句话说，当在特定核上（如核 0）发生上下文切换时，核的 FPU 寄存器状态不会立即保存到要被切出的任务的堆栈中（如任务 A）。FPU 的寄存器在发生以下情况前将保持不变：
+    然而，IDF FreeRTOS 为核的浮点运算单元 (FPU) 寄存器实现了惰性上下文切换。换句话说，当在特定核上（如核 0）发生上下文切换时，核的 FPU 寄存器状态不会立即保存到要被切出的任务的堆栈中（如任务 A）。FPU 的寄存器在发生以下情况前将保持不变：
 
     - 另一个任务（如任务 B）在同一核上运行并使用 FPU，这将触发异常，将 FPU 寄存器保存到任务 A 的堆栈中。
     - 任务 A 重新调度到同一核并继续执行。在这种情况下，不需要保存和恢复 FPU 的寄存器。
@@ -425,11 +438,54 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
 
         .. note::
 
-            如需在 ISR 例程中使用 ``float`` 类型，请参考配置选项:ref:`CONFIG_FREERTOS_FPU_IN_ISR`。
+            如需在 ISR 例程中使用 ``float`` 类型，请参考配置选项:menuitem:`CONFIG_FREERTOS_FPU_IN_ISR`。
 
     .. note::
 
-        具有 FPU 的 ESP 芯片不支持双精度浮点运算 ``double`` 的硬件加速。``double`` 通过软件实现，因此比起 ``float`` 类型，``double`` 操作可能消耗更多 CPU 时间。
+        包含 FPU 的乐鑫芯片不支持双精度浮点运算 ``double`` 的硬件加速。``double`` 通过软件实现，因此针对 ``float`` 类型的行为限制不适用于 ``double``。请注意，由于缺少硬件加速，``double`` 运算与 ``float`` 相比可能会消耗更多的 CPU 时间。
+
+
+.. only:: SOC_CPU_HAS_PIE
+
+    使用 PIE/AI 协处理器
+    ^^^^^^^^^^^^^^^^^^^^
+
+    与浮点运算单元 (FPU) 类似，IDF FreeRTOS 在 PIE 协处理器上也采用了 **惰性上下文切换** 策略。在上下文切换时，PIE 寄存器保持不变，直到某个任务执行 PIE 指令时才进行处理。一旦有任务使用了 PIE 协处理器，该任务将被 **固定到当前核心**。
+
+    .. only:: esp32s31
+
+        .. note::
+
+            在 ESP32-S31 上，PIE 协处理器 **仅在核心 1 上可用**。如果任务在核心 0 上运行时执行了 PIE 指令，IDF FreeRTOS 会将该任务迁移至核心 1 并将其固定。此迁移会 **覆盖** 任何现有的核心亲和性设置。
+
+            由于存在这种迁移机制，任务 **不得** 在临界区或 ISR 例程中使用 PIE 协处理器，否则将导致运行时中止。
+
+    意外使用 PIE（例如深层调用栈间接调用了 PIE 辅助函数）可能会把本不该运行在 PIE 核心上的任务固定到该核心。可启用 :menuitem:`CONFIG_FREERTOS_DEBUG_TASK_PIE_BLACKLIST`，并对不得执行 PIE 的任务调用 :cpp:func:`vTaskSetPieBlacklisted`。该标志仅在协处理器陷入时被检查。PIE 所有者持续运行期间，PIE 保持使能，因此任务被切换出去之前执行的指令不会陷入。任务被切换出去后，PIE 会被关闭，下一次 PIE 指令会陷入。即使该任务仍是协处理器所有者，被加入黑名单的任务也会在这次陷入时中止，而不是被静默固定到 PIE 核心。
+
+    .. code-block:: c
+
+        #if CONFIG_FREERTOS_DEBUG_TASK_PIE_BLACKLIST
+            vTaskSetPieBlacklisted(my_task, pdTRUE);
+        #endif
+
+
+.. only:: SOC_CPU_HAS_HWLOOP
+
+    使用硬件循环 (HWLP)
+    ^^^^^^^^^^^^^^^^^^^
+
+    在 IDF FreeRTOS 中，硬件循环 (HWLP) 单元的处理方式与其他协处理器不同：它 **不** 使用惰性上下文切换。
+
+    当使用 HWLP 的任务发生上下文切换时，HWLP 寄存器会在中断入口路径中立即保存。之后，如果同一任务被切换回来，所有 HWLP 寄存器会立即恢复。
+
+    在实践中，这意味着任何曾经使用过 HWLP 的任务，在每次上下文切出和切入时都会产生额外的开销。
+
+.. only:: SOC_CPU_HAS_DSP
+
+    使用 DSP 协处理器
+    ^^^^^^^^^^^^^^^^^
+
+    在包含 DSP 协处理器的目标芯片上，上下文切换遵循与 FPU 相同的延迟方案：只有在同一核心上的另一个任务使用了该协处理器，或者该任务被切换到另一个核心时，协处理器的状态才会被保存。当任务使用 DSP 协处理器时，IDF FreeRTOS 会自动 **将该任务固定至其当前运行的核心**。DSP 协处理器不得在中断上下文中使用。
 
 
 .. -------------------------------------------------- Single Core  -----------------------------------------------------
@@ -439,9 +495,9 @@ IDF FreeRTOS 中，特定核进入和退出临界区的过程如下：
 单核模式
 ^^^^^^^^
 
-尽管 IDF FreeRTOS 是为双核 SMP 专门设计的，但也可通过启用 :ref:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核。
+尽管 IDF FreeRTOS 是为双核 SMP 专门设计的，但也可通过启用 :menuitem:`CONFIG_FREERTOS_UNICORE` 选项，将 IDF FreeRTOS 配置为支持单核。
 
-对于 ESP32-S2 和 ESP32-C3 等单核芯片，:ref:`CONFIG_FREERTOS_UNICORE` 选项始终启用。对于 ESP32 和 ESP32-S3 等多核芯片也可以设置 :ref:`CONFIG_FREERTOS_UNICORE`，对于多核目标（如 ESP32 和 ESP32-S3），也可以设置 :ref:`CONFIG_FREERTOS_UNICORE`，但启用该选项后应用仅在核 0 上运行。
+对于 ESP32-S2 和 ESP32-C3 等单核芯片，:menuitem:`CONFIG_FREERTOS_UNICORE` 选项始终启用。对于 ESP32 和 ESP32-S3 等多核芯片也可以设置 :menuitem:`CONFIG_FREERTOS_UNICORE`，对于多核目标（如 ESP32 和 ESP32-S3），也可以设置 :menuitem:`CONFIG_FREERTOS_UNICORE`，但启用该选项后应用仅在核 0 上运行。
 
 在单核模式下，IDF FreeRTOS 与 Vanilla FreeRTOS 完全相同，因此无需考虑前文提到的对内核行为的 SMP 更改。因此，在单核模式下构建 IDF FreeRTOS 具有以下特点：
 

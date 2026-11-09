@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -202,6 +202,10 @@ esp_err_t gpio_wakeup_enable(gpio_num_t gpio_num, gpio_int_type_t intr_type);
 
 /**
  * @brief Disable GPIO wake-up function.
+ *
+ * @note When either CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND or CONFIG_PM_SLP_DISABLE_GPIO is enabled,
+ *       the sleep-state configuration of `gpio_num` is applied during sleep (and that the user must
+ *       call `gpio_sleep_sel_dis()` again if the pin should stay on the active-state configuration).
  *
  * @param gpio_num GPIO number
  *
@@ -575,7 +579,10 @@ esp_err_t gpio_sleep_set_pull_mode(gpio_num_t gpio_num, gpio_pull_mode_t pull);
  *
  * @param gpio_num GPIO number.
  *
- * @param intr_type GPIO wake-up type. Only GPIO_INTR_LOW_LEVEL or GPIO_INTR_HIGH_LEVEL can be used.
+ * @param intr_type GPIO wake-up type.
+ *                  - Always supported: GPIO_INTR_LOW_LEVEL, GPIO_INTR_HIGH_LEVEL
+ *                  - If SOC_RTC_GPIO_EDGE_WAKEUP_SUPPORTED:
+ *                        GPIO_INTR_POSEDGE, GPIO_INTR_NEGEDGE, GPIO_INTR_ANYEDGE
  *
  * @note Called by the SDK. User shouldn't call this directly in the APP.
  *

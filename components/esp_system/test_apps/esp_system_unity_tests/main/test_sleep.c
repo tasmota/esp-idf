@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -184,7 +184,7 @@ TEST_CASE("light sleep and frequency switching", "[lightsleep]")
 #elif SOC_UART_SUPPORT_XTAL_CLK
     clk_source = UART_SCLK_XTAL;
 #endif
-    esp_clk_tree_enable_src((soc_module_clk_t)clk_source, true);
+    esp_clk_tree_acquire_src((soc_module_clk_t)clk_source, NULL);
     PERIPH_RCC_ATOMIC() {
         uart_ll_set_sclk(UART_LL_GET_HW(CONFIG_ESP_CONSOLE_UART_NUM), (soc_module_clk_t)clk_source);
     }
@@ -320,6 +320,24 @@ static void test_psram_accessible_after_lightsleep(void)
     TEST_ESP_OK(sleep_cpu_configure(true));
 #endif
 
+    // Verify PSRAM was not corrupted after light sleep
+    uint8_t *psram_data = (uint8_t *)heap_caps_malloc(1024 * 1024, MALLOC_CAP_SPIRAM);
+    uint8_t test_pattern = 0x5a;
+    for (int i = 0; i < 5; i++) {
+        memset(psram_data, test_pattern, 1024 * 1024);
+        esp_sleep_enable_timer_wakeup(100 * 1000);
+        esp_light_sleep_start();
+        for (int j = 0; j < (1024 * 1024); j++) {
+            TEST_ASSERT_EQUAL(test_pattern, psram_data[j]);
+        }
+        test_pattern = ~test_pattern;
+#if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+        TEST_ASSERT_EQUAL(PMU_SLEEP_PD_TOP, sleep_ctx.sleep_flags & PMU_SLEEP_PD_TOP);
+#endif
+    }
+    free(psram_data);
+
+    // Verify that all addresses in PSRAM are accessible after light sleep
     esp_sleep_enable_timer_wakeup(100 * 1000);
     esp_light_sleep_start();
     TEST_ASSERT_EQUAL(0, sleep_ctx.sleep_request_result);
@@ -463,7 +481,7 @@ static void check_wake_stub(void)
 {
     TEST_ASSERT_EQUAL(ESP_RST_DEEPSLEEP, esp_reset_reason());
     TEST_ASSERT_EQUAL_HEX32((uint32_t) &wake_stub, s_wake_stub_var);
-#if !CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_IDF_TARGET_ESP32C6 && !CONFIG_IDF_TARGET_ESP32H2
+#if !SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
     /* ROM code clears wake stub entry address */
     TEST_ASSERT_NULL(esp_get_deep_sleep_wake_stub());
 #endif

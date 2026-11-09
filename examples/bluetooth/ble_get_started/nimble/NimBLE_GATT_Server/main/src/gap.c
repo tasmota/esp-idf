@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -54,7 +54,9 @@ static void print_conn_desc(struct ble_gap_conn_desc *desc) {
 static void start_advertising(void) {
     /* Local variables */
     int rc = 0;
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     const char *name;
+#endif
     struct ble_hs_adv_fields adv_fields = {0};
     struct ble_hs_adv_fields rsp_fields = {0};
     struct ble_gap_adv_params adv_params = {0};
@@ -62,11 +64,16 @@ static void start_advertising(void) {
     /* Set advertising flags */
     adv_fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
 
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     /* Set device name */
     name = ble_svc_gap_device_name();
+    if (name == NULL) {
+        name = DEVICE_NAME;
+    }
     adv_fields.name = (uint8_t *)name;
     adv_fields.name_len = strlen(name);
     adv_fields.name_is_complete = 1;
+#endif
 
     /* Set device tx power */
     adv_fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
@@ -159,26 +166,29 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
             /* Print connection descriptor */
             print_conn_desc(&desc);
 
-            /* Try to update connection parameters */
+            /* Try to update connection parameters.
+             * BT spec requires: supervision_timeout > (1+latency)*itvl/4
+             * Ensure the timeout satisfies this constraint when latency=3. */
+            uint16_t min_timeout = (uint16_t)(((1 + 3) * (uint32_t)desc.conn_itvl) / 4 + 1);
+            uint16_t supervision_timeout = (desc.supervision_timeout > min_timeout)
+                                           ? desc.supervision_timeout : min_timeout;
             struct ble_gap_upd_params params = {.itvl_min = desc.conn_itvl,
                                                 .itvl_max = desc.conn_itvl,
                                                 .latency = 3,
-                                                .supervision_timeout =
-                                                    desc.supervision_timeout};
+                                                .supervision_timeout = supervision_timeout};
             rc = ble_gap_update_params(event->connect.conn_handle, &params);
             if (rc != 0) {
                 ESP_LOGE(
                     TAG,
                     "failed to update connection parameters, error code: %d",
                     rc);
-                return rc;
             }
         }
         /* Connection failed, restart advertising */
         else {
             start_advertising();
         }
-        return rc;
+        return 0;
 
     /* Disconnect event */
     case BLE_GAP_EVENT_DISCONNECT:
@@ -294,7 +304,7 @@ void adv_init(void) {
 int gap_init(void) {
     /* Local variables */
     int rc = 0;
-
+#if CONFIG_BT_NIMBLE_GAP_SERVICE
     /* Call NimBLE GAP initialization API */
     ble_svc_gap_init();
 
@@ -305,5 +315,6 @@ int gap_init(void) {
                  DEVICE_NAME, rc);
         return rc;
     }
+#endif
     return rc;
 }

@@ -1180,6 +1180,9 @@ void btm_ble_resolving_list_cleanup(void)
 {
     tBTM_BLE_RESOLVE_Q *p_q = &btm_cb.ble_ctr_cb.resolving_list_pend_q;
 
+    p_q->q_next = 0;
+    p_q->q_pending = 0;
+
     if (p_q->resolve_q_random_pseudo) {
         osi_free(p_q->resolve_q_random_pseudo);
         p_q->resolve_q_random_pseudo = NULL;
@@ -1201,6 +1204,10 @@ void btm_ble_resolving_list_cleanup(void)
 #if (CONTROLLER_RPA_LIST_ENABLE == TRUE)
 void btm_ble_add_default_entry_to_resolving_list(void)
 {
+    const controller_t *controller = controller_get_interface();
+    if (!controller->supports_ble()) {
+        return;
+    }
     /*
      * Add local IRK entry with 00:00:00:00:00:00 address. This entry will
      * be used to generate RPA for non-directed advertising if own_addr_type

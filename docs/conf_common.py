@@ -30,10 +30,12 @@ BT_DOCS = [
     'api-reference/bluetooth/controller_vhci.rst',
     'api-reference/bluetooth/index.rst',
     'migration-guides/release-5.x/5.4/bt_common.rst',
+    'migration-guides/release-6.x/6.1/bt_common.rst',
 ]
 
 BLE_DOCS = [
     'api-guides/ble/index.rst',
+    'api-guides/ble/ble-log-console.rst',
     'api-guides/ble/overview.rst',
     'api-guides/ble/ble-feature-support-status.rst',
     'api-guides/ble/host-feature-support-status.rst',
@@ -47,11 +49,16 @@ BLE_DOCS = [
     'api-guides/low-power-mode/low-power-mode-ble.rst',
     'api-reference/bluetooth/bt_le.rst',
     'api-reference/bluetooth/esp_gap_ble.rst',
+    'api-reference/bluetooth/esp_ble_ead.rst',
     'api-reference/bluetooth/esp_gatt_defs.rst',
     'api-reference/bluetooth/esp_gatts.rst',
     'api-reference/bluetooth/esp_gattc.rst',
     'api-reference/bluetooth/nimble/index.rst',
     'migration-guides/release-5.x/5.0/bluetooth-low-energy.rst',
+]
+
+BLE_DUAL_IDENTITY_DOCS = [
+    'api-guides/ble/bluedroid-dual-identity-host-dev.rst',
 ]
 
 BLE_MESH_DOCS = [
@@ -69,7 +76,12 @@ BLE_ISO_DOCS = [
 
 BLE_AUDIO_DOCS = [
     'api-reference/bluetooth/esp-ble-audio.rst',
-    'api-guides/ble/ble-audio.rst',
+    'api-guides/esp-ble-audio/ble-audio-index.rst',
+    'api-guides/esp-ble-audio/ble-audio-introduction.rst',
+    'api-guides/esp-ble-audio/ble-audio-architecture-overview.rst',
+    'api-guides/esp-ble-audio/ble-audio-architecture-iso.rst',
+    'api-guides/esp-ble-audio/ble-audio-architecture-lea.rst',
+    'api-guides/esp-ble-audio/ble-audio-feature-support-status.rst',
 ]
 
 CLASSIC_BT_DOCS = [
@@ -87,12 +99,20 @@ CLASSIC_BT_DOCS = [
     'api-reference/bluetooth/esp_hf_client.rst',
     'api-reference/bluetooth/esp_hf_ag.rst',
     'api-reference/bluetooth/esp_spp.rst',
+    'api-reference/bluetooth/esp_pan.rst',
     'api-reference/bluetooth/esp_gap_bt.rst',
+    'api-reference/bluetooth/esp_opp.rst',
     'migration-guides/release-5.x/5.0/bluetooth-classic.rst',
     'migration-guides/release-5.x/5.2/bluetooth-classic.rst',
     'migration-guides/release-5.x/5.3/bluetooth-classic.rst',
     'migration-guides/release-5.x/5.4/bluetooth-classic.rst',
     'migration-guides/release-6.x/6.0/bluetooth-classic.rst',
+    'migration-guides/release-6.x/6.1/bluetooth-classic.rst',
+    'migration-guides/release-6.x/6.2/bluetooth-classic.rst',
+]
+
+ORCA_BREDR_CONTROLLER_DOCS = [
+    'api-guides/classic-bt/esp-bredr-controller-kconfig.rst',
 ]
 
 BLUFI_DOCS = ['api-guides/ble/blufi.rst', 'api-reference/bluetooth/esp_blufi.rst']
@@ -122,6 +142,8 @@ COEXISTENCE_DOCS = ['api-guides/coexist.rst']
 
 MM_SYNC_DOCS = ['api-reference/system/mm_sync.rst']
 
+CACHE_CNT_DOCS = ['api-reference/system/cache_cnt.rst']
+
 CAMERA_DOCS = ['api-reference/peripherals/camera_driver.rst']
 
 BITSCRAMBLER_DOCS = ['api-reference/peripherals/bitscrambler.rst']
@@ -136,7 +158,18 @@ SDMMC_DOCS = ['api-reference/peripherals/sdmmc_host.rst']
 
 SDIO_SLAVE_DOCS = ['api-reference/peripherals/sdio_slave.rst', 'api-reference/protocols/esp_sdio_slave_protocol.rst']
 
-MCPWM_DOCS = ['api-reference/peripherals/mcpwm.rst']
+MCPWM_DOCS = [
+    'api-reference/peripherals/mcpwm/index.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_advanced.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_cap.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_cmpr.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_etm.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_fault.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_gen.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_operator.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_sync.rst',
+    'api-reference/peripherals/mcpwm/mcpwm_timer.rst',
+]
 
 DEDIC_GPIO_DOCS = ['api-reference/peripherals/dedic_gpio.rst']
 
@@ -278,32 +311,22 @@ ESP32_DOCS = (
     + QEMU_DOCS
 )
 
-ESP32S2_DOCS = (
-    [
-        'hw-reference/esp32s2/**',
-        'api-guides/usb-console.rst',
-        'api-reference/peripherals/ds.rst',
-        'api-guides/RF_calibration.rst',
-        'api-guides/phy.rst',
-    ]
-    + FTDI_JTAG_DOCS
-    + USB_OTG_DFU_DOCS
-    + USB_OTG_CONSOLE_DOCS
-)
+ESP32S2_DOCS = [
+    'hw-reference/esp32s2/**',
+    'api-guides/usb-console.rst',
+    'api-reference/peripherals/ds.rst',
+    'api-guides/RF_calibration.rst',
+    'api-guides/phy.rst',
+] + FTDI_JTAG_DOCS
 
-ESP32S3_DOCS = (
-    [
-        'hw-reference/esp32s3/**',
-        'api-reference/system/ipc.rst',
-        'api-guides/flash_psram_config.rst',
-        'api-reference/peripherals/sd_pullup_requirements.rst',
-        'api-guides/RF_calibration.rst',
-        'api-guides/phy.rst',
-    ]
-    + USB_OTG_DFU_DOCS
-    + USB_OTG_CONSOLE_DOCS
-    + QEMU_DOCS
-)
+ESP32S3_DOCS = [
+    'hw-reference/esp32s3/**',
+    'api-reference/system/ipc.rst',
+    'api-guides/flash_psram_config.rst',
+    'api-reference/peripherals/sd_pullup_requirements.rst',
+    'api-guides/RF_calibration.rst',
+    'api-guides/phy.rst',
+] + QEMU_DOCS
 
 # No JTAG docs for this one as it gets gated on SOC_USB_SERIAL_JTAG_SUPPORTED down below.
 ESP32C3_DOCS = ['hw-reference/esp32c3/**', 'api-guides/RF_calibration.rst', 'api-guides/phy.rst'] + QEMU_DOCS
@@ -330,6 +353,8 @@ ESP32C6_DOCS = [
 
 ESP32H2_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst'] + ESP_TEE_DOCS
 
+ESP32H21_DOCS = ['api-guides/RF_calibration.rst', 'api-guides/phy.rst']
+
 ESP32H4_DOCS = [
     'api-reference/system/ipc.rst',
     'api-guides/RF_calibration.rst',
@@ -338,6 +363,7 @@ ESP32H4_DOCS = [
 
 ESP32S31_DOCS = [
     'api-reference/system/ipc.rst',
+    'api-reference/peripherals/sd_pullup_requirements.rst',
     'api-guides/RF_calibration.rst',
     'api-guides/phy.rst',
 ]
@@ -346,28 +372,33 @@ ESP32P4_DOCS = [
     'api-reference/system/ipc.rst',
     'api-reference/peripherals/cap_touch_sens.rst',
     'api-reference/peripherals/sd_pullup_requirements.rst',
-] + USB_OTG_DFU_DOCS
+]
 
 # format: {tag needed to include: documents to included}, tags are parsed from sdkconfig and peripheral_caps.h headers
 conditional_include_dict = {
     'SOC_BT_SUPPORTED': BT_DOCS,
     'SOC_BLE_SUPPORTED': BLE_DOCS,
+    'SOC_BLE_50_SUPPORTED': BLE_DUAL_IDENTITY_DOCS,
     'SOC_BLE_MESH_SUPPORTED': BLE_MESH_DOCS,
     'SOC_BLE_ISO_SUPPORTED': BLE_ISO_DOCS,
     'SOC_BLE_AUDIO_SUPPORTED': BLE_AUDIO_DOCS,
     'SOC_BLUFI_SUPPORTED': BLUFI_DOCS,
     'SOC_WIFI_SUPPORTED': WIFI_DOCS,
     'SOC_BT_CLASSIC_SUPPORTED': CLASSIC_BT_DOCS,
+    'SOC_ORCA_BREDR_CONTROLLER': ORCA_BREDR_CONTROLLER_DOCS,
     'SOC_IEEE802154_SUPPORTED': IEEE802154_DOCS,
     'SOC_SUPPORT_COEXISTENCE': COEXISTENCE_DOCS,
     'SOC_PSRAM_DMA_CAPABLE': MM_SYNC_DOCS,
     'SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE': MM_SYNC_DOCS,
+    'SOC_CACHE_CNT_SUPPORTED': CACHE_CNT_DOCS,
     'SOC_CLK_TREE_SUPPORTED': CLK_TREE_DOCS,
     'SOC_UART_SUPPORTED': UART_DOCS,
     'SOC_UHCI_SUPPORTED': UHCI_DOCS,
     'SOC_SDMMC_HOST_SUPPORTED': SDMMC_DOCS,
     'SOC_SDIO_SLAVE_SUPPORTED': SDIO_SLAVE_DOCS,
     'SOC_MCPWM_SUPPORTED': MCPWM_DOCS,
+    'SOC_USB_DFU_SUPPORTED': USB_OTG_DFU_DOCS,
+    'SOC_USB_OTG_CONSOLE_SUPPORTED': USB_OTG_CONSOLE_DOCS,
     'SOC_USB_SERIAL_JTAG_SUPPORTED': USB_SERIAL_JTAG_DOCS,
     'SOC_DEDICATED_GPIO_SUPPORTED': DEDIC_GPIO_DOCS,
     'SOC_LCD_I80_SUPPORTED': I80_LCD_DOCS,
@@ -386,8 +417,11 @@ conditional_include_dict = {
     'SOC_DIG_SIGN_SUPPORTED': ['api-reference/peripherals/ds.rst'],
     'SOC_ECDSA_SUPPORTED': ['api-reference/peripherals/ecdsa.rst'],
     'SOC_HMAC_SUPPORTED': ['api-reference/peripherals/hmac.rst'],
+    'SOC_SHA_SUPPORT_SM3': ['api-reference/peripherals/sm3.rst'],
+    'SOC_ECC_SUPPORT_CURVE_SM2': ['api-reference/peripherals/sm2.rst'],
     'SOC_GDMA_SUPPORT_CRC': ['api-reference/peripherals/async_crc.rst'],
     'SOC_ASYNC_MEMCPY_SUPPORTED': ['api-reference/peripherals/async_memcpy.rst'],
+    'SOC_DMA2D_SUPPORTED': ['api-reference/peripherals/async_color_convert.rst'],
     'SOC_KEY_MANAGER_SUPPORTED': ['api-reference/peripherals/key_manager.rst'],
     'CONFIG_IDF_TARGET_ARCH_XTENSA': XTENSA_DOCS,
     'CONFIG_IDF_TARGET_ARCH_RISCV': RISCV_DOCS,
@@ -426,12 +460,14 @@ conditional_include_dict = {
     'esp32c6': ESP32C6_DOCS,
     'esp32c61': ESP32C61_DOCS,
     'esp32h2': ESP32H2_DOCS,
+    'esp32h21': ESP32H21_DOCS,
     'esp32h4': ESP32H4_DOCS,
     'esp32s31': ESP32S31_DOCS,
     'esp32p4': ESP32P4_DOCS,
 }
 
 extensions += [  # noqa: F405
+    'sphinxcontrib.mermaid',
     'sphinx_copybutton',
     'sphinxcontrib.wavedrom',
     # Note: order is important here, events must
@@ -506,7 +542,6 @@ with open('../page_redirects.txt') as f:
 html_redirect_pages = [tuple(line.split(' ')) for line in lines]
 
 html_static_path = ['../_static']
-html_css_files = ['js/chatbot_widget.css']
 
 idf_build_system = {
     'doxygen_component_info': True,

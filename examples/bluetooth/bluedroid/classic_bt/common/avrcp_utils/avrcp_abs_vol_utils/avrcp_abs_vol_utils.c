@@ -67,16 +67,17 @@ void bt_avrc_avc_tg_evt_hdl(uint16_t event, void *param)
         uint8_t *bda = rc->conn_stat.remote_bda;
         ESP_LOGI(BT_RC_TG_TAG, "AVRC conn_state evt: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
                  rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+        avrc_abs_vol_srv_set_conn_hdl(rc->conn_stat.connected ? rc->conn_stat.conn_hdl : ESP_A2D_INVALID_CONN_HDL);
         if (rc->conn_stat.connected) {
             /* create task to simulate volume change */
             avrc_abs_vol_srv_open();
             xTaskCreate(volume_change_simulation, "vcsTask", 4 * 1024, NULL, 5, &s_vcs_task_hdl);
         } else {
-            avrc_abs_vol_srv_close();
             if (s_vcs_task_hdl) {
                 vTaskDelete(s_vcs_task_hdl);
                 s_vcs_task_hdl = NULL;
             }
+            avrc_abs_vol_srv_close();
             ESP_LOGI(BT_RC_TG_TAG, "Stop volume change simulation");
         }
         break;

@@ -7,7 +7,7 @@ This document provides a guide to installing OpenOCD for {IDF_TARGET_NAME} and d
 
 .. note::
 
-    You can also debug your {IDF_TARGET_NAME} without needing to setup JTAG or OpenOCD by using ``idf.py monitor``. See: :doc:`../../api-guides/tools/idf-monitor` and :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`.
+    You can also debug your {IDF_TARGET_NAME} without needing to setup JTAG or OpenOCD by using ``idf.py monitor``. See: :doc:`../../api-guides/tools/idf-monitor` and :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`.
 
 .. highlight:: none
 
@@ -29,6 +29,8 @@ The document is structured as follows:
     If you are not familiar with GDB, check this section for debugging examples provided from :ref:`jtag-debugging-examples-eclipse` as well as from :ref:`jtag-debugging-examples-command-line`.
 :ref:`jtag-debugging-building-openocd`
     Reference for OpenOCD build workflow when building from sources.
+:ref:`jtag-debugging-semihosting`
+    Introduction to semihosting feature.
 :ref:`jtag-debugging-tips-and-quirks`
     This section provides collection of tips and quirks related to JTAG debugging of {IDF_TARGET_NAME} with OpenOCD and GDB.
 
@@ -184,7 +186,7 @@ Open a terminal and set it up for using the ESP-IDF as described in the :ref:`se
    :start-after: run-openocd
    :end-before: ---
 
-{IDF_TARGET_FTDI_CONFIG:default="Not Updated!", esp32s3="board/esp32s3-ftdi.cfg", esp32c3="board/esp32c3-ftdi.cfg", esp32c6="board/esp32c6-ftdi.cfg", esp32h2="board/esp32h2-ftdi.cfg", esp32h21="board/esp32h21-ftdi.cfg", esp32h4="board/esp32h4-ftdi.cfg", esp32p4="board/esp32p4-ftdi.cfg", esp32c5="board/esp32c5-ftdi.cfg", esp32c61="board/esp32c61-ftdi.cfg"}
+{IDF_TARGET_FTDI_CONFIG:default="Not Updated!", esp32s3="board/esp32s3-ftdi.cfg", esp32c3="board/esp32c3-ftdi.cfg", esp32c6="board/esp32c6-ftdi.cfg", esp32h2="board/esp32h2-ftdi.cfg", esp32h21="board/esp32h21-ftdi.cfg", esp32h4="board/esp32h4-ftdi.cfg", esp32p4="board/esp32p4-ftdi.cfg", esp32c5="board/esp32c5-ftdi.cfg", esp32c61="board/esp32c61-ftdi.cfg", esp32s31="board/esp32s31-ftdi.cfg}
 
 .. note::
 
@@ -221,7 +223,7 @@ Another option is to write application image to flash using OpenOCD via JTAG wit
 
 OpenOCD flashing command ``program_esp`` has the following format:
 
-``program_esp <image_file> <offset> [verify] [reset] [exit] [compress] [encrypt] [no_clock_boost] [restore_clock] [no_skip_loaded]``
+``program_esp <image_file> <offset> [verify] [reset] [exit] [compress] [encrypt] [no_clock_boost] [restore_clock] [no_skip_loaded] [force]``
 
  - ``image_file`` - Path to program image file.
  - ``offset`` - Offset in flash bank to write image.
@@ -233,6 +235,7 @@ OpenOCD flashing command ``program_esp`` has the following format:
  - ``no_clock_boost`` - Optional. Disable setting target clock frequency to its maximum possible value before programming. Clock boost is enabled by default.
  - ``restore_clock`` - Optional. Restore clock frequency to its initial value after programming. Disabled by default.
  - ``no_skip_loaded`` - Optional. Do not check whether the binary is already loaded before flashing. Disabled by default.
+ - ``force`` - Optional. Disable checks for target compatibility with the chip type and revision range detected from the image file. Checks are enabled by default.
 
 Alternative Method: Using ``program_esp_bins``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -256,7 +259,7 @@ Command Format
 
 The OpenOCD flashing command ``program_esp_bins`` has the following format:
 
-``program_esp_bins <build_dir> <json_file> [verify] [reset] [exit] [compress] [no_clock_boost] [restore_clock] [no_skip_loaded]``
+``program_esp_bins <build_dir> <json_file> [verify] [reset] [exit] [compress] [no_clock_boost] [restore_clock] [no_skip_loaded] [force]``
 
  - ``build_dir`` - Path to the build directory containing the ``flasher_args.json`` file.
  - ``json_file`` - Name of the JSON file containing flash configuration (typically ``flasher_args.json``).
@@ -314,6 +317,18 @@ The examples in this document use the pre-built OpenOCD binary distribution desc
 
 If you need to build OpenOCD from sources for custom requirements, please refer to the `OpenOCD build workflow <https://github.com/espressif/openocd-esp32/blob/master/.github/workflows/build_openocd.yml>`_, which demonstrates how OpenOCD is built for different platforms (Windows, Linux, macOS).
 
+.. _jtag-debugging-semihosting:
+
+Semihosting
+-----------
+
+Semihosting is a mechanism that allows code running on the target {IDF_TARGET_NAME} to communicate with the host PC through the debugger connection, e.g., for printing debug messages or reading/writing files.
+
+.. toctree::
+    :maxdepth: 1
+
+    semihosting
+
 .. _jtag-debugging-tips-and-quirks:
 
 Tips and Quirks
@@ -326,7 +341,6 @@ This section provides collection of links to all tips and quirks referred to fro
 
     tips-and-quirks
 
-
 Related Documents
 -----------------
 
@@ -337,11 +351,12 @@ Related Documents
 
     using-debugger
     debugging-examples
+    semihosting
     tips-and-quirks
-    ../app_trace
 
 - :doc:`using-debugger`
 - :doc:`debugging-examples`
+- :doc:`semihosting`
 - :doc:`tips-and-quirks`
-- :doc:`../app_trace`
+- :doc:`../tracing/index`
 - `Introduction to ESP-Prog Board <https://docs.espressif.com/projects/espressif-esp-iot-solution/en/latest/hw-reference/ESP-Prog_guide.html>`__

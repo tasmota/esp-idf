@@ -24,11 +24,19 @@
 #include "hal/wdt_hal.h"
 #endif
 #include "hal/uart_ll.h"
+#include "hal/sec_ll.h"
 #if SOC_MODEM_CLOCK_SUPPORTED
 #include "hal/modem_syscon_ll.h"
 #include "hal/modem_lpcon_ll.h"
 #endif
+#include "hal/riscv_trace_hal.h"
 #include "esp_private/cache_err_int.h"
+#include "esp_memory_utils.h"
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD && CONFIG_COMPILER_ENABLE_RISCV_ZCMP
+#include "esp_private/hw_stack_guard.h"
+#endif
+
+extern int _bss_end;
 
 #include "esp32c5/rom/cache.h"
 #include "esp32c5/rom/rtc.h"
@@ -36,6 +44,9 @@
 
 void esp_system_reset_modules_on_exit(void)
 {
+    // A software reset leaves the trace encoders running, and they would write into RAM after restart
+    riscv_trace_hal_stop_all_encoders();
+
     // Flush any data left in UART FIFOs before reset the UART peripheral
     for (int i = 0; i < SOC_UART_HP_NUM; ++i) {
         if (uart_ll_is_enabled(i)) {
@@ -81,24 +92,50 @@ void esp_system_reset_modules_on_exit(void)
     // all the peripherals are reset at the same time, which triggers a hardware SEC reset. The SEC reset
     // causes the crypto -> APB path to be reset, but the APB -> crypto path is not reset. This asymmetry
     // results in the crypto module hanging and refusing all access.
+#if !CONFIG_SECURE_ENABLE_TEE
+    // Avoid resetting the TEE-protected crypto peripherals as it would lead to an APM fault
     SET_PERI_REG_MASK(PCR_AES_CONF_REG, PCR_AES_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_AES_CONF_REG, PCR_AES_RST_EN);
     SET_PERI_REG_MASK(PCR_DS_CONF_REG, PCR_DS_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_DS_CONF_REG, PCR_DS_RST_EN);
     SET_PERI_REG_MASK(PCR_ECC_CONF_REG, PCR_ECC_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_ECC_CONF_REG, PCR_ECC_RST_EN);
-    SET_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
-    CLEAR_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
     SET_PERI_REG_MASK(PCR_HMAC_CONF_REG, PCR_HMAC_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_HMAC_CONF_REG, PCR_HMAC_RST_EN);
-    SET_PERI_REG_MASK(PCR_RSA_CONF_REG, PCR_RSA_RST_EN);
-    CLEAR_PERI_REG_MASK(PCR_RSA_CONF_REG, PCR_RSA_RST_EN);
     SET_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_ECC_PD_CTRL_REG, PCR_ECC_MEM_FORCE_PD);
+    SET_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
+    SET_PERI_REG_MASK(PCR_RSA_CONF_REG, PCR_RSA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_RSA_CONF_REG, PCR_RSA_RST_EN);
+#endif // !CONFIG_SECURE_ENABLE_TEE
+
+    // Reset crypto clk mux to XTAL (always-on); otherwise if the parent is gated off,
+    // next-boot ROM encryption ops can hang.
+    sec_ll_crypto_clk_src_sel(SOC_MOD_CLK_XTAL);
 
     // UART's sclk is controlled in the PCR register and does not reset with the UART module. The ROM missed enabling
     // it when initializing the ROM UART. If it is not turned on, it will trigger LP_WDT in the ROM.
     uart_ll_sclk_enable(&UART0);
+}
+
+static void IRAM_ATTR __attribute__((noinline, noreturn)) esp_restart_noos_inner(void)
+{
+    // Disable cache
+    Cache_Disable_Cache();
+
+    esp_system_reset_modules_on_exit();
+
+    // Set CPU back to XTAL source, same as hard reset, but keep BBPLL on so that USB Serial JTAG can log at 1st stage bootloader.
+#if !CONFIG_IDF_ENV_FPGA
+    rtc_clk_cpu_set_to_default_config();
+#endif
+
+    // Reset PRO CPU
+    esp_rom_software_reset_cpu(0);
+
+    ESP_INFINITE_LOOP();
 }
 
 /* "inner" restart function for after RTOS, interrupts & anything else on this
@@ -137,18 +174,22 @@ void esp_restart_noos(void)
     wdt_hal_write_protect_enable(&wdt1_context);
 #endif /* SOC_WDT_SUPPORTED */
 
-    // Disable cache
-    Cache_Disable_Cache();
+#ifdef CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+    if (esp_ptr_external_ram(esp_cpu_get_sp())) {
+        // If stack is in external RAM (CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM), switch SP to
+        // internal RAM before disabling the cache to avoid a "Cache disabled but cached memory
+        // region accessed" crash.
 
-    esp_system_reset_modules_on_exit();
-
-    // Set CPU back to XTAL source, same as hard reset, but keep BBPLL on so that USB Serial JTAG can log at 1st stage bootloader.
-#if !CONFIG_IDF_ENV_FPGA
-    rtc_clk_cpu_set_to_default_config();
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD && CONFIG_COMPILER_ENABLE_RISCV_ZCMP
+        // Stop hw stack guard before changing SP: new SP is outside task stack bounds.
+        // rtc_clk_cpu_set_to_default_config() (called later) uses vPortEnterCritical() via
+        // ENABLE_CLK_GATE, which can trigger DIG-661 (assist-debug interrupt with mstatus.mie=0).
+        esp_hw_stack_guard_monitor_stop();
+#endif
+        uint32_t new_sp = ESP_ALIGN_DOWN((uint32_t)&_bss_end, 16);
+        rv_utils_set_sp((void *)new_sp);
+    }
 #endif
 
-    // Reset PRO CPU
-    esp_rom_software_reset_cpu(0);
-
-    ESP_INFINITE_LOOP();
+    esp_restart_noos_inner();
 }

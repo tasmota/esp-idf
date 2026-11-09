@@ -90,21 +90,24 @@ const tBTA_JV_ACTION bta_jv_action[] = {
 ** Description      State machine event handling function for JV
 **
 **
-** Returns          void
+** Returns          TRUE if the caller needs to free the buffer
+                    FALSE otherwise
 **
 *******************************************************************************/
 BOOLEAN bta_jv_sm_execute(BT_HDR *p_msg)
 {
-    BOOLEAN ret = FALSE;
+    if (!p_msg) {
+        return FALSE;
+    }
+
     UINT16 action = (p_msg->event & 0x00ff);
     /* execute action functions */
 
     if (action < BTA_JV_NUM_ACTIONS) {
         (*bta_jv_action[action])((tBTA_JV_MSG *)p_msg);
-        ret = TRUE;
     }
 
-    return (ret);
+    return TRUE;
 }
 
 #endif  ///defined BTA_JV_INCLUDED && BTA_JV_INCLUDED == TRUE

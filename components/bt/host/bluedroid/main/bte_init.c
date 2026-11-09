@@ -41,7 +41,7 @@
 #endif
 
 #if (defined(BNEP_INCLUDED) && BNEP_INCLUDED == TRUE)
-#include "bnep_api.h"
+#include "stack/bnep_api.h"
 #endif
 
 #if (defined(GAP_INCLUDED) && GAP_INCLUDED == TRUE)
@@ -49,7 +49,7 @@
 #endif
 
 #if (defined(PAN_INCLUDED) && PAN_INCLUDED == TRUE)
-#include "pan_api.h"
+#include "stack/pan_api.h"
 #endif
 
 #if (defined(HID_HOST_INCLUDED) && HID_HOST_INCLUDED == TRUE)
@@ -100,6 +100,11 @@
 #include "stack/goepc_api.h"
 #endif
 
+#if (defined(GOEPS_INCLUDED) && GOEPS_INCLUDED == TRUE)
+#include "stack/goep_common.h"
+#include "stack/goeps_api.h"
+#endif
+
 //BTA Modules
 #if BTA_INCLUDED == TRUE && BTA_DYNAMIC_MEMORY == TRUE
 #include "bta/bta_api.h"
@@ -135,6 +140,10 @@
 #include "bta_hh_int.h"
 #endif
 
+#if BTA_PAN_INCLUDED == TRUE
+#include "bta_pan_int.h"
+#endif
+
 #if BTA_HD_INCLUDED==TRUE
 #include "bta_hd_int.h"
 #endif
@@ -154,6 +163,10 @@
 
 #if BTA_PBA_CLIENT_INCLUDED == TRUE
 #include "bta_pba_client_int.h"
+#endif
+
+#if BTA_OPP_INCLUDED == TRUE
+#include "bta_opp_int.h"
 #endif
 
 #include "bta_sys_int.h"
@@ -190,6 +203,12 @@ void BTE_DeinitStack(void)
         bta_pba_client_cb_ptr = NULL;
     }
 #endif
+#if BTA_OPP_INCLUDED == TRUE
+    if (bta_opp_cb_ptr) {
+        osi_free(bta_opp_cb_ptr);
+        bta_opp_cb_ptr = NULL;
+    }
+#endif
 #if GATTS_INCLUDED == TRUE
     if (bta_gatts_cb_ptr){
         osi_free(bta_gatts_cb_ptr);
@@ -206,6 +225,12 @@ void BTE_DeinitStack(void)
     if (bta_hd_cb_ptr){
         osi_free(bta_hd_cb_ptr);
         bta_hd_cb_ptr = NULL;
+    }
+#endif
+#if BTA_PAN_INCLUDED == TRUE
+    if (bta_pan_cb_ptr){
+        osi_free(bta_pan_cb_ptr);
+        bta_pan_cb_ptr = NULL;
     }
 #endif
 #if BTA_HH_INCLUDED==TRUE
@@ -290,6 +315,10 @@ void BTE_DeinitStack(void)
     GOEPC_Deinit();
 #endif
 
+#if (defined(GOEPS_INCLUDED) && GOEPS_INCLUDED == TRUE)
+    GOEPS_Deinit();
+#endif
+
 #if (defined(OBEX_INCLUDED) && OBEX_INCLUDED == TRUE)
     OBEX_Deinit();
 #endif
@@ -328,6 +357,14 @@ void BTE_DeinitStack(void)
     A2D_Deinit();
 #endif
 
+#if (defined(PAN_INCLUDED) && PAN_INCLUDED == TRUE)
+    PAN_Deinit();
+#endif
+
+#if (defined(BNEP_INCLUDED) && BNEP_INCLUDED == TRUE)
+    BNEP_Deinit();
+#endif
+
 #if (defined(RFCOMM_INCLUDED) && RFCOMM_INCLUDED == TRUE)
     RFCOMM_Deinit();
 #endif
@@ -359,10 +396,14 @@ bt_status_t BTE_InitStack(void)
 
     //BNEP and its profiles
 #if (defined(BNEP_INCLUDED) && BNEP_INCLUDED == TRUE)
-    BNEP_Init();
+    if (BNEP_Init() != BT_STATUS_SUCCESS) {
+        goto error_exit;
+    }
 
 #if (defined(PAN_INCLUDED) && PAN_INCLUDED == TRUE)
-    PAN_Init();
+    if (PAN_Init() != BT_STATUS_SUCCESS) {
+        goto error_exit;
+    }
 #endif  // PAN
 #endif  // BNEP Included
 
@@ -423,6 +464,12 @@ bt_status_t BTE_InitStack(void)
 
 #if (defined(GOEPC_INCLUDED) && GOEPC_INCLUDED == TRUE)
     if (GOEPC_Init() != GOEP_SUCCESS) {
+        goto error_exit;
+    }
+#endif
+
+#if (defined(GOEPS_INCLUDED) && GOEPS_INCLUDED == TRUE)
+    if (GOEPS_Init() != GOEP_SUCCESS) {
         goto error_exit;
     }
 #endif
@@ -512,6 +559,12 @@ bt_status_t BTE_InitStack(void)
     }
     memset((void *)bta_hh_cb_ptr, 0, sizeof(tBTA_HH_CB));
 #endif
+#if BTA_PAN_INCLUDED == TRUE
+    if ((bta_pan_cb_ptr = (tBTA_PAN_CB *)osi_malloc(sizeof(tBTA_PAN_CB))) == NULL) {
+        goto error_exit;
+    }
+    memset((void *)bta_pan_cb_ptr, 0, sizeof(tBTA_PAN_CB));
+#endif
 #if BTA_HD_INCLUDED==TRUE
     if ((bta_hd_cb_ptr = (tBTA_HD_CB *)osi_malloc(sizeof(tBTA_HD_CB))) == NULL) {
         goto error_exit;
@@ -535,6 +588,12 @@ bt_status_t BTE_InitStack(void)
         goto error_exit;
     }
     memset((void *)bta_pba_client_cb_ptr, 0, sizeof(tBTA_PBA_CLIENT_CB));
+#endif
+#if BTA_OPP_INCLUDED == TRUE
+    if ((bta_opp_cb_ptr = (tBTA_OPP_CB *)osi_malloc(sizeof(tBTA_OPP_CB))) == NULL) {
+        goto error_exit;
+    }
+    memset((void *)bta_opp_cb_ptr, 0, sizeof(tBTA_OPP_CB));
 #endif
 
 #endif // BTA_INCLUDED == TRUE

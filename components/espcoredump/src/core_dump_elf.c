@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,6 +18,8 @@
 #include <sys/param.h>      // for the MIN macro
 #include "esp_app_desc.h"
 #include "esp_memory_utils.h"
+#include "esp_macros.h"
+#include "esp_private/esp_core_dump_extension.h"
 
 #define ELF_CLASS ELFCLASS32
 
@@ -77,9 +79,17 @@ typedef struct _core_dump_elf_t {
     uint16_t                        elf_stage;
     uint32_t                        elf_next_data_offset;
     uint16_t                        segs_count;
+    uint16_t                        phdr_index;     /* running program-header index within the current pass */
     core_dump_write_data_t          write_data;
     uint32_t                        note_data_size; /* can be used where static storage needed */
 } core_dump_elf_t;
+
+struct core_dump_sink_s {
+    core_dump_elf_t *self;
+    int seg_total;   /* provider PT_LOAD contribution for the current pass */
+    int note_bytes;  /* accumulated provider note-description bytes */
+    esp_err_t err;   /* first failure, if any */
+};
 
 typedef struct {
     core_dump_elf_t *self;
@@ -88,11 +98,6 @@ typedef struct {
 } core_dump_elf_opaque_t;
 
 // Represents lightweight implementation to save core dump data into ELF formatted binary
-
-#ifdef ALIGN_UP
-#undef ALIGN_UP
-#endif
-#define ALIGN_UP(x, a) (((x) + (a) - 1) & ~((a) - 1))
 
 // Builds elf header and check all data offsets
 static int elf_write_file_header(core_dump_elf_t *self, uint32_t seg_count)
@@ -157,10 +162,12 @@ static int elf_add_segment(core_dump_elf_t *self,
 {
     esp_err_t err = ESP_FAIL;
     elf_phdr seg_hdr = { 0 };
-    int data_len = ALIGN_UP(data_sz, 4);
+    int data_len = ESP_ALIGN_UP(data_sz, 4);
 
     ELF_CHECK_ERR((data != NULL), ELF_PROC_ERR_OTHER,
                   "Invalid data for segment.");
+
+    self->phdr_index++;
 
     if (self->elf_stage == ELF_STAGE_CALC_SPACE) {
         self->segs_count++;
@@ -219,7 +226,7 @@ static int elf_write_note_header(core_dump_elf_t *self, const char* name, uint32
     ELF_CHECK_ERR((err == ESP_OK), ELF_PROC_ERR_WRITE_FAIL,
                   "Write ELF note header failure (%d)", err);
     // write note name
-    err = esp_core_dump_write_data(&self->write_data, name_buffer, ALIGN_UP(note_hdr.n_namesz, 4));
+    err = esp_core_dump_write_data(&self->write_data, name_buffer, ESP_ALIGN_UP(note_hdr.n_namesz, 4));
     ELF_CHECK_ERR((err == ESP_OK), ELF_PROC_ERR_WRITE_FAIL,
                   "Write ELF note name failure (%d)", err);
 
@@ -238,7 +245,7 @@ static int elf_write_note(core_dump_elf_t *self,
     ELF_CHECK_ERR((name_len <= ELF_NOTE_NAME_MAX_SIZE), 0,
                   "Segment note name is too long %d.", name_len);
 
-    uint32_t note_size = ALIGN_UP(name_len, 4) + ALIGN_UP(data_sz, 4) + sizeof(elf_note);
+    uint32_t note_size = ESP_ALIGN_UP(name_len, 4) + ESP_ALIGN_UP(data_sz, 4) + sizeof(elf_note);
 
     // write segment data during second pass
     if (self->elf_stage == ELF_STAGE_PLACE_DATA) {
@@ -252,7 +259,7 @@ static int elf_write_note(core_dump_elf_t *self,
         // which might not be aligned by default. Therefore, we need to verify alignment and add padding if necessary.
         err = esp_core_dump_write_data(&self->write_data, data, data_sz);
         if (err == ESP_OK) {
-            const int pad_size = ALIGN_UP(data_sz, 4) - data_sz;
+            const int pad_size = ESP_ALIGN_UP(data_sz, 4) - data_sz;
             if (pad_size > 0) {
                 uint8_t pad_bytes[3] = {0};
                 ESP_COREDUMP_LOG_PROCESS("Core dump note data needs %d bytes padding", pad_size);
@@ -374,6 +381,8 @@ static int elf_process_note_segment(core_dump_elf_t *self, int notes_size)
 {
     int ret;
     elf_phdr seg_hdr = { 0 };
+
+    self->phdr_index++;
 
     if (self->elf_stage == ELF_STAGE_PLACE_HEADERS) {
         // segment header for PR_STATUS notes
@@ -497,8 +506,8 @@ static int elf_process_task_data(core_dump_elf_t *self)
     core_dump_task_header_t task_hdr = { 0 };
     core_dump_mem_seg_header_t interrupted_stack = { 0 };
     TaskIterator_t task_iter;
-    uint16_t tasks_num = 0;
-    uint16_t bad_tasks_num = 0;
+    uint16_t written_task_num = 0;
+    uint16_t __attribute__((unused)) bad_tasks_num = 0;
 
     ESP_COREDUMP_LOG_PROCESS("================   Processing task data   ================");
 
@@ -516,7 +525,7 @@ static int elf_process_task_data(core_dump_elf_t *self)
         if (ret > 0) {
             elf_len += ret;
         }
-        tasks_num++;
+        written_task_num++;
     }
 
     esp_core_dump_task_iterator_init(&task_iter);
@@ -525,12 +534,11 @@ static int elf_process_task_data(core_dump_elf_t *self)
         if (!task_iter.pxTaskHandle || task_iter.pxTaskHandle == current_task) {
             continue;
         }
-        if (tasks_num > CONFIG_ESP_COREDUMP_MAX_TASKS_NUM) {
+        if (written_task_num > CONFIG_ESP_COREDUMP_MAX_TASKS_NUM) {
             ESP_COREDUMP_LOG_PROCESS("Reached maximum number of tasks (%d), stopping task data processing",
                                      CONFIG_ESP_COREDUMP_MAX_TASKS_NUM);
             break;
         }
-        tasks_num++;
         if (!esp_core_dump_get_task_snapshot(task_iter.pxTaskHandle, &task_hdr, NULL)) {
             bad_tasks_num++;
             continue;
@@ -539,8 +547,9 @@ static int elf_process_task_data(core_dump_elf_t *self)
         ELF_CHECK_ERR((ret > 0), ret,
                       "Task %x, TCB write failed, return (%d).", task_iter.pxTaskHandle, ret);
         elf_len += ret;
+        written_task_num++;
     }
-    ESP_COREDUMP_LOG_PROCESS("Found %d bad task out of %d", bad_tasks_num, tasks_num);
+    ESP_COREDUMP_LOG_PROCESS("Found %d bad task out of %d", bad_tasks_num, bad_tasks_num + written_task_num);
 
     return elf_len;
 }
@@ -687,7 +696,7 @@ static int elf_add_wdt_panic_details(core_dump_elf_t *self)
 
         esp_task_wdt_print_triggered_tasks(elf_write_core_dump_note_cb, &param, NULL);
         ELF_CHECK_ERR((param.total_size > 0), ELF_PROC_ERR_WRITE_FAIL, "Write ELF note data failure (%d)", err);
-        const int pad_size = ALIGN_UP(self->note_data_size, 4) - self->note_data_size;
+        const int pad_size = ESP_ALIGN_UP(self->note_data_size, 4) - self->note_data_size;
         if (pad_size > 0) {
             uint8_t pad_bytes[3] = {0};
             ESP_COREDUMP_LOG_PROCESS("Core dump note needs %d bytes padding", pad_size);
@@ -696,7 +705,7 @@ static int elf_add_wdt_panic_details(core_dump_elf_t *self)
         }
     }
 
-    return ALIGN_UP(name_len, 4) + ALIGN_UP(self->note_data_size, 4) + sizeof(elf_note);
+    return ESP_ALIGN_UP(name_len, 4) + ESP_ALIGN_UP(self->note_data_size, 4) + sizeof(elf_note);
 }
 #endif //CONFIG_ESP_TASK_WDT_EN
 
@@ -762,9 +771,95 @@ static int elf_write_core_dump_info(core_dump_elf_t *self)
     return ret;
 }
 
+esp_err_t esp_core_dump_sink_add_segment(core_dump_sink_t *sink, uint32_t vaddr,
+                                         const void *data, uint32_t size, uint32_t *out_index)
+{
+    if (sink->err != ESP_OK) {
+        return sink->err;
+    }
+    if (data == NULL || size == 0) {
+        sink->err = ESP_ERR_INVALID_ARG;
+        return sink->err;
+    }
+    if (size % 4 != 0) {
+        sink->err = ESP_ERR_INVALID_SIZE;
+        return sink->err;
+    }
+    uint32_t index = sink->self->phdr_index;
+    int ret = elf_add_segment(sink->self, PT_LOAD, vaddr, (void *)data, size);
+    if (ret <= 0) {
+        sink->err = ESP_FAIL;
+        return sink->err;
+    }
+    sink->seg_total += ret;
+    if (out_index != NULL) {
+        *out_index = index;
+    }
+    return ESP_OK;
+}
+
+esp_err_t esp_core_dump_sink_add_note(core_dump_sink_t *sink, const char *name,
+                                      uint32_t type, const void *desc, uint32_t desc_size)
+{
+    if (sink->err != ESP_OK) {
+        return sink->err;
+    }
+    if (name == NULL || desc == NULL || desc_size == 0) {
+        sink->err = ESP_ERR_INVALID_ARG;
+        return sink->err;
+    }
+    int ret = elf_add_note(sink->self, name, type, (void *)desc, desc_size);
+    if (ret <= 0) {
+        sink->err = ESP_FAIL;
+        return sink->err;
+    }
+    sink->note_bytes += ret;
+    return ESP_OK;
+}
+
+bool esp_core_dump_sink_is_data_stage(const core_dump_sink_t *sink)
+{
+    return sink->self->elf_stage == ELF_STAGE_PLACE_DATA;
+}
+
+/* Linker-collected extra-write callbacks (ESP_COREDUMP_REGISTER_EXTRA). Weak so
+ * a build with no providers still links when the SURROUND section is empty. */
+extern const esp_core_dump_extra_cb_t _esp_coredump_extra_array_start __attribute__((weak));
+extern const esp_core_dump_extra_cb_t _esp_coredump_extra_array_end __attribute__((weak));
+
+/* Provider PT_LOAD segments first, then all provider notes wrapped in one
+ * trailing PT_NOTE segment. This ordering keeps every note's segment index
+ * stable and matches the segment/note byte order across passes. */
+static int elf_write_extra_providers(core_dump_elf_t *self)
+{
+    core_dump_sink_t sink = { .self = self, .seg_total = 0, .note_bytes = 0, .err = ESP_OK };
+
+    const esp_core_dump_extra_cb_t *start = &_esp_coredump_extra_array_start;
+    const esp_core_dump_extra_cb_t *end = &_esp_coredump_extra_array_end;
+    if (start != NULL && end != NULL) {
+        for (const esp_core_dump_extra_cb_t *it = start; it < end; ++it) {
+            if (*it != NULL) {
+                (*it)(&sink);
+                ELF_CHECK_ERR((sink.err == ESP_OK), ELF_PROC_ERR_OTHER,
+                              "coredump attachment failed (%d)", sink.err);
+            }
+        }
+    }
+
+    int total = sink.seg_total;
+    if (sink.note_bytes > 0) {
+        int ret = elf_process_note_segment(self, sink.note_bytes);
+        ELF_CHECK_ERR((ret > 0), ret, "attachment note segment processing failure, returned (%d).", ret);
+        total += ret;
+    }
+    return total;
+}
+
 static int esp_core_dump_do_write_elf_pass(core_dump_elf_t *self)
 {
     int tot_len = 0;
+
+    self->phdr_index = 0;
 
     int data_sz = elf_write_file_header(self, ELF_SEG_HEADERS_COUNT(self));
     if (self->elf_stage == ELF_STAGE_PLACE_DATA) {
@@ -789,6 +884,11 @@ static int esp_core_dump_do_write_elf_pass(core_dump_elf_t *self)
     ELF_CHECK_ERR((data_sz > 0), data_sz, "Version info writing failed. Returned (%d).", data_sz);
     tot_len += data_sz;
 
+    // write segments and notes contributed by other components
+    data_sz = elf_write_extra_providers(self);
+    ELF_CHECK_ERR((data_sz >= 0), data_sz, "Coredump attachment writing failed. Returned (%d).", data_sz);
+    tot_len += data_sz;
+
     return tot_len;
 }
 
@@ -797,7 +897,7 @@ esp_err_t esp_core_dump_write_elf(void)
     core_dump_elf_t self = { 0 };
     core_dump_header_t dump_hdr = { 0 };
     int tot_len = sizeof(dump_hdr);
-    int write_len = sizeof(dump_hdr);
+    int __attribute__((unused)) write_len = sizeof(dump_hdr);
 
     esp_err_t err = esp_core_dump_write_init();
     if (err != ESP_OK) {
@@ -907,7 +1007,7 @@ static esp_err_t elf_core_dump_image_mmap(esp_partition_mmap_handle_t* core_data
     }
 
     /* map the full core dump partition, including the checksum. */
-    return esp_partition_mmap(core_part, 0, out_size, ESP_PARTITION_MMAP_DATA,
+    return esp_partition_mmap(core_part, 0, out_size, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE,
                               map_addr, core_data_handle);
 }
 
@@ -966,14 +1066,14 @@ static void esp_core_dump_parse_note_section(uint8_t *coredump_data, elf_note_co
                 for (size_t idx = 0; idx < size; ++idx) {
                     if (target_notes[idx].n_type == note->n_type) {
                         char *nm = (char *)&note[1];
-                        target_notes[idx].n_ptr = nm + ALIGN_UP(note->n_namesz, 4);
+                        target_notes[idx].n_ptr = nm + ESP_ALIGN_UP(note->n_namesz, 4);
                         target_notes[idx].n_descsz = note->n_descsz;
                         ESP_COREDUMP_LOGD("%d bytes target note (%X) found in the note section",
                                           note->n_descsz, note->n_type);
                         break;
                     }
                 }
-                consumed_note_sz += ALIGN_UP(note->n_namesz, 4) + ALIGN_UP(note->n_descsz, 4) + sizeof(elf_note);
+                consumed_note_sz += ESP_ALIGN_UP(note->n_namesz, 4) + ESP_ALIGN_UP(note->n_descsz, 4) + sizeof(elf_note);
             }
         }
     }

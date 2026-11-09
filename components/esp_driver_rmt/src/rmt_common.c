@@ -45,7 +45,7 @@ rmt_group_t *rmt_acquire_group_handle(int group_id)
                 rmt_ll_reset_register(group_id);
             }
 #if RMT_USE_RETENTION_LINK
-            sleep_retention_module_t module = rmt_reg_retention_info[group_id].module;
+            sleep_retention_module_t module = rmt_retention_infos[group_id].module;
             sleep_retention_module_init_param_t init_param = {
                 .cbs = {
                     .create = {
@@ -53,6 +53,7 @@ rmt_group_t *rmt_acquire_group_handle(int group_id)
                         .arg = group,
                     },
                 },
+                .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
                 .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
             };
             if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
@@ -104,7 +105,8 @@ void rmt_release_group_handle(rmt_group_t *group)
 
     if (do_deinitialize) {
 #if RMT_USE_RETENTION_LINK
-        sleep_retention_module_t module = rmt_reg_retention_info[group_id].module;
+        sleep_retention_module_t module = rmt_retention_infos[group_id].module;
+        sleep_retention_module_detach(module);
         if (sleep_retention_is_module_created(module)) {
             sleep_retention_module_free(module);
         }
@@ -199,7 +201,7 @@ esp_err_t rmt_select_periph_clock(rmt_channel_handle_t chan, rmt_clock_source_t 
     ESP_RETURN_ON_ERROR(ret, TAG, "create pm lock failed");
 #endif // CONFIG_PM_ENABLE
 
-    ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true), TAG, "clock source enable failed");
+    ESP_RETURN_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)clk_src, NULL), TAG, "clock source enable failed");
     uint32_t real_div;
 #if RMT_LL_GET(CHANNEL_CLK_INDEPENDENT)
     uint32_t periph_src_clk_hz = 0;
@@ -231,7 +233,7 @@ esp_err_t rmt_select_periph_clock(rmt_channel_handle_t chan, rmt_clock_source_t 
     return ret;
 
 err:
-    esp_clk_tree_enable_src((soc_module_clk_t)clk_src, false);
+    esp_clk_tree_release_src((soc_module_clk_t)clk_src);
     return ret;
 }
 
@@ -279,21 +281,25 @@ static esp_err_t rmt_create_sleep_retention_link_cb(void *arg)
 {
     rmt_group_t *group = (rmt_group_t *)arg;
     int group_id = group->group_id;
-    esp_err_t err = sleep_retention_entries_create(rmt_reg_retention_info[group_id].regdma_entry_array,
-                                                   rmt_reg_retention_info[group_id].array_size,
-                                                   REGDMA_LINK_PRI_RMT, rmt_reg_retention_info[group_id].module);
+    esp_err_t err = sleep_retention_entries_create(rmt_retention_infos[group_id].regdma_entry_array,
+                                                   rmt_retention_infos[group_id].array_size,
+                                                   REGDMA_LINK_PRI_RMT, rmt_retention_infos[group_id].module);
     return err;
 }
 
 void rmt_create_retention_module(rmt_group_t *group)
 {
     int group_id = group->group_id;
-    sleep_retention_module_t module = rmt_reg_retention_info[group_id].module;
+    sleep_retention_module_t module = rmt_retention_infos[group_id].module;
     _lock_acquire(&s_platform.mutex);
     if (sleep_retention_is_module_inited(module) && !sleep_retention_is_module_created(module)) {
         if (sleep_retention_module_allocate(module) != ESP_OK) {
             // even though the sleep retention module create failed, RMT driver should still work, so just warning here
             ESP_LOGW(TAG, "create retention link failed, power domain won't be turned off during sleep");
+        } else {
+            if (sleep_retention_module_attach(module) != ESP_OK) {
+                ESP_LOGW(TAG, "attach retention link failed, power domain won't be turned off during sleep");
+            }
         }
     }
     _lock_release(&s_platform.mutex);

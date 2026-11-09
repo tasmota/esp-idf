@@ -1,14 +1,16 @@
-# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import os
 import re
 import stat
 import sys
+from collections.abc import Callable
 from shutil import copyfile
 from shutil import copytree
-from typing import Dict
 
-import click
+from esp_pylib.logger import log
+from rich.markup import escape
+from rich_click import Context
 
 from idf_py_actions.tools import PropertyDict
 
@@ -31,17 +33,21 @@ def is_empty_and_create(path: str, action: str) -> None:
     if not os.path.exists(abspath):
         os.makedirs(abspath)
     elif not os.path.isdir(abspath):
-        print(
-            f'Your target path is not a directory.'
-            f'Please remove the {os.path.abspath(abspath)} or use different target path.'
+        log.die(
+            escape(
+                f'Your target path is not a directory.'
+                f'Please remove the {os.path.abspath(abspath)} or use different target path.'
+            ),
+            exit_code=4,
         )
-        sys.exit(4)
     elif len(os.listdir(path)) > 0:
-        print(
-            f'The directory {abspath} is not empty. To create a {get_type(action)} you must '
-            f'empty the directory or choose a different path.'
+        log.die(
+            escape(
+                f'The directory {abspath} is not empty. To create a {get_type(action)} you must '
+                f'empty the directory or choose a different path.'
+            ),
+            exit_code=3,
         )
-        sys.exit(3)
 
 
 def make_directory_permissions_writable(root_path: str) -> None:
@@ -65,9 +71,11 @@ def make_directory_permissions_writable(root_path: str) -> None:
                 continue
 
 
-def create_project(target_path: str, name: str) -> None:
+def create_project(target_path: str, name: str, *, use_cpp: bool = False) -> None:
+    template = 'sample_project_cpp' if use_cpp else 'sample_project'
+    main_ext = 'cpp' if use_cpp else 'c'
     copytree(
-        os.path.join(os.environ['IDF_PATH'], 'tools', 'templates', 'sample_project'),
+        os.path.join(os.environ['IDF_PATH'], 'tools', 'templates', template),
         target_path,
         # 'copyfile' ensures only data are copied, without any metadata (file permissions) - for files only
         copy_function=copyfile,
@@ -76,7 +84,10 @@ def create_project(target_path: str, name: str) -> None:
     # since 'copyfile' does preserve directory metadata, we need to make sure the directories are writable
     make_directory_permissions_writable(target_path)
     main_folder = os.path.join(target_path, 'main')
-    os.rename(os.path.join(main_folder, 'main.c'), os.path.join(main_folder, '.'.join((name, 'c'))))
+    os.rename(
+        os.path.join(main_folder, '.'.join(('main', main_ext))),
+        os.path.join(main_folder, '.'.join((name, main_ext))),
+    )
     replace_in_file(os.path.join(main_folder, 'CMakeLists.txt'), 'main', name)
     replace_in_file(os.path.join(target_path, 'CMakeLists.txt'), 'main', name)
 
@@ -100,14 +111,17 @@ def create_component(target_path: str, name: str) -> None:
     replace_in_file(os.path.join(target_path, 'CMakeLists.txt'), 'main', name)
 
 
-def action_extensions(base_actions: Dict, project_path: str) -> Dict:
-    def create_new(action: str, ctx: click.core.Context, global_args: PropertyDict, **action_args: str) -> Dict:
+def action_extensions(base_actions: dict, project_path: str) -> dict:
+    def create_new(action: str, ctx: Context, global_args: PropertyDict, **action_args: str) -> dict:
         target_path = action_args.get('path') or os.path.join(project_path, action_args['name'])
 
         is_empty_and_create(target_path, action)
 
-        func_action_map = {'create-project': create_project, 'create-component': create_component}
-        func_action_map[action](target_path, action_args['name'])
+        func_action_map: dict[str, Callable[..., None]] = {
+            'create-project': lambda tp, n, aa: create_project(tp, n, use_cpp=bool(aa.get('cpp'))),
+            'create-component': lambda tp, n, aa: create_component(tp, n),
+        }
+        func_action_map[action](target_path, action_args['name'], action_args)
 
         print('The', get_type(action), 'was created in', os.path.abspath(target_path))
 
@@ -125,6 +139,7 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
                     '`idf.py create-project new_proj` '
                     'will create a new project in subdirectory called `new_proj` '
                     'of the current working directory. '
+                    'Use `--cpp` to generate a C++ source file (`NAME.cpp`) with `extern "C" void app_main(void)`. '
                     "For specifying the new project's path, use either the option --path for specifying the "
                     'destination directory, or the global option -C if the project should be created as a '
                     'subdirectory of the specified directory. '
@@ -142,6 +157,12 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
                             'Set the path for the new project. The project '
                             'will be created directly in the given folder if it does not contain anything'
                         ),
+                    },
+                    {
+                        'names': ['--cpp'],
+                        'is_flag': True,
+                        'default': False,
+                        'help': 'Create a C++ main source file instead of C.',
                     },
                 ],
             },

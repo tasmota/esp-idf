@@ -603,9 +603,16 @@ esp_err_t httpd_req_handle_err(httpd_req_t *req, httpd_err_code_t error)
     if (hd->err_handler_fns[error]) {
         ret = hd->err_handler_fns[error](req, error);
 
-        /* If error code is 500, force return failure
-         * irrespective of the handler's return value */
-        ret = (error == HTTPD_500_INTERNAL_SERVER_ERROR ? ESP_FAIL : ret);
+        /* Force failure irrespective of the handler's return value for
+         * errors after which the session cannot continue safely: 500
+         * (internal state is broken) and 501 (parsing aborted mid-request,
+         * so the position of the next request in the byte stream is
+         * unknown and keep-alive would let leftover bytes be parsed and
+         * answered as a further request). */
+        if (error == HTTPD_500_INTERNAL_SERVER_ERROR ||
+            error == HTTPD_501_METHOD_NOT_IMPLEMENTED) {
+            ret = ESP_FAIL;
+        }
     } else {
         /* If no handler is registered for this error default
          * behavior is to send the HTTP error response and
@@ -738,9 +745,19 @@ esp_err_t httpd_req_async_handler_complete(httpd_req_t *r)
     // will now re-add this FD to its select() descriptor list. This ensures that subsequent requests
     // on the same FD are processed correctly
     struct httpd_ctrl_data msg = {.hc_msg = HTTPD_CTRL_MAX};
+
+    /* Reserve an mbox slot so we don't overrun ctrl_sock_semaphore's
+     * accounting and starve concurrent httpd_queue_work() producers. The
+     * httpd main task is the consumer and will drain the mbox shortly. */
+    if (xSemaphoreTake(hd->ctrl_sock_semaphore, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGW(TAG, LOG_FMT("failed to acquire ctrl socket semaphore"));
+        return ESP_FAIL;
+    }
+
     int ret = cs_send_to_ctrl_sock(msg_fd, port, &msg, sizeof(msg));
     if (ret < 0) {
         ESP_LOGW(TAG, LOG_FMT("failed to send socket notification"));
+        xSemaphoreGive(hd->ctrl_sock_semaphore);
         return ESP_FAIL;
     }
 
@@ -766,9 +783,12 @@ int httpd_req_to_sockfd(httpd_req_t *r)
 static int httpd_sock_err(const char *ctx, int sockfd)
 {
     int errval;
-    ESP_LOGW(TAG, LOG_FMT("error in %s : %d"), ctx, errno);
+    /* Save errno before it is logged. The log backend can overwrite errno,
+     * for example when a disconnected secondary console sets EIO. */
+    int sock_err = errno;
+    ESP_LOGW(TAG, LOG_FMT("error in %s : %d"), ctx, sock_err);
 
-    switch (errno) {
+    switch (sock_err) {
     case EAGAIN:
     case EINTR:
         errval = HTTPD_SOCK_ERR_TIMEOUT;

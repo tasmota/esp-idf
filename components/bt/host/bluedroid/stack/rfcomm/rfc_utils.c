@@ -121,6 +121,10 @@ BOOLEAN rfc_check_fcs (UINT16 len, UINT8 *p, UINT8 received_fcs)
     return (fcs == 0xCF);
 }
 
+void osi_free_fun(void *p)
+{
+    osi_free(p);
+}
 
 /*******************************************************************************
 **
@@ -168,7 +172,7 @@ tRFC_MCB *rfc_alloc_multiplexer_channel (BD_ADDR bd_addr, BOOLEAN is_initiator)
         p_mcb = &rfc_cb.port.rfc_mcb[j];
         if (rfc_cb.port.rfc_mcb[j].state == RFC_MX_STATE_IDLE) {
             /* New multiplexer control block */
-            fixed_queue_free(p_mcb->cmd_q, NULL);
+            fixed_queue_free(p_mcb->cmd_q, osi_free_fun);
             rfc_timer_free(p_mcb);
             memset (p_mcb, 0, sizeof (tRFC_MCB));
             memcpy (p_mcb->bd_addr, bd_addr, BD_ADDR_LEN);
@@ -176,6 +180,10 @@ tRFC_MCB *rfc_alloc_multiplexer_channel (BD_ADDR bd_addr, BOOLEAN is_initiator)
                                is_initiator, &rfc_cb.port.rfc_mcb[j], j);
 
             p_mcb->cmd_q = fixed_queue_new(QUEUE_SIZE_MAX);
+            if (p_mcb->cmd_q == NULL) {
+                memset(p_mcb, 0, sizeof (tRFC_MCB));
+                return (NULL);
+            }
 
             p_mcb->is_initiator = is_initiator;
 
@@ -188,15 +196,11 @@ tRFC_MCB *rfc_alloc_multiplexer_channel (BD_ADDR bd_addr, BOOLEAN is_initiator)
     return (NULL);
 }
 
-void osi_free_fun(void *p)
-{
-    osi_free(p);
-}
 /*******************************************************************************
 **
 ** Function         rfc_release_multiplexer_channel
 **
-** Description      This function returns existing or new control block for
+** Description      This function releases existing control block for
 **                  the BD_ADDR.
 **
 *******************************************************************************/
@@ -299,7 +303,7 @@ void rfc_port_timer_stop (tPORT *p_port)
 *******************************************************************************/
 void rfc_port_timer_free (tPORT *p_port)
 {
-    RFCOMM_TRACE_EVENT ("rfc_port_timer_stop");
+    RFCOMM_TRACE_EVENT ("rfc_port_timer_free");
 
     btu_free_timer (&p_port->rfc.tle);
     memset(&p_port->rfc.tle, 0, sizeof(TIMER_LIST_ENT));
@@ -319,7 +323,7 @@ void rfc_check_mcb_active (tRFC_MCB *p_mcb)
 {
     UINT16 i;
 
-    for (i = 0; i < RFCOMM_MAX_DLCI; i++) {
+    for (i = 0; i <= RFCOMM_MAX_DLCI; i++) {
         if (p_mcb->port_inx[i] != 0) {
             p_mcb->is_disc_initiator = FALSE;
             return;
@@ -375,11 +379,10 @@ void rfcomm_process_timeout (TIMER_LIST_ENT  *p_tle)
 void rfc_sec_check_complete (BD_ADDR bd_addr, tBT_TRANSPORT transport, void *p_ref_data, UINT8 res)
 {
     tPORT *p_port = (tPORT *)p_ref_data;
-    UNUSED(bd_addr);
     UNUSED(transport);
 
     /* Verify that PORT is still waiting for Security to complete */
-    if (!p_port->in_use
+    if (!p_port->in_use || memcmp(p_port->bd_addr, bd_addr, BD_ADDR_LEN) != 0
             || ((p_port->rfc.state != RFC_STATE_ORIG_WAIT_SEC_CHECK)
                 && (p_port->rfc.state != RFC_STATE_TERM_WAIT_SEC_CHECK))) {
         return;
@@ -416,6 +419,7 @@ void rfc_port_closed (tPORT *p_port)
 
         /* If there are no more ports opened on this MCB release it */
         rfc_check_mcb_active (p_mcb);
+        p_port->rfc.p_mcb = NULL;
     }
 
     /* Notify port that RFC connection is gone */
@@ -436,7 +440,11 @@ void rfc_port_closed (tPORT *p_port)
 void rfc_inc_credit (tPORT *p_port, UINT8 credit)
 {
     if (p_port->rfc.p_mcb->flow == PORT_FC_CREDIT) {
-        p_port->credit_tx += credit;
+        if (p_port->credit_tx < UINT16_MAX - credit) {
+            p_port->credit_tx += credit;
+        }else {
+            p_port->credit_tx = UINT16_MAX;
+        }
 
         RFCOMM_TRACE_EVENT ("rfc_inc_credit:%d", p_port->credit_tx);
 

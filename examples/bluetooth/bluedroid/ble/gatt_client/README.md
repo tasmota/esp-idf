@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | --------- |
 
 # ESP-IDF Gatt Client Example
 
@@ -76,7 +76,7 @@ To test this example, you first run the [gatt_server_demo](../gatt_server), whic
 
 This example will enable gatt server's notification function once the connection is established and then the devices start exchanging data.
 
-Please, check this [tutorial](tutorial/Gatt_Client_Example_Walkthrough.md) for more information about this example.
+Please check this [tutorial](tutorial/Gatt_Client_Example_Walkthrough.md) for more information about this example.
 
 ### Hardware Required
 

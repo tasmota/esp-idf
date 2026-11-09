@@ -1,9 +1,14 @@
 # SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
+import logging
+import random
 import re
 from enum import Enum
+from pathlib import Path
 
+import pexpect
 import pytest
+import yaml
 from pytest_embedded_idf import IdfDut
 from pytest_embedded_idf.utils import idf_parametrize
 from tee_exception_test_map import TEE_EXCEPTION_TEST_MAP
@@ -339,14 +344,15 @@ class TeeOtaStage(Enum):
     REBOOT = 3
 
 
-def tee_ota_stage_checks(dut: IdfDut, stage: TeeOtaStage, offset: str) -> None:
+def tee_ota_stage_checks(dut: IdfDut, stage: TeeOtaStage, offset: str, running_subtype: int = 0x30) -> None:
     if stage == TeeOtaStage.PRE:
         dut.expect(f'Loaded TEE app from partition at offset {offset}', timeout=10)
         dut.expect('Current image already has been marked VALID', timeout=10)
     elif stage == TeeOtaStage.BEGIN:
+        next_subtype = 0x31 if running_subtype == 0x30 else 0x30
         dut.expect('Starting TEE OTA...', timeout=10)
-        dut.expect('Running partition - Subtype: 0x30', timeout=10)
-        dut.expect_exact(f'Next partition - Subtype: 0x31 (Offset: {offset})', timeout=10)
+        dut.expect(f'Running partition - Subtype: {running_subtype:#x}', timeout=10)
+        dut.expect_exact(f'Next partition - Subtype: {next_subtype:#x} (Offset: {offset})', timeout=10)
     elif stage == TeeOtaStage.REBOOT:
         dut.expect(f'Loaded TEE app from partition at offset {offset}', timeout=10)
         dut.expect_exact('Press ENTER to see the list of tests')
@@ -444,6 +450,91 @@ def test_esp_tee_ota_rollback(dut: IdfDut) -> None:
     tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x10000')
 
 
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA_NO_AUTOFLASH,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
+def test_esp_tee_ota_anti_rollback_invalid(dut: IdfDut) -> None:
+    tee_sec_ver = dut.app.sdkconfig.get('SECURE_TEE_SECURE_VERSION')
+
+    # Flashing the dummy TEE app (secure version 0) to the non-secure app's passive partition
+    dut.serial.custom_flash_w_test_tee_img_rb(secure_version=0)
+
+    # pre-test checks (blank emulated eFuses)
+    dut.expect('TEE secure version \\(from eFuse\\) = 0', timeout=10)
+    tee_ota_stage_checks(dut, TeeOtaStage.PRE, '0x10000')
+
+    # start test
+    dut.expect_exact('Press ENTER to see the list of tests')
+    dut.write('"Test TEE OTA - Anti-rollback"')
+
+    # OTA begin checks
+    tee_ota_stage_checks(dut, TeeOtaStage.BEGIN, '0x50000')
+    dut.expect('TEE OTA update rejected by anti-rollback!', timeout=10)
+
+    # bootloader check: the dummy TEE app (secure version 0) in the active TEE partition is refused
+    dut.serial.copy_test_tee_img('tee_0', True, secure_version=0)
+    dut.expect(f'TEE secure version \\(from eFuse\\) = {tee_sec_ver}', timeout=10)
+    dut.expect('TEE app secure version check failed', timeout=10)
+
+    # after restoring the TEE app
+    dut.serial.copy_test_tee_img('tee_0', False)
+    tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x10000')
+
+
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA_NO_AUTOFLASH,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
+def test_esp_tee_ota_anti_rollback_valid(dut: IdfDut) -> None:
+    tee_sec_ver = int(dut.app.sdkconfig.get('SECURE_TEE_SECURE_VERSION'))
+    new_sec_ver = tee_sec_ver + 1
+
+    # Flashing the TEE app re-stamped with a higher secure version to the non-secure app's passive partition
+    dut.serial.custom_flash_w_test_tee_img_gen(secure_version=new_sec_ver)
+
+    # pre-test checks (blank emulated eFuses)
+    dut.expect('TEE secure version \\(from eFuse\\) = 0', timeout=10)
+    tee_ota_stage_checks(dut, TeeOtaStage.PRE, '0x10000')
+
+    # start test
+    dut.expect_exact('Press ENTER to see the list of tests')
+    dut.write('"Test TEE OTA - Valid image"')
+
+    # OTA begin checks
+    tee_ota_stage_checks(dut, TeeOtaStage.BEGIN, '0x50000')
+    dut.expect('TEE OTA update successful!', timeout=10)
+
+    # after reboot 1: the counter holds the previous version while the new image is trial-booted
+    dut.expect(f'TEE secure version \\(from eFuse\\) = {tee_sec_ver}', timeout=10)
+    dut.expect('TEE otadata - Current image state: NEW', timeout=10)
+    tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x50000')
+
+    # after reboot 2: the new image confirmed itself and advanced the counter
+    dut.serial.hard_reset()
+    dut.expect(f'TEE secure version \\(from eFuse\\) = {new_sec_ver}', timeout=10)
+    dut.expect('TEE otadata - Current image state: VALID', timeout=10)
+    tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x50000')
+
+    # the previous secure version is now rejected by TEE OTA...
+    dut.serial.copy_test_tee_img('ota_1', True, secure_version=tee_sec_ver)
+    tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x50000')
+    dut.write('"Test TEE OTA - Anti-rollback"')
+    tee_ota_stage_checks(dut, TeeOtaStage.BEGIN, '0x10000', running_subtype=0x31)
+    dut.expect('TEE OTA update rejected by anti-rollback!', timeout=10)
+
+    # ...and by the bootloader
+    dut.serial.copy_test_tee_img('tee_1', True, secure_version=tee_sec_ver)
+    dut.expect(f'TEE secure version \\(from eFuse\\) = {new_sec_ver}', timeout=10)
+    dut.expect('TEE app secure version check failed', timeout=10)
+
+    # after restoring the TEE app
+    dut.serial.copy_test_tee_img('tee_1', False, secure_version=new_sec_ver)
+    tee_ota_stage_checks(dut, TeeOtaStage.REBOOT, '0x50000')
+
+
 # ---------------- TEE Secure Storage tests ----------------
 
 
@@ -475,6 +566,23 @@ def test_esp_tee_secure_storage_with_host_img(dut: IdfDut) -> None:
     dut.run_all_single_board_cases(group='sec_storage_host_keygen')
 
 
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA_NO_AUTOFLASH,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
+def test_esp_tee_secure_storage_encryption(dut: IdfDut) -> None:
+    dut.serial.custom_flash_with_empty_sec_stg()
+
+    # NOTE: In release mode (CONFIG_SECURE_TEE_SEC_STG_MODE_RELEASE), the test
+    # expects the eFuse-burned HMAC key used for TEE secure storage to be available
+    # at the path "test_keys/tee_sec_stg_hmac_key.bin"
+    dut.expect_exact('Press ENTER to see the list of tests')
+    dut.write('"Test TEE Secure Storage - Verify data encryption"')
+
+    dut.serial.verify_tee_sec_stg_encryption(dut)
+
+
 # ---------------- TEE Attestation tests ----------------
 
 
@@ -489,3 +597,91 @@ def test_esp_tee_attestation(dut: IdfDut) -> None:
 
     # start test
     dut.run_all_single_board_cases(group='attestation')
+
+
+@idf_parametrize(
+    'config, target, skip_autoflash, markers',
+    CONFIG_OTA_NO_AUTOFLASH,
+    indirect=['config', 'target', 'skip_autoflash'],
+)
+def test_esp_tee_attestation_code_hash(dut: IdfDut) -> None:
+    ref = dut.serial.get_tee_image_ref()
+
+    dut.serial.custom_flash_with_empty_sec_stg()
+
+    boot_ver = dut.expect(r'esp_tee_init: App version:\s+(\S+)', timeout=30)[1].decode()
+    dut.expect_exact('Press ENTER to see the list of tests')
+    dut.write('"PSA Attestation: Verify the TEE image code hash claim"')
+    tee_ver = dut.expect(r'TEE image version: (\S+)', timeout=30)[1].decode()
+    tee_digest = dut.expect(r'TEE image digest: ([0-9a-f]{64})', timeout=30)[1].decode()
+    match = dut.expect(r'TEE code hash: ([0-9a-f]{64}) \(ver (\d+)\)', timeout=30)
+    tee_code_hash, code_hash_ver = match[1].decode(), int(match[2].decode())
+    dut.expect_unity_test_output(timeout=30)
+
+    assert re.fullmatch(r'\d+\.\d+\.\d+~v\d+\.\d+\.\d+', tee_ver), tee_ver
+    assert boot_ver == tee_ver
+    assert tee_ver == ref['version']
+    assert tee_ver == ref['expected_version']
+    assert tee_digest == ref['digest']
+    assert code_hash_ver == ref['code_hash_ver']
+    assert tee_code_hash == ref['code_hash']
+    logging.info(f'TEE code hash (ver {code_hash_ver}): {tee_code_hash}')
+
+
+# ---------------- TEE Fuzzing tests ----------------
+
+
+@pytest.mark.generic
+@idf_parametrize('config', ['tee_fuzzing'], indirect=['config'])
+@idf_parametrize('target', TESTING_TARGETS, indirect=['target'])
+def test_esp_tee_fuzzer(dut: IdfDut) -> None:
+    # Panics are expected during fuzzing; skip GDB decode on teardown
+    dut.skip_decode_panic = True
+
+    seed = random.randrange(2**32)
+    logging.info('Fuzzer seed: 0x%08x', seed)
+    rng = random.Random(seed)
+
+    # Number of random inputs to send per service
+    FUZZ_ITERATIONS_PER_SERVICE = 4
+
+    # Build {service_id: arg_count} map from the target's YAML service table
+    yml_path = Path(__file__).parent.joinpath('..', '..', 'scripts', dut.target, 'sec_srv_tbl_default.yml').resolve()
+    with open(yml_path) as f:
+        services = {
+            entry['id']: entry['args'] for family in yaml.safe_load(f)['secure_services'] for entry in family['entries']
+        }
+
+    pat_ret = re.compile(r'Service call returned (0x[0-9A-Fa-f]+)')
+    pat_rst = re.compile(r'rst:(0x[0-9A-Fa-f]+) \(([^)]+)\)')
+    device_rebooted = True  # True on first entry since device boots fresh
+
+    for srv_id, num_args in sorted(services.items()):
+        for iter_idx in range(FUZZ_ITERATIONS_PER_SERVICE):
+            # Re-enter the console menu only after a reboot
+            if device_rebooted:
+                dut.expect_exact('Press ENTER to see the list of tests')
+                dut.write('[fuzzing]')
+                dut.expect('esp>')
+                device_rebooted = False
+
+            # Always pass at least 1 arg; extra trailing args are ignored by the dispatcher
+            n = max(num_args, 1)
+            arg_str = ';'.join(f'0x{rng.getrandbits(32):08x}' for _ in range(n))
+            dut.write(f'fuzz -c {num_args} -i {srv_id} {arg_str}')
+
+            try:
+                # Service call either returns gracefully or crashes the device
+                match = dut.expect([pat_ret, pat_rst], timeout=3)
+            except pexpect.TIMEOUT:
+                logging.warning('Device hung, hard-resetting (srv_id: %d, iter: %d)', srv_id, iter_idx)
+                dut.serial.hard_reset()
+                device_rebooted = True
+                continue
+
+            if pat_rst.match(match.group(0).decode()):
+                # Device crashed and rebooted — verify it was a software reset
+                device_rebooted = True
+                rst_rsn = match.group(2).decode()
+                if rst_rsn not in ('LP_WDT_SYS', 'RTC_WDT_SYS', 'LP_SW_HPSYS', 'RTC_SW_HPSYS'):
+                    logging.warning('Unexpected reset reason: "%s" (srv_id: %d, iter: %d)', rst_rsn, srv_id, iter_idx)

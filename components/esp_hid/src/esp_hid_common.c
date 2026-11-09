@@ -1,9 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2017-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdbool.h>
 #include "esp_log.h"
@@ -11,6 +13,9 @@
 #include "esp_hid_common.h"
 #if (CONFIG_GATTS_ENABLE || CONFIG_GATTC_ENABLE)
 #include "esp_gatt_defs.h"
+#endif
+#if CONFIG_BT_NIMBLE_ENABLED
+#include "host/ble_hs.h"
 #endif
 static const char *TAG = "hid_parser";
 
@@ -62,6 +67,19 @@ static int add_report(temp_hid_report_map_t *map, esp_hid_report_item_t *item)
     }
     memcpy(&(map->reports[map->reports_len]), item, sizeof(esp_hid_report_item_t));
     map->reports_len++;
+    return 0;
+}
+
+static int add_report_len_bits_to(uint16_t *len_bits, uint16_t size, uint16_t count)
+{
+    uint32_t add = (uint32_t)size * (uint32_t)count;
+    uint32_t new_len = (uint32_t)(*len_bits) + add;
+
+    if (new_len > UINT16_MAX) {
+        ESP_LOGE(TAG, "report length overflow: %u + %u * %u", *len_bits, size, count);
+        return -1;
+    }
+    *len_bits = (uint16_t)new_len;
     return 0;
 }
 
@@ -290,15 +308,34 @@ static int handle_cmd(hid_report_cmd_t *cmd)
         } else if (cmd->cmd == HID_RM_USAGE) {
             s_report_params.inner_usage = cmd->value;
         } else if (cmd->cmd == HID_RM_REPORT_SIZE) {
-            s_report_size = cmd->value;
+            if (cmd->value > UINT16_MAX) {
+                ESP_LOGE(TAG, "REPORT_SIZE too large: %" PRIu32, cmd->value);
+                s_parse_step = PARSE_WAIT_USAGE_PAGE;
+                return -1;
+            }
+            s_report_size = (uint16_t)cmd->value;
         } else if (cmd->cmd == HID_RM_REPORT_COUNT) {
-            s_report_count = cmd->value;
+            if (cmd->value > UINT16_MAX) {
+                ESP_LOGE(TAG, "REPORT_COUNT too large: %" PRIu32, cmd->value);
+                s_parse_step = PARSE_WAIT_USAGE_PAGE;
+                return -1;
+            }
+            s_report_count = (uint16_t)cmd->value;
         } else if (cmd->cmd == HID_RM_INPUT) {
-            s_report_params.input_len += (s_report_size * s_report_count);
+            if (add_report_len_bits_to(&s_report_params.input_len, s_report_size, s_report_count) != 0) {
+                s_parse_step = PARSE_WAIT_USAGE_PAGE;
+                return -1;
+            }
         } else if (cmd->cmd == HID_RM_OUTPUT) {
-            s_report_params.output_len += (s_report_size * s_report_count);
+            if (add_report_len_bits_to(&s_report_params.output_len, s_report_size, s_report_count) != 0) {
+                s_parse_step = PARSE_WAIT_USAGE_PAGE;
+                return -1;
+            }
         } else if (cmd->cmd == HID_RM_FEATURE) {
-            s_report_params.feature_len += (s_report_size * s_report_count);
+            if (add_report_len_bits_to(&s_report_params.feature_len, s_report_size, s_report_count) != 0) {
+                s_parse_step = PARSE_WAIT_USAGE_PAGE;
+                return -1;
+            }
         } else if (cmd->cmd == HID_RM_COLLECTION) {
             s_collection_depth += 1;
         } else if (cmd->cmd == HID_RM_END_COLLECTION) {
@@ -353,6 +390,11 @@ esp_hid_report_map_t *esp_hid_parse_report_map(const uint8_t *hid_rm, size_t hid
         }
     }
 
+    temp_hid_report_map_t *map = s_temp_hid_report_map;
+    if (map == NULL) {
+        return NULL;
+    }
+
     esp_hid_report_map_t *out = (esp_hid_report_map_t *)calloc(1, sizeof(esp_hid_report_map_t));
     if (out == NULL) {
         ESP_LOGE(TAG, "hid_report_map malloc failed");
@@ -360,8 +402,6 @@ esp_hid_report_map_t *esp_hid_parse_report_map(const uint8_t *hid_rm, size_t hid
         s_temp_hid_report_map = NULL;
         return NULL;
     }
-
-    temp_hid_report_map_t *map = s_temp_hid_report_map;
 
     esp_hid_report_item_t *reports = (esp_hid_report_item_t *)calloc(1, map->reports_len * sizeof(esp_hid_report_item_t));
     if (reports == NULL) {
@@ -487,22 +527,57 @@ void esp_hid_cod_minor_print(uint8_t cod_min, FILE *fp)
     }
 }
 
+/* Core HCI disconnect statuses (Vol 1 Part F). Shared by Bluedroid GATT
+ * conn reasons and NimBLE BLE_HS_HCI_ERR(hci_status).
+ */
+static const char *ble_hci_disconn_reason_str(int hci_reason)
+{
+    switch (hci_reason) {
+    case 0x05: return "AUTH_FAIL";
+    case 0x06: return "PINKEY_MISSING";
+    case 0x08: return "TIMEOUT";
+    case 0x13: return "TERMINATE_PEER_USER";
+    case 0x14: return "TERMINATE_PEER_RESOURCES";
+    case 0x15: return "TERMINATE_PEER_POWER_OFF";
+    case 0x16: return "TERMINATE_LOCAL_HOST";
+    case 0x1f: return "UNSPECIFIED";
+    case 0x22: return "LMP_TIMEOUT";
+    case 0x28: return "INSTANT_PASSED";
+    case 0x3b: return "UNACCEPTABLE_CONN_PARAMS";
+    case 0x3d: return "MIC_FAILURE";
+    case 0x3e: return "FAIL_ESTABLISH";
+    default: return NULL;
+    }
+}
+
 const char *esp_hid_disconnect_reason_str(esp_hid_transport_t transport, int reason)
 {
-    if (transport == ESP_HID_TRANSPORT_BLE) {
-#if (CONFIG_GATTS_ENABLE || CONFIG_GATTC_ENABLE)
-        switch ((esp_gatt_conn_reason_t)reason) {
-        case ESP_GATT_CONN_L2C_FAILURE: return "L2C_FAILURE";
-        case ESP_GATT_CONN_TIMEOUT: return "TIMEOUT";
-        case ESP_GATT_CONN_TERMINATE_PEER_USER: return "TERMINATE_PEER_USER";
-        case ESP_GATT_CONN_TERMINATE_LOCAL_HOST: return "TERMINATE_LOCAL_HOST";
-        case ESP_GATT_CONN_LMP_TIMEOUT: return "LMP_TIMEOUT";
-        case ESP_GATT_CONN_FAIL_ESTABLISH: return "FAIL_ESTABLISH";
-        case ESP_GATT_CONN_CONN_CANCEL: return "CONN_CANCEL";
-        case ESP_GATT_CONN_NONE: return "NONE";
-        default: break;
-        }
-#endif /* CONFIG_GATTS_ENABLE || CONFIG_GATTC_ENABLE */
+    const char *str;
+
+    if (transport != ESP_HID_TRANSPORT_BLE) {
+        return s_unknown_str;
     }
-    return s_unknown_str;
+
+#if CONFIG_BT_NIMBLE_ENABLED
+    /* NimBLE GAP posts BLE_HS_HCI_ERR(hci) = 0x200 + hci. Do not fall through:
+     * HCI 0x01 would collide with Bluedroid ESP_GATT_CONN_L2C_FAILURE.
+     */
+    if (reason > BLE_HS_ERR_HCI_BASE && reason < BLE_HS_ERR_L2C_BASE) {
+        str = ble_hci_disconn_reason_str(reason - BLE_HS_ERR_HCI_BASE);
+        return str ? str : s_unknown_str;
+    }
+#endif
+
+#if (CONFIG_GATTS_ENABLE || CONFIG_GATTC_ENABLE)
+    switch ((esp_gatt_conn_reason_t)reason) {
+    case ESP_GATT_CONN_L2C_FAILURE: return "L2C_FAILURE";
+    case ESP_GATT_CONN_CONN_CANCEL: return "CONN_CANCEL";
+    case ESP_GATT_CONN_NONE: return "NONE";
+    default:
+        break;
+    }
+#endif /* CONFIG_GATTS_ENABLE || CONFIG_GATTC_ENABLE */
+
+    str = ble_hci_disconn_reason_str(reason);
+    return str ? str : s_unknown_str;
 }

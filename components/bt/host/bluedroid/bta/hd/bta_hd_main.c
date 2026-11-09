@@ -18,7 +18,7 @@
  ******************************************************************************/
 /******************************************************************************
  *
- *  This file contains the HID host main functions and state machine.
+ *  This file contains the HID device main functions and state machine.
  *
  ******************************************************************************/
 #include "common/bt_target.h"
@@ -204,13 +204,11 @@ void bta_hd_sm_execute(uint16_t event, tBTA_HD_DATA *p_data)
     tBTA_HD_ST_TBL state_table;
     tBTA_HD_STATE prev_state;
     uint8_t action;
-    tBTA_HD cback_data;
 
     APPL_TRACE_EVENT("%s: state=%s (%d) event=%s (%d)", __func__, bta_hd_state_code(bta_hd_cb.state), bta_hd_cb.state,
                      bta_hd_evt_code(event), event);
 
     prev_state = bta_hd_cb.state;
-    memset(&cback_data, 0, sizeof(tBTA_HD));
     state_table = bta_hd_st_tbl[bta_hd_cb.state];
     event &= 0xff;
 
@@ -324,7 +322,7 @@ tBTA_STATUS bta_hd_bqb_set_local_di_record(void)
 {
     tBTA_STATUS status = BTA_FAILURE;
 
-    tBTA_DI_RECORD bqb_device_info;
+    tBTA_DI_RECORD bqb_device_info = {0};
     bqb_device_info.vendor = 0;
     bqb_device_info.vendor_id_source = 0xff; // BTA_HH_VENDOR_ID_INVALID
     bqb_device_info.product = 1;

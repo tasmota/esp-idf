@@ -335,7 +335,7 @@ IP_EVENT_STA_LOST_IP
 
 当 IPV4 地址失效时，将引发此事件。
 
-此事件不会在 Wi-Fi 断连后立刻出现。Wi-Fi 连接断开后，首先将启动一个 IPV4 地址丢失计时器（可通过 :ref:`CONFIG_ESP_NETIF_LOST_IP_TIMER_ENABLE` 与 :ref:`CONFIG_ESP_NETIF_IP_LOST_TIMER_INTERVAL` 配置）。如果 station 在该计时器超时之前成功获取了 IPV4 地址，则不会发生此事件。否则，此事件将在计时器超时时发生。
+此事件不会在 Wi-Fi 断连后立刻出现。Wi-Fi 连接断开后，首先将启动一个 IPV4 地址丢失计时器（可通过 :menuitem:`CONFIG_ESP_NETIF_LOST_IP_TIMER_ENABLE` 与 :menuitem:`CONFIG_ESP_NETIF_IP_LOST_TIMER_INTERVAL` 配置）。如果 station 在该计时器超时之前成功获取了 IPV4 地址，则不会发生此事件。否则，此事件将在计时器超时时发生。
 
 一般来说，应用程序可忽略此事件。这只是一个调试事件，主要使应用程序获知 IPV4 地址已丢失。
 
@@ -387,9 +387,11 @@ WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START
 
 
 
-{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4", esp32c3="10", esp32c6="10"}
+{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4"}
 
-{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c3="7", esp32c6="7"}
+{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c2="0"}
+
+{IDF_TARGET_SUPPORT_ENCRYPT_NUM:default="17", esp32c2="4"}
 
 .. _wifi-configuration:
 
@@ -513,68 +515,46 @@ API :cpp:func:`esp_wifi_set_config()` 可用于配置 station。配置的参数�
    * - threshold
      - 该字段用来筛选找到的 AP，如果 AP 的 RSSI 或安全模式小于配置的阈值，则不会被连接。
 
-       如果 RSSI 设置为 0，则表示默认阈值，默认 RSSI 阈值为 -127 dBm。如果 authmode 阈值设置为 0，则表示默认阈值，默认 authmode 阈值为开放模式。
+       如果 RSSI 设置为 0，则表示默认阈值，默认 RSSI 阈值为 -127 dBm。如果 authmode 阈值设置为 0，则表示默认阈值，默认 authmode 阈值为 ``WIFI_AUTH_OPEN``。
 
 
 .. attention::
 
-    WEP/WPA 安全模式在 IEEE802.11-2016 协议中已弃用，建议不要使用。可使用 authmode 阈值代替，通过将 threshold.authmode 设置为 ``WIFI_AUTH_WPA2_PSK`` 使用 WPA2 模式。
+    IEEE 802.11-2016 已废弃 WEP 和 TKIP，不建议继续使用 WEP 或基于 TKIP 的 WPA 网络。若希望 station 只连接 WPA2 及以上安全级别的 AP，可将 ``wifi_config_t.sta.threshold.authmode`` 设置为 ``WIFI_AUTH_WPA2_PSK``；低于该阈值的 AP（如 OPEN、WEP、WPA-PSK）将在连接筛选时被忽略。
 
 AP 基本配置
 +++++++++++++++++++++++++++++++++++++
 
 API :cpp:func:`esp_wifi_set_config()` 可用于配置 AP。配置的参数信息会保存到 NVS 中。下表详细介绍了各个字段。
 
-.. only:: esp32 or esp32s2 or esp32s3 or esp32c3 or esp32c5 or esp32c6
+.. list-table::
+  :header-rows: 1
+  :widths: 15 55
 
-    .. list-table::
-      :header-rows: 1
-      :widths: 15 55
+  * - 字段
+    - 描述
+  * - ssid
+    - 指 AP 的 SSID。如果 ssid[0] 和 ssid[1] 均为 0xFF，AP 默认 SSID 为 ``ESP_aabbcc``，”aabbcc” 是 AP MAC 的最后三个字节。
+  * - password
+    - AP 的密码。如果身份验证模式为 ``WIFI_AUTH_OPEN``，此字段将被忽略。
+  * - ssid_len
+    - SSID 的长度。如果 ssid_len 为 0，则检查 SSID 直至出现终止字符。如果 ssid_len 大于 32，请更改为 32，或者根据 ssid_len 设置 SSID 长度。
+  * - channel
+    - .. only:: SOC_WIFI_SUPPORT_5G
 
-      * - 字段
-        - 描述
-      * - ssid
-        - 指 AP 的 SSID。如果 ssid[0] 和 ssid[1] 均为 0xFF，AP 默认 SSID 为 ``ESP_aabbcc``，”aabbcc” 是 AP MAC 的最后三个字节。
-      * - password
-        - AP 的密码。如果身份验证模式为 ``WIFI_AUTH_OPEN``，此字段将被忽略。
-      * - ssid_len
-        - SSID 的长度。如果 ssid_len 为 0，则检查 SSID 直至出现终止字符。如果 ssid_len 大于 32，请更改为 32，或者根据 ssid_len 设置 SSID 长度。
-      * - channel
-        - AP 的信道。如果信道超出范围，Wi-Fi 驱动程序将返回 error。所以，请确保信道在要求的范围内。有关详细信息，请参阅 `Wi-Fi 国家/地区代码`_。
-      * - authmode
-        - ESP AP 的身份验证模式。目前，ESP AP 不支持 AUTH_WEP。如果 authmode 是一个无效值，AP 默认该值为 ``WIFI_AUTH_OPEN``。
-      * - ssid_hidden
-        - 如果 ssid_hidden 为 1，AP 不广播 SSID。若为其他值，则广播。
-      * - max_connection
-        - 允许连接 station 的最大数目，默认值是 10。ESP Wi-Fi 支持 {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) 个 Wi-Fi 连接。请注意， ESP AP 和 ESP-NOW 共享同一块加密硬件 keys，因此 max_connection 参数将受到 :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` 的影响。加密硬件 keys 的总数是 17，如果 :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` 小于等于 {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}，那么 max_connection 最大可以设置为 {IDF_TARGET_MAX_CONN_STA_NUM}，否则 max_connection 最大可以设置为 (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`)。
-      * - beacon_interval
-        - beacon 间隔。值为 100 ~ 60000 ms，默认值为 100 ms。如果该值不在上述范围，AP 默认取 100 ms。
+         AP 的信道。设为 0 表示自动选择（最小信道：2.4 GHz 通常为 1，5 GHz 通常为 36）。其它非法值将返回 ``ESP_ERR_INVALID_ARG``。请确保信道在允许范围内。更多说明请参阅 `Wi-Fi 国家/地区代码`_。
 
+      .. only:: not SOC_WIFI_SUPPORT_5G
 
-.. only:: esp32c2
-
-    .. list-table::
-      :header-rows: 1
-      :widths: 15 55
-
-      * - 字段
-        - 描述
-      * - ssid
-        - 指 AP 的 SSID。如果 ssid[0] 和 ssid[1] 均为 0xFF，AP 默认 SSID 为 ``ESP_aabbcc``，”aabbcc” 是 AP MAC 的最后三个字节。
-      * - password
-        - AP 的密码。如果身份验证模式为 ``WIFI_AUTH_OPEN``，此字段将被忽略。
-      * - ssid_len
-        - SSID 的长度。如果 ssid_len 为 0，则检查 SSID 直至出现终止字符。如果 ssid_len 大于 32，请更改为 32，或者根据 ssid_len 设置 SSID 长度。
-      * - channel
-        - AP 的信道。如果信道超出范围，Wi-Fi 驱动程序将默认为信道 1。所以，请确保信道在要求的范围内。有关详细信息，请参阅 `Wi-Fi 国家/地区代码`_。
-      * - authmode
-        - ESP AP 的身份验证模式。目前，ESP AP 不支持 AUTH_WEP。如果 authmode 是一个无效值，AP 默认该值为 ``WIFI_AUTH_OPEN``。
-      * - ssid_hidden
-        - 如果 ssid_hidden 为 1，AP 不广播 SSID。若为其他值，则广播。
-      * - max_connection
-        - 允许连接 station 的最大数目，默认值是 2。ESP Wi-Fi 支持 {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) 个 Wi-Fi 连接。请注意， ESP AP 和 ESP-NOW 共享同一块加密硬件 keys，因此 max_connection 参数将受到 :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` 的影响。加密硬件 keys 的总数是 {IDF_TARGET_MAX_CONN_STA_NUM}， max_connection 最大可以设置为 ({IDF_TARGET_MAX_CONN_STA_NUM} - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`)。
-      * - beacon_interval
-        - beacon 间隔。值为 100 ~ 60000 ms，默认值为 100 ms。如果该值不在上述范围，AP 默认取 100 ms。
+         AP 的信道。设为 0 表示自动选择（最小信道：2.4 GHz 通常为 1）。其它非法值将返回 ``ESP_ERR_INVALID_ARG``。请确保信道在允许范围内。更多说明请参阅 `Wi-Fi 国家/地区代码`_。
+  * - authmode
+    - ESP AP 的身份验证模式。目前，ESP AP 不支持 AUTH_WEP。如果 authmode 是一个无效值，AP 默认该值为 ``WIFI_AUTH_OPEN``。
+  * - ssid_hidden
+    - 如果 ssid_hidden 为 1，AP 不广播 SSID。若为其他值，则广播。
+  * - max_connection
+    - 允许接入的 station 最大数量。{IDF_TARGET_NAME} 最多支持 {IDF_TARGET_MAX_CONN_STA_NUM}（``ESP_WIFI_MAX_CONN_NUM``） 个 Wi-Fi 连接。请注意，soft-AP 与 ESP-NOW 共享同一套加密硬件 keys，因此 max_connection 会受到 :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` 的影响。加密硬件 keys 总数为 {IDF_TARGET_SUPPORT_ENCRYPT_NUM}：若 :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}，则 max_connection 最大可设为 {IDF_TARGET_MAX_CONN_STA_NUM}；否则最大可设为 ({IDF_TARGET_SUPPORT_ENCRYPT_NUM} - :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`)。
+  * - beacon_interval
+    - beacon 间隔。值为 100 ~ 60000 ms，默认值为 100 ms。如果该值不在上述范围，AP 默认取 100 ms。
 
 
 Wi-Fi 协议模式
@@ -944,6 +924,7 @@ Wi-Fi 带宽模式
 
           1. 当 STA 连接到位于 DFS 信道的 AP 时，SoftAP 允许通过 CSA (Channel Switch Announcement) 切换至相同的 DFS 信道。
           2. 当 STA 断开连接后，SoftAP 将通过 CSA 切换回非 DFS 信道，确保符合监管要求。
+          3. 如需要完全禁止 SoftAP 工作在 DFS 信道上，可通过 :cpp:func:`esp_wifi_set_country()` 将 ``policy`` 设为 ``WIFI_COUNTRY_POLICY_MANUAL``，并将 ``wifi_5g_channel_mask`` 限制为当前国家/地区的非 DFS 信道。``wifi_5g_channel_mask`` 仅在 policy 为 ``WIFI_COUNTRY_POLICY_MANUAL`` 时生效。注意：此时若目标 AP 工作在 DFS 信道上，STA 将无法与该 AP 建立连接。各国 DFS 信道范围见 :component_file:`esp_wifi/regulatory/esp_wifi_regulatory.txt`。
 
 ..
 
@@ -1078,7 +1059,7 @@ Wi-Fi 国家/地区代码
       * - policy
         - 国家/地区策略。当配置的国家/地区与连接 AP 的信息冲突时，此字段决定应使用哪一方的信息。详情见下文说明。
       * - wifi_5g_channel_mask
-        - 表示 station/AP 在 5 GHz 频段中可使用的信道掩码。信道值与位的对应关系详见 :cpp:enum:`wifi_5g_channel_bit_t`。
+        - 表示 station/AP 在 5 GHz 频段中可使用的信道掩码。信道值与位的对应关系详见 :cpp:enum:`wifi_5g_channel_bit_t`。掩码为 0 时，5 GHz 信道按当地监管规则允许使用。配置的掩码仅在 ``policy`` 为 ``WIFI_COUNTRY_POLICY_MANUAL`` 时生效。如需禁用 DFS 信道，请将掩码限制为当前国家/地区的非 DFS 信道；此时 STA 也无法连接到工作在 DFS 信道上的 AP。
 
     默认配置示例如下::
 

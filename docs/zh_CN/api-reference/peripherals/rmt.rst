@@ -89,7 +89,7 @@ RMT 接收器可以对输入信号采样，将其转换为 RMT 数据格式，�
 
 - :cpp:member:`rmt_tx_channel_config_t::trans_queue_depth` 设置内部事务队列深度。队列越深，在待处理队列中可以准备的事务越多。
 - :cpp:member:`rmt_tx_channel_config_t::invert_out` 决定是否在将 RMT 信号发送到 GPIO 管脚前反转 RMT 信号。
-- :cpp:member:`rmt_tx_channel_config_t::with_dma` 为通道启用 DMA 后端。启用 DMA 后端可以释放 CPU 上的大部分通道工作负载，显著减轻 CPU 负担。但并非所有 ESP 芯片都支持 DMA 后端，在启用此选项前，请参阅 [`TRM <{IDF_TARGET_TRM_EN_URL}#rmt>`__]。若所选芯片不支持 DMA 后端，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
+- :cpp:member:`rmt_tx_channel_config_t::with_dma` 为通道启用 DMA 后端。启用 DMA 后端可以释放 CPU 上的大部分通道工作负载，显著减轻 CPU 负担。但并非所有 ESP 芯片都支持 DMA 后端，在启用此选项前，请参阅 [`TRM <{IDF_TARGET_TRM_CN_URL}#rmt>`__]。若所选芯片不支持 DMA 后端，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
 - :cpp:member:`rmt_tx_channel_config_t::intr_priority` 设置中断的优先级。如果设置为 ``0`` ，驱动将会使用一个中低优先级的中断（优先级可能为 1，2 或 3），否则会使用 :cpp:member:`rmt_tx_channel_config_t::intr_priority` 指定的优先级。请使用优先级序号 (1, 2, 3)，而不是 bitmask 的形式（(1<<1)，(1<<2)，(1<<3)）。请注意，中断优先级一旦设置，在 :cpp:func:`rmt_del_channel` 被调用之前不可再次修改。
 - :cpp:member:`rmt_tx_channel_config_t::allow_pd` 配置驱动程序是否允许系统在睡眠模式下关闭外设电源。在进入睡眠之前，系统将备份 RMT 寄存器上下文，当系统退出睡眠模式时，这些上下文将被恢复。关闭外设可以节省更多功耗，但代价是消耗更多内存来保存寄存器上下文。你需要在功耗和内存消耗之间做权衡。此配置选项依赖于特定的硬件功能，如果在不支持的芯片上启用它，你将看到类似 ``not able to power down in light sleep`` 的错误消息。
 
@@ -123,7 +123,7 @@ RMT 接收器可以对输入信号采样，将其转换为 RMT 数据格式，�
     - 如果未启用 DMA，则该字段控制通道专用内存块大小，至少为 {IDF_TARGET_SOC_RMT_MEM_WORDS_PER_CHANNEL}。
 
 - :cpp:member:`rmt_rx_channel_config_t::invert_in` 在输入信号传递到 RMT 接收器前对其进行反转。该反转由 GPIO 交换矩阵完成，而非 RMT 外设。
-- :cpp:member:`rmt_rx_channel_config_t::with_dma` 为通道启用 DMA 后端。启用 DMA 后端可以释放 CPU 上的大部分通道工作负载，显著减轻 CPU 负担。但并非所有 ESP 芯片都支持 DMA 后端，在启用此选项前，请参阅 [`TRM <{IDF_TARGET_TRM_EN_URL}#rmt>`__]。若所选芯片不支持 DMA 后端，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
+- :cpp:member:`rmt_rx_channel_config_t::with_dma` 为通道启用 DMA 后端。启用 DMA 后端可以释放 CPU 上的大部分通道工作负载，显著减轻 CPU 负担。但并非所有 ESP 芯片都支持 DMA 后端，在启用此选项前，请参阅 [`TRM <{IDF_TARGET_TRM_CN_URL}#rmt>`__]。若所选芯片不支持 DMA 后端，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
 - :cpp:member:`rmt_rx_channel_config_t::intr_priority` 设置中断的优先级。如果设置为 ``0`` ，驱动将会使用一个中低优先级的中断（优先级可能为 1，2 或 3），否则会使用 :cpp:member:`rmt_rx_channel_config_t::intr_priority` 指定的优先级。请使用优先级序号 (1，2，3)，而不是 bitmask 的形式（(1<<1)，(1<<2)，(1<<3)）。请注意，中断优先级一旦设置，在 :cpp:func:`rmt_del_channel` 被调用之前不可再次修改。
 - :cpp:member:`rmt_rx_channel_config_t::allow_pd` 配置驱动程序是否允许系统在睡眠模式下关闭外设电源。在进入睡眠之前，系统将备份 RMT 寄存器上下文，当系统退出睡眠模式时，这些上下文将被恢复。关闭外设可以节省更多功耗，但代价是消耗更多内存来保存寄存器上下文。你需要在功耗和内存消耗之间做权衡。此配置选项依赖于特定的硬件功能，如果在不支持的芯片上启用它，你将看到类似 ``not able to power down in light sleep`` 的错误消息。
 
@@ -156,7 +156,7 @@ RMT 接收器可以对输入信号采样，将其转换为 RMT 数据格式，�
 载波调制与解调
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-RMT 发射器可以生成载波信号，并将其调制到消息信号上。载波信号的频率远高于消息信号。此外，仅支持配置载波信号的频率和占空比。RMT 接收器可以从输入信号中解调出载波信号。注意，并非所有 ESP 芯片都支持载波调制和解调功能，在配置载波前，请参阅 [`TRM <{IDF_TARGET_TRM_EN_URL}#rmt>`__]。若所选芯片不支持载波调制和解调功能，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
+RMT 发射器可以生成载波信号，并将其调制到消息信号上。载波信号的频率远高于消息信号。此外，仅支持配置载波信号的频率和占空比。RMT 接收器可以从输入信号中解调出载波信号。注意，并非所有 ESP 芯片都支持载波调制和解调功能，在配置载波前，请参阅 [`TRM <{IDF_TARGET_TRM_CN_URL}#rmt>`__]。若所选芯片不支持载波调制和解调功能，可能会报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。
 
 载波相关配置位于 :cpp:type:`rmt_carrier_config_t` 中，该配置中的各部分详情如下：
 
@@ -284,7 +284,7 @@ RMT 是一种特殊的通信外设，无法像 SPI 和 I2C 那样发送原始字
 - :cpp:member:`rmt_sync_manager_config_t::tx_channel_array` 指向要管理的 TX 通道数组。
 - :cpp:member:`rmt_sync_manager_config_t::array_size` 设置要管理的通道数量。
 
-成功调用 :cpp:func:`rmt_new_sync_manager` 函数将返回管理器句柄，该函数也可能因为无效参数等错误而无法调用。在已经安装了同步管理器，且缺少硬件资源来创建另一个管理器时，该函数将报告 :c:macro:`ESP_ERR_NOT_FOUND` 错误。此外，如果硬件不支持同步管理器，将报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。在使用同步管理器功能之前，请参阅 [`TRM <{IDF_TARGET_TRM_EN_URL}#rmt>`__]。
+成功调用 :cpp:func:`rmt_new_sync_manager` 函数将返回管理器句柄，该函数也可能因为无效参数等错误而无法调用。在已经安装了同步管理器，且缺少硬件资源来创建另一个管理器时，该函数将报告 :c:macro:`ESP_ERR_NOT_FOUND` 错误。此外，如果硬件不支持同步管理器，将报告 :c:macro:`ESP_ERR_NOT_SUPPORTED` 错误。在使用同步管理器功能之前，请参阅 [`TRM <{IDF_TARGET_TRM_CN_URL}#rmt>`__]。
 
 发起同时发送
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -571,7 +571,7 @@ RMT 编码器是 RMT TX 事务的一部分，用于在特定时间生成正确�
 电源管理
 ^^^^^^^^^^^^^^^^
 
-当电源管理 :ref:`CONFIG_PM_ENABLE` 被启用的时候，系统在进入睡眠前可能会调整或禁用时钟源。结果是，RMT 内部的时间基准无法按预期工作。
+当电源管理 :menuitem:`CONFIG_PM_ENABLE` 被启用的时候，系统在进入睡眠前可能会调整或禁用时钟源。结果是，RMT 内部的时间基准无法按预期工作。
 
 驱动程序可以通过创建一个电源管理锁来防止上述问题。锁的类型会根据不同的时钟源来设置。驱动程序将在 :cpp:func:`rmt_enable` 中拿锁，并在 :cpp:func:`rmt_disable` 中释放锁。这意味着，无论电源管理策略如何，在这两个函数之间的任何 RMT 事务都可以保证正常工作。在此期间，时钟源不会被禁用或调整频率。
 
@@ -586,7 +586,7 @@ Cache 安全
 
 默认情况下，禁用 cache 时，写入/擦除主 flash 等原因将导致 RMT 中断延迟，事件回调函数也将延迟执行。在实时应用程序中，应避免此类情况。此外，当 RMT 事务依赖 **交替** 中断连续编码或复制 RMT 符号时，上述中断延迟将导致不可预测的结果。
 
-因此，可以启用 Kconfig 选项 :ref:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 和 :ref:`CONFIG_RMT_RX_ISR_CACHE_SAFE`，该选项：
+因此，可以启用 Kconfig 选项 :menuitem:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 和 :menuitem:`CONFIG_RMT_RX_ISR_CACHE_SAFE`，该选项：
 
 1. 支持在禁用 cache 时启用所需中断
 2. 支持将 ISR 使用的所有函数存放在 IRAM 中 [2]_
@@ -594,9 +594,9 @@ Cache 安全
 
 启用该选项可以保证 cache 禁用时的中断运行，但会相应增加 IRAM 占用。
 
-请注意，当 :ref:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 使能后，你必须将编码器函数（主要是 :cpp:member:`rmt_encoder_t::encode` 和 :cpp:member:`rmt_encoder_t::reset`）放进 IRAM 中。建议你使用 :c:macro:`RMT_ENCODER_FUNC_ATTR` 来装饰你的编码器函数。
+请注意，当 :menuitem:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 使能后，你必须将编码器函数（主要是 :cpp:member:`rmt_encoder_t::encode` 和 :cpp:member:`rmt_encoder_t::reset`）放进 IRAM 中。建议你使用 :c:macro:`RMT_ENCODER_FUNC_ATTR` 来装饰你的编码器函数。
 
-另外一个 Kconfig 选项 :ref:`CONFIG_RMT_RECV_FUNC_IN_IRAM` 可以将 :cpp:func:`rmt_receive` 函数放进内部的 IRAM 中，从而当 flash cache 被关闭的时候，这个函数也能够被使用。
+另外一个 Kconfig 选项 :menuitem:`CONFIG_RMT_RECV_FUNC_IN_IRAM` 可以将 :cpp:func:`rmt_receive` 函数放进内部的 IRAM 中，从而当 flash cache 被关闭的时候，这个函数也能够被使用。
 
 .. _rmt-thread-safety:
 
@@ -615,9 +615,9 @@ RMT 驱动程序会确保工厂函数 :cpp:func:`rmt_new_tx_channel`、:cpp:func
 Kconfig 选项
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 和 :ref:`CONFIG_RMT_RX_ISR_CACHE_SAFE` 控制默认 ISR 处理程序能否在禁用 cache 的情况下工作。详情请参阅 :ref:`rmt-cache-safe`。
-- :ref:`CONFIG_RMT_ENABLE_DEBUG_LOG` 用于启用调试日志输出，启用此选项将增加固件的二进制文件大小。
-- :ref:`CONFIG_RMT_RECV_FUNC_IN_IRAM` 用于控制 RMT 接收函数被链接到系统存储的哪个位置（IRAM 还是 Flash）。详情请参阅 :ref:`rmt-cache-safe`。
+- :menuitem:`CONFIG_RMT_TX_ISR_CACHE_SAFE` 和 :menuitem:`CONFIG_RMT_RX_ISR_CACHE_SAFE` 控制默认 ISR 处理程序能否在禁用 cache 的情况下工作。详情请参阅 :ref:`rmt-cache-safe`。
+- :menuitem:`CONFIG_RMT_ENABLE_DEBUG_LOG` 用于启用调试日志输出，启用此选项将增加固件的二进制文件大小。
+- :menuitem:`CONFIG_RMT_RECV_FUNC_IN_IRAM` 用于控制 RMT 接收函数被链接到系统存储的哪个位置（IRAM 还是 Flash）。详情请参阅 :ref:`rmt-cache-safe`。
 
 应用示例
 --------------------
@@ -657,7 +657,7 @@ API 参考
 
 
 .. [1]
-   不同 ESP 芯片系列可能具有不同数量的 RMT 通道，详情请参阅 [`TRM <{IDF_TARGET_TRM_EN_URL}#rmt>`__]。驱动程序对通道申请数量不做限制，但当硬件资源用尽时，驱动程序将返回错误。因此，每次进行 :ref:`rmt-resource-allocation` 时，请注意检查返回值。
+   不同 ESP 芯片系列可能具有不同数量的 RMT 通道，详情请参阅 [`TRM <{IDF_TARGET_TRM_CN_URL}#rmt>`__]。驱动程序对通道申请数量不做限制，但当硬件资源用尽时，驱动程序将返回错误。因此，每次进行 :ref:`rmt-resource-allocation` 时，请注意检查返回值。
 
 .. [2]
    注意，回调函数（如 :cpp:member:`rmt_tx_event_callbacks_t::on_trans_done`）及回调函数所调用的函数也应位于 IRAM 中。

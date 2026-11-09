@@ -18,6 +18,7 @@
 #include "esp_private/mipi_csi_share_hw_ctrl.h"
 #include "hal/hal_utils.h"
 #include "hal/color_hal.h"
+#include "hal/mipi_csi_brg_ll.h"
 #include "soc/mipi_csi_bridge_struct.h"
 #include "hal/isp_periph.h"
 #include "soc/soc_caps.h"
@@ -46,8 +47,8 @@ static esp_err_t s_isp_claim_processor(isp_processor_t *proc)
             s_platform.processors[i] = proc;
             proc->proc_id = i;
             PERIPH_RCC_ATOMIC() {
-                isp_ll_enable_module_clock(proc->hal.hw, true);
-                isp_ll_reset_module_clock(proc->hal.hw);
+                isp_ll_enable_module_clock(true);
+                isp_ll_reset_module_clock();
             }
             break;
         }
@@ -67,7 +68,7 @@ static esp_err_t s_isp_declaim_processor(isp_processor_t *proc)
     _lock_acquire(&s_platform.mutex);
     s_platform.processors[proc->proc_id] = NULL;
     PERIPH_RCC_ATOMIC() {
-        isp_ll_enable_module_clock(proc->hal.hw, false);
+        isp_ll_enable_module_clock(false);
     }
     _lock_release(&s_platform.mutex);
 
@@ -78,13 +79,24 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
 {
     esp_err_t ret = ESP_FAIL;
     ESP_RETURN_ON_FALSE(proc_config && ret_proc, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
-    ESP_RETURN_ON_FALSE(proc_config->h_res <= ISP_LL_HSIZE_MAX && proc_config->v_res <= ISP_LL_VSIZE_MAX, ESP_ERR_INVALID_ARG, TAG, "invalid h_res or v_res");
-    ESP_RETURN_ON_FALSE(proc_config->input_data_source != ISP_INPUT_DATA_SOURCE_DWGDMA, ESP_ERR_NOT_SUPPORTED, TAG, "input source not supported yet");
+    ESP_RETURN_ON_FALSE(proc_config->h_res <= ISP_LL_HSIZE_MAX, ESP_ERR_INVALID_ARG, TAG, "invalid h_res");
+    if (proc_config->input_data_source == ISP_INPUT_DATA_SOURCE_DWGDMA) {
+        ESP_RETURN_ON_FALSE((proc_config->input_data_color_type == ISP_COLOR_RAW8) ||
+                            (proc_config->input_data_color_type == ISP_COLOR_RAW10) ||
+                            (proc_config->input_data_color_type == ISP_COLOR_RAW12),
+                            ESP_ERR_INVALID_ARG, TAG, "dma input only supports RAW8/RAW10/RAW12");
+        uint32_t in_bits_per_pixel = color_hal_pixel_format_fourcc_get_bit_depth(proc_config->input_data_color_type);
+        uint64_t frame_bits = (uint64_t)proc_config->h_res * proc_config->v_res * in_bits_per_pixel;
+        ESP_RETURN_ON_FALSE((frame_bits % 64) == 0, ESP_ERR_INVALID_ARG, TAG, "frame bits should be 64-bit aligned");
+        ESP_RETURN_ON_FALSE((frame_bits / 64) <= ((1UL << 22) - 1), ESP_ERR_INVALID_ARG, TAG, "frame size exceeds hardware limit");
+        ESP_RETURN_ON_FALSE(proc_config->dma_burst_size <= 16, ESP_ERR_INVALID_ARG, TAG, "dma burst size out of range");
+    }
     if (proc_config->flags.bypass_isp) {
         ESP_RETURN_ON_FALSE(proc_config->input_data_color_type == proc_config->output_data_color_type, ESP_ERR_INVALID_ARG, TAG, "isp is bypassed, input and output data color type should be same");
     }
 
-    isp_processor_t *proc = heap_caps_calloc(1, sizeof(isp_processor_t), ISP_MEM_ALLOC_CAPS);
+    // always allocate memory from internal memory because the driver object contains atomic variables
+    isp_processor_t *proc = heap_caps_calloc(1, sizeof(isp_processor_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(proc, ESP_ERR_NO_MEM, TAG, "no mem");
     INIT_CRIT_SECTION_LOCK_RUNTIME(&proc->spinlock);
 
@@ -116,10 +128,10 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
     if (out_clk_freq_hz != proc_config->clk_hz) {
         ESP_LOGW(TAG, "precision loss, real output frequency: %"PRIu32"Hz", out_clk_freq_hz);
     }
-    ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)clk_src, true), err, TAG, "clock source enable failed");
+    ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)clk_src, NULL), err, TAG, "clock source enable failed");
     PERIPH_RCC_ATOMIC() {
-        isp_ll_select_clk_source(proc->hal.hw, clk_src);
-        isp_ll_set_clock_div(proc->hal.hw, &clk_div);
+        isp_ll_select_clk_source(clk_src);
+        isp_ll_set_clock_div(&clk_div);
     }
     isp_hal_init(&proc->hal, proc->proc_id);
 
@@ -134,6 +146,7 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
     atomic_init(&proc->lsc_fsm, ISP_FSM_INIT);
     atomic_init(&proc->sharpen_fsm, ISP_FSM_INIT);
     atomic_init(&proc->wbg_fsm, ISP_FSM_INIT);
+    atomic_init(&proc->dpc_fsm, ISP_FSM_INIT);
 
     //Input & Output color format
     isp_color_t in_color_format = proc_config->input_data_color_type;
@@ -173,8 +186,15 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
         isp_ll_yuv_set_range(proc->hal.hw, proc_config->yuv_range);
     }
 
-    if ((out_color_format == ISP_COLOR_RGB888 || out_color_format == ISP_COLOR_RGB565) && proc_config->input_data_source == ISP_INPUT_DATA_SOURCE_DVP) {
-        isp_ll_color_enable(proc->hal.hw, true); // workaround for DIG-474
+    if ((out_color_format == ISP_COLOR_RGB888 || out_color_format == ISP_COLOR_RGB565) &&
+            (proc_config->input_data_source == ISP_INPUT_DATA_SOURCE_DVP ||
+             proc_config->input_data_source == ISP_INPUT_DATA_SOURCE_DWGDMA)) {
+        // DIG-474 workaround: Color must be enabled for RGB output, so configure its neutral defaults before enabling
+        // Disable shadow registers temporarily to apply the defaults directly, without leaving a pending Color update.
+        isp_ll_shadow_set_mode(proc->hal.hw, ISP_SHADOW_MODE_DISABLE);
+        isp_hal_color_config(&proc->hal, NULL);
+        isp_ll_color_set_clk_ctrl_mode(proc->hal.hw, ISP_LL_PIPELINE_CLK_CTRL_AUTO);
+        isp_ll_color_enable(proc->hal.hw, true);
     }
     if (proc_config->flags.byte_swap_en) {
         isp_ll_set_byte_swap(proc->hal.hw, true);
@@ -184,16 +204,23 @@ esp_err_t esp_isp_new_processor(const esp_isp_processor_cfg_t *proc_config, isp_
 
     proc->in_color_format = in_color_format;
     proc->out_color_format = out_color_format;
+    proc->input_data_source = proc_config->input_data_source;
     proc->h_res = proc_config->h_res;
     proc->v_res = proc_config->v_res;
     proc->bayer_order = proc_config->bayer_order;
     proc->bypass_isp = proc_config->flags.bypass_isp;
+    proc->dma_out_burst_len = proc_config->dma_burst_size;
+    if (proc->input_data_source == ISP_INPUT_DATA_SOURCE_DWGDMA) {
+        ESP_GOTO_ON_ERROR(isp_dma_configure_input(proc), err, TAG, "configure dma input failed");
+        ESP_GOTO_ON_ERROR(isp_dma_new_frame_ctx(proc), err, TAG, "create dma frame context failed");
+    }
 
     *ret_proc = proc;
 
     return ESP_OK;
 
 err:
+    isp_dma_del_frame_ctx(proc);
     if (proc->intr_hdl) {
         esp_isp_deregister_isr(proc, ISP_SUBMODULE_GENERAL);
     }
@@ -207,12 +234,14 @@ esp_err_t esp_isp_del_processor(isp_proc_handle_t proc)
     ESP_RETURN_ON_FALSE(proc, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
     ESP_RETURN_ON_FALSE(atomic_load(&proc->isp_fsm) == ISP_FSM_INIT, ESP_ERR_INVALID_STATE, TAG, "processor isn't in init state");
 
+    isp_dma_del_frame_ctx(proc);
+
     //declaim first, then do free
     ESP_RETURN_ON_ERROR(s_isp_declaim_processor(proc), TAG, "declaim processor fail");
 #if SOC_ISP_SHARE_CSI_BRG
     ESP_RETURN_ON_ERROR(mipi_csi_brg_declaim(proc->csi_brg_id), TAG, "declaim csi bridge fail");
 #endif
-    ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)(proc->clk_src), false), TAG, "clock source disable failed");
+    ESP_RETURN_ON_ERROR(esp_clk_tree_release_src((soc_module_clk_t)(proc->clk_src)), TAG, "clock source disable failed");
     if (proc->intr_hdl) {
         esp_isp_deregister_isr(proc, ISP_SUBMODULE_GENERAL);
     }
@@ -338,20 +367,26 @@ static void IRAM_ATTR s_isp_isr_dispatcher(void *arg)
         do_dispatch = false;
     }
 
-    if ((error_events & ISP_LL_EVENT_DATA_TYPE_ERR) || (error_events & ISP_LL_EVENT_DATA_TYPE_SETTING_ERR)) {
-        ESP_EARLY_LOGE(TAG, "data type error");
-    }
-    if ((error_events & ISP_LL_EVENT_ASYNC_FIFO_OVF) || (error_events & ISP_LL_EVENT_BUF_FULL)) {
-        ESP_EARLY_LOGE(TAG, "fifo overflow");
-    }
-    if ((error_events & ISP_LL_EVENT_HVNUM_SETTING_ERR) || (error_events & ISP_LL_EVENT_MIPI_HNUM_UNMATCH)) {
-        ESP_EARLY_LOGE(TAG, "hnum / vnum setting error");
-    }
-    if (error_events & ISP_LL_EVENT_GAMMA_XCOORD_ERR) {
-        ESP_EARLY_LOGE(TAG, "gamma xcoord error");
-    }
-    if (error_events & ISP_LL_EVENT_CROP_ERR) {
-        ESP_EARLY_LOGE(TAG, "crop error");
+    if (error_events) {
+        if ((error_events & ISP_LL_EVENT_DATA_TYPE_ERR) || (error_events & ISP_LL_EVENT_DATA_TYPE_SETTING_ERR)) {
+            ESP_EARLY_LOGE(TAG, "data type error");
+        }
+        if ((error_events & ISP_LL_EVENT_ASYNC_FIFO_OVF)) {
+            ESP_EARLY_LOGE(TAG, "fifo overflow");
+        }
+        if ((error_events & ISP_LL_EVENT_BUF_FULL)) {
+            //This error does not affect the operation of the ISP
+            ESP_EARLY_LOGD(TAG, "buffer full");
+        }
+        if ((error_events & ISP_LL_EVENT_HVNUM_SETTING_ERR) || (error_events & ISP_LL_EVENT_MIPI_HNUM_UNMATCH)) {
+            ESP_EARLY_LOGE(TAG, "hnum / vnum setting error");
+        }
+        if (error_events & ISP_LL_EVENT_GAMMA_XCOORD_ERR) {
+            ESP_EARLY_LOGE(TAG, "gamma xcoord error");
+        }
+        if (error_events & ISP_LL_EVENT_CROP_ERR) {
+            ESP_EARLY_LOGE(TAG, "crop error");
+        }
     }
 
     if (need_yield) {

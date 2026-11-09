@@ -30,10 +30,10 @@ def test_i2c(dut: Dut) -> None:
     ],
     indirect=True,
 )
+@pytest.mark.temp_skip_ci(targets=['esp32h21'], reason='lack of runner')  # TODO: IDF-16190
 @idf_parametrize('target', soc_filtered_targets('SOC_I2C_SUPPORTED == 1'), indirect=['target'])
-@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='lack of s31 multi-device runner # TODO: IDFCI-10334')
 def test_i2c_multi_device(case_tester) -> None:  # type: ignore
-    case_tester.run_all_multi_dev_cases(reset=True)
+    case_tester.run_all_multi_dev_cases(reset=True, timeout=30)
 
 
 @pytest.mark.flash_suspend

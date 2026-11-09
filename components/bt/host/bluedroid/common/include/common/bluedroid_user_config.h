@@ -32,6 +32,12 @@
 #define UC_BT_CLASSIC_ENABLED               FALSE
 #endif
 
+#ifdef CONFIG_BT_CLASSIC_MAX_RECONNECT_ON_COLLISION
+#define UC_BT_CLASSIC_MAX_RECONNECT_ON_COLLISION CONFIG_BT_CLASSIC_MAX_RECONNECT_ON_COLLISION
+#else
+#define UC_BT_CLASSIC_MAX_RECONNECT_ON_COLLISION 5
+#endif
+
 //A2DP
 #ifdef CONFIG_BT_A2DP_ENABLE
 #define UC_BT_A2DP_ENABLED                  CONFIG_BT_A2DP_ENABLE
@@ -43,6 +49,30 @@
 #define UC_BT_A2DP_USE_EXTERNAL_CODEC       CONFIG_BT_A2DP_USE_EXTERNAL_CODEC
 #else
 #define UC_BT_A2DP_USE_EXTERNAL_CODEC       FALSE
+#endif
+
+#ifdef CONFIG_BT_A2DP_CODEC_AAC_ENABLED
+#define UC_BT_A2DP_CODEC_AAC_ENABLED        CONFIG_BT_A2DP_CODEC_AAC_ENABLED
+#else
+#define UC_BT_A2DP_CODEC_AAC_ENABLED        FALSE
+#endif
+
+#ifdef CONFIG_BT_A2DP_SEP_NUM_MAX
+#define UC_BT_A2DP_SEP_NUM_MAX              CONFIG_BT_A2DP_SEP_NUM_MAX
+#else
+#define UC_BT_A2DP_SEP_NUM_MAX              1
+#endif
+
+#ifdef CONFIG_BT_A2DP_SINK_MAX_CONN
+#define UC_BT_A2DP_SINK_MAX_CONN            CONFIG_BT_A2DP_SINK_MAX_CONN
+#else
+#define UC_BT_A2DP_SINK_MAX_CONN            1
+#endif
+
+#ifdef CONFIG_BT_A2DP_AUDIO_STATS
+#define UC_BT_A2DP_AUDIO_STATS              CONFIG_BT_A2DP_AUDIO_STATS
+#else
+#define UC_BT_A2DP_AUDIO_STATS              FALSE
 #endif
 
 //AVRCP
@@ -148,13 +178,11 @@
 #define UC_BT_CLASSIC_BQB_ENABLED           FALSE
 #endif
 
-//Set Encryption Key Size(BT)
-#ifdef CONFIG_BT_ENC_KEY_SIZE_CTRL_STD
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   1
-#elif CONFIG_BT_ENC_KEY_SIZE_CTRL_VSC
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   2
+// Vendor-specific HCI for Classic Bluetooth encryption key size
+#ifdef CONFIG_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC
+#define UC_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC             CONFIG_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC
 #else
-#define UC_BT_ENC_KEY_SIZE_CTRL_MODE   0
+#define UC_BT_CLASSIC_ENABLE_ENC_KEY_SIZE_CTRL_VSC             FALSE
 #endif
 
 //Enable Classic Bluetooth power control vsc
@@ -169,6 +197,32 @@
 #define UC_BT_PBAC_ENABLED           	    CONFIG_BT_PBAC_ENABLED
 #else
 #define UC_BT_PBAC_ENABLED       	        FALSE
+#endif
+
+//PAN
+#ifdef CONFIG_BT_PAN_ENABLED
+#define UC_BT_PAN_ENABLED                   CONFIG_BT_PAN_ENABLED
+#else
+#define UC_BT_PAN_ENABLED                   FALSE
+#endif
+
+//OPP
+#ifdef CONFIG_BT_OPP_ENABLED
+#define UC_BT_OPP_ENABLED                   CONFIG_BT_OPP_ENABLED
+#else
+#define UC_BT_OPP_ENABLED                   FALSE
+#endif
+
+#ifdef CONFIG_BT_OPP_SERVER_ENABLED
+#define UC_BT_OPP_SERVER_ENABLED            CONFIG_BT_OPP_SERVER_ENABLED
+#else
+#define UC_BT_OPP_SERVER_ENABLED            FALSE
+#endif
+
+#ifdef CONFIG_BT_OPP_CLIENT_ENABLED
+#define UC_BT_OPP_CLIENT_ENABLED            CONFIG_BT_OPP_CLIENT_ENABLED
+#else
+#define UC_BT_OPP_CLIENT_ENABLED            FALSE
 #endif
 
 #ifdef CONFIG_BT_PBAC_SUPPORTED_FEAT
@@ -188,6 +242,13 @@
 #define UC_BT_GOEPC_ENABLED           	    CONFIG_BT_GOEPC_ENABLED
 #else
 #define UC_BT_GOEPC_ENABLED           	    FALSE
+#endif
+
+//GOEPS (BT)
+#ifdef CONFIG_BT_GOEPS_ENABLED
+#define UC_BT_GOEPS_ENABLED           	    CONFIG_BT_GOEPS_ENABLED
+#else
+#define UC_BT_GOEPS_ENABLED           	    FALSE
 #endif
 
 //BLE
@@ -211,6 +272,36 @@
 #define UC_BT_BLE_50_FEATURES_SUPPORTED            CONFIG_BT_BLE_50_FEATURES_SUPPORTED
 #else
 #define UC_BT_BLE_50_FEATURES_SUPPORTED            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_PERIPH_PSEUDO_ADDR_BOND
+#define UC_BT_BLE_PERIPH_PSEUDO_ADDR_BOND          CONFIG_BT_BLE_PERIPH_PSEUDO_ADDR_BOND
+#else
+#define UC_BT_BLE_PERIPH_PSEUDO_ADDR_BOND          FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_SMP_HARDENED_REPAIRING
+#define UC_BT_BLE_SMP_HARDENED_REPAIRING           CONFIG_BT_BLE_SMP_HARDENED_REPAIRING
+#else
+#define UC_BT_BLE_SMP_HARDENED_REPAIRING           FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL
+#define UC_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL     CONFIG_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL
+#else
+#define UC_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL     FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL
+#define UC_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL  CONFIG_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL
+#else
+#define UC_BT_BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL  FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_SMP_UNBOND_ON_KEY_MISSING
+#define UC_BT_BLE_SMP_UNBOND_ON_KEY_MISSING        CONFIG_BT_BLE_SMP_UNBOND_ON_KEY_MISSING
+#else
+#define UC_BT_BLE_SMP_UNBOND_ON_KEY_MISSING        FALSE
 #endif
 
 #ifdef CONFIG_BT_BLE_42_FEATURES_SUPPORTED
@@ -395,10 +486,46 @@
 #define UC_BT_BLE_FEAT_CHANNEL_SOUNDING            FALSE
 #endif
 
+#ifdef CONFIG_BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS
+#define UC_BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS    CONFIG_BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS
+#else
+#define UC_BT_BLE_FEAT_CS_SECURITY_REQUIREMENTS    FALSE
+#endif
+
 #ifdef CONFIG_BT_BLE_FEAT_ADV_MONITOR
 #define UC_BT_BLE_FEAT_ADV_MONITOR            CONFIG_BT_BLE_FEAT_ADV_MONITOR
 #else
 #define UC_BT_BLE_FEAT_ADV_MONITOR            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_FEAT_DBAF
+#define UC_BT_BLE_FEAT_DBAF            CONFIG_BT_BLE_FEAT_DBAF
+#else
+#define UC_BT_BLE_FEAT_DBAF            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_FEAT_FRAME_SPACE_UPDATE
+#define UC_BT_BLE_FEAT_FRAME_SPACE_UPDATE            CONFIG_BT_BLE_FEAT_FRAME_SPACE_UPDATE
+#else
+#define UC_BT_BLE_FEAT_FRAME_SPACE_UPDATE            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_FEAT_LL_EXT_FEAT
+#define UC_BT_BLE_FEAT_LL_EXT_FEAT            CONFIG_BT_BLE_FEAT_LL_EXT_FEAT
+#else
+#define UC_BT_BLE_FEAT_LL_EXT_FEAT            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_FEAT_SHORTER_CONN_INTERVALS
+#define UC_BT_BLE_FEAT_SHORTER_CONN_INTERVALS            CONFIG_BT_BLE_FEAT_SHORTER_CONN_INTERVALS
+#else
+#define UC_BT_BLE_FEAT_SHORTER_CONN_INTERVALS            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_FEAT_LE_UTP
+#define UC_BT_BLE_FEAT_LE_UTP            CONFIG_BT_BLE_FEAT_LE_UTP
+#else
+#define UC_BT_BLE_FEAT_LE_UTP            FALSE
 #endif
 
 #ifdef CONFIG_BT_BLE_VENDOR_HCI_EN
@@ -411,6 +538,18 @@
 #define UC_BT_BLE_HIGH_DUTY_ADV_INTERVAL CONFIG_BT_BLE_HIGH_DUTY_ADV_INTERVAL
 #else
 #define UC_BT_BLE_HIGH_DUTY_ADV_INTERVAL FALSE
+#endif
+
+/* When set to 1, the Bluedroid host's parameter validation no longer enforces
+ * a minimum BLE connection interval; the actual lower limit is then left to
+ * the controller. See BLE_CONN_INT_MIN_HOST_CHECK in common/bt_target.h.
+ *
+ * Do not turn this on manually in menuconfig unless you know the implications.
+ * In normal IDF builds it follows the active Controller integration. */
+#ifdef CONFIG_BT_BLE_HOST_ALLOW_SUB_SPEC_MIN_CONN_INT
+#define UC_BT_BLE_HOST_ALLOW_SUB_SPEC_MIN_CONN_INT      1
+#else
+#define UC_BT_BLE_HOST_ALLOW_SUB_SPEC_MIN_CONN_INT      0
 #endif
 
 //GATTS
@@ -459,6 +598,12 @@
 #define UC_BT_SMP_ENABLE                       CONFIG_BT_SMP_ENABLE
 #else
 #define UC_BT_SMP_ENABLE                       FALSE
+#endif
+
+#ifdef CONFIG_BT_SMP_CTKD_ENABLE
+#define UC_BT_SMP_CTKD_ENABLE                  CONFIG_BT_SMP_CTKD_ENABLE
+#else
+#define UC_BT_SMP_CTKD_ENABLE                  FALSE
 #endif
 
 //SMP_SLAVE_CON_PARAMS_UPD_ENABLE
@@ -647,6 +792,54 @@
 #define UC_BT_BLE_RPA_TIMEOUT                   900
 #endif
 
+#ifdef CONFIG_BT_BLE_L2CAP_COC_ENABLED
+#define UC_BT_BLE_L2CAP_COC_ENABLED             CONFIG_BT_BLE_L2CAP_COC_ENABLED
+#else
+#define UC_BT_BLE_L2CAP_COC_ENABLED             FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_L2CAP_COC_MAX_CHAN
+#define UC_BT_BLE_L2CAP_COC_MAX_CHAN            CONFIG_BT_BLE_L2CAP_COC_MAX_CHAN
+#else
+#define UC_BT_BLE_L2CAP_COC_MAX_CHAN            5
+#endif
+
+#ifdef CONFIG_BT_BLE_L2CAP_COC_MPS
+#define UC_BT_BLE_L2CAP_COC_MPS                 CONFIG_BT_BLE_L2CAP_COC_MPS
+#else
+#define UC_BT_BLE_L2CAP_COC_MPS                 247
+#endif
+
+#ifdef CONFIG_BT_BLE_L2CAP_COC_INIT_CREDITS
+#define UC_BT_BLE_L2CAP_COC_INIT_CREDITS        CONFIG_BT_BLE_L2CAP_COC_INIT_CREDITS
+#else
+#define UC_BT_BLE_L2CAP_COC_INIT_CREDITS        24
+#endif
+
+#ifdef CONFIG_BT_BLE_L2CAP_ENHANCED_COC
+#define UC_BT_BLE_L2CAP_ENHANCED_COC            CONFIG_BT_BLE_L2CAP_ENHANCED_COC
+#else
+#define UC_BT_BLE_L2CAP_ENHANCED_COC            FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_EATT_ENABLE
+#define UC_BT_BLE_EATT_ENABLE                   CONFIG_BT_BLE_EATT_ENABLE
+#else
+#define UC_BT_BLE_EATT_ENABLE                   FALSE
+#endif
+
+#ifdef CONFIG_BT_BLE_EATT_CHAN_NUM
+#define UC_BT_BLE_EATT_CHAN_NUM                 CONFIG_BT_BLE_EATT_CHAN_NUM
+#else
+#define UC_BT_BLE_EATT_CHAN_NUM                 3
+#endif
+
+#ifdef CONFIG_BT_BLE_EATT_MTU
+#define UC_BT_BLE_EATT_MTU                      CONFIG_BT_BLE_EATT_MTU
+#else
+#define UC_BT_BLE_EATT_MTU                      247
+#endif
+
 //SCO VOICE OVER HCI
 #ifdef CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI
 #define UC_BT_HFP_AUDIO_DATA_PATH_HCI           CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI
@@ -654,11 +847,18 @@
 #define UC_BT_HFP_AUDIO_DATA_PATH_HCI           FALSE
 #endif
 
-//Wide Band Speech
+//Wideband Speech
 #ifdef CONFIG_BT_HFP_WBS_ENABLE
 #define UC_BT_HFP_WBS_ENABLE                    CONFIG_BT_HFP_WBS_ENABLE
 #else
 #define UC_BT_HFP_WBS_ENABLE                    FALSE
+#endif
+
+//Super Wideband Speech (LC3-SWB)
+#ifdef CONFIG_BT_HFP_LC3_ENABLE
+#define UC_BT_HFP_LC3_ENABLE                    CONFIG_BT_HFP_LC3_ENABLE
+#else
+#define UC_BT_HFP_LC3_ENABLE                    FALSE
 #endif
 
 /**********************************************************
@@ -747,6 +947,12 @@
 #define UC_BT_LOG_AVRC_TRACE_LEVEL          CONFIG_BT_LOG_AVRC_TRACE_LEVEL
 #else
 #define UC_BT_LOG_AVRC_TRACE_LEVEL          UC_TRACE_LEVEL_WARNING
+#endif
+
+#ifdef CONFIG_BT_LOG_GOEPS_TRACE_LEVEL
+#define UC_BT_LOG_GOEPS_TRACE_LEVEL         CONFIG_BT_LOG_GOEPS_TRACE_LEVEL
+#else
+#define UC_BT_LOG_GOEPS_TRACE_LEVEL         UC_TRACE_LEVEL_WARNING
 #endif
 
 #ifdef CONFIG_BT_LOG_MCA_TRACE_LEVEL

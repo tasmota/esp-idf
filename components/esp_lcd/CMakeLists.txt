@@ -1,20 +1,22 @@
 idf_build_get_property(target IDF_TARGET)
 
-if(${target} STREQUAL "linux")
-    return() # This component is not supported by the POSIX/Linux simulator
-endif()
-
-set(srcs "src/esp_lcd_common.c"
-         "src/esp_lcd_panel_io.c"
-         "src/esp_lcd_panel_ssd1306.c"
-         "src/esp_lcd_panel_st7789.c"
-         "src/esp_lcd_panel_ops.c")
+set(srcs "src/esp_lcd_panel_ops.c")
 set(includes "include" "interface")
-set(priv_requires "esp_mm" "esp_psram" "esp_pm" "esp_driver_i2s" "esp_driver_dma")
-set(public_requires "esp_driver_gpio" "esp_driver_i2c" "esp_driver_spi" "esp_driver_parlio" "esp_hal_lcd")
+set(priv_includes "priv_include")
+set(public_requires "esp_hal_lcd" "esp_hal_gpio")
+set(priv_requires)
 
-if(CONFIG_SOC_DMA2D_SUPPORTED)
-    list(APPEND srcs "src/esp_async_fbcpy.c")
+if(NOT ${target} STREQUAL "linux")
+    list(APPEND srcs "src/esp_lcd_common.c"
+                     "src/esp_lcd_panel_io.c"
+                     "src/esp_lcd_panel_ssd1306.c"
+                     "src/esp_lcd_panel_st7789.c")
+    list(APPEND priv_requires "esp_mm" "esp_psram" "esp_pm" "esp_driver_dma")
+    if(${target} STREQUAL "esp32" OR ${target} STREQUAL "esp32s2")
+        # These are the only targets with I2S-I80 LCD support.
+        list(APPEND priv_requires "esp_driver_i2s")
+    endif()
+    list(APPEND public_requires "esp_driver_gpio" "esp_driver_i2c" "esp_driver_spi" "esp_driver_parlio")
 endif()
 
 if(CONFIG_SOC_I2C_SUPPORTED)
@@ -35,6 +37,9 @@ endif()
 
 if(CONFIG_SOC_LCDCAM_I80_LCD_SUPPORTED)
     list(APPEND srcs "i80/esp_lcd_panel_io_i80.c")
+    if(CONFIG_SOC_PAU_SUPPORTED)
+        list(APPEND srcs "i80/${target}/lcd_retention.c")
+    endif()
 endif()
 
 if(CONFIG_SOC_LCDCAM_RGB_LCD_SUPPORTED)
@@ -49,7 +54,18 @@ endif()
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${includes}
-                       PRIV_INCLUDE_DIRS "priv_include"
-                       PRIV_REQUIRES ${priv_requires}
+                       PRIV_INCLUDE_DIRS ${priv_includes}
                        REQUIRES ${public_requires}
+                       PRIV_REQUIRES ${priv_requires}
                        LDFRAGMENTS linker.lf)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    # GCC -fanalyzer false positives on early-return cleanup paths (see build logs with -Werror=analyzer-malloc-leak).
+    set_source_files_properties("src/esp_lcd_panel_ssd1306.c"
+                                "src/esp_lcd_panel_st7789.c"
+                                PROPERTIES COMPILE_FLAGS "-Wno-analyzer-malloc-leak")
+    if(CONFIG_SOC_I2C_SUPPORTED)
+        set_source_files_properties("i2c/esp_lcd_panel_io_i2c.c"
+                                    PROPERTIES COMPILE_FLAGS "-Wno-analyzer-malloc-leak")
+    endif()
+endif()

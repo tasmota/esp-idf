@@ -70,27 +70,35 @@ esp_err_t esp_hmac_calculate(hmac_key_id_t key_id,
 
     esp_crypto_hmac_lock_acquire();
 
-    // We also enable SHA and DS here. SHA is used by HMAC, DS will otherwise hold SHA in reset state.
+    // SHA is used by HMAC, so enable it here.
     esp_crypto_hmac_enable_periph_clk(true);
 
     esp_crypto_sha_enable_periph_clk(true);
-
-#if SOC_DIG_SIGN_SUPPORTED
-    esp_crypto_ds_enable_periph_clk(true);
-#endif
 
 #if SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
     /*  Key Manager holds the key usage selector register(efuse vs own key).
         Thus, we need to enable the Key Manager peripheral clock to ensure
         that the key usage selector register is properly set.
+        Taken after the HMAC lock (SHA/AES) so the order matches ECDSA/DS:
+        sha_aes < mpi < key_manager. Do not take it earlier: ECDSA already
+        holds MPI before KM, and reversing that here would deadlock.
      */
-    esp_crypto_key_mgr_enable_periph_clk(true);
+    esp_crypto_key_manager_lock_acquire();
+    /* Clock only: a full KM reset would drop the XTS-AES flash encryption
+       key-usage selector, and spi_flash DMA does not take the KM lock. */
+    esp_crypto_key_mgr_enable_periph_clk_no_reset(true);
 #endif /* SOC_KEY_MANAGER_HMAC_KEY_DEPLOY */
 
     hmac_hal_start();
 
     uint32_t conf_error = hmac_hal_configure(HMAC_OUTPUT_USER, key_id);
     if (conf_error) {
+        esp_crypto_sha_enable_periph_clk(false);
+        esp_crypto_hmac_enable_periph_clk(false);
+#if SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
+        esp_crypto_key_mgr_enable_periph_clk_no_reset(false);
+        esp_crypto_key_manager_lock_release();
+#endif // SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
         esp_crypto_hmac_lock_release();
         return ESP_FAIL;
     }
@@ -99,7 +107,7 @@ esp_err_t esp_hmac_calculate(hmac_key_id_t key_id,
         // If message including padding is only one block...
         // Last message block, so apply SHA-256 padding rules in software
         uint8_t block[SHA256_BLOCK_SZ];
-        uint64_t bit_len = __builtin_bswap64(message_len * 8 + 512);
+        uint64_t bit_len = __builtin_bswap64((uint64_t)message_len * 8 + 512);
 
         write_and_padd(block, message_bytes, message_len);
         // Final block: append the bit length in this block and signal padding to peripheral
@@ -126,7 +134,7 @@ esp_err_t esp_hmac_calculate(hmac_key_id_t key_id,
         size_t remaining = message_len % SHA256_BLOCK_SZ;
         // Last message block, so apply SHA-256 padding rules in software
         uint8_t block[SHA256_BLOCK_SZ];
-        uint64_t bit_len = __builtin_bswap64(message_len * 8 + 512);
+        uint64_t bit_len = __builtin_bswap64((uint64_t)message_len * 8 + 512);
 
         // If the remaining message and appended padding doesn't fit into a single block, we have to write an
         // extra block with the rest of the message and potential padding first.
@@ -148,12 +156,9 @@ esp_err_t esp_hmac_calculate(hmac_key_id_t key_id,
     hmac_hal_read_result_256(hmac);
 
 #if SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
-    esp_crypto_key_mgr_enable_periph_clk(false);
+    esp_crypto_key_mgr_enable_periph_clk_no_reset(false);
+    esp_crypto_key_manager_lock_release();
 #endif /* SOC_KEY_MANAGER_HMAC_KEY_DEPLOY */
-
-#if SOC_DIG_SIGN_SUPPORTED
-    esp_crypto_ds_enable_periph_clk(false);
-#endif
 
     esp_crypto_sha_enable_periph_clk(false);
 
@@ -185,6 +190,8 @@ esp_err_t esp_hmac_jtag_enable(hmac_key_id_t key_id, const uint8_t *token)
     }
 
     esp_crypto_hmac_lock_acquire();
+    esp_crypto_hmac_enable_periph_clk(true);
+    esp_crypto_sha_enable_periph_clk(true);
 
     ets_status = ets_jtag_enable_temporarily(token, convert_key_type(key_id));
 
@@ -196,8 +203,8 @@ esp_err_t esp_hmac_jtag_enable(hmac_key_id_t key_id, const uint8_t *token)
 
     ESP_LOGD(TAG, "HMAC computation in downstream mode is completed.");
 
+    esp_crypto_sha_enable_periph_clk(false);
     esp_crypto_hmac_enable_periph_clk(false);
-
     esp_crypto_hmac_lock_release();
 
     return err;

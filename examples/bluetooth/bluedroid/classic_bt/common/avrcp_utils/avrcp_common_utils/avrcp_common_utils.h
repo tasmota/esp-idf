@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -36,6 +36,16 @@ void bt_avrc_common_tg_evt_def_hdl(uint16_t event, void *param);
 uint8_t bt_avrc_common_alloc_tl(void);
 
 /**
+ * @brief  Remember the A2DP connection handle of the current AVRCP controller peer.
+ */
+void bt_avrc_common_ct_set_conn_hdl(esp_a2d_conn_hdl_t conn_hdl);
+
+/**
+ * @brief  A2DP connection handle saved by bt_avrc_common_ct_set_conn_hdl().
+ */
+esp_a2d_conn_hdl_t bt_avrc_common_ct_get_conn_hdl(void);
+
+/**
  * @brief  AVRCP deep copy function
  *
  * @param [in] p_dest   pointer to destination data
@@ -43,6 +53,13 @@ uint8_t bt_avrc_common_alloc_tl(void);
  * @param [in] len      data length in byte
  */
 void bt_avrc_common_copy_metadata(void *p_dest, void *p_src, int len);
+
+/**
+ * @brief  AVRCP deep free function for copied metadata
+ *
+ * @param [in] p_param  pointer to copied callback parameter
+ */
+void bt_avrc_common_free_metadata(void *p_param);
 
 /**
  * @brief  AVRCP controller get notification capabilities command

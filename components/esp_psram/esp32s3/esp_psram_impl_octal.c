@@ -23,6 +23,7 @@
 #include "esp_private/spi_flash_os.h"
 #include "esp_private/mspi_timing_tuning.h"
 #include "esp_private/esp_gpio_reserve.h"
+#include "esp_private/opi_flash_private.h"
 
 #define OPI_PSRAM_SYNC_READ             0x0000
 #define OPI_PSRAM_SYNC_WRITE            0x8080
@@ -336,14 +337,26 @@ static void s_configure_psram_ecc(void)
 #endif
 }
 
+static void s_set_flash_vendor_required_regs(void)
+{
+    if (spi_flash_is_octal_mode_enabled()) {
+        esp_opiflash_set_required_regs();
+        SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 1, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
+    } else {
+        //Flash chip requires MSPI specifically, call this function to set them
+        // Set back MSPI registers after Octal PSRAM initialization.
+        SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 0, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
+    }
+}
+
 esp_err_t esp_psram_impl_enable(void)
 {
     s_init_psram_pins();
     s_set_psram_cs_timing();
     s_configure_psram_ecc();
 
-    //enter MSPI slow mode to init PSRAM device registers
-    mspi_timing_enter_low_speed_mode(true);
+    //enter MSPI slow mode to init PSRAM device registers (early init: see mspi_timing_enter_low_speed_early)
+    mspi_timing_enter_low_speed_early();
 
     //set to variable dummy mode
     SET_PERI_REG_MASK(SPI_MEM_DDR_REG(1), SPI_MEM_SPI_FMEM_VAR_DUMMY);
@@ -359,7 +372,7 @@ esp_err_t esp_psram_impl_enable(void)
     s_init_psram_mode_reg(1, &mode_reg);
 
     if (s_check_psram_connected(1) != ESP_OK) {
-        ESP_EARLY_LOGE(TAG, "PSRAM chip is not connected, or wrong PSRAM line mode");
+        PSRAM_LOG_NOTFOUND(TAG, "PSRAM chip is not connected, or wrong PSRAM line mode");
         return ESP_ERR_NOT_SUPPORTED;
     }
 
@@ -378,7 +391,7 @@ esp_err_t esp_psram_impl_enable(void)
     //Do PSRAM timing tuning, we use SPI1 to do the tuning, and set the SPI0 PSRAM timing related registers accordingly
     mspi_timing_psram_tuning();
     //Back to the high speed mode. Flash/PSRAM clocks are set to the clock that user selected. SPI0/1 registers are all set correctly
-    mspi_timing_enter_high_speed_mode(true);
+    mspi_timing_enter_high_speed_early();
 
     /**
      * Tuning may change SPI1 regs, whereas legacy spi_flash APIs rely on these regs.
@@ -386,7 +399,7 @@ esp_err_t esp_psram_impl_enable(void)
      */
     spi_flash_set_rom_required_regs();
     //Flash chip requires MSPI specifically, call this function to set them
-    spi_flash_set_vendor_required_regs();
+    s_set_flash_vendor_required_regs();
 
     s_config_psram_spi_phases();
     return ESP_OK;

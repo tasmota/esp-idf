@@ -26,6 +26,7 @@
 #endif
 #if SOC_HMAC_SUPPORTED
 #include "esp_hmac.h"
+#include "hal/hmac_hal.h"
 #endif
 #if SOC_DIG_SIGN_SUPPORTED
 #include "esp_ds.h"
@@ -142,6 +143,20 @@ int __wrap_esp_aes_crypt_ecb(esp_aes_context *ctx,
     return err;
 }
 
+int __wrap_esp_aes_crypt_ecb_blocks(esp_aes_context *ctx,
+                                    int mode,
+                                    size_t length,
+                                    const unsigned char *input,
+                                    unsigned char *output)
+{
+    esp_crypto_sha_aes_lock_acquire();
+    esp_err_t err = esp_tee_service_call(6, SS_ESP_AES_CRYPT_ECB_BLOCKS,
+                                         (uint32_t)ctx, (uint32_t)mode, length,
+                                         (uint32_t)input, (uint32_t)output);
+    esp_crypto_sha_aes_lock_release();
+    return err;
+}
+
 int __wrap_esp_aes_crypt_ofb(esp_aes_context *ctx,
                              size_t length,
                              size_t *iv_off,
@@ -208,6 +223,11 @@ int __wrap_esp_sha_512_t_init_hash(uint16_t t)
 /* ---------------------------------------------- HMAC ------------------------------------------------- */
 
 #if SOC_HMAC_SUPPORTED
+void __wrap_esp_crypto_hmac_enable_periph_clk(bool enable)
+{
+    esp_tee_service_call(2, SS_ESP_CRYPTO_HMAC_ENABLE_PERIPH_CLK, enable);
+}
+
 esp_err_t __wrap_esp_hmac_calculate(hmac_key_id_t key_id, const void *message, size_t message_len, uint8_t *hmac)
 {
     esp_crypto_hmac_lock_acquire();
@@ -236,68 +256,19 @@ esp_err_t __wrap_esp_hmac_jtag_disable(void)
 /* ---------------------------------------------- DS ------------------------------------------------- */
 
 #if SOC_DIG_SIGN_SUPPORTED
-esp_err_t __wrap_esp_ds_sign(const void *message,
-                             const esp_ds_data_t *data,
-                             hmac_key_id_t key_id,
-                             void *signature)
+void __wrap_esp_crypto_ds_enable_periph_clk(bool enable)
 {
-    esp_crypto_ds_lock_acquire();
-    esp_err_t err = esp_tee_service_call(5, SS_ESP_DS_SIGN, message, data, key_id, signature);
-    esp_crypto_ds_lock_release();
-    return err;
+    esp_tee_service_call(2, SS_ESP_CRYPTO_DS_ENABLE_PERIPH_CLK, enable);
 }
 
-esp_err_t __wrap_esp_ds_start_sign(const void *message,
-                                   const esp_ds_data_t *data,
-                                   hmac_key_id_t key_id,
-                                   esp_ds_context_t **esp_ds_ctx)
+uint32_t __wrap_hmac_hal_config_key(hmac_hal_output_t config, uint32_t key_id)
 {
-    esp_crypto_ds_lock_acquire();
-    if (esp_ds_ctx != NULL) {
-        *esp_ds_ctx = malloc(sizeof(esp_ds_context_t));
-        if (!*esp_ds_ctx) {
-            return ESP_ERR_NO_MEM;
-        }
-    }
-    return esp_tee_service_call(5, SS_ESP_DS_START_SIGN, message, data, key_id, esp_ds_ctx);
+    return esp_tee_service_call(3, SS_HMAC_HAL_CONFIG_KEY, config, key_id);
 }
 
-bool __wrap_esp_ds_is_busy(void)
+void __wrap_hmac_hal_clean(void)
 {
-    return esp_tee_service_call(1, SS_ESP_DS_IS_BUSY);
-}
-
-esp_err_t __wrap_esp_ds_finish_sign(void *signature, esp_ds_context_t *esp_ds_ctx)
-{
-    esp_err_t err = esp_tee_service_call(3, SS_ESP_DS_FINISH_SIGN, signature, esp_ds_ctx);
-    if (err != ESP_ERR_INVALID_ARG) {
-        free(esp_ds_ctx);
-    }
-    esp_crypto_ds_lock_release();
-    return err;
-}
-
-esp_err_t __wrap_esp_ds_encrypt_params(esp_ds_data_t *data,
-                                       const void *iv,
-                                       const esp_ds_p_data_t *p_data,
-                                       const void *key)
-{
-    esp_crypto_sha_aes_lock_acquire();
-    esp_err_t err = esp_tee_service_call(5, SS_ESP_DS_ENCRYPT_PARAMS, data, iv, p_data, key);
-    esp_crypto_sha_aes_lock_release();
-    return err;
-}
-
-esp_err_t __wrap_esp_ds_encrypt_params_using_key_type(esp_ds_data_t *data,
-                                                      const void *iv,
-                                                      const esp_ds_p_data_t *p_data,
-                                                      const void *key,
-                                                      esp_ds_key_type_t key_type)
-{
-    esp_crypto_sha_aes_lock_acquire();
-    esp_err_t err = esp_tee_service_call(6, SS_ESP_DS_ENCRYPT_PARAMS_USING_KEY_TYPE, data, iv, p_data, key, key_type);
-    esp_crypto_sha_aes_lock_release();
-    return err;
+    esp_tee_service_call(1, SS_HMAC_HAL_CLEAN);
 }
 #endif
 
@@ -310,7 +281,7 @@ void __wrap_esp_crypto_mpi_enable_periph_clk(bool enable)
 }
 #endif
 
-/* ---------------------------------------------- ECC ------------------------------------------------- */
+/* ---------------------------------------------- ECC/ECDSA ------------------------------------------------- */
 
 #if SOC_ECC_SUPPORTED
 int __wrap_esp_ecc_point_multiply(const ecc_point_t *point, const uint8_t *scalar, ecc_point_t *result, bool verify_first)
@@ -334,6 +305,11 @@ int __wrap_esp_ecc_point_verify(const ecc_point_t *point)
 void __wrap_esp_crypto_ecc_enable_periph_clk(bool enable)
 {
     esp_tee_service_call(2, SS_ESP_CRYPTO_ECC_ENABLE_PERIPH_CLK, enable);
+}
+
+void __wrap_esp_crypto_ecdsa_enable_periph_clk(bool enable)
+{
+    esp_tee_service_call(2, SS_ESP_CRYPTO_ECDSA_ENABLE_PERIPH_CLK, enable);
 }
 #endif
 
@@ -489,6 +465,16 @@ void IRAM_ATTR __wrap_mspi_timing_enter_low_speed_mode(bool control_spi1)
 void IRAM_ATTR __wrap_mspi_timing_enter_high_speed_mode(bool control_spi1)
 {
     esp_tee_service_call(2, SS_MSPI_TIMING_ENTER_HIGH_SPEED_MODE, control_spi1);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_enter_low_speed_early(void)
+{
+    esp_tee_service_call(1, SS_MSPI_TIMING_ENTER_LOW_SPEED_EARLY);
+}
+
+void IRAM_ATTR __wrap_mspi_timing_enter_high_speed_early(void)
+{
+    esp_tee_service_call(1, SS_MSPI_TIMING_ENTER_HIGH_SPEED_EARLY);
 }
 
 void IRAM_ATTR __wrap_mspi_timing_change_speed_mode_cache_safe(bool switch_down)

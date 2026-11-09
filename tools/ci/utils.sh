@@ -104,7 +104,7 @@ function run_cmd() {
 }
 
 function pytest_for_ut() {
-  pytest_args="-c NUL -p no:idf-ci -p no:pytest_embedded"
+  pytest_args="-c /dev/null --rootdir . --confcutdir . -p no:idf-ci -p no:pytest_embedded"
 
   if [ -n "${CI_JOB_ID-}" ]; then
     if [ -z "${KNOWN_FAILURE_CASES_FILE_NAME-}" ]; then
@@ -163,39 +163,4 @@ function join_by {
   if shift 2; then
     printf %s "$f" "${@/#/$d}"
   fi
-}
-
-function is_based_on_commits() {
-  # This function would accept space-separated args as multiple commits.
-  # The return value would be 0 if current HEAD is based on any of the specified commits.
-  #
-  # In our CI, we use environment variable $REQUIRED_ANCESTOR_COMMITS to declare the ancestor commits.
-  # Please remember to set one commit for each release branch.
-
-  commits=$*
-  if [[ -z $commits ]]; then
-    info "Not specifying commits that branches should be based on, skipping check..."
-    return 0
-  fi
-
-  commits_str="$(join_by " or " $commits)" # no doublequotes here, passing array
-
-  info "Checking if current branch is based on $commits_str..."
-  for i in $commits; do
-    if git merge-base --is-ancestor "$i" HEAD >/dev/null 2>&1; then
-      info "Current branch is based on $i"
-      return 0
-    else
-      info "Current branch is not based on $i"
-    fi
-  done
-
-  error "The base commit of your branch is too old."
-  error "The branch should be more recent than either of the following commits:"
-  error "  $commits_str"
-  error "To fix the issue:"
-  error " - If your merge request is 'Draft', or has conflicts with the target branch, rebase it to the latest master or release branch"
-  error " - Otherwise, simply run a new pipeline."
-
-  return 1
 }

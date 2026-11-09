@@ -90,6 +90,7 @@ TWAI 是一种适用于汽车和工业应用的高可靠性的多主机实时串
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_loopback` 使能自收发模式，节点会收到自己发送的报文（如果配置了过滤器则还需要符合过滤规则），同时也会发送到总线。
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_listen_only` 配置为监听模式，节点只接收，不发送任何显性位，包括 ACK 和错误帧。
     - :cpp:member:`twai_onchip_node_config_t::flags::no_receive_rtr` 使用过滤器时是否同时过滤掉符合 ID 规则的远程帧。
+    - :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx` 使能定时发送。该功能必须配置非零的 :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz`。
 
 函数 :cpp:func:`twai_node_enable` 将启动 TWAI 控制器，此时 TWAI 控制器就连接到了总线，可以向总线发送报文。如果收到了总线上其他节点发送的报文，或者检测到了总线错误，也将产生相应事件。
 
@@ -134,6 +135,7 @@ TWAI 报文有多种类型，由报头指定。一个典型的数据帧报文主
 - :cpp:member:`twai_frame_t::header::fdf` 报文为 FD 格式，支持最大数据长度 64 字节。
 - :cpp:member:`twai_frame_t::header::brs` 发送报文时在数据段使用独立的波特率。
 - :cpp:member:`twai_frame_t::header::esi` 对于收到的报文，指示发送节点的错误状态。
+- :cpp:member:`twai_frame_t::tx_queue_priority` 本地发送队列优先级，详情请参阅 `发送队列优先级`_。
 
 接收报文
 --------
@@ -175,10 +177,40 @@ TWAI 驱动支持为每个成功接收的报文创建一个 64 位的时间戳�
 
 节点时间继承自系统时间，即时间起点同为芯片上电启动时开始计时，期间不受驱动停止/启动/BUS_OFF 状态的影响。
 
+.. only:: SOC_TWAI_FD_SUPPORTED
+
+    定时发送
+    --------
+
+    {IDF_TARGET_NAME} TWAI 支持定时发送报文。创建节点时使能 :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx` 并设置 :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz`，然后在调用 :cpp:func:`twai_node_transmit` 前填写 :cpp:member:`twai_frame_t::header::trigger_time`。触发时间使用与接收报文 timestamp 相同的时间基准。
+
+    .. code:: c
+
+        twai_onchip_node_config_t node_config = {
+            .io_cfg.tx = 4,
+            .io_cfg.rx = 5,
+            .bit_timing.bitrate = 500000,
+            .timestamp_resolution_hz = 1000,  // 1 tick = 1 ms
+            .tx_queue_depth = 4,
+            .flags.enable_scheduled_tx = true,
+        };
+
+        twai_frame_t tx_msg = {
+            .header.id = 0x10,
+            .header.trigger_time = 2000,  // 当节点 timestamp 到达 2000 ticks 时发送
+        };
+        ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &tx_msg, 0));
+
+    .. note::
+
+        如果报文准备发送时，其触发时间已经到达或已经过去，驱动会立即开始发送该报文。多个定时报文同时排队时，驱动按软件提交顺序处理，不会按照 :cpp:member:`twai_frame_t::header::trigger_time` 对队列重新排序。因此，后提交但触发时间更早的报文不会越过先提交的报文。
+
 停止和删除节点
 --------------
 
 当不再需要使用 TWAI 时，应该调用 :cpp:func:`twai_node_delete` 函数来释放软硬件资源。删除前请确保 TWAI 已经处于停止状态。
+
+注意：由于驱动设计的原因，请不要在 FreeRTOS 定时器任务 (Timer task) 中调用删除函数。
 
 进阶功能
 ========
@@ -213,6 +245,13 @@ TWAI 驱动支持在中断服务程序 (ISR) 中发送报文。这对于需要�
 
 .. note::
     在 ISR 中调用 :cpp:func:`twai_node_transmit` 时，``timeout`` 参数将被忽略，函数不会阻塞。如果发送队列已满，函数将立即返回错误。应用程序需要自行处理队列已满的情况。同样，``twai_frame_t`` 及其 ``buffer`` 指向的内存必须在 **该传输** 完成之前保持有效。通过 :cpp:member:`twai_tx_done_event_data_t::done_tx_frame` 指针可得知该次完成的报文。
+
+发送队列优先级
+--------------
+
+TWAI 驱动支持通过 :cpp:member:`twai_frame_t::tx_queue_priority` 设置本地发送队列优先级。当驱动发送队列中有多个待发送报文时，``tx_queue_priority`` 值更高的报文会优先出队开始发送。优先级相同的报文保持入队顺序发送。
+
+该优先级只影响驱动的本地发送队列，不会被发送到 TWAI 总线上，也不会替代 TWAI 总线仲裁。若控制器有多个硬件发送缓存（例如 esp32c5 的 4 个硬件发送缓存），已经缓存的报文也不会被新入队的高优先级报文抢占。报文到达总线后，仲裁仍由帧 ID 决定，ID 越小，总线优先级越高。控制器已经开始发送的报文不会被新入队的高优先级报文抢占。
 
 位时序自定义
 -------------
@@ -332,7 +371,7 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 关于低功耗
 ----------
 
-当启用电源管理 :ref:`CONFIG_PM_ENABLE` 时，系统在进入睡眠模式前可能会调整或关闭时钟源，从而导致 TWAI 出错。为了防止这种情况发生，驱动内部使用电源锁管理。当调用 :cpp:func:`twai_node_enable` 函数后，该锁将被激活，确保系统不会进入睡眠模式，从而保持 TWAI 功能正常。如果需要降低功耗，可以调用 :cpp:func:`twai_node_disable` 函数来释放电源管理锁，使系统能够进入睡眠模式，睡眠期间 TWAI 控制器也将停止工作。
+当启用电源管理 :menuitem:`CONFIG_PM_ENABLE` 时，系统在进入睡眠模式前可能会调整或关闭时钟源，从而导致 TWAI 出错。为了防止这种情况发生，驱动内部使用电源锁管理。当调用 :cpp:func:`twai_node_enable` 函数后，该锁将被激活，确保系统不会进入睡眠模式，从而保持 TWAI 功能正常。如果需要降低功耗，可以调用 :cpp:func:`twai_node_disable` 函数来释放电源管理锁，使系统能够进入睡眠模式，睡眠期间 TWAI 控制器也将停止工作。
 
 .. only:: SOC_TWAI_SUPPORT_SLEEP_RETENTION
 
@@ -341,12 +380,12 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 
     {IDF_TARGET_NAME} 支持在 **Light Sleep** 期间将 TWAI 控制器断电以进一步降低功耗，并在唤醒后自动恢复。即程序不需要在 **Light Sleep** 唤醒后重新配置 TWAI。
 
-    启用选项 :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，并在初始化 TWAI 节点时，将 :cpp:member:`twai_onchip_node_config_t::flags::sleep_allow_pd` 设置为 ``true`` 即可启用该功能，否则 TWAI 控制器在 **Light Sleep** 期间将保持供电。它可以帮助降低轻度睡眠时的功耗，但需要花费一些额外的存储来保存寄存器的配置。
+    启用选项 :menuitem:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`，并在初始化 TWAI 节点时，将 :cpp:member:`twai_onchip_node_config_t::flags::sleep_allow_pd` 设置为 ``true`` 即可启用该功能，否则 TWAI 控制器在 **Light Sleep** 期间将保持供电。它可以帮助降低轻度睡眠时的功耗，但需要花费一些额外的存储来保存寄存器的配置。
 
 关于 Cache 安全
 ---------------
 
-在进行 Flash 写操作时，为了避免 Cache 从 Flash 加载指令和数据时出现错误，系统会暂时禁用 Cache 功能。这会导致存放在 Flash 上的中断处理程序在此期间无法响应。如果希望在 Cache 被禁用期间，中断处理程序仍能正常运行，可以启用 :ref:`CONFIG_TWAI_ISR_CACHE_SAFE` 选项。
+在进行 Flash 写操作时，为了避免 Cache 从 Flash 加载指令和数据时出现错误，系统会暂时禁用 Cache 功能。这会导致存放在 Flash 上的中断处理程序在此期间无法响应。如果希望在 Cache 被禁用期间，中断处理程序仍能正常运行，可以启用 :menuitem:`CONFIG_TWAI_ISR_CACHE_SAFE` 选项。
 
 .. note::
 
@@ -360,9 +399,9 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 关于性能
 --------
 
-为了提升中断处理的实时响应能力， 驱动提供了 :ref:`CONFIG_TWAI_ISR_IN_IRAM` 选项。启用该选项后，中断处理程序和接收操作将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令带来的延迟。
+为了提升中断处理的实时响应能力， 驱动提供了 :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` 选项。启用该选项后，中断处理程序和接收操作将被放置在内部 RAM 中运行，从而减少了从 Flash 加载指令带来的延迟。
 
-对于需要高性能发送操作的应用，驱动还提供了 :ref:`CONFIG_TWAI_IO_FUNC_IN_IRAM` 选项，用于将发送函数放置在 IRAM 中。这对于在用户任务中频繁调用 :cpp:func:`twai_node_transmit` 的时间关键应用特别有效。
+对于需要高性能发送操作的应用，驱动还提供了 :menuitem:`CONFIG_TWAI_IO_FUNC_IN_IRAM` 选项，用于将发送函数放置在 IRAM 中。这对于在用户任务中频繁调用 :cpp:func:`twai_node_transmit` 的时间关键应用特别有效。
 
 .. note::
 
@@ -377,8 +416,8 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 - 默认日志等级设置为 ``ESP_LOG_INFO``，以平衡调试信息和性能。
 - 关闭以下驱动优化选项：
 
-    - :ref:`CONFIG_TWAI_ISR_IN_IRAM` - 中断处理程序不放入 IRAM。
-    - :ref:`CONFIG_TWAI_ISR_CACHE_SAFE` - 不启用 Cache 安全选项。
+    - :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` - 中断处理程序不放入 IRAM。
+    - :menuitem:`CONFIG_TWAI_ISR_CACHE_SAFE` - 不启用 Cache 安全选项。
 
 **注意，以下数据仅供参考，不是精确值，在不同芯片上会有所出入。**
 
@@ -392,7 +431,7 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 | soc             | 64         | 0     | 0    | 0     | 0     | 64    | 64      | 0     |
 +-----------------+------------+-------+------+-------+-------+-------+---------+-------+
 
-打开 :ref:`CONFIG_TWAI_ISR_IN_IRAM` 优化选项的消耗情况：
+打开 :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` 优化选项的消耗情况：
 
 +-----------------+------------+-------+------+-------+-------+-------+---------+-------+
 | Component Layer | Total Size | DIRAM | .bss | .data | .text | Flash | .rodata | .text |
@@ -409,7 +448,7 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
 其他 Kconfig 选项
 -----------------
 
-- :ref:`CONFIG_TWAI_ENABLE_DEBUG_LOG` 选项允许强制启用 TWAI 驱动的所有调试日志，无论全局日志级别设置如何。启用此选项可以帮助开发人员在调试过程中获取更详细的日志信息，从而更容易定位和解决问题。
+- :menuitem:`CONFIG_TWAI_ENABLE_DEBUG_LOG` 选项允许强制启用 TWAI 驱动的所有调试日志，无论全局日志级别设置如何。启用此选项可以帮助开发人员在调试过程中获取更详细的日志信息，从而更容易定位和解决问题。
 
 应用示例
 ========
@@ -420,6 +459,7 @@ TWAI控制器能够检测由于总线干扰产生的/损坏的不符合帧格式
     - :example:`peripherals/twai/twai_error_recovery` 演示了总线错误上报，节点状态变化等事件信息，以及如何从离线状态恢复节点并重新进行通信。
     - :example:`peripherals/twai/twai_network` 通过发送、监听， 2 个不同角色的节点，演示了如何使用驱动程序进行单次的和大量的数据发送，以及配置过滤器以接收这些数据。
     - :example:`peripherals/twai/cybergear` 演示了如何通过 TWAI 接口控制 XiaoMi CyberGear 电机。
+    - :example:`peripherals/twai/usb_twai_adapter` 演示了如何制作一个 USB-CAN 适配器并将其枚举为 SocketCAN 设备。
 
 API 参考
 ========

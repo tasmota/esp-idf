@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "tmap_peripheral.h"
@@ -113,7 +112,7 @@ static void read_uri_schemes_string_cb(esp_ble_conn_t *conn,
     }
 
     if (i >= sizeof(remote_uri)) {
-        ESP_LOGW(TAG, "Cannot store URI of length %u: %s", i, value);
+        ESP_LOGW(TAG, "Cannot store URI of length %zu: %s", i, value);
         return;
     }
 

@@ -1,0 +1,38 @@
+# Documentation: .gitlab/ci/README.md#manifest-file-to-control-the-buildtest-apps
+
+examples/system/tracing/app_trace_basic:
+  depends_components:
+    - esp_trace
+    - app_trace
+
+examples/system/tracing/esp_trace_custom_library:
+  disable:
+    - if: SOC_USB_SERIAL_JTAG_SUPPORTED != 1
+      reason: example transport is USB Serial JTAG
+  depends_components:
+    - esp_trace
+    - freertos
+
+examples/system/tracing/function_tracing:
+  depends_components:
+    - esp_trace
+    - app_trace
+
+examples/system/tracing/gcov:
+  depends_components:
+    - esp_trace
+    - app_trace
+
+examples/system/tracing/sysview_tracing:
+  disable:
+    - if: SOC_GPTIMER_SUPPORTED != 1
+  depends_components:
+    - esp_trace
+    - app_trace
+
+examples/system/tracing/sysview_tracing_heap_log:
+  disable:
+    - if: SOC_GPTIMER_SUPPORTED != 1
+  depends_components:
+    - esp_trace
+    - app_trace

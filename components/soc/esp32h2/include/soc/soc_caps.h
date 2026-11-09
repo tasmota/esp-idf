@@ -87,6 +87,7 @@
 #define SOC_BOD_SUPPORTED               1
 #define SOC_VBAT_SUPPORTED              1
 #define SOC_APM_SUPPORTED               1 /*!< Support for APM peripheral */
+#define SOC_RISCV_TRACE_SUPPORTED       1
 #define SOC_PMU_SUPPORTED               1
 #define SOC_RTC_TIMER_SUPPORTED         1
 #define SOC_LP_AON_SUPPORTED            1
@@ -124,29 +125,17 @@
 #define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
 #define SOC_ADC_MONITOR_SUPPORTED               1
-#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
 #define SOC_ADC_DMA_SUPPORTED                   1
 #define SOC_ADC_PERIPH_NUM                      (1U)
-#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (5)
-#define SOC_ADC_MAX_CHANNEL_NUM                 (5)
 #define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
-#define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
 #define SOC_ADC_PATT_LEN_MAX                    (8) /*!< One pattern table, each contains 8 items. Each item takes 1 byte */
-#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
-#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
+#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MONITOR_NUM                (2)
 #define SOC_ADC_DIGI_RESULT_BYTES               (4)
 #define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-/*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval<= 4095 */
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
-
-/*!< RTC */
-#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
-#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
@@ -163,12 +152,17 @@
 /*-------------------------- APB BACKUP DMA CAPS -------------------------------*/
 #define SOC_APB_BACKUP_DMA              (0)
 
+/*-------------------------- ANALOG COMPARATOR CAPS -------------------------------*/
+#define SOC_ANA_CMPR_SUPPORT_AUTO_SCAN         (1)
+
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 #define SOC_BROWNOUT_RESET_SUPPORTED 1
 
 /*-------------------------- CACHE CAPS --------------------------------------*/
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 2   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (1U)
@@ -406,6 +400,8 @@
 #define SOC_EFUSE_DIS_DIRECT_BOOT 1
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
 #define SOC_EFUSE_DIS_ICACHE 1
+/* Capability to disable the MSPI access in download mode */
+#define SOC_EFUSE_DIS_DOWNLOAD_MSPI 1
 #define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // XTS-AES and ECDSA key purposes not supported for this block
 #if SOC_CAPS_ECO_VER < 102
 #define SOC_EFUSE_ECDSA_USE_HARDWARE_K 1 // Force use hardware TRNG supplied K for ECDSA
@@ -437,7 +433,7 @@
 #define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
 
 /*------------------------- ECDSA CAPS -------------------------*/
-#define SOC_ECDSA_USES_MPI                  (1)
+#define SOC_ECDSA_USES_MPI                  (1)  /*!< ECDSA reuses the MPI operand memory below rev v1.2, and shares MPI's reset domain on every revision */
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
@@ -466,7 +462,6 @@
 
 /*-------------------------- EXTERNAL COEXISTENCE CAPS -------------------------------------*/
 #define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE ADVANCED EXTERNAL COEXISTENCE CAPS */
-#define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
@@ -485,11 +480,9 @@
 
 #define SOC_PM_PAU_LINK_NUM                 (4)
 #define SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR   (1)
-#define SOC_PM_PAU_REGDMA_LINK_WIFIMAC      (1)
+#define SOC_PM_PAU_REGDMA_LINK_MODEM      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
-
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
 
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN        (1)
 #define SOC_PM_CPU_RETENTION_BY_SW                 (1)
@@ -539,3 +532,8 @@
 
 /*------------------------------------- DEBUG CAPS -------------------------------------*/
 #define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
+
+/*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (100) /*!< Processor Trace v1.0 */
+#define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (5) /*!< Bits in the exception cause field (ecause_width_p) */

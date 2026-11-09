@@ -24,6 +24,7 @@
 #define ESP_ROM_HAS_NEWLIB                  (1) // ROM has newlib (at least parts of it) functions included
 #define ESP_ROM_HAS_NEWLIB_NANO_FORMAT      (1) // ROM has the newlib nano version of formatting functions
 #define ESP_ROM_HAS_NEWLIB_32BIT_TIME       (1) // ROM was compiled with 32 bit time_t
+#define ESP_ROM_HAS_LIBGCC                  (1) // ROM has libgcc functions included
 #define ESP_ROM_NEEDS_SET_CACHE_MMU_SIZE    (1) // ROM needs to set cache MMU size according to instruction and rodata for flash mmap
 #define ESP_ROM_RAM_APP_NEEDS_MMU_INIT      (1) // ROM doesn't init cache MMU when it's a RAM APP, needs MMU hal to init
 #define ESP_ROM_HAS_SW_FLOAT                (1) // ROM has libgcc software floating point emulation functions
@@ -33,3 +34,4 @@
 #define ESP_ROM_CONSOLE_OUTPUT_SECONDARY    (1) // The console output functions will also output to the USB-serial secondary console
 #define ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY  (1) // ROM mem/str functions are not optimized well for misaligned memory access.
 #define ESP_ROM_HAS_REGI2C_IMPL             (1) // ROM has the implementation of REGI2C read/write functions
+#define ESP_ROM_BOOTLOADER_OFFSET_FLASH     (0x0) // Bootloader offset in flash determined by the ROM bootloader

@@ -6,6 +6,13 @@ from pytest_embedded_idf.utils import idf_parametrize
 from pytest_embedded_idf.utils import soc_filtered_targets
 
 
+def get_flash_encryption_marks(target: str) -> tuple[pytest.MarkDecorator, ...]:
+    if target == 'esp32s3':
+        return (pytest.mark.flash_encryption_f4r8,)
+
+    return (pytest.mark.flash_encryption,)
+
+
 @pytest.mark.generic
 @pytest.mark.parametrize(
     'config',
@@ -19,27 +26,15 @@ def test_i80_lcd(dut: Dut) -> None:
     dut.run_all_single_board_cases()
 
 
-@pytest.mark.generic
 @pytest.mark.parametrize(
-    'config, skip_autoflash',
+    'config, target',
     [
-        ('virt_flash_enc', 'y'),
+        pytest.param('flash_enc', target, marks=get_flash_encryption_marks(target))
+        for target in soc_filtered_targets(
+            'SOC_LCD_I80_SUPPORTED == 1 and SOC_PSRAM_DMA_CAPABLE == 1 and SOC_FLASH_ENC_SUPPORTED == 1'
+        )
     ],
     indirect=True,
 )
-@idf_parametrize(
-    'target',
-    soc_filtered_targets('SOC_LCD_I80_SUPPORTED == 1 and SOC_FLASH_ENC_SUPPORTED == 1'),
-    indirect=['target'],
-)
-def test_i80_lcd_with_virt_flash_enc(dut: Dut) -> None:
-    print(' - Erase flash')
-    dut.serial.erase_flash()
-
-    print(' - Start app (flash partition_table and app)')
-    dut.serial.write_flash_no_enc()
-    dut.expect('Loading virtual efuse blocks from real efuses')
-    dut.expect('Checking flash encryption...')
-    dut.expect('Generating new flash encryption key...')
-
+def test_i80_lcd_with_flash_encryption(dut: Dut) -> None:
     dut.run_all_single_board_cases()

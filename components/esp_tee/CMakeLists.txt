@@ -9,7 +9,7 @@ idf_build_get_property(target IDF_TARGET)
 # ESP-TEE is currently supported only on the ESP32-C6, H2, C5 and C61 SoCs
 set(SUPPORTED_TARGETS "esp32c6" "esp32h2" "esp32c5" "esp32c61")
 if(NOT target IN_LIST SUPPORTED_TARGETS)
-    message(STATUS "ESP-TEE is currently supported only on the ${SUPPORTED_TARGETS} SoCs")
+    # ESP-TEE Kconfig is gated on the supported targets; nothing to register elsewhere.
     return()
 endif()
 
@@ -19,6 +19,7 @@ elseif(esp_tee_build)
     # TEE build currently only uses the shared headers.
     idf_component_register(INCLUDE_DIRS include)
 else()
+    set(srcs)
     if(CONFIG_SECURE_ENABLE_TEE)
         if(NOT CMAKE_BUILD_EARLY_EXPANSION)
             # Add custom flash target for TEE binary
@@ -81,7 +82,7 @@ else()
     idf_component_register(INCLUDE_DIRS include
                            SRCS ${srcs}
                            PRIV_REQUIRES efuse esp_hal_wdt esp_security esp_stdio
-                                         esp_system esptool_py mbedtls spi_flash)
+                                         esp_system esptool_py mbedtls spi_flash esp_mspi esp_hal_cache)
     if(CONFIG_SECURE_ENABLE_TEE)
         set(EXTRA_LINK_FLAGS)
         list(APPEND EXTRA_LINK_FLAGS "-u esp_tee_app_config")
@@ -123,18 +124,26 @@ if(CONFIG_SECURE_ENABLE_TEE AND NOT esp_tee_build)
         list(APPEND exclude_srv "attestation")
     endif()
 
+    # The parser uses OptionEatAll, so each flag consumes all following values and
+    # the CMake lists can be passed directly. --exclude behaves like nargs='+', so
+    # omit it entirely when empty (a bare --exclude would error / swallow --wrap).
+    set(exclude_args)
+    if(exclude_srv)
+        set(exclude_args "--exclude" ${exclude_srv})
+    endif()
+
     idf_build_get_property(secure_service_headers_dir SECURE_SERVICE_HEADERS_DIR)
     execute_process(
         COMMAND python ${secure_service_yml_parser_py}
         "--sec_srv" ${secure_service_yml}
-        "--exclude" ${exclude_srv}
+        ${exclude_args}
         WORKING_DIRECTORY ${secure_service_headers_dir}
     )
 
     execute_process(
         COMMAND python ${secure_service_yml_parser_py}
         "--sec_srv" ${secure_service_yml}
-        "--exclude" ${exclude_srv} "--wrap"
+        ${exclude_args} "--wrap"
         OUTPUT_VARIABLE wrap_list
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         OUTPUT_STRIP_TRAILING_WHITESPACE

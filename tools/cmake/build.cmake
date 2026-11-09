@@ -65,6 +65,17 @@ function(idf_build_unset_property property)
     idf_build_set_property(__BUILD_PROPERTIES "${build_properties}")
 endfunction()
 
+function(__component_manager_get_command var)
+    idf_build_get_property(python PYTHON)
+    if(DEFINED ENV{IDF_COMPONENT_WRAPPER} AND NOT "$ENV{IDF_COMPONENT_WRAPPER}" STREQUAL "")
+        set(component_manager_cmd
+            "${python}" "$ENV{IDF_COMPONENT_WRAPPER}" "idf_component_manager.prepare_components")
+    else()
+        set(component_manager_cmd "${python}" "-m" "idf_component_manager.prepare_components")
+    endif()
+    set(${var} ${component_manager_cmd} PARENT_SCOPE)
+endfunction()
+
 # idf_build_replace_option_from_property
 #
 # @brief Replace specified option with new one in a given property.
@@ -154,7 +165,6 @@ function(__build_get_idf_git_revision)
     endif()
     # cut IDF_VER to required 32 characters.
     string(SUBSTRING "${idf_ver_t}" 0 31 idf_ver)
-    idf_build_set_property(COMPILE_DEFINITIONS "IDF_VER=\"${idf_ver}\"" APPEND)
     git_submodule_check("${idf_path}")
     idf_build_set_property(IDF_VER ${idf_ver})
 endfunction()
@@ -171,9 +181,7 @@ function(__build_set_default_build_specifications)
     unset(c_compile_options)
     unset(cxx_compile_options)
 
-    list(APPEND compile_definitions "_GLIBCXX_USE_POSIX_SEMAPHORE"  # These two lines enable libstd++ to use
-                                    "_GLIBCXX_HAVE_POSIX_SEMAPHORE" # posix-semaphores from components/pthread
-                                    "_GNU_SOURCE")
+    list(APPEND compile_definitions "_GNU_SOURCE")
 
     list(APPEND compile_options     "-ffunction-sections"
                                     "-fdata-sections"
@@ -200,8 +208,8 @@ function(__build_set_default_build_specifications)
     if(NOT IDF_TARGET STREQUAL "linux")
         # Building for chip targets: we use a known version of the toolchain.
         # Use latest supported versions.
-        # For Linux target -std settings, refer to the __linux_build_set_lang_version
-        # function, which must be called after project().
+        # For Linux target -std settings, refer to the linux component's
+        # CMakeLists.txt, which checks the host compiler support.
         # Please update docs/en/api-guides/c.rst, docs/en/api-guides/cplusplus.rst and
         # tools/test_apps/system/cxx_build_test/main/test_cxx_standard.cpp when changing this.
         list(APPEND c_compile_options   "-std=gnu23")
@@ -212,54 +220,6 @@ function(__build_set_default_build_specifications)
     idf_build_set_property(COMPILE_OPTIONS "${compile_options}" APPEND)
     idf_build_set_property(C_COMPILE_OPTIONS "${c_compile_options}" APPEND)
     idf_build_set_property(CXX_COMPILE_OPTIONS "${cxx_compile_options}" APPEND)
-endfunction()
-
-function(__linux_build_set_lang_version)
-    # This must be called after the project() function when languages are
-    # enabled in CMake. Refer to
-    # https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html#languages
-    # for more information. We use language-specific functions such as
-    # check_c_compiler_flag here. Remember, we cannot use enable_language()
-    # because it must not be invoked before the first call to project().
-    # Refer to policy CMP0165 for more details.
-    if(NOT IDF_TARGET STREQUAL "linux")
-        return()
-    endif()
-
-    # Building for Linux target, fall back to an older version of the standard
-    # if the preferred one is not supported by the compiler.
-    set(preferred_c_versions gnu23 gnu17 gnu11 gnu99)
-    set(ver_found FALSE)
-    foreach(c_version ${preferred_c_versions})
-        check_c_compiler_flag("-std=${c_version}" ver_${c_version}_supported)
-        if(ver_${c_version}_supported)
-            set(c_std ${c_version})
-            set(ver_found TRUE)
-            break()
-        endif()
-    endforeach()
-    if(NOT ver_found)
-        message(FATAL_ERROR "Failed to set C language standard to one of the supported versions: "
-                            "${preferred_c_versions}. Please upgrade the host compiler.")
-    endif()
-
-    set(preferred_cxx_versions gnu++26 gnu++2b gnu++20 gnu++2a gnu++17 gnu++14)
-    set(ver_found FALSE)
-    foreach(cxx_version ${preferred_cxx_versions})
-        check_cxx_compiler_flag("-std=${cxx_version}" ver_${cxx_version}_supported)
-        if(ver_${cxx_version}_supported)
-            set(cxx_std ${cxx_version})
-            set(ver_found TRUE)
-            break()
-        endif()
-    endforeach()
-    if(NOT ver_found)
-        message(FATAL_ERROR "Failed to set C++ language standard to one of the supported versions: "
-                            "${preferred_cxx_versions}. Please upgrade the host compiler.")
-    endif()
-
-    idf_build_set_property(C_COMPILE_OPTIONS "-std=${c_std}" APPEND)
-    idf_build_set_property(CXX_COMPILE_OPTIONS "-std=${cxx_std}" APPEND)
 endfunction()
 
 #
@@ -293,10 +253,10 @@ function(__build_init idf_path)
 
     # Set the Python path (which may be passed in via -DPYTHON=) and store in a build property
     set_default(PYTHON "python")
-    file(TO_CMAKE_PATH ${PYTHON} PYTHON)
-    idf_build_set_property(PYTHON ${PYTHON})
+    file(TO_CMAKE_PATH "${PYTHON}" PYTHON)
+    idf_build_set_property(PYTHON "${PYTHON}")
 
-    idf_build_set_property(IDF_PATH ${idf_path})
+    idf_build_set_property(IDF_PATH "${idf_path}")
 
     idf_build_set_property(__PREFIX idf)
     idf_build_set_property(__CHECK_PYTHON 1)
@@ -307,14 +267,14 @@ function(__build_init idf_path)
     # Add internal components to the build
     idf_build_get_property(idf_path IDF_PATH)
     idf_build_get_property(prefix __PREFIX)
-    file(GLOB component_dirs ${idf_path}/components/*)
+    file(GLOB component_dirs "${idf_path}/components/*")
     list(SORT component_dirs)
     foreach(component_dir ${component_dirs})
         # A potential component must be a directory
-        if(IS_DIRECTORY ${component_dir})
-            __component_dir_quick_check(is_component ${component_dir})
+        if(IS_DIRECTORY "${component_dir}")
+            __component_dir_quick_check(is_component "${component_dir}")
             if(is_component)
-                __component_add(${component_dir} ${prefix} "idf_components")
+                __component_add("${component_dir}" ${prefix} "idf_components")
             endif()
         endif()
     endforeach()
@@ -359,6 +319,7 @@ function(idf_build_component component_dir)
 
     # component_source must be one of the following (sorted by the override order):
     set(valid_component_sources "idf_components"
+                              "idf_managed_components"
                               "project_managed_components"
                               "project_extra_components"
                               "project_components")
@@ -465,7 +426,7 @@ function(__build_write_properties output_file)
         idf_build_get_property(val ${property})
         set(build_properties_text "${build_properties_text}\nset(${property} \"${val}\")")
     endforeach()
-    file(WRITE ${output_file} "${build_properties_text}")
+    file(WRITE "${output_file}" "${build_properties_text}")
 endfunction()
 
 #
@@ -496,7 +457,7 @@ macro(__build_process_project_includes)
     # Include the sdkconfig cmake file, since the following operations require
     # knowledge of config values.
     idf_build_get_property(sdkconfig_cmake SDKCONFIG_CMAKE)
-    include(${sdkconfig_cmake})
+    include("${sdkconfig_cmake}")
 
     # Make each build property available as a read-only variable
     idf_build_get_property(build_properties __BUILD_PROPERTIES)
@@ -512,11 +473,11 @@ macro(__build_process_project_includes)
         __component_get_property(dir ${component_target} COMPONENT_DIR)
         __component_get_property(_name ${component_target} COMPONENT_NAME)
         set(COMPONENT_NAME ${_name})
-        set(COMPONENT_DIR ${dir})
-        set(COMPONENT_PATH ${dir})  # this is deprecated, users are encouraged to use COMPONENT_DIR;
+        set(COMPONENT_DIR "${dir}")
+        set(COMPONENT_PATH "${dir}")  # this is deprecated, users are encouraged to use COMPONENT_DIR;
                                     # retained for compatibility
-        if(EXISTS ${COMPONENT_DIR}/project_include.cmake)
-            include(${COMPONENT_DIR}/project_include.cmake)
+        if(EXISTS "${COMPONENT_DIR}/project_include.cmake")
+            include("${COMPONENT_DIR}/project_include.cmake")
         endif()
     endforeach()
 endmacro()
@@ -560,7 +521,7 @@ function(__build_import_configs)
     # Include the sdkconfig cmake file, since the following operations require
     # knowledge of config values.
     idf_build_get_property(sdkconfig_cmake SDKCONFIG_CMAKE)
-    include(${sdkconfig_cmake})
+    include("${sdkconfig_cmake}")
 
     idf_build_set_property(__CONFIG_VARIABLES "${CONFIGS_LIST}")
     foreach(config ${CONFIGS_LIST})
@@ -649,6 +610,7 @@ macro(idf_build_process target)
     idf_build_get_property(idf_component_manager IDF_COMPONENT_MANAGER)
 
     set(result 0)
+    set(use_sdk_json FALSE)
     if(idf_component_manager EQUAL 1)
         idf_build_get_property(build_dir BUILD_DIR)
         set(managed_components_list_file ${build_dir}/managed_components_list.temp.cmake)
@@ -661,52 +623,65 @@ macro(idf_build_process target)
         foreach(__build_component_target ${build_component_targets})
             __component_get_property(__component_name ${__build_component_target} COMPONENT_NAME)
             __component_get_property(__component_dir ${__build_component_target} COMPONENT_DIR)
+            __component_get_property(__component_source ${__build_component_target} COMPONENT_SOURCE)
 
             # Exclude components could be passed with -DEXCLUDE_COMPONENTS
             # after the call to __component_add finished in the last run.
             # Need to check if the component is excluded again
             if(NOT __component_name IN_LIST EXCLUDE_COMPONENTS)
-                set(__contents "${__contents}  - name: \"${__component_name}\"\n    path: \"${__component_dir}\"\n")
+                string(CONCAT __contents "${__contents}"
+                    "  - name: \"${__component_name}\"\n"
+                    "    path: \"${__component_dir}\"\n"
+                    "    source: \"${__component_source}\"\n")
             endif()
         endforeach()
 
-        file(WRITE ${local_components_list_file} "${__contents}")
+        file(WRITE "${local_components_list_file}" "${__contents}")
 
         # Call for the component manager to prepare remote dependencies
-        idf_build_get_property(python PYTHON)
+        __component_manager_get_command(component_manager_cmd)
         idf_build_get_property(component_manager_interface_version __COMPONENT_MANAGER_INTERFACE_VERSION)
         idf_build_get_property(dependencies_lock_file DEPENDENCIES_LOCK)
 
-        execute_process(COMMAND ${python}
-            "-m"
-            "idf_component_manager.prepare_components"
+        set(use_sdk_json TRUE)
+        if(retried EQUAL 0)
+            set(use_sdk_json FALSE)
+        endif()
+
+        execute_process(COMMAND ${component_manager_cmd}
             "--project_dir=${project_dir}"
             "--lock_path=${dependencies_lock_file}"
-            "--sdkconfig_json_file=${build_dir}/config/sdkconfig.json"
             "--interface_version=${component_manager_interface_version}"
+            "--use_sdk_json=${use_sdk_json}"
             "prepare_dependencies"
             "--local_components_list_file=${local_components_list_file}"
+            "--build_dir=${build_dir}"
             "--managed_components_list_file=${managed_components_list_file}"
             RESULT_VARIABLE result
             ERROR_VARIABLE error)
 
         if(NOT result EQUAL 0)
-            if(result EQUAL ${__RERUN_EXITCODE})
-                message(WARNING "${error}")
-            else()
+            # If KConfig variables are missing, allow rerunning 2 times
+            if(NOT (result EQUAL ${__RERUN_EXITCODE} AND retried LESS 2))
                 message(FATAL_ERROR "${error}")
+            endif()
+        else()
+            if(error)
+                message(WARNING "${error}")
             endif()
         endif()
 
-        include(${managed_components_list_file})
+
+
+        include("${managed_components_list_file}")
 
         # Add managed components to list of all components
         # `managed_components` contains the list of components installed by the component manager
         # It is defined in the temporary managed_components_list_file file
         set(__COMPONENTS "${__COMPONENTS};${managed_components}")
 
-        file(REMOVE ${managed_components_list_file})
-        file(REMOVE ${local_components_list_file})
+        file(REMOVE "${managed_components_list_file}")
+        file(REMOVE "${local_components_list_file}")
     else()
         message(VERBOSE "IDF Component manager was explicitly disabled by setting IDF_COMPONENT_MANAGER=0")
 
@@ -725,26 +700,11 @@ macro(idf_build_process target)
         endif()
     endif()
 
-    idf_build_get_property(prefix __PREFIX)
-
-    file(GLOB root_dep_component_dirs
-        ${IDF_TOOLS_PATH}/root_managed_components/idf${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH}/*)
-    list(SORT root_dep_component_dirs)
-    foreach(component_dir ${root_dep_component_dirs})
-        # A potential component must be a directory
-        if(IS_DIRECTORY ${component_dir})
-            __component_dir_quick_check(is_component ${component_dir})
-            if(is_component)
-                __component_add(${component_dir} ${prefix} "idf_managed_components")
-            endif()
-        endif()
-    endforeach()
-
     # Perform early expansion of component CMakeLists.txt in CMake scripting mode.
     # It is here we retrieve the public and private requirements of each component.
     # It is also here we add the common component requirements to each component's
     # own requirements.
-    __component_get_requirements()
+    __component_get_requirements(${use_sdk_json})
 
     idf_build_get_property(component_targets __COMPONENT_TARGETS)
 
@@ -782,14 +742,34 @@ macro(idf_build_process target)
     idf_build_get_property(sdkconfig SDKCONFIG)
     idf_build_get_property(sdkconfig_defaults SDKCONFIG_DEFAULTS)
 
+    set(sdkconfig_cm "${build_dir}/sdkconfig.cm")
     # add target here since we have all components
     if(result EQUAL 0)
         __kconfig_generate_config("${sdkconfig}" "${sdkconfig_defaults}" CREATE_MENUCONFIG_TARGET)
+        # Delete the sdkconfig.cm backup if the last run of Component Manager was successful (cleanup)
+        if(EXISTS "${sdkconfig_cm}")
+            file(REMOVE "${sdkconfig_cm}")
+        endif()
     else()
-        __kconfig_generate_config("${sdkconfig}" "${sdkconfig_defaults}")
+        # We need to create backup of sdkconfig because the build system may
+        # lacks the Kconfig definitions for managed components.
+        if(EXISTS "${sdkconfig}")
+            file(COPY_FILE "${sdkconfig}" "${sdkconfig_cm}")
+        else()
+            file(REMOVE "${sdkconfig_cm}")
+        endif()
+        __kconfig_generate_config("${sdkconfig_cm}" "${sdkconfig_defaults}")
     endif()
 
     __build_import_configs()
+
+    # CONFIG_* is only available after sdkconfig is imported. Adding IDF_VER
+    # earlier would ignore APP_BUILD_DEFINE_IDF_VER.
+    idf_build_get_config(define_idf_ver CONFIG_APP_BUILD_DEFINE_IDF_VER)
+    if(define_idf_ver)
+        idf_build_get_property(idf_ver IDF_VER)
+        idf_build_set_property(COMPILE_DEFINITIONS "IDF_VER=\"${idf_ver}\"" APPEND)
+    endif()
 
     if(result EQUAL 0)
         # All targets built under this scope is with the ESP-IDF build system
@@ -808,9 +788,19 @@ macro(idf_build_process target)
         __build_process_project_includes()
 
         idf_build_get_property(idf_path IDF_PATH)
-        add_subdirectory(${idf_path} ${build_dir}/esp-idf)
+        add_subdirectory("${idf_path}" "${build_dir}/esp-idf")
 
         unset(ESP_PLATFORM)
+    else()
+        # We have to clear all build properties set in
+        # __build_expand_requirements if we are doing a retry
+        # This fixes order of dependencies when KConfig is used
+        idf_build_unset_property(__BUILD_COMPONENT_TARGETS)
+        idf_build_unset_property(__COMPONENT_TARGETS_SEEN)
+        idf_build_unset_property(__BUILD_COMPONENTS)
+        idf_build_unset_property(BUILD_COMPONENT_ALIASES)
+        idf_build_unset_property(BUILD_COMPONENTS)
+        idf_build_unset_property(__BUILD_COMPONENT_DEPGRAPH)
     endif()
 endmacro()
 

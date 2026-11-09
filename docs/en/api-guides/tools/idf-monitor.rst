@@ -40,7 +40,10 @@ For easy interaction with IDF Monitor, use the keyboard shortcuts given in the t
      - Reset the target board and re-starts the application via the RTS line (if connected).
    * - * Ctrl + F
      - Build and flash the project
-     - Pause idf_monitor to run the project ``flash`` target, then resumes idf_monitor. Any changed source files are recompiled and then re-flashed. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``.
+     - Pause idf_monitor to run the project ``flash`` target, then resumes idf_monitor. Any changed source files are recompiled and then re-flashed. Uses :ref:`fast reflashing <flash-with-idf-py>` by default when previously flashed binaries are available. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``.
+   * - * Ctrl + E (or E)
+     - Build and full flash the project
+     - Same as Ctrl + F (runs the ``flash`` target), but disables fast reflashing by setting the ``IDF_FLASH_FULL`` environment variable. Equivalent to ``idf.py flash -a``/``--all``. Target ``encrypted-flash`` is run if idf_monitor was started with argument ``-E``. Requires esp-idf-monitor 1.10.0 or later.
    * - * Ctrl + A (or A)
      - Build and flash the app only
      - Pause idf_monitor to run the ``app-flash`` target, then resumes idf_monitor. Similar to the ``flash`` target, but only the main app is built and re-flashed. Target ``encrypted-app-flash`` is run if idf_monitor was started with argument ``-E``.
@@ -49,7 +52,7 @@ For easy interaction with IDF Monitor, use the keyboard shortcuts given in the t
      - Discard all incoming serial data while activated. Allows to quickly pause and examine log output without quitting the monitor.
    * - * Ctrl + L
      - Stop/resume log output saved to file
-     - Create a file in the project directory and the output is written to that file until this is disabled with the same keyboard shortcut (or IDF Monitor exits).
+     - Create a file in the current working directory and the output is written to that file until this is disabled with the same keyboard shortcut (or IDF Monitor exits).
    * - * Ctrl + I (or I)
      - Stop/resume printing timestamps
      - IDF Monitor can print a timestamp in the beginning of each line. The timestamp format can be changed by the ``--timestamp-format`` command line argument.
@@ -61,7 +64,7 @@ For easy interaction with IDF Monitor, use the keyboard shortcuts given in the t
      -
    * - Ctrl + C
      - Interrupt running application
-     - Pause IDF Monitor and runs GDB_ project debugger to debug the application at runtime. This requires :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME` option to be enabled.
+     - Pause IDF Monitor and runs GDB_ project debugger to debug the application at runtime. This requires :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME` option to be enabled.
 
 Any keys pressed, other than ``Ctrl-]`` and ``Ctrl-T``, will be sent through the serial port.
 
@@ -73,7 +76,7 @@ IDF Monitor automatically colors the output based on the log level. This feature
 
 The automatic coloring is enabled by default. To disable it, use the command line option ``--disable-auto-color``.
 
-The coloring is done based on the log level followed by optional timestamp and tag. For option to enable coloring on the {IDF_TARGET_NAME} side, see :ref:`CONFIG_LOG_COLORS`.
+The coloring is done based on the log level followed by optional timestamp and tag. For option to enable coloring on the {IDF_TARGET_NAME} side, see :menuitem:`CONFIG_LOG_COLORS`.
 
 For more details on the log, see :doc:`Logging <../../api-reference/system/log>`.
 
@@ -241,6 +244,13 @@ The ROM ELF file is automatically loaded from a location based on the ``IDF_PATH
 
     Set environment variable ``ESP_MONITOR_DECODE`` to ``0`` or call esp_idf_monitor with specific command line option: ``python -m esp_idf_monitor --disable-address-decoding`` to disable address decoding.
 
+.. _idf-monitor-target-detection:
+
+Automatic Target Detection
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, ``idf.py monitor`` connects to the target that has been set for the project. However, on an unbuilt project where no target has been configured, it can connect to any target — it will automatically detect the chip on the default serial port and pass it to the monitor. This allows running ``idf.py monitor`` on a clean project without having to call ``idf.py set-target`` first.
+
 Target Reset on Connection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -275,9 +285,9 @@ Launching GDB with GDBStub
 
 GDBStub is a useful runtime debugging feature that runs on the target and connects to the host over the serial port to receive debugging commands. GDBStub supports commands such as reading memory and variables, examining call stack frames etc. Although GDBStub is less versatile than JTAG debugging, it does not require any special hardware (such as a JTAG to USB bridge) as communication is done entirely over the serial port.
 
-A target can be configured to run GDBStub in the background by setting the :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`. GDBStub will run in the background until a ``Ctrl+C`` message is sent over the serial port and causes the GDBStub to break (i.e., stop the execution of) the program, thus allowing GDBStub to handle debugging commands.
+A target can be configured to run GDBStub in the background by setting the :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`. GDBStub will run in the background until a ``Ctrl+C`` message is sent over the serial port and causes the GDBStub to break (i.e., stop the execution of) the program, thus allowing GDBStub to handle debugging commands.
 
-Furthermore, the panic handler can be configured to run GDBStub on a crash by setting the :ref:`CONFIG_ESP_SYSTEM_PANIC` to ``GDBStub on panic``. When a crash occurs, GDBStub will output a special string pattern over the serial port to indicate that it is running.
+Furthermore, the panic handler can be configured to run GDBStub on a crash by setting the :menuitem:`CONFIG_ESP_SYSTEM_PANIC` to ``GDBStub on panic``. When a crash occurs, GDBStub will output a special string pattern over the serial port to indicate that it is running.
 
 In both cases (i.e., sending the ``Ctrl+C`` message, or receiving the special string pattern), IDF Monitor will automatically launch GDB in order to allow the user to send debugging commands. After GDB exits, the target is reset via the RTS serial line. If this line is not connected, users can reset their target (by pressing the board's Reset button).
 
@@ -352,6 +362,124 @@ The options ``--print_filter="light_driver:D esp_image:N boot:N cpu_start:N vfs:
     D (309) light_driver: [light_init, 74]:status: 1, mode: 2
 
 
+.. _idf-monitor-command-stream:
+
+Command-Stream Mode
+===================
+
+The interactive key bindings require a terminal (TTY) attached to the input of the monitor. But when the input comes from a pipe or a file, or there is no input attached at all (for example in continuous integration jobs), the monitor automatically switches to command-stream mode. In this mode, it reads line-based commands from the redirected input.
+
+Reading from a file via ``--command-file`` is recommended over reading from a pipe when multiple ``idf.py`` commands are intended to be chained together in order to avoid influencing the standard input of other tools. Reading commands from a pipe is safe when ``idf.py monitor`` is invoked without additional commands like ``flash``. Refer to the following examples which demonstrate the recommended use cases.
+
+.. code-block:: bash
+
+    idf.py monitor --command-file commands.txt
+    idf.py flash monitor --command-file commands.txt
+
+Piping into ``idf.py monitor`` also works when stdin is not a TTY:
+
+.. code-block:: bash
+
+    printf 'reset\nexpect --timeout 10 ALL TESTS PASSED\n' | idf.py monitor
+
+Commands
+~~~~~~~~
+
+.. list-table::
+    :widths: 30 70
+    :header-rows: 1
+
+    * - Command
+      - Action
+    * - ``reset``
+      - Hard-reset the chip using the RTS line.
+    * - ``flash``
+      - Run the build system's ``flash`` target (fast reflash by default).
+    * - ``flash-all``
+      - Run the ``flash`` target with a full flash, disabling fast reflash (equivalent to ``idf.py flash -a``).
+    * - ``app-flash``
+      - Run the build system's ``app-flash`` target.
+    * - ``send <text>``
+      - Send ``<text>`` followed by the configured end-of-line sequence to the device.
+    * - ``sleep <seconds>``
+      - Pause command processing for the given duration while serial output continues (accepts floating-point values and ``inf``).
+    * - ``expect <regex>``
+      - Wait until a serial line matches the Python regular expression using ``re.search``.
+    * - ``expect --timeout <seconds> <regex>``
+      - Wait for a match for at most the given positive, finite duration. A timeout reports an error and aborts the remaining commands.
+    * - ``output``
+      - Toggle printing serial output.
+    * - ``log``
+      - Toggle saving output to a log file.
+    * - ``timestamps``
+      - Toggle prepending timestamps to serial output.
+    * - ``bootloader``
+      - Reset the chip into download (bootloader) mode.
+    * - ``exit``
+      - Quit IDF Monitor after draining pending serial output.
+
+Empty lines and lines starting with ``#`` are ignored. Each processed command is echoed to standard error, so script progress remains visible when standard output is redirected to a file.
+
+``expect`` also checks a bounded buffer of recently received lines before waiting for new output. Line endings are removed before matching, so a ``$`` anchor works with both LF and CRLF output. It can also match prompts that have no line ending.
+
+Ending a Command Stream
+~~~~~~~~~~~~~~~~~~~~~~~
+
+After at least one command has been read, reaching EOF ends the session. Therefore, a command file can end with ``exit``, a final ``expect``, or simply EOF. If standard input is empty from the start (for example, redirected from ``/dev/null`` or when Docker runs without ``-i``), IDF Monitor enters watch-only mode and continues displaying serial output until stopped externally with ``Ctrl+C`` or ``SIGTERM``.
+
+Examples
+~~~~~~~~
+
+Wait for a pattern, then exit:
+
+.. code-block:: bash
+
+    printf 'expect ALL TESTS PASSED\n' | idf.py monitor > test.log
+
+As the final command, ``expect`` makes the monitor exit after the pattern is matched. Without ``--timeout``, it waits indefinitely.
+
+Wait for a pattern for up to ten seconds:
+
+.. code-block:: bash
+
+    printf 'reset\nexpect --timeout 10 Hello world!\n' | idf.py monitor > boot.log
+
+If the pattern is not matched, subsequent commands are not executed. IDF Monitor drains pending output and flushes the log before exiting.
+
+Reset the device and capture ten seconds of boot output:
+
+.. code-block:: bash
+
+    printf 'reset\nsleep 10\n' | idf.py monitor > boot.log
+
+No ``exit`` command is needed because EOF ends a non-empty command stream.
+
+Drive a console application:
+
+.. code-block:: bash
+
+    idf.py monitor <<'EOF'
+    reset
+    expect esp>
+    send free
+    expect \d+
+    exit
+    EOF
+
+Run in watch-only mode:
+
+.. code-block:: bash
+
+    idf.py monitor < /dev/null
+
+
+.. note::
+
+    Because command-stream mode has no terminal, an interactive GDB session cannot be started from the target's GDB stub.
+
+This mode is used by the ESP-IDF MCP ``monitor device`` tool. See :ref:`mcp-monitor-device`.
+
+
 .. _configuration-file:
 
 Configuration File
@@ -361,6 +489,46 @@ Configuration File
 
 For more details on the configuration file, see the `IDF Monitor documentation`_.
 
+Host-side Command Markers
+=========================
+
+IDF Monitor can execute host-side helper commands when a device log line starts with a supported marker.
+
+For eFuse token decoding, print one of the following from firmware logs:
+
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY <TOKEN> [extra arguments]``
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP <TOKEN>``
+
+When a marker is detected, monitor invokes ``espefuse`` on the host and prints the decoded output inline.
+
+Example 1 (summary with custom table):
+
+.. code-block:: text
+
+  I (441) app: IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY EFSR:esp32c3:100:... --extend-efuse-table main/esp_efuse_custom_table.csv
+
+This line triggers a host-side command equivalent to:
+
+.. code-block:: text
+
+  espefuse --token EFSR:esp32c3:100:... --extend-efuse-table main/esp_efuse_custom_table.csv summary --active
+
+Example 2 (raw dump):
+
+.. code-block:: text
+
+  I (442) app: IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP EFSR:esp32c3:100:...
+
+This line triggers a host-side command equivalent to:
+
+.. code-block:: text
+
+  espefuse --token EFSR:esp32c3:100:... dump
+
+.. important::
+
+    Treat token payloads as sensitive data (especially ``EFSW``/``EFSRW``), because they can expose key values in plaintext while those values are still staged, not yet burned, and not yet read-protected. For token formats and generation APIs, see :doc:`eFuse Manager <../../api-reference/system/efuse>`.
+
 
 Known Issues with IDF Monitor
 =============================
@@ -369,7 +537,7 @@ The following issues are currently known:
 
 - Autocoloring cannot detect the log level if the message contains new lines. In this case, the IDF Monitor will only color the first line of the message.
 
-  To work around this issue, enable :ref:`CONFIG_LOG_COLORS` in menuconfig. Please note that this might have some impact on binary size and performance.
+  To work around this issue, enable :menuitem:`CONFIG_LOG_COLORS` in menuconfig. Please note that this might have some impact on binary size and performance.
 
 - On Windows, if the terminal is closed without first closing the IDF Monitor, some drivers may fail to release the serial port. To release the port, you may need to unplug and replug the USB cable, or in some cases even restart the computer. This issue has been observed with the CH9102 USB-to-UART bridge. Other drivers, such as CP210x and CH340, should work fine.
 
@@ -378,5 +546,5 @@ The following issues are currently known:
 If you experience any other issues while using IDF Monitor, check our `GitHub repository <https://github.com/espressif/esp-idf-monitor/issues>`_ for a list of known issues and their current status. If you come across a problem that hasn't been documented yet, we encourage you to create a new issue report.
 
 .. _esp-idf-monitor: https://github.com/espressif/esp-idf-monitor
-.. _IDF Monitor documentation: https://github.com/espressif/esp-idf-monitor/blob/v1.5.0/README.md#documentation
+.. _IDF Monitor documentation: https://github.com/espressif/esp-idf-monitor/blob/v1.10.0/README.md#documentation
 .. _gdb: https://sourceware.org/gdb/download/onlinedocs/

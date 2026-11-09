@@ -24,12 +24,10 @@ SIGNATURE_TYPE_RSA = 0
 SIGNATURE_TYPE_RSA_3072 = 1
 
 SIGNATURE_TYPE_ECDSA = 10
-SIGNATURE_TYPE_ECDSA_P192 = 11
 SIGNATURE_TYPE_ECDSA_P256 = 12
 SIGNATURE_TYPE_ECDSA_P384 = 13
 
 SIGNATURE_TYPE_RSA_3072_SIZE = 384
-SIGNATURE_TYPE_ECDSA_P192_SIZE = 64
 SIGNATURE_TYPE_ECDSA_P256_SIZE = 64
 SIGNATURE_TYPE_ECDSA_P384_SIZE = 96
 
@@ -40,19 +38,20 @@ SECURE_BOOT_RSA_TARGETS = [
     'esp32c3',
     'esp32c5',
     'esp32c6',
-    'esp32c61',
     'esp32h2',
     'esp32h21',
     'esp32s2',
     'esp32s3',
     'esp32p4',
 ]
-SECURE_BOOT_ECDSA_TARGETS = ['esp32c2', 'esp32c5', 'esp32c6', 'esp32c61', 'esp32h2', 'esp32h21', 'esp32p4']
+# ESP32-H4/H21 are preview targets with ECDSA based Secure Boot V2 marked unsupported,
+# and ESP32-H4 has Secure Boot disabled entirely, so they are excluded here.
+SECURE_BOOT_ECDSA_TARGETS = ['esp32c2', 'esp32c5', 'esp32c6', 'esp32c61', 'esp32h2', 'esp32p4']
 SECURE_BOOT_ECDSA_P384_TARGETS = ['esp32c5']
 
 CONFIGS_SECURE_BOOT_ECDSA = list(
     itertools.chain(
-        itertools.product(['ecdsa_p192', 'ecdsa_p256'], SECURE_BOOT_ECDSA_TARGETS),
+        itertools.product(['ecdsa_p256'], SECURE_BOOT_ECDSA_TARGETS),
         itertools.product(['ecdsa_p384'], SECURE_BOOT_ECDSA_P384_TARGETS),
     )
 )
@@ -98,7 +97,7 @@ def corrupt_sig_block(sig_block, seed=0, corrupt_sig=True, corrupt_crc=False, si
     if signature_type == SIGNATURE_TYPE_RSA_3072:
         data = sig_block[:812]
         new_sig = sig = sig_block[812:1196]
-    elif signature_type in [SIGNATURE_TYPE_ECDSA_P192, SIGNATURE_TYPE_ECDSA_P256]:
+    elif signature_type in [SIGNATURE_TYPE_ECDSA_P256]:
         data = sig_block[:101]
         new_sig = sig = sig_block[101:165]
     elif signature_type == SIGNATURE_TYPE_ECDSA_P384:
@@ -269,9 +268,7 @@ def get_signature_type_size(dut: Dut, signature_type: int) -> int:
     if signature_type == SIGNATURE_TYPE_RSA:
         signature_type_size = SIGNATURE_TYPE_RSA_3072_SIZE
     elif signature_type == SIGNATURE_TYPE_ECDSA:
-        if dut.app.sdkconfig.get('CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_192_BITS'):
-            signature_type_size = SIGNATURE_TYPE_ECDSA_P192_SIZE
-        elif dut.app.sdkconfig.get('CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS'):
+        if dut.app.sdkconfig.get('CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS'):
             signature_type_size = SIGNATURE_TYPE_ECDSA_P256_SIZE
         elif dut.app.sdkconfig.get('CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS'):
             signature_type_size = SIGNATURE_TYPE_ECDSA_P384_SIZE

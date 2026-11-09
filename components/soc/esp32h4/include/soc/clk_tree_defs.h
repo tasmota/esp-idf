@@ -48,6 +48,12 @@ extern "C" {
 #define SOC_CLK_XTAL32K_FREQ_APPROX         32768                               /*!< Approximate XTAL32K_CLK frequency in Hz */
 #define SOC_CLK_OSC_SLOW_FREQ_APPROX        32768                               /*!< Approximate OSC_SLOW_CLK (external slow clock) frequency in Hz */
 
+/* Default clock accuracy values in ppm (parts per million) at different observation durations */
+/* Row order: 1 s, 10 s, 30 s, 60 s */
+#define SOC_CLK_RC_FAST_ACCURACY_PPM_DEFAULTS    { (620), (1978), (4356), (7409) }
+#define SOC_CLK_RC_SLOW_ACCURACY_PPM_DEFAULTS    { (1795), (3096), (6590), (11899) }
+#define SOC_CLK_CRYSTAL_ACCURACY_PPM_DEFAULTS    { (500), (500), (500), (500) }
+
 // Naming convention: SOC_ROOT_CLK_{loc}_{type}_[attr]
 // {loc}: EXT, INT
 // {type}: XTAL, RC
@@ -61,6 +67,7 @@ typedef enum {
     SOC_ROOT_CLK_EXT_XTAL,             /*!< External 32MHz crystal */
     SOC_ROOT_CLK_EXT_XTAL32K,          /*!< External 32kHz crystal */
     SOC_ROOT_CLK_EXT_OSC_SLOW,         /*!< External slow clock signal at pin5 */
+    SOC_ROOT_CLK_SRC_NUM,              /*!< Number of root clock sources */
 } soc_root_clk_t;
 
 /**
@@ -69,6 +76,7 @@ typedef enum {
 typedef enum {
     SOC_ROOT_CIRCUIT_CLK_BBPLL,         /*!< BBPLL_CLK is the output of the PLL generator circuit */
     SOC_ROOT_CIRCUIT_CLK_XTAL_X2,       /*!< XTAL_X2_CLK is the output of the XTAL_X2 generator circuit */
+    SOC_ROOT_CIRCUIT_CLK_MAX,
 } soc_root_clk_circuit_t;
 
 /**
@@ -141,7 +149,8 @@ typedef enum {
     SOC_MOD_CLK_XTAL32K,                       /*!< XTAL32K_CLK comes from the external 32kHz crystal, passing a clock gating to the peripherals */
     SOC_MOD_CLK_RC_FAST,                       /*!< RC_FAST_CLK comes from the internal 20MHz rc oscillator, passing a clock gating to the peripherals */
     SOC_MOD_CLK_XTAL,                          /*!< XTAL_CLK comes from the external 32MHz crystal */
-
+    SOC_MOD_CLK_XTAL_X2,                       /*!< XTAL_X2_CLK is the output of the XTAL_X2 generator circuit (64MHz); CPU clock source, not the gated F64M */
+    SOC_MOD_CLK_BBPLL,                         /*!< BBPLL_CLK is the output of the PLL generator circuit (96MHz); CPU clock source, not the gated F96M */
     SOC_MOD_CLK_INVALID,                       /*!< Indication of the end of the available module clock sources */
 } soc_module_clk_t;
 
@@ -274,7 +283,7 @@ typedef enum {
  * @brief Type of SPI clock source.
  */
 typedef enum {
-    SPI_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F48M,     /*!< Select XTAL as SPI source clock */
+    SPI_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F48M,     /*!< Select PLL_F48M as SPI source clock */
     SPI_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,            /*!< Select XTAL as SPI source clock */
     SPI_CLK_SRC_PLL_F48M = SOC_MOD_CLK_PLL_F48M,    /*!< Select PLL_48M as SPI source clock */
     SPI_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,      /*!< Select RC_FAST as SPI source clock */
@@ -489,6 +498,23 @@ typedef enum {
     GLITCH_FILTER_CLK_SRC_PLL_F48M = SOC_MOD_CLK_PLL_F48M, /*!< Select PLL_F48M clock as the source clock */
     GLITCH_FILTER_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F48M,  /*!< Select PLL_F48M clock as the default clock choice */
 } soc_periph_glitch_filter_clk_src_t;
+
+////////////////////////////////////////////////ANA_CMPR////////////////////////////////////////////////////
+
+/**
+ * @brief Array initializer for all supported clock sources of Analog Comparator
+ */
+#define SOC_ANA_CMPR_CLKS {SOC_MOD_CLK_XTAL, SOC_MOD_CLK_RC_FAST, SOC_MOD_CLK_PLL_F48M}
+
+/**
+ * @brief Type of Analog Comparator clock source
+ */
+typedef enum {
+    ANA_CMPR_CLK_SRC_XTAL = SOC_MOD_CLK_XTAL,         /*!< Select XTAL clock as the source clock */
+    ANA_CMPR_CLK_SRC_RC_FAST = SOC_MOD_CLK_RC_FAST,   /*!< Select RC_FAST as the source clock */
+    ANA_CMPR_CLK_SRC_PLL_F48M = SOC_MOD_CLK_PLL_F48M, /*!< Select PLL_F48M as the source clock */
+    ANA_CMPR_CLK_SRC_DEFAULT = SOC_MOD_CLK_PLL_F48M,  /*!< Select PLL_F48M as the default clock choice */
+} soc_periph_ana_cmpr_clk_src_t;
 
 //////////////////////////////////////////////////TWAI//////////////////////////////////////////////////////////////////
 

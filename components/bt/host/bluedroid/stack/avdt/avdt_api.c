@@ -113,6 +113,13 @@ void AVDT_Register(tAVDT_REG *p_reg, tAVDT_CTRL_CBACK *p_cback)
     if (p_reg == NULL || p_cback == NULL) {
         return;
     }
+
+#if defined(AVDT_INITIAL_TRACE_LEVEL)
+    avdt_cb.trace_level = AVDT_INITIAL_TRACE_LEVEL;
+#else
+    avdt_cb.trace_level = BT_TRACE_LEVEL_NONE;
+#endif
+
     /* register PSM with L2CAP */
     L2CA_Register(AVDT_PSM, (tL2CAP_APPL_INFO *) &avdt_l2c_appl);
 
@@ -220,6 +227,16 @@ void AVDT_SINK_Deactivate(void)
             p_scb->in_use = TRUE;
             break;
         }
+    }
+}
+
+void AVDT_SetSepInUse(UINT8 handle, BOOLEAN in_use)
+{
+    tAVDT_SCB *p_scb = avdt_scb_by_hdl(handle);
+
+    if (p_scb != NULL) {
+        AVDT_TRACE_DEBUG("AVDT_SetSepInUse hdl=%d in_use=%d", handle, in_use);
+        p_scb->in_use = in_use;
     }
 }
 
@@ -776,6 +793,10 @@ UINT16 AVDT_ReconfigReq(UINT8 handle, tAVDT_CFG *p_cfg)
     UINT16          result = AVDT_SUCCESS;
     tAVDT_SCB_EVT   evt;
 
+    if (p_cfg == NULL) {
+        return AVDT_BAD_PARAMS;
+    }
+
     /* map handle to scb */
     if ((p_scb = avdt_scb_by_hdl(handle)) == NULL) {
         result = AVDT_BAD_HANDLE;
@@ -940,6 +961,7 @@ UINT16 AVDT_WriteReqOpt(UINT8 handle, BT_HDR *p_pkt, UINT32 time_stamp, UINT8 m_
     }
     /* map handle to scb */
     if ((p_scb = avdt_scb_by_hdl(handle)) == NULL) {
+        osi_free(p_pkt);
         result = AVDT_BAD_HANDLE;
     } else {
         evt.apiwrite.p_buf = p_pkt;
@@ -1249,7 +1271,7 @@ UINT16 AVDT_SendReport(UINT8 handle, AVDT_REPORT_TYPE type,
                     len = AVDT_MAX_CNAME_SIZE;
                 }
                 *p++ = (UINT8)len;
-                BCM_STRNCPY_S((char *)p, (char *)p_data->cname, AVDT_MAX_CNAME_SIZE + 1);
+                memcpy(p, p_data->cname, len);
                 p += len;
                 break;
             }

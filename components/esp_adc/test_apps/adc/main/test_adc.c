@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,19 +27,20 @@ const __attribute__((unused)) static char *TAG = "TEST_ADC";
 #define ADC1_TEST_CHAN0          ADC_CHANNEL_4
 #define ADC1_TEST_CHAN1          ADC_CHANNEL_5
 #define ADC2_TEST_CHAN0          ADC_CHANNEL_0
-static const char *TAG_CH[2][10] = {{"ADC1_CH4", "ADC1_CH5"}, {"ADC2_CH0"}};
 #else
 #define ADC1_TEST_CHAN0          ADC_CHANNEL_2
 #define ADC1_TEST_CHAN1          ADC_CHANNEL_3
 #define ADC2_TEST_CHAN0          ADC_CHANNEL_0
-static const char *TAG_CH[2][10] = {{"ADC1_CH2", "ADC1_CH3"}, {"ADC2_CH0"}};
 #endif
 
 /*---------------------------------------------------------------
         ADC Oneshot High / Low test
 ---------------------------------------------------------------*/
-//ESP32C3 ADC2 oneshot mode is not supported anymore
-#define ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2    ((SOC_ADC_PERIPH_NUM >= 2) && !CONFIG_IDF_TARGET_ESP32C3)
+// ESP32C3 ADC2 oneshot mode is not supported anymore.
+// ESP32P4 ADC2 pins(49–52) are externally pulled up on the core board with ESP32C6.
+#define ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2    ((SOC_ADC_PERIPH_NUM >= 2) && \
+                                                !CONFIG_IDF_TARGET_ESP32C3 && \
+                                                !CONFIG_IDF_TARGET_ESP32P4)
 
 static int adc_raw[2][10];
 static adc_oneshot_unit_handle_t adc1_handle;
@@ -69,7 +70,7 @@ static void adc_oneshot_init_test(void)
     //-------------ADC1 TEST Channel 0 Config---------------//
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = ADC_ATTEN_DB_12,
+        .atten = TEST_ADC_DRIVER_DEFAULT_ATTEN,
     };
     TEST_ESP_OK(adc_oneshot_config_channel(adc1_handle, ADC1_TEST_CHAN0, &config));
 
@@ -86,36 +87,30 @@ static void adc_oneshot_read_test(void)
 {
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN0, 0);
     TEST_ESP_OK(adc_oneshot_read(adc1_handle, ADC1_TEST_CHAN0, &adc_raw[0][0]));
-    ESP_LOGI(TAG_CH[0][0], "low  raw  data: %d", adc_raw[0][0]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_LOW_THRESH, ADC_TEST_LOW_VAL, adc_raw[0][0]);
+    test_assert_adc_raw(ADC_UNIT_1, ADC1_TEST_CHAN0, false, adc_raw[0][0], false, false);
 
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN1, 0);
     TEST_ESP_OK(adc_oneshot_read(adc1_handle, ADC1_TEST_CHAN1, &adc_raw[0][1]));
-    ESP_LOGI(TAG_CH[0][1], "low  raw  data: %d", adc_raw[0][1]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_LOW_THRESH, ADC_TEST_LOW_VAL, adc_raw[0][1]);
+    test_assert_adc_raw(ADC_UNIT_1, ADC1_TEST_CHAN1, false, adc_raw[0][1], false, false);
 
 #if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     test_adc_set_io_level(ADC_UNIT_2, ADC2_TEST_CHAN0, 0);
     TEST_ESP_OK(adc_oneshot_read(adc2_handle, ADC2_TEST_CHAN0, &adc_raw[1][0]));
-    ESP_LOGI(TAG_CH[1][0], "low  raw  data: %d", adc_raw[1][0]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_LOW_THRESH, ADC_TEST_LOW_VAL, adc_raw[1][0]);
+    test_assert_adc_raw(ADC_UNIT_2, ADC2_TEST_CHAN0, false, adc_raw[1][0], false, false);
 #endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN0, 1);
     TEST_ESP_OK(adc_oneshot_read(adc1_handle, ADC1_TEST_CHAN0, &adc_raw[0][0]));
-    ESP_LOGI(TAG_CH[0][0], "high raw  data: %d", adc_raw[0][0]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_HIGH_THRESH, ADC_TEST_HIGH_VAL, adc_raw[0][0]);
+    test_assert_adc_raw(ADC_UNIT_1, ADC1_TEST_CHAN0, true, adc_raw[0][0], false, false);
 
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN1, 1);
     TEST_ESP_OK(adc_oneshot_read(adc1_handle, ADC1_TEST_CHAN1, &adc_raw[0][1]));
-    ESP_LOGI(TAG_CH[0][1], "high raw  data: %d", adc_raw[0][1]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_HIGH_THRESH, ADC_TEST_HIGH_VAL, adc_raw[0][1]);
+    test_assert_adc_raw(ADC_UNIT_1, ADC1_TEST_CHAN1, true, adc_raw[0][1], false, false);
 
 #if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     test_adc_set_io_level(ADC_UNIT_2, ADC2_TEST_CHAN0, 1);
     TEST_ESP_OK(adc_oneshot_read(adc2_handle, ADC2_TEST_CHAN0, &adc_raw[1][0]));
-    ESP_LOGI(TAG_CH[1][0], "high raw  data: %d", adc_raw[1][0]);
-    TEST_ASSERT_INT_WITHIN(ADC_TEST_HIGH_THRESH, ADC_TEST_HIGH_VAL, adc_raw[1][0]);
+    test_assert_adc_raw(ADC_UNIT_2, ADC2_TEST_CHAN0, true, adc_raw[1][0], false, false);
 #endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 }
 
@@ -141,13 +136,68 @@ TEST_CASE("ADC oneshot basic test", "[adc_oneshot]")
     adc_oneshot_deinit_test();
 }
 
+#if CONFIG_IDF_TARGET_ESP32S31
+TEST_CASE("ADC S31 calibrated oneshot conversion", "[adc_oneshot][adc_cali]")
+{
+    adc_oneshot_unit_handle_t handle;
+    adc_cali_handle_t cali_handle = NULL;
+    adc_oneshot_unit_init_cfg_t unit_config = {
+        .unit_id = ADC_UNIT_1,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    adc_oneshot_chan_cfg_t channel_config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_0,
+    };
+
+    TEST_ESP_OK(adc_oneshot_new_unit(&unit_config, &handle));
+    TEST_ESP_OK(adc_oneshot_config_channel(handle, ADC1_TEST_CHAN1, &channel_config));
+    TEST_ASSERT_TRUE(test_adc_calibration_init(ADC_UNIT_1, ADC1_TEST_CHAN1,
+                                               ADC_ATTEN_DB_0, ADC_BITWIDTH_DEFAULT,
+                                               &cali_handle));
+
+    const int sample_count = 10;
+    int voltage_low_sum = 0;
+    int voltage_high_sum = 0;
+    test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN1, false);
+    for (int i = 0; i < sample_count; i++) {
+        int raw;
+        int voltage;
+        TEST_ESP_OK(adc_oneshot_read(handle, ADC1_TEST_CHAN1, &raw));
+        TEST_ESP_OK(adc_cali_chan_raw_to_voltage(cali_handle, ADC1_TEST_CHAN1,
+                                                 raw, &voltage));
+        voltage_low_sum += voltage;
+    }
+
+    test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN1, true);
+    for (int i = 0; i < sample_count; i++) {
+        int raw;
+        int voltage;
+        TEST_ESP_OK(adc_oneshot_read(handle, ADC1_TEST_CHAN1, &raw));
+        TEST_ESP_OK(adc_cali_chan_raw_to_voltage(cali_handle, ADC1_TEST_CHAN1,
+                                                 raw, &voltage));
+        voltage_high_sum += voltage;
+    }
+
+    int voltage_low = voltage_low_sum / sample_count;
+    int voltage_high = voltage_high_sum / sample_count;
+    ESP_LOGI(TAG, "average calibrated voltage from %d samples: low=%d mV, high=%d mV",
+             sample_count,
+             voltage_low, voltage_high);
+    TEST_ASSERT_GREATER_OR_EQUAL(100, voltage_high - voltage_low);
+
+    test_adc_calibration_deinit(cali_handle);
+    TEST_ESP_OK(adc_oneshot_del_unit(handle));
+}
+#endif
+
 TEST_CASE("ADC oneshot stress test that get zero even if convent done", "[adc_oneshot]")
 {
     //There is a hardware limitation. After ADC get DONE signal, it still need a delay to synchronize ADC raw data or it may get zero even if getting DONE signal.
 
     int test_num = 100;
     adc_channel_t channel = ADC1_TEST_CHAN1;
-    adc_atten_t atten = ADC_ATTEN_DB_12;
+    adc_atten_t atten = TEST_ADC_DRIVER_DEFAULT_ATTEN;
     adc_unit_t unit_id = ADC_UNIT_1;
 
     adc_oneshot_unit_handle_t adc1_handle;
@@ -157,7 +207,7 @@ TEST_CASE("ADC oneshot stress test that get zero even if convent done", "[adc_on
     };
 
     adc_oneshot_chan_cfg_t config = {
-        .bitwidth = SOC_ADC_RTC_MAX_BITWIDTH,
+        .bitwidth = ADC_LL_RTC_MAX_BITWIDTH,
         .atten = atten,
     };
 
@@ -202,14 +252,14 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
 
     //-------------ADC Channel Config---------------//
     adc_oneshot_chan_cfg_t config = {
-        .bitwidth = SOC_ADC_RTC_MAX_BITWIDTH,
+        .bitwidth = ADC_LL_RTC_MAX_BITWIDTH,
     };
 
     //-------------ADC Calibration Init---------------//
     bool do_calibration = false;
     adc_cali_handle_t cali_handle[TEST_ATTEN_NUMS] = {};
     for (int i = 0; i < TEST_ATTEN_NUMS; i++) {
-        do_calibration = test_adc_calibration_init(unit_id, channel, g_test_atten[i], SOC_ADC_RTC_MAX_BITWIDTH, &cali_handle[i]);
+        do_calibration = test_adc_calibration_init(unit_id, channel, g_test_atten[i], ADC_LL_RTC_MAX_BITWIDTH, &cali_handle[i]);
     }
     if (!do_calibration) {
         ESP_LOGW(TAG, "No efuse bits burnt, only test the regi2c analog register values");
@@ -231,7 +281,7 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
         //Read
         TEST_ESP_OK(adc_oneshot_read(adc_handle, channel, &raw_expected));
         if (do_calibration) {
-            TEST_ESP_OK(adc_cali_raw_to_voltage(cali_handle[i], raw_expected, &cali_expected));
+            TEST_ESP_OK(adc_cali_chan_raw_to_voltage(cali_handle[i], channel, raw_expected, &cali_expected));
         }
 
         //Print regi2c
@@ -267,7 +317,7 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
         //Read
         TEST_ESP_OK(adc_oneshot_read(adc_handle, channel, &raw_after_sleep));
         if (do_calibration) {
-            TEST_ESP_OK(adc_cali_raw_to_voltage(cali_handle[i], raw_after_sleep, &cali_after_sleep));
+            TEST_ESP_OK(adc_cali_chan_raw_to_voltage(cali_handle[i], channel, raw_after_sleep, &cali_after_sleep));
         }
 
         //Print result
@@ -345,7 +395,7 @@ TEST_CASE("ADC continuous monitor init_deinit", "[adc]")
 
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
     for (int i = 0; i < 1; i++) {
-        adc_pattern[i].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].atten = TEST_ADC_DRIVER_DEFAULT_ATTEN;
         adc_pattern[i].channel = i;
         adc_pattern[i].unit = ADC_UNIT_1;
         adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
@@ -353,7 +403,7 @@ TEST_CASE("ADC continuous monitor init_deinit", "[adc]")
     adc_continuous_config_t dig_cfg = {
         .pattern_num = 1,
         .adc_pattern = adc_pattern,
-        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_LOW,
+        .sample_freq_hz = ADC_LL_SAMPLE_FREQ_THRES_LOW,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .format = TEST_ADC_FORMAT_TYPE,
     };
@@ -445,7 +495,7 @@ TEST_CASE("ADC continuous monitor functionary", "[adc]")
 
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
     for (int i = 0; i < 2; i++) {
-        adc_pattern[i].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].atten = TEST_ADC_DRIVER_DEFAULT_ATTEN;
         adc_pattern[i].channel = TEST_ADC_CHANNEL;
         adc_pattern[i].unit = ADC_UNIT_1;
         adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
@@ -453,7 +503,7 @@ TEST_CASE("ADC continuous monitor functionary", "[adc]")
     adc_continuous_config_t dig_cfg = {
         .pattern_num = 2,
         .adc_pattern = adc_pattern,
-        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_LOW,
+        .sample_freq_hz = ADC_LL_SAMPLE_FREQ_THRES_LOW,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .format = TEST_ADC_FORMAT_TYPE,
     };
@@ -500,12 +550,12 @@ TEST_CASE("ADC continuous monitor functionary", "[adc]")
         switch (pull_mode) {
         case GPIO_PULLUP_ONLY:
 #if !CONFIG_IDF_TARGET_ESP32S2
-            TEST_ASSERT_UINT32_WITHIN(SOC_ADC_SAMPLE_FREQ_THRES_LOW * 0.1, SOC_ADC_SAMPLE_FREQ_THRES_LOW, m1h_cnt);
+            TEST_ASSERT_UINT32_WITHIN(ADC_LL_SAMPLE_FREQ_THRES_LOW * 0.1, ADC_LL_SAMPLE_FREQ_THRES_LOW, m1h_cnt);
             TEST_ASSERT_EQUAL(0, m1l_cnt);  //low limit should NOT triggrted when pull_up
 #endif
             break;
         case GPIO_PULLDOWN_ONLY:
-            TEST_ASSERT_UINT32_WITHIN(SOC_ADC_SAMPLE_FREQ_THRES_LOW * 0.1, SOC_ADC_SAMPLE_FREQ_THRES_LOW, m1l_cnt);
+            TEST_ASSERT_UINT32_WITHIN(ADC_LL_SAMPLE_FREQ_THRES_LOW * 0.1, ADC_LL_SAMPLE_FREQ_THRES_LOW, m1l_cnt);
             TEST_ASSERT_EQUAL(0, m1h_cnt);
             break;
         case GPIO_PULLUP_PULLDOWN:

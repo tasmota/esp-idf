@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -52,7 +52,7 @@ _Static_assert((1 << (sizeof(vfs_index_t)*8)) >= VFS_MAX_COUNT, "VFS index type 
 _Static_assert(((vfs_index_t) -1) < 0, "vfs_index_t must be a signed type");
 
 static vfs_entry_t* s_vfs[VFS_MAX_COUNT] = { 0 };
-static size_t s_vfs_count = 0;
+static size_t s_vfs_upper_bound = 0; // upper bound of indices in s_vfs which can be occupied by VFS entries; always equal to the index of the last non-NULL entry + 1
 
 static fd_table_t s_fd_table[MAX_FDS] = { [0 ... MAX_FDS-1] = FD_TABLE_ENTRY_UNUSED };
 static _lock_t s_fd_table_lock;
@@ -93,6 +93,22 @@ static void esp_vfs_free_entry(vfs_entry_t *entry) {
     }
 
     free(entry);
+}
+
+/* s_fd_table_lock is held. Detach the slot and its fds. Caller frees the entry. */
+static vfs_entry_t *vfs_take_down_locked(int vfs_id)
+{
+    vfs_entry_t *vfs = s_vfs[vfs_id];
+    s_vfs[vfs_id] = NULL;
+    for (int j = 0; j < MAX_FDS; ++j) {
+        if (s_fd_table[j].vfs_index == vfs_id) {
+            s_fd_table[j] = FD_TABLE_ENTRY_UNUSED;
+        }
+    }
+    while (s_vfs_upper_bound > 0 && s_vfs[s_vfs_upper_bound - 1] == NULL) {
+        s_vfs_upper_bound--;
+    }
+    return vfs;
 }
 
 typedef struct {
@@ -383,6 +399,18 @@ static bool is_path_prefix_valid(const char *path, size_t length) {
         && (path[length - 1] != '/');
 }
 
+static ssize_t find_vfs_index_for_prefix(const char *base_path, size_t base_path_len)
+{
+    for (size_t i = 0; i < s_vfs_upper_bound; ++i) {
+        const vfs_entry_t *vfs = s_vfs[i];
+        if (vfs != NULL && base_path_len == vfs->path_prefix_len &&
+                memcmp(base_path, vfs->path_prefix, base_path_len) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static esp_err_t esp_vfs_register_fs_common(
     const char *base_path,
     const esp_vfs_fs_ops_t *vfs,
@@ -390,8 +418,9 @@ static esp_err_t esp_vfs_register_fs_common(
     void *ctx,
     int *vfs_index)
 {
-    if (s_vfs_count >= VFS_MAX_COUNT) {
-        return  ESP_ERR_NO_MEM;
+    ssize_t index = esp_get_free_index();
+    if (index < 0) { // Check for free slot before doing any other work
+        return ESP_ERR_NO_MEM;
     }
 
     if (vfs == NULL) {
@@ -410,19 +439,19 @@ static esp_err_t esp_vfs_register_fs_common(
             ESP_LOGE(TAG, "Invalid path prefix");
             return ESP_ERR_INVALID_ARG;
         }
-    }
 
-    ssize_t index = esp_get_free_index();
-    if (index < 0) {
-        return ESP_ERR_NO_MEM;
+        if (find_vfs_index_for_prefix(base_path, base_path_len) >= 0) {
+            ESP_LOGE(TAG, "Path prefix '%s' is already registered", base_path);
+            return ESP_ERR_INVALID_STATE;
+        }
     }
 
     if (s_vfs[index] != NULL) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (index == s_vfs_count) {
-        s_vfs_count++;
+    if (index == s_vfs_upper_bound) {
+        s_vfs_upper_bound++;
     }
 
     vfs_entry_t *entry = heap_caps_malloc(sizeof(vfs_entry_t) + base_path_len + 1, VFS_MALLOC_FLAGS);
@@ -447,20 +476,15 @@ static esp_err_t esp_vfs_register_fs_common(
     return ESP_OK;
 }
 
-esp_err_t esp_vfs_register_fs(const char* base_path, const esp_vfs_fs_ops_t* vfs, int flags, void* ctx)
+static esp_err_t esp_vfs_register_fs_ops(const char *base_path, const esp_vfs_fs_ops_t *vfs, int flags, void *ctx, int *vfs_index)
 {
     if (vfs == NULL) {
         ESP_LOGE(TAG, "VFS is NULL");
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (base_path == NULL) {
-        ESP_LOGE(TAG, "base_path cannot be null");
-        return ESP_ERR_INVALID_ARG;
-    }
-
     if ((flags & ESP_VFS_FLAG_STATIC)) {
-        return esp_vfs_register_fs_common(base_path, vfs, flags, ctx, NULL);
+        return esp_vfs_register_fs_common(base_path, vfs, flags, ctx, vfs_index);
     }
 
     esp_vfs_fs_ops_t *_vfs = esp_vfs_duplicate_fs_ops(vfs);
@@ -468,13 +492,23 @@ esp_err_t esp_vfs_register_fs(const char* base_path, const esp_vfs_fs_ops_t* vfs
         return ESP_ERR_NO_MEM;
     }
 
-    esp_err_t ret = esp_vfs_register_fs_common(base_path, _vfs, flags, ctx, NULL);
+    esp_err_t ret = esp_vfs_register_fs_common(base_path, _vfs, flags, ctx, vfs_index);
     if (ret != ESP_OK) {
         esp_vfs_free_fs_ops(_vfs);
         return ret;
     }
 
     return ESP_OK;
+}
+
+esp_err_t esp_vfs_register_fs(const char* base_path, const esp_vfs_fs_ops_t* vfs, int flags, void* ctx)
+{
+    if (base_path == NULL) {
+        ESP_LOGE(TAG, "base_path cannot be null");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return esp_vfs_register_fs_ops(base_path, vfs, flags, ctx, NULL);
 }
 
 esp_err_t esp_vfs_register_common(const char* base_path, size_t len, const esp_vfs_t* vfs, void* ctx, int *vfs_index)
@@ -537,26 +571,22 @@ esp_err_t esp_vfs_register_with_id(const esp_vfs_t *vfs, void *ctx, esp_vfs_id_t
 
 esp_err_t esp_vfs_register_fd_range(const esp_vfs_fs_ops_t *vfs, int flags, void *ctx, int min_fd, int max_fd)
 {
-    if (min_fd < 0 || max_fd < 0 || min_fd > MAX_FDS || max_fd > MAX_FDS || min_fd > max_fd) {
+    if (min_fd < 0 || max_fd < 0 || min_fd > MAX_FDS || max_fd > MAX_FDS || min_fd > max_fd ||
+            !(flags & ESP_VFS_FLAG_STATIC)) {
         ESP_LOGD(TAG, "Invalid arguments: esp_vfs_register_fd_range(0x%p, 0x%p, %d, %d)", vfs, ctx, min_fd, max_fd);
         return ESP_ERR_INVALID_ARG;
     }
 
     int index = 0;
-    esp_err_t ret = esp_vfs_register_fs_common(NULL, vfs, flags, ctx, &index);
+    esp_err_t ret = esp_vfs_register_fs_ops(NULL, vfs, flags, ctx, &index);
 
     if (ret == ESP_OK) {
         _lock_acquire(&s_fd_table_lock);
         for (int i = min_fd; i < max_fd; ++i) {
             if (s_fd_table[i].vfs_index != -1) {
-                free(s_vfs[index]);
-                s_vfs[index] = NULL;
-                for (int j = min_fd; j < i; ++j) {
-                    if (s_fd_table[j].vfs_index == index) {
-                        s_fd_table[j] = FD_TABLE_ENTRY_UNUSED;
-                    }
-                }
+                vfs_entry_t *entry = vfs_take_down_locked(index);
                 _lock_release(&s_fd_table_lock);
+                esp_vfs_free_entry(entry);
                 ESP_LOGW(TAG, "esp_vfs_register_fd_range cannot set fd %d (used by other VFS)", i);
                 return ESP_ERR_INVALID_ARG;
             }
@@ -579,29 +609,25 @@ esp_err_t esp_vfs_register_fs_with_id(const esp_vfs_fs_ops_t *vfs, int flags, vo
     }
 
     *vfs_id = -1;
-    return esp_vfs_register_fs_common(NULL, vfs, flags, ctx, vfs_id);
+    return esp_vfs_register_fs_ops(NULL, vfs, flags, ctx, vfs_id);
 }
 
 esp_err_t esp_vfs_unregister_with_id(esp_vfs_id_t vfs_id)
 {
-    if (vfs_id < 0 || vfs_id >= VFS_MAX_COUNT || s_vfs[vfs_id] == NULL) {
+    if (vfs_id < 0 || vfs_id >= VFS_MAX_COUNT) {
         return ESP_ERR_INVALID_ARG;
     }
-    vfs_entry_t* vfs = s_vfs[vfs_id];
-    esp_vfs_free_entry(vfs);
-    s_vfs[vfs_id] = NULL;
 
     _lock_acquire(&s_fd_table_lock);
-    // Delete all references from the FD lookup-table
-    for (int j = 0; j < VFS_MAX_COUNT; ++j) {
-        if (s_fd_table[j].vfs_index == vfs_id) {
-            s_fd_table[j] = FD_TABLE_ENTRY_UNUSED;
-        }
+    if (s_vfs[vfs_id] == NULL) {
+        _lock_release(&s_fd_table_lock);
+        return ESP_ERR_INVALID_ARG;
     }
+    vfs_entry_t *vfs = vfs_take_down_locked(vfs_id);
     _lock_release(&s_fd_table_lock);
 
+    esp_vfs_free_entry(vfs);
     return ESP_OK;
-
 }
 
 #ifndef CONFIG_IDF_TARGET_LINUX
@@ -610,18 +636,39 @@ esp_err_t esp_vfs_unregister_fs_with_id(esp_vfs_id_t vfs_id) __attribute__((alia
 
 esp_err_t esp_vfs_unregister(const char* base_path)
 {
-    const size_t base_path_len = strlen(base_path);
-    for (size_t i = 0; i < s_vfs_count; ++i) {
-        vfs_entry_t* vfs = s_vfs[i];
-        if (vfs == NULL) {
-            continue;
-        }
-        if (base_path_len == vfs->path_prefix_len &&
-                memcmp(base_path, vfs->path_prefix, vfs->path_prefix_len) == 0) {
-            return esp_vfs_unregister_with_id(i);
-        }
+    if (base_path == NULL) {
+        ESP_LOGE(TAG, "base_path cannot be null");
+        return ESP_ERR_INVALID_ARG;
     }
-    return ESP_ERR_INVALID_STATE;
+
+    ssize_t index = find_vfs_index_for_prefix(base_path, strlen(base_path));
+    if (index < 0) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return esp_vfs_unregister_with_id(index);
+}
+
+esp_err_t esp_vfs_unregister_fs_checked(const char *base_path, const esp_vfs_fs_ops_t *vfs, int flags, void *ctx)
+{
+    if (base_path == NULL || vfs == NULL) {
+        ESP_LOGE(TAG, "base_path and vfs cannot be null");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ssize_t index = find_vfs_index_for_prefix(base_path, strlen(base_path));
+    if (index < 0) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    const vfs_entry_t *entry = s_vfs[index];
+    if ((entry->flags & ESP_VFS_FLAG_STATIC) == 0) {
+        ESP_LOGE(TAG, "FS registered at '%s' is not static, its ops cannot be verified", base_path);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (entry->vfs != vfs || entry->flags != flags || entry->ctx != ctx) {
+        ESP_LOGE(TAG, "FS registered at '%s' does not match the given ops, flags and ctx", base_path);
+        return ESP_ERR_INVALID_ARG;
+    }
+    return esp_vfs_unregister_with_id(index);
 }
 
 #ifndef CONFIG_IDF_TARGET_LINUX
@@ -635,7 +682,7 @@ esp_err_t esp_vfs_register_fd(esp_vfs_id_t vfs_id, int *fd)
 
 esp_err_t esp_vfs_register_fd_with_local_fd(esp_vfs_id_t vfs_id, int local_fd, bool permanent, int *fd)
 {
-    if (vfs_id < 0 || vfs_id >= s_vfs_count || fd == NULL) {
+    if (vfs_id < 0 || vfs_id >= s_vfs_upper_bound || fd == NULL) {
         ESP_LOGD(TAG, "Invalid arguments for esp_vfs_register_fd_with_local_fd(%d, %d, %d, 0x%p)",
                  vfs_id, local_fd, permanent, fd);
         return ESP_ERR_INVALID_ARG;
@@ -669,7 +716,7 @@ esp_err_t esp_vfs_unregister_fd(esp_vfs_id_t vfs_id, int fd)
 {
     esp_err_t ret = ESP_ERR_INVALID_ARG;
 
-    if (vfs_id < 0 || vfs_id >= s_vfs_count || fd < 0 || fd >= MAX_FDS) {
+    if (vfs_id < 0 || vfs_id >= s_vfs_upper_bound || fd < 0 || fd >= MAX_FDS) {
         ESP_LOGD(TAG, "Invalid arguments for esp_vfs_unregister_fd(%d, %d)", vfs_id, fd);
         return ret;
     }
@@ -732,7 +779,7 @@ void esp_vfs_dump_registered_paths(FILE *fp)
 esp_err_t esp_vfs_set_readonly_flag(const char* base_path)
 {
     const size_t base_path_len = strlen(base_path);
-    for (size_t i = 0; i < s_vfs_count; ++i) {
+    for (size_t i = 0; i < s_vfs_upper_bound; ++i) {
         vfs_entry_t* vfs = s_vfs[i];
         if (vfs == NULL) {
             continue;
@@ -748,11 +795,10 @@ esp_err_t esp_vfs_set_readonly_flag(const char* base_path)
 
 const vfs_entry_t *get_vfs_for_index(int index)
 {
-    if (index < 0 || index >= s_vfs_count) {
+    if (index < 0 || index >= VFS_MAX_COUNT) {
         return NULL;
-    } else {
-        return s_vfs[index];
     }
+    return s_vfs[index];
 }
 
 int register_fd(int vfs_index, int local_fd, bool permanent)
@@ -833,10 +879,13 @@ const char* translate_path(const vfs_entry_t* vfs, const char* src_path)
 
 const vfs_entry_t* get_vfs_for_path(const char* path)
 {
+    if (path == NULL) {
+        return NULL;
+    }
     const vfs_entry_t* best_match = NULL;
     ssize_t best_match_prefix_len = -1;
     size_t len = strlen(path);
-    for (size_t i = 0; i < s_vfs_count; ++i) {
+    for (size_t i = 0; i < s_vfs_upper_bound; ++i) {
         const vfs_entry_t* vfs = s_vfs[i];
         if (vfs == NULL || vfs->path_prefix_len == LEN_PATH_PREFIX_IGNORED) {
             continue;
@@ -860,7 +909,7 @@ const vfs_entry_t* get_vfs_for_path(const char* path)
         // Out of all matching path prefixes, select the longest one;
         // i.e. if "/dev" and "/dev/uart" both match, for "/dev/uart/1" path,
         // choose "/dev/uart",
-        // This causes all s_vfs_count VFS entries to be scanned when opening
+        // This causes all s_vfs_upper_bound VFS entries to be scanned when opening
         // a file by name. This can be optimized by introducing a table for
         // FS search order, sorted so that longer prefixes are checked first.
         if (best_match_prefix_len < (ssize_t) vfs->path_prefix_len) {
@@ -871,9 +920,9 @@ const vfs_entry_t* get_vfs_for_path(const char* path)
     return best_match;
 }
 
-size_t get_vfs_count(void)
+size_t get_vfs_upper_bound(void)
 {
-    return s_vfs_count;
+    return s_vfs_upper_bound;
 }
 
 void close_pending(int nfds)

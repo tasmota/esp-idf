@@ -10,7 +10,7 @@ HTTP Server 组件提供了在 ESP32 上运行轻量级 Web 服务器的功能�
 
     * :cpp:func:`httpd_start`： 创建 HTTP 服务器的实例，根据具体的配置为其分配内存和资源，并返回该服务器实例的句柄。服务器使用了两个套接字，一个用来监听 HTTP 流量（TCP 类型），另一个用来处理控制信号（UDP 类型），它们在服务器的任务循环中轮流使用。通过向 ``httpd_start()`` 传递 ``httpd_config_t`` 结构体，可以在创建服务器实例时配置任务的优先级和堆栈的大小。TCP 流量被解析为 HTTP 请求，根据请求的 URI 来调用用户注册的处理程序，在处理程序中需要发送回 HTTP 响应数据包。
     * :cpp:func:`httpd_stop`： 根据传入的句柄停止服务器，并释放相关联的内存和资源。这是一个阻塞函数，首先给服务器任务发送停止信号，然后等待其终止。期间服务器任务会关闭所有已打开的连接，删除已注册的 URI 处理程序，并将所有会话的上下文数据重置为空。
-    * :cpp:func:`httpd_register_uri_handler`： 通过传入 ``httpd_uri_t`` 结构体类型的对象来注册 URI 处理程序。该结构体包含如下成员：``uri`` 名字，``method`` 类型（比如 ``HTTP_GET/HTTP_POST/HTTP_PUT`` 等等）， ``esp_err_t *handler (httpd_req_t *req)`` 类型的函数指针，指向用户上下文数据的 ``user_ctx`` 指针。
+    * :cpp:func:`httpd_register_uri_handler`： 通过传入 ``httpd_uri_t`` 结构体类型的对象来注册 URI 处理程序。该结构体包含如下成员：``uri`` 名字，``method`` 类型（比如 ``HTTP_GET/HTTP_POST/HTTP_PUT/HTTP_QUERY`` 等等）， ``esp_err_t *handler (httpd_req_t *req)`` 类型的函数指针，指向用户上下文数据的 ``user_ctx`` 指针。RFC 10008 的 ``HTTP_QUERY`` 安全且幂等，可以携带请求体；使用 ``.method = HTTP_QUERY`` 注册即可。
 
 .. note::
 
@@ -93,7 +93,7 @@ HTTP 服务器具有长连接的功能，允许重复使用同一个连接（会
 WebSocket 服务器
 ----------------
 
-HTTP 服务器组件提供 websocket 支持。可以在 menuconfig 中使用 :ref:`CONFIG_HTTPD_WS_SUPPORT` 选项启用 websocket 功能。
+HTTP 服务器组件提供 websocket 支持。可以在 menuconfig 中使用 :menuitem:`CONFIG_HTTPD_WS_SUPPORT` 选项启用 websocket 功能。
 
 :example:`protocols/http_server/ws_echo_server` 演示了如何使用 HTTP 服务器创建一个 WebSocket 回显服务器，该服务器在本地网络上启动，与 WebSocket 客户端进行交互，回显接收到的 WebSocket 帧。
 
@@ -105,7 +105,7 @@ HTTP 服务器组件为 WebSocket 端点提供了握手前回调 (pre-handshake 
 
 握手前回调函数可用于身份认证、权限校验及其他检查。如果回调返回 :c:macro:`ESP_OK`，WebSocket 握手将继续进行；如果返回其他值，则握手中止，连接也会关闭。
 
-要使用 WebSocket 握手前回调，需在项目配置中启用 :ref:`CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT` 选项。
+要使用 WebSocket 握手前回调，需在项目配置中启用 :menuitem:`CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT` 选项。
 
 WebSocket 握手后回调
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -114,7 +114,7 @@ WebSocket 握手后回调
 
 此时连接已升级为 WebSocket，服务器已返回 WebSocket 握手响应。该握手后回调可用于记录日志、发送初始消息或执行其他初始化任务。
 
-要使用 WebSocket 握手后回调功能，需在项目配置中启用 :ref:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` 选项。
+要使用 WebSocket 握手后回调功能，需在项目配置中启用 :menuitem:`CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT` 选项。
 
 .. code-block:: c
 
@@ -137,6 +137,62 @@ WebSocket 握手后回调
 
     // 在启动服务器后注册该处理程序
     httpd_register_uri_handler(server, &ws);
+
+
+WebSocket 消息分片
+^^^^^^^^^^^^^^^^^^
+
+服务器不支持 `RFC 6455 第 5.4 节 <https://tools.ietf.org/html/rfc6455#section-5.4>`_ 所定义的 WebSocket 消息分片。需要接收或发送分片的应用程序必须自行遵循以下规则。
+
+接收时，服务器会将每个帧单独传递给处理程序，不会合并同一消息的各个分片。如果一条 TEXT 消息分为三个片段，处理程序会收到三个独立的帧。可使用 :cpp:type:`httpd_ws_frame_t` 的 ``final`` 和 ``fragmented`` 字段识别分片，并在应用程序中合并有效载荷。
+
+服务器不会验证分片顺序。即使没有待继续的消息，服务器也会接受 CONTINUE 帧；在一条分片消息尚未结束时，也会接受新的 TEXT 或 BINARY 帧。根据 RFC 6455，这两种情况下都应使用状态码 1002 关闭连接。
+
+:menuitem:`CONFIG_HTTPD_WS_STRICTER_RFC6455` 仅验证完整且未分片的 TEXT 帧是否为有效的 UTF-8，不会验证以分片形式到达的 TEXT 消息。要对此类消息实施 `RFC 6455 第 8.1 节 <https://tools.ietf.org/html/rfc6455#section-8.1>`_ 的要求，请合并各分片，并对结果调用 :cpp:func:`httpd_ws_validate_utf8`。
+
+发送时，服务器不会自动对消息进行分片。要发送分片，请设置 ``fragmented`` 选项，并使用 ``final`` 选项标记最后一个分片。
+
+
+WebSocket 控制帧处理程序
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+默认情况下，服务器会自动回复 WebSocket 控制帧。收到 PING 帧时回复 PONG 帧，收到 CLOSE 帧时回复 CLOSE 帧，应用程序不会参与该过程。
+
+在 :cpp:type:`httpd_uri_t` 中将 ``handle_ws_control_frames`` 设置为 true 可关闭自动回复。此后控制帧会传递给数据处理程序，该处理程序必须接收每个帧并自行发送协议回复。
+
+``ws_control_handler`` 回调可避免将控制帧传递给数据处理程序。请将该回调与 ``handle_ws_control_frames`` 一同设置。此后控制帧（PING、PONG、CLOSE）会传递给该专用处理程序，数据处理程序只会接收数据帧。
+
+服务器会为处理程序接收帧体，因此无需分配内存，也无需调用 :cpp:func:`httpd_ws_recv_frame`。服务器不会回复，处理程序负责发送协议回复。收到 PING 时，应回复有效载荷相同的 PONG；收到 CLOSE 时，应回复 CLOSE；收到 PONG 时无需回复。要发送回复，请覆盖 ``frame->type``，并将该帧传递给 :cpp:func:`httpd_ws_send_frame`。
+
+帧及其有效载荷均归服务器所有，且仅在回调期间有效。处理程序不得释放或保留它们，也不得将 ``frame->len`` 增大到超过接收长度，因为有效载荷缓冲区只能容纳一个控制帧。如果处理程序返回错误，服务器不会发送回复，并会关闭连接。
+
+.. code-block:: c
+
+    static esp_err_t ws_control_frame_handler(httpd_req_t *req, httpd_ws_frame_t *frame)
+    {
+        switch (frame->type) {
+        case HTTPD_WS_TYPE_PING:
+            frame->type = HTTPD_WS_TYPE_PONG;   // 复用该帧发送回复
+            return httpd_ws_send_frame(req, frame);
+        case HTTPD_WS_TYPE_CLOSE:
+            frame->len = 0;                     // 空 CLOSE 帧是有效回复
+            frame->payload = NULL;
+            return httpd_ws_send_frame(req, frame);
+        default:
+            return ESP_OK;                      // PONG 无需回复
+        }
+    }
+
+    // 注册带有专用控制帧处理程序的 WebSocket URI 处理程序
+    static const httpd_uri_t ws = {
+        .uri        = "/ws",
+        .method     = HTTP_GET,
+        .handler    = handler,           // WebSocket 数据处理程序
+        .user_ctx   = NULL,
+        .is_websocket = true,
+        .handle_ws_control_frames = true,
+        .ws_control_handler = ws_control_frame_handler
+    };
 
 
 事件处理

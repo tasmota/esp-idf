@@ -33,11 +33,12 @@ end
 %% =======================
 subgraph PRIMARY["🔌 PUBLIC INTERFACE"]
     api["- esp_trace.h 
-    - esp_trace_init()
-    - esp_trace_record()
     - esp_trace_write()
+    - esp_trace_start()
+    - esp_trace_stop()
     - esp_trace_flush()
-    - esp_trace_print()"]
+    - esp_trace_is_host_connected()
+    - esp_trace_get_link_type()"]
 end
 
 %% wiring: App uses API (labels land on the short pre-edges to api_in)
@@ -203,7 +204,7 @@ idf_component_register(
 )
 ```
 
-This means you can directly use both the trace library APIs (e.g., SystemView) and `esp_trace` APIs (like `esp_trace_get_user_params()`, `esp_trace_is_host_connected()`, etc.) without explicitly declaring the dependency.
+This means you can directly use both the trace library APIs (e.g., SystemView) and `esp_trace` APIs (like `esp_trace_get_user_params()`, `esp_trace_is_host_connected()`, `esp_trace_start()` / `esp_trace_stop()` / `esp_trace_flush()`, etc.) without explicitly declaring the dependency.
 
 ### When Using Standalone Apptrace
 
@@ -225,6 +226,20 @@ The `esp_trace` component supports integration of external trace libraries throu
 
 - **Transport Adapters**: Handle the physical transport layer (e.g., JTAG, UART)
 - **Encoder Adapters**: Handle the trace encoding/formatting (e.g., SystemView, custom formats)
+
+> ⚠️ **Reentrancy constraint for adapter runtime callbacks**
+>
+> Encoder and transport callbacks invoked from the hot path — `write`, `flush` / `flush_nolock`, `read`, `take_lock` / `give_lock`, `panic_handler` — run from inside FreeRTOS trace hooks (and from ISR context for `traceISR_ENTER` / `traceISR_EXIT`). They are also called while the encoder's lock is held.
+>
+> Do **not** call FreeRTOS / IDF APIs that themselves trigger trace hooks from these callbacks. Anything that would invoke a `trace*()` macro re-enters the tracing path: it can recurse into your own encoder, deadlock on the encoder's non-recursive spinlock, or call a task-only API from ISR context.
+>
+> Specifically avoid:
+> - Task APIs: `vTaskDelay`, `vTaskSuspend`, `xTaskNotify*`, anything that yields.
+> - Queue / semaphore / mutex APIs: `xQueueSend/Receive`, `xSemaphoreTake/Give`, `xQueueSemaphoreTake`.
+> - Stream / message buffer APIs.
+> - Heap allocations that may take an internal mutex.
+>
+> Safe building blocks for adapter code: lock-free or spinlock-only primitives (e.g. `esp_trace_lock_*`, `esp_trace_rb_*`), low-level peripheral register access, atomic operations, and `esp_rom_*` helpers. Do any heavier work (FreeRTOS APIs, allocations) only at adapter `init()` time, before the trace session is in steady state.
 
 ### Creating a Transport Adapter
 
@@ -396,6 +411,57 @@ target_link_libraries(${esp_trace_lib} INTERFACE $<TARGET_NAME_IF_EXISTS:${COMPO
 
 **Note:** External trace libraries should use `CONFIG_ESP_TRACE_LIB_EXTERNAL=y` instead of defining their own Kconfig option in the esp_trace menu. This keeps the external component independent from the esp_trace component.
 
+## Function Tracing
+
+`esp_trace` can record function entry/exit using the compiler's `-finstrument-functions` feature. The runtime and hooks live in `esp_trace`. The active encoder (e.g. SystemView) formats the events.
+
+### Enable
+
+```
+CONFIG_ESP_TRACE_FUNCTION_TRACE=y
+```
+
+### Instrument selected code
+
+Add the flag only to the components or files you want traced:
+
+```cmake
+# instrument the whole component
+target_compile_options(${COMPONENT_LIB} PRIVATE -finstrument-functions)
+```
+
+To narrow it down, exclude files or functions:
+
+```cmake
+target_compile_options(${COMPONENT_LIB} PRIVATE
+    -finstrument-functions
+    -finstrument-functions-exclude-file-list=foo.c,bar.c
+    -finstrument-functions-exclude-function-list=hot_fn,isr_handler)
+```
+
+Individual functions can also be excluded in source with `__attribute__((no_instrument_function))`.
+
+### Control from the application
+
+```c
+#include "esp_trace_function_trace.h"
+
+esp_trace_function_trace_start();
+// ...
+esp_trace_function_trace_stop();
+```
+
+Recording is active only while function tracing is started and the encoder reports it is recording (for SystemView this follows the host connecting and starting a recording over JTAG/UART).
+
+> Do not instrument `esp_trace`, encoders, transports, or SEGGER sources. They must stay free of `-finstrument-functions` to avoid recursion. The target sends addresses, not symbol names. If supported, the host viewer can resolve them from the ELF.
+
+### Limitations
+
+- No early-boot tracing. Events are recorded only after a trace session and the encoder are running.
+- The target sends addresses, not symbol strings. The host viewer can optionally resolve them from the ELF.
+- Instrumentation adds hook overhead to every traced call and increases code size and stack usage.
+- Whole-IDF instrumentation is not recommended. Instrument selected components or files only.
+
 ## Documentation
 
 For detailed usage instructions, see:
@@ -405,6 +471,7 @@ For detailed usage instructions, see:
 ## Examples
 
 Examples demonstrating trace usage can be found in:
-- `examples/system/app_trace_basic/` - Basic application tracing
-- `examples/system/sysview_tracing/` - SystemView tracing example
-- `examples/system/sysview_tracing_heap_log/` - SystemView heap and log tracing example
+- `examples/system/tracing/app_trace_basic/` - Basic application tracing
+- `examples/system/tracing/sysview_tracing/` - SystemView tracing example
+- `examples/system/tracing/esp_trace_custom_library/` - Minimal template for integrating an external trace library (encoder + FreeRTOS hooks + vtable lock)
+- `examples/system/tracing/sysview_tracing_heap_log/` - SystemView heap and log tracing example

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,7 +9,7 @@
 #include <assert.h>
 #include "esp_efuse_table.h"
 
-// md5_digest_table 4ec5511e3b738f65373b56d5cdecea93
+// md5_digest_table 6183bb2364f684633bf2b6aa1ee00621
 // This file was generated from the file esp_efuse_table.csv. DO NOT CHANGE THIS FILE MANUALLY.
 // If you want to change some fields, you need to change esp_efuse_table.csv file
 // then run `efuse_common_table` or `efuse_custom_table` command it will generate this file.
@@ -21,6 +21,10 @@ static const esp_efuse_desc_t WR_DIS[] = {
 
 static const esp_efuse_desc_t WR_DIS_RD_DIS[] = {
     {EFUSE_BLK0, 0, 1}, 	 // [] wr_dis of RD_DIS,
+};
+
+static const esp_efuse_desc_t WR_DIS_PVT_GLITCH_EN[] = {
+    {EFUSE_BLK0, 2, 1}, 	 // [] wr_dis of PVT_GLITCH_EN,
 };
 
 static const esp_efuse_desc_t WR_DIS_DIS_ICACHE[] = {
@@ -44,7 +48,7 @@ static const esp_efuse_desc_t WR_DIS_SPI_DOWNLOAD_MSPI_DIS[] = {
 };
 
 static const esp_efuse_desc_t WR_DIS_DIS_TWAI[] = {
-    {EFUSE_BLK0, 2, 1}, 	 // [WR_DIS.DIS_CAN] wr_dis of DIS_TWAI,
+    {EFUSE_BLK0, 2, 1}, 	 // [] wr_dis of DIS_TWAI,
 };
 
 static const esp_efuse_desc_t WR_DIS_JTAG_SEL_ENABLE[] = {
@@ -57,6 +61,10 @@ static const esp_efuse_desc_t WR_DIS_DIS_PAD_JTAG[] = {
 
 static const esp_efuse_desc_t WR_DIS_DIS_DOWNLOAD_MANUAL_ENCRYPT[] = {
     {EFUSE_BLK0, 2, 1}, 	 // [] wr_dis of DIS_DOWNLOAD_MANUAL_ENCRYPT,
+};
+
+static const esp_efuse_desc_t WR_DIS_POWERGLITCH_EN1[] = {
+    {EFUSE_BLK0, 2, 1}, 	 // [] wr_dis of POWERGLITCH_EN1,
 };
 
 static const esp_efuse_desc_t WR_DIS_WDT_DELAY_SEL[] = {
@@ -103,6 +111,10 @@ static const esp_efuse_desc_t WR_DIS_KEY_PURPOSE_5[] = {
     {EFUSE_BLK0, 13, 1}, 	 // [WR_DIS.KEY5_PURPOSE] wr_dis of KEY_PURPOSE_5,
 };
 
+static const esp_efuse_desc_t WR_DIS_XTS_DPA_PSEUDO_LEVEL[] = {
+    {EFUSE_BLK0, 14, 1}, 	 // [] wr_dis of XTS_DPA_PSEUDO_LEVEL,
+};
+
 static const esp_efuse_desc_t WR_DIS_SEC_DPA_LEVEL[] = {
     {EFUSE_BLK0, 14, 1}, 	 // [] wr_dis of SEC_DPA_LEVEL,
 };
@@ -140,7 +152,7 @@ static const esp_efuse_desc_t WR_DIS_DIS_DIRECT_BOOT[] = {
 };
 
 static const esp_efuse_desc_t WR_DIS_DIS_USB_SERIAL_JTAG_ROM_PRINT[] = {
-    {EFUSE_BLK0, 18, 1}, 	 // [WR_DIS.DIS_USB_PRINT] wr_dis of DIS_USB_SERIAL_JTAG_ROM_PRINT,
+    {EFUSE_BLK0, 18, 1}, 	 // [] wr_dis of DIS_USB_SERIAL_JTAG_ROM_PRINT,
 };
 
 static const esp_efuse_desc_t WR_DIS_DIS_USB_SERIAL_JTAG_DOWNLOAD_MODE[] = {
@@ -187,32 +199,52 @@ static const esp_efuse_desc_t WR_DIS_MAC_EXT[] = {
     {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of MAC_EXT,
 };
 
-static const esp_efuse_desc_t WR_DIS_RXIQ_VERSION[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of RXIQ_VERSION,
+static const esp_efuse_desc_t WR_DIS_PVT_CELL_SELECT[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PVT_CELL_SELECT,
 };
 
-static const esp_efuse_desc_t WR_DIS_RXIQ_0[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of RXIQ_0,
+static const esp_efuse_desc_t WR_DIS_BLK_VERSION_MINOR[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of BLK_VERSION_MINOR,
 };
 
-static const esp_efuse_desc_t WR_DIS_RXIQ_1[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of RXIQ_1,
+static const esp_efuse_desc_t WR_DIS_BLK_VERSION_MAJOR[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of BLK_VERSION_MAJOR,
 };
 
-static const esp_efuse_desc_t WR_DIS_ACTIVE_HP_DBIAS[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of ACTIVE_HP_DBIAS,
+static const esp_efuse_desc_t WR_DIS_DISABLE_BLK_VERSION_MAJOR[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of DISABLE_BLK_VERSION_MAJOR,
 };
 
-static const esp_efuse_desc_t WR_DIS_ACTIVE_LP_DBIAS[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of ACTIVE_LP_DBIAS,
+static const esp_efuse_desc_t WR_DIS_FLASH_CAP[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of FLASH_CAP,
 };
 
-static const esp_efuse_desc_t WR_DIS_DSLP_DBIAS[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of DSLP_DBIAS,
+static const esp_efuse_desc_t WR_DIS_FLASH_VENDOR[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of FLASH_VENDOR,
 };
 
-static const esp_efuse_desc_t WR_DIS_DBIAS_VOL_GAP[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of DBIAS_VOL_GAP,
+static const esp_efuse_desc_t WR_DIS_TEMP[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of TEMP,
+};
+
+static const esp_efuse_desc_t WR_DIS_PVT_LIMIT[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PVT_LIMIT,
+};
+
+static const esp_efuse_desc_t WR_DIS_PVT_GLITCH_CHARGE_RESET[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PVT_GLITCH_CHARGE_RESET,
+};
+
+static const esp_efuse_desc_t WR_DIS_PVT_GLITCH_MODE[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PVT_GLITCH_MODE,
+};
+
+static const esp_efuse_desc_t WR_DIS_PVT_PUMP_LIMIT[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PVT_PUMP_LIMIT,
+};
+
+static const esp_efuse_desc_t WR_DIS_PUMP_DRV[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PUMP_DRV,
 };
 
 static const esp_efuse_desc_t WR_DIS_WAFER_VERSION_MINOR[] = {
@@ -227,20 +259,16 @@ static const esp_efuse_desc_t WR_DIS_DISABLE_WAFER_VERSION_MAJOR[] = {
     {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of DISABLE_WAFER_VERSION_MAJOR,
 };
 
-static const esp_efuse_desc_t WR_DIS_FLASH_CAP[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of FLASH_CAP,
-};
-
-static const esp_efuse_desc_t WR_DIS_FLASH_TEMP[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of FLASH_TEMP,
-};
-
-static const esp_efuse_desc_t WR_DIS_FLASH_VENDOR[] = {
-    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of FLASH_VENDOR,
-};
-
 static const esp_efuse_desc_t WR_DIS_PKG_VERSION[] = {
     {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of PKG_VERSION,
+};
+
+static const esp_efuse_desc_t WR_DIS_OCODE[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of OCODE,
+};
+
+static const esp_efuse_desc_t WR_DIS_DCDC_OCODE[] = {
+    {EFUSE_BLK0, 20, 1}, 	 // [] wr_dis of DCDC_OCODE,
 };
 
 static const esp_efuse_desc_t WR_DIS_SYS_DATA_PART1[] = {
@@ -251,20 +279,20 @@ static const esp_efuse_desc_t WR_DIS_OPTIONAL_UNIQUE_ID[] = {
     {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of OPTIONAL_UNIQUE_ID,
 };
 
-static const esp_efuse_desc_t WR_DIS_BLK_VERSION_MINOR[] = {
-    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of BLK_VERSION_MINOR,
+static const esp_efuse_desc_t WR_DIS_SPI_LDO_1V2_ADJ[] = {
+    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of SPI_LDO_1V2_ADJ,
 };
 
-static const esp_efuse_desc_t WR_DIS_BLK_VERSION_MAJOR[] = {
-    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of BLK_VERSION_MAJOR,
+static const esp_efuse_desc_t WR_DIS_SPI_LDO_1V8_ADJ[] = {
+    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of SPI_LDO_1V8_ADJ,
 };
 
-static const esp_efuse_desc_t WR_DIS_DISABLE_BLK_VERSION_MAJOR[] = {
-    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of DISABLE_BLK_VERSION_MAJOR,
+static const esp_efuse_desc_t WR_DIS_PVT_DRVB[] = {
+    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of PVT_DRVB,
 };
 
-static const esp_efuse_desc_t WR_DIS_TEMP_CALIB[] = {
-    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of TEMP_CALIB,
+static const esp_efuse_desc_t WR_DIS_TEMP_CALI[] = {
+    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of TEMP_CALI,
 };
 
 static const esp_efuse_desc_t WR_DIS_ADC1_AVE_INITCODE_ATTEN0[] = {
@@ -315,8 +343,8 @@ static const esp_efuse_desc_t WR_DIS_ADC1_CH3_ATTEN0_INITCODE_DIFF[] = {
     {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of ADC1_CH3_ATTEN0_INITCODE_DIFF,
 };
 
-static const esp_efuse_desc_t WR_DIS_ADC1_CH4_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of ADC1_CH4_ATTEN0_INITCODE_DIFF,
+static const esp_efuse_desc_t WR_DIS_VDD_3V4_DOUT[] = {
+    {EFUSE_BLK0, 21, 1}, 	 // [] wr_dis of VDD_3V4_DOUT,
 };
 
 static const esp_efuse_desc_t WR_DIS_BLOCK_USR_DATA[] = {
@@ -355,6 +383,34 @@ static const esp_efuse_desc_t WR_DIS_BLOCK_SYS_DATA2[] = {
     {EFUSE_BLK0, 29, 1}, 	 // [WR_DIS.SYS_DATA_PART2] wr_dis of BLOCK_SYS_DATA2,
 };
 
+static const esp_efuse_desc_t WR_DIS_ACTIVE_DCDC_1V25[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of ACTIVE_DCDC_1V25,
+};
+
+static const esp_efuse_desc_t WR_DIS_ACTIVE_DCDC_1V55[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of ACTIVE_DCDC_1V55,
+};
+
+static const esp_efuse_desc_t WR_DIS_SLP_DCDC[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of SLP_DCDC,
+};
+
+static const esp_efuse_desc_t WR_DIS_LSLP_HP_DRVB[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of LSLP_HP_DRVB,
+};
+
+static const esp_efuse_desc_t WR_DIS_RXIQ_VERSION[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of RXIQ_VERSION,
+};
+
+static const esp_efuse_desc_t WR_DIS_RXIQ_0[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of RXIQ_0,
+};
+
+static const esp_efuse_desc_t WR_DIS_RXIQ_1[] = {
+    {EFUSE_BLK0, 29, 1}, 	 // [] wr_dis of RXIQ_1,
+};
+
 static const esp_efuse_desc_t WR_DIS_USB_EXCHG_PINS[] = {
     {EFUSE_BLK0, 30, 1}, 	 // [] wr_dis of USB_EXCHG_PINS,
 };
@@ -368,7 +424,7 @@ static const esp_efuse_desc_t WR_DIS_SOFT_DIS_JTAG[] = {
 };
 
 static const esp_efuse_desc_t RD_DIS[] = {
-    {EFUSE_BLK0, 32, 7}, 	 // [] Disable reading from BlOCK4-10,
+    {EFUSE_BLK0, 32, 7}, 	 // [] Disable reading from BLOCK4-9,
 };
 
 static const esp_efuse_desc_t RD_DIS_BLOCK_KEY0[] = {
@@ -395,84 +451,68 @@ static const esp_efuse_desc_t RD_DIS_BLOCK_KEY5[] = {
     {EFUSE_BLK0, 37, 1}, 	 // [RD_DIS.KEY5] rd_dis of BLOCK_KEY5,
 };
 
-static const esp_efuse_desc_t RD_DIS_BLOCK_SYS_DATA2[] = {
-    {EFUSE_BLK0, 38, 1}, 	 // [RD_DIS.SYS_DATA_PART2] rd_dis of BLOCK_SYS_DATA2,
-};
-
 static const esp_efuse_desc_t PVT_GLITCH_EN[] = {
-    {EFUSE_BLK0, 39, 1}, 	 // [] Represents whether pvt glitch is enabled,
+    {EFUSE_BLK0, 39, 1}, 	 // [] Represents whether to enable PVT power glitch monitor function.1: Enable. 0: Disable,
 };
 
 static const esp_efuse_desc_t DIS_ICACHE[] = {
-    {EFUSE_BLK0, 40, 1}, 	 // [] Represents whether icache is disabled,
+    {EFUSE_BLK0, 40, 1}, 	 // [] Represents whether icache is disabled or enabled. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_USB_JTAG[] = {
-    {EFUSE_BLK0, 41, 1}, 	 // [] Represents whether the function of usb switch to jtag is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 41, 1}, 	 // [] Represents whether the USB-to-JTAG function in USB Serial/JTAG is disabled.  1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t POWERGLITCH_EN[] = {
-    {EFUSE_BLK0, 42, 1}, 	 // [] Represents whether power glitch function is enabled. 1: enabled. 0: disabled,
-};
-
-static const esp_efuse_desc_t DIS_USJ[] = {
-    {EFUSE_BLK0, 43, 1}, 	 // [] Represents whether usb serial jtag is disabled,
+    {EFUSE_BLK0, 42, 1}, 	 // [] Represents whether to enable power glitch function.,
 };
 
 static const esp_efuse_desc_t DIS_FORCE_DOWNLOAD[] = {
-    {EFUSE_BLK0, 44, 1}, 	 // [] Represents whether the function that forces chip into download mode is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 44, 1}, 	 // [] Represents whether the function that forces chip into Download mode is disabled.  1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t SPI_DOWNLOAD_MSPI_DIS[] = {
-    {EFUSE_BLK0, 45, 1}, 	 // [] Represents whether SPI0 controller during boot_mode_download is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 45, 1}, 	 // [] Represents accessing MSPI flash/MSPI RAM by SYS AXI matrix is disabled during boot_mode_download. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_TWAI[] = {
-    {EFUSE_BLK0, 46, 1}, 	 // [DIS_CAN] Represents whether TWAI function is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 46, 1}, 	 // [] Represents whether TWAI function is disabled.  1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t JTAG_SEL_ENABLE[] = {
-    {EFUSE_BLK0, 47, 1}, 	 // [] Set this bit to enable selection between usb_to_jtag and pad_to_jtag through strapping gpio25 when both EFUSE_DIS_PAD_JTAG and EFUSE_DIS_USB_JTAG are equal to 0,
+    {EFUSE_BLK0, 47, 1}, 	 // [] Represents whether the selection of a JTAG signal source through the strapping pin value is enabled when both EFUSE_DIS_PAD_JTAG and EFUSE_DIS_USB_JTAG are configured to 0. For more information; please refer to Chapter Placeholder. 1: Enabled 0: Disabled,
 };
 
 static const esp_efuse_desc_t SOFT_DIS_JTAG[] = {
-    {EFUSE_BLK0, 48, 3}, 	 // [] Represents whether JTAG is disabled in soft way. Odd number: disabled. Even number: enabled,
+    {EFUSE_BLK0, 48, 3}, 	 // [] Represents whether PAD JTAG is disabled in the soft way. It can be restarted via HMAC.  Odd count of bits with a value of 1: Disabled Even count of bits with a value of 1: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_PAD_JTAG[] = {
-    {EFUSE_BLK0, 51, 1}, 	 // [] Represents whether JTAG is disabled in the hard way(permanently). 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 51, 1}, 	 // [] Represents whether PAD JTAG is disabled in the hard way (permanently). 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_DOWNLOAD_MANUAL_ENCRYPT[] = {
-    {EFUSE_BLK0, 52, 1}, 	 // [] Represents whether flash encrypt function is disabled or enabled(except in SPI boot mode). 1: disabled. 0: enabled,
-};
-
-static const esp_efuse_desc_t USB_DREFH[] = {
-    {EFUSE_BLK0, 53, 2}, 	 // [] USB drefh,
-};
-
-static const esp_efuse_desc_t USB_DREFL[] = {
-    {EFUSE_BLK0, 55, 2}, 	 // [] USB drefl,
+    {EFUSE_BLK0, 52, 1}, 	 // [] Represents whether flash encryption is disabled (except in SPI boot mode). 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t USB_EXCHG_PINS[] = {
-    {EFUSE_BLK0, 57, 1}, 	 // [] Represents whether the D+ and D- pins is exchanged. 1: exchanged. 0: not exchanged,
+    {EFUSE_BLK0, 57, 1}, 	 // [] Represents whether the D+ and D- pins is exchanged. 1: Exchanged 0: Not exchanged,
 };
 
 static const esp_efuse_desc_t VDD_SPI_AS_GPIO[] = {
-    {EFUSE_BLK0, 58, 1}, 	 // [] Represents whether vdd spi pin is functioned as gpio. 1: functioned. 0: not functioned,
+    {EFUSE_BLK0, 58, 1}, 	 // [] Represents whether vdd spi pin is functioned as gpio. 1: Functioned 0: Not functioned,
 };
 
 static const esp_efuse_desc_t ECDSA_CURVE_MODE[] = {
-    {EFUSE_BLK0, 59, 2}, 	 // [] ECDSA curve mode. 0: only P256. 1: only P192. 2: both P192 and P256. 3: only P256,
+    {EFUSE_BLK0, 59, 2}, 	 // [] Represents the configuration of the curve of ECDSA calculation. 0: Only enable P256 1: Only enable P192 2: Both enable P256 and P192 3: Only enable P256,
 };
 
 static const esp_efuse_desc_t ECC_FORCE_CONST_TIME[] = {
-    {EFUSE_BLK0, 61, 1}, 	 // [] ECC force const time,
+    {EFUSE_BLK0, 61, 1}, 	 // [] Represents whether to permanently turn on ECC const-time mode. 0: Disabled 1: Enabled,
 };
 
 static const esp_efuse_desc_t XTS_DPA_PSEUDO_LEVEL[] = {
-    {EFUSE_BLK0, 62, 2}, 	 // [] XTS DPA pseudo level,
+    {EFUSE_BLK0, 62, 2}, 	 // [] Represents control method of xts pseudo-round anti-dpa attack function. 0: Controlled by register 1-3: The higher the value is; the more pseudo-rounds are inserted to the xts-aes calculation.,
 };
 
 static const esp_efuse_desc_t IO_LDO_ADJUST[] = {
@@ -480,11 +520,11 @@ static const esp_efuse_desc_t IO_LDO_ADJUST[] = {
 };
 
 static const esp_efuse_desc_t VDD_SPI_LDO_ADJUST[] = {
-    {EFUSE_BLK0, 72, 8}, 	 // [] Represents configuration of FLASH LDO mode and voltage,
+    {EFUSE_BLK0, 72, 8}, 	 // [] Represents configuration of FLASH LDO mode and voltage.,
 };
 
 static const esp_efuse_desc_t WDT_DELAY_SEL[] = {
-    {EFUSE_BLK0, 80, 2}, 	 // [] Represents whether RTC watchdog timeout threshold is selected at startup. 1: selected. 0: not selected,
+    {EFUSE_BLK0, 80, 2}, 	 // [] Represents RTC watchdog timeout threshold. 0: The originally configured STG0 threshold x 2 1: The originally configured STG0 threshold x 4 2: The originally configured STG0 threshold x 8 3: The originally configured STG0 threshold x 16,
 };
 
 static const esp_efuse_desc_t SPI_BOOT_CRYPT_CNT[] = {
@@ -504,75 +544,83 @@ static const esp_efuse_desc_t SECURE_BOOT_KEY_REVOKE2[] = {
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_0[] = {
-    {EFUSE_BLK0, 88, 4}, 	 // [KEY0_PURPOSE] Represents the purpose of Key0,
+    {EFUSE_BLK0, 88, 4}, 	 // [KEY0_PURPOSE] Represents the purpose of Key0. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_1[] = {
-    {EFUSE_BLK0, 92, 4}, 	 // [KEY1_PURPOSE] Represents the purpose of Key1,
+    {EFUSE_BLK0, 92, 4}, 	 // [KEY1_PURPOSE] Represents the purpose of Key1. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_2[] = {
-    {EFUSE_BLK0, 96, 4}, 	 // [KEY2_PURPOSE] Represents the purpose of Key2,
+    {EFUSE_BLK0, 96, 4}, 	 // [KEY2_PURPOSE] Represents the purpose of Key2. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_3[] = {
-    {EFUSE_BLK0, 100, 4}, 	 // [KEY3_PURPOSE] Represents the purpose of Key3,
+    {EFUSE_BLK0, 100, 4}, 	 // [KEY3_PURPOSE] Represents the purpose of Key3. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_4[] = {
-    {EFUSE_BLK0, 104, 4}, 	 // [KEY4_PURPOSE] Represents the purpose of Key4,
+    {EFUSE_BLK0, 104, 4}, 	 // [KEY4_PURPOSE] Represents the purpose of Key4. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t KEY_PURPOSE_5[] = {
-    {EFUSE_BLK0, 108, 4}, 	 // [KEY5_PURPOSE] Represents the purpose of Key5,
+    {EFUSE_BLK0, 108, 4}, 	 // [KEY5_PURPOSE] Represents the purpose of Key5. See Table tab:efuse-key-purpose.,
 };
 
 static const esp_efuse_desc_t SEC_DPA_LEVEL[] = {
-    {EFUSE_BLK0, 112, 2}, 	 // [] Represents the spa secure level by configuring the clock random divide mode,
+    {EFUSE_BLK0, 112, 2}, 	 // [] Represents the security level of anti-DPA attack. The level is adjusted by configuring the clock random frequency division mode. 0: Security level is SEC_DPA_OFF 1: Security level is SEC_DPA_LOW 2: Security level is SEC_DPA_MIDDLE 3: Security level is SEC_DPA_HIGH For more information; please refer to Chapter mod:sysreg > Section sec:sysreg-anti-dpa-attack-security-control.,
 };
 
 static const esp_efuse_desc_t IO_LDO_1P8[] = {
-    {EFUSE_BLK0, 114, 1}, 	 // [] Represents select IO LDO voltage to 1.8V or 3.3V.\\ 1: 1.8V\\ 0: 3.3V,
+    {EFUSE_BLK0, 114, 1}, 	 // [] Represents select IO LDO voltage to 1.8V or 3.3V. 1: 1.8V 0: 3.3V,
 };
 
 static const esp_efuse_desc_t CRYPT_DPA_ENABLE[] = {
-    {EFUSE_BLK0, 115, 1}, 	 // [] Represents whether anti-dpa attack is enabled. 1:enabled. 0: disabled,
+    {EFUSE_BLK0, 115, 1}, 	 // [] Represents whether defense against DPA attack is enabled. 1: Enabled 0: Disabled,
 };
 
 static const esp_efuse_desc_t SECURE_BOOT_EN[] = {
-    {EFUSE_BLK0, 116, 1}, 	 // [] Represents whether secure boot is enabled or disabled. 1: enabled. 0: disabled,
+    {EFUSE_BLK0, 116, 1}, 	 // [] Represents whether Secure Boot is enabled. 1: Enabled 0: Disabled,
 };
 
 static const esp_efuse_desc_t SECURE_BOOT_AGGRESSIVE_REVOKE[] = {
-    {EFUSE_BLK0, 117, 1}, 	 // [] Represents whether revoking aggressive secure boot is enabled or disabled. 1: enabled. 0: disabled,
+    {EFUSE_BLK0, 117, 1}, 	 // [] Represents whether aggressive revocation of Secure Boot is enabled. 1: Enabled 0: Disabled,
 };
 
 static const esp_efuse_desc_t POWERGLITCH_EN1[] = {
-    {EFUSE_BLK0, 118, 5}, 	 // [] Represents whether to enable power glitch function when chip power on,
+    {EFUSE_BLK0, 118, 5}, 	 // [] Represents whether to enable power glitch function when chip power on.,
+};
+
+static const esp_efuse_desc_t DCDC_CCM_EN[] = {
+    {EFUSE_BLK0, 123, 1}, 	 // [] Represents whether change DCDC to CCM mode,
 };
 
 static const esp_efuse_desc_t FLASH_TPUW[] = {
-    {EFUSE_BLK0, 124, 4}, 	 // [] Represents the flash waiting time after power-up; in unit of ms. When the value less than 15; the waiting time is the programmed value. Otherwise; the waiting time is 2 times the programmed value,
+    {EFUSE_BLK0, 124, 4}, 	 // [] Represents the flash waiting time after power-up. Measurement unit: ms. When the value is less than 15; the waiting time is the programmed value. Otherwise; the waiting time is a fixed value; i.e. 30 ms.,
 };
 
 static const esp_efuse_desc_t DIS_DOWNLOAD_MODE[] = {
-    {EFUSE_BLK0, 128, 1}, 	 // [] Represents whether Download mode is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 128, 1}, 	 // [] Represents whether all download modes are disabled. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_DIRECT_BOOT[] = {
-    {EFUSE_BLK0, 129, 1}, 	 // [] Represents whether direct boot mode is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 129, 1}, 	 // [] Represents whether direct boot mode is disabled. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t DIS_USB_SERIAL_JTAG_ROM_PRINT[] = {
-    {EFUSE_BLK0, 130, 1}, 	 // [DIS_USB_PRINT] Set this bit to disable USB-Serial-JTAG print during rom boot,
+    {EFUSE_BLK0, 130, 1}, 	 // [] Represents whether print from USB-Serial-JTAG during ROM boot is disabled. 1: Disabled 0: Enabled,
+};
+
+static const esp_efuse_desc_t FLASH_LDO_EFUSE_SEL[] = {
+    {EFUSE_BLK0, 131, 1}, 	 // [] Selects the source of the default flash LDO voltage. 0: strapping pin; 1: eFuse,
 };
 
 static const esp_efuse_desc_t DIS_USB_SERIAL_JTAG_DOWNLOAD_MODE[] = {
-    {EFUSE_BLK0, 132, 1}, 	 // [] Represents whether the USB-Serial-JTAG download function is disabled or enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 132, 1}, 	 // [] Represents whether the USB-Serial-JTAG download function is disabled. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t ENABLE_SECURITY_DOWNLOAD[] = {
-    {EFUSE_BLK0, 133, 1}, 	 // [] Represents whether security download is enabled or disabled. 1: enabled. 0: disabled,
+    {EFUSE_BLK0, 133, 1}, 	 // [] Represents whether security download is enabled. Only UART is supported for download. Reading/writing RAM or registers is not supported (i.e. Stub download is not supported). 1: Enabled 0: Disabled,
 };
 
 static const esp_efuse_desc_t UART_PRINT_CONTROL[] = {
@@ -580,23 +628,27 @@ static const esp_efuse_desc_t UART_PRINT_CONTROL[] = {
 };
 
 static const esp_efuse_desc_t FORCE_SEND_RESUME[] = {
-    {EFUSE_BLK0, 136, 1}, 	 // [] Represents whether ROM code is forced to send a resume command during SPI boot. 1: forced. 0:not forced,
+    {EFUSE_BLK0, 136, 1}, 	 // [] Represents whether ROM code is forced to send a resume command during SPI boot. 1: Forced 0: Not forced,
 };
 
 static const esp_efuse_desc_t SECURE_VERSION[] = {
-    {EFUSE_BLK0, 137, 16}, 	 // [] Represents the version used by ESP-IDF anti-rollback feature,
+    {EFUSE_BLK0, 137, 16}, 	 // [] Represents the security version used by ESP-IDF anti-rollback feature.,
 };
 
 static const esp_efuse_desc_t SECURE_BOOT_DISABLE_FAST_WAKE[] = {
-    {EFUSE_BLK0, 153, 1}, 	 // [] Represents whether FAST VERIFY ON WAKE is disabled or enabled when Secure Boot is enabled. 1: disabled. 0: enabled,
+    {EFUSE_BLK0, 153, 1}, 	 // [] Represents whether FAST VERIFY ON WAKE is disabled when Secure Boot is enabled. 1: Disabled 0: Enabled,
 };
 
 static const esp_efuse_desc_t HYS_EN_PAD0[] = {
-    {EFUSE_BLK0, 154, 6}, 	 // [] Set bits to enable hysteresis function of PAD0~5,
+    {EFUSE_BLK0, 154, 6}, 	 // [] Represents whether to enable the hysteresis function of pad 0-5. 0: Disabled 1: Enabled,
 };
 
 static const esp_efuse_desc_t HYS_EN_PAD1[] = {
-    {EFUSE_BLK0, 160, 22}, 	 // [] Set bits to enable hysteresis function of PAD6~27,
+    {EFUSE_BLK0, 160, 22}, 	 // [] Represents whether to enable the hysteresis function of pad 6-27. 0: Disabled 1: Enabled,
+};
+
+static const esp_efuse_desc_t FLASH_LDO_POWER_SEL[] = {
+    {EFUSE_BLK0, 182, 1}, 	 // [] Selects the flash LDO voltage. 0: 1.2 V; 1: 1.8 V,
 };
 
 static const esp_efuse_desc_t MAC[] = {
@@ -613,132 +665,148 @@ static const esp_efuse_desc_t MAC_EXT[] = {
     {EFUSE_BLK1, 48, 8}, 	 // [] Stores the extended bits of MAC address,
 };
 
-static const esp_efuse_desc_t RXIQ_VERSION[] = {
-    {EFUSE_BLK1, 64, 3}, 	 // [] Stores RF Calibration data. RXIQ version,
+static const esp_efuse_desc_t PVT_CELL_SELECT[] = {
+    {EFUSE_BLK1, 100, 7}, 	 // [] Represents the selection of Power glitch monitor PVT cell.,
 };
 
-static const esp_efuse_desc_t RXIQ_0[] = {
-    {EFUSE_BLK1, 67, 7}, 	 // [] Stores RF Calibration data. RXIQ data 0,
+static const esp_efuse_desc_t BLK_VERSION_MINOR[] = {
+    {EFUSE_BLK1, 114, 3}, 	 // [] Minor version of BLOCK2,
 };
 
-static const esp_efuse_desc_t RXIQ_1[] = {
-    {EFUSE_BLK1, 74, 7}, 	 // [] Stores RF Calibration data. RXIQ data 1,
+static const esp_efuse_desc_t BLK_VERSION_MAJOR[] = {
+    {EFUSE_BLK1, 117, 2}, 	 // [] Major version of BLOCK2,
 };
 
-static const esp_efuse_desc_t ACTIVE_HP_DBIAS[] = {
-    {EFUSE_BLK1, 81, 5}, 	 // [] Stores the PMU active hp dbias,
-};
-
-static const esp_efuse_desc_t ACTIVE_LP_DBIAS[] = {
-    {EFUSE_BLK1, 86, 5}, 	 // [] Stores the PMU active lp dbias,
-};
-
-static const esp_efuse_desc_t DSLP_DBIAS[] = {
-    {EFUSE_BLK1, 91, 4}, 	 // [] Stores the PMU sleep dbias,
-};
-
-static const esp_efuse_desc_t DBIAS_VOL_GAP[] = {
-    {EFUSE_BLK1, 95, 5}, 	 // [] Stores the low 1 bit of dbias_vol_gap,
-};
-
-static const esp_efuse_desc_t WAFER_VERSION_MINOR[] = {
-    {EFUSE_BLK1, 114, 3}, 	 // [] Stores the wafer version minor,
-};
-
-static const esp_efuse_desc_t WAFER_VERSION_MAJOR[] = {
-    {EFUSE_BLK1, 117, 2}, 	 // [] Stores the wafer version major,
-};
-
-static const esp_efuse_desc_t DISABLE_WAFER_VERSION_MAJOR[] = {
-    {EFUSE_BLK1, 119, 1}, 	 // [] Disables check of wafer version major,
+static const esp_efuse_desc_t DISABLE_BLK_VERSION_MAJOR[] = {
+    {EFUSE_BLK1, 119, 1}, 	 // [] Disables check of blk version major,
 };
 
 static const esp_efuse_desc_t FLASH_CAP[] = {
-    {EFUSE_BLK1, 120, 3}, 	 // [] Stores the flash cap,
-};
-
-static const esp_efuse_desc_t FLASH_TEMP[] = {
-    {EFUSE_BLK1, 123, 2}, 	 // [] Stores the flash temp,
+    {EFUSE_BLK1, 120, 3}, 	 // [] Mark the capacity of in-package Flash,
 };
 
 static const esp_efuse_desc_t FLASH_VENDOR[] = {
-    {EFUSE_BLK1, 125, 3}, 	 // [] Stores the flash vendor,
+    {EFUSE_BLK1, 123, 3}, 	 // [] Mark the vendor of in-package Flash,
+};
+
+static const esp_efuse_desc_t TEMP[] = {
+    {EFUSE_BLK1, 126, 2}, 	 // [] Mark the specified maximum ambient temperature that ESP Chip can work properly,
+};
+
+static const esp_efuse_desc_t PVT_LIMIT[] = {
+    {EFUSE_BLK1, 133, 16}, 	 // [] Represents the threshold of power glitch monitor.,
+};
+
+static const esp_efuse_desc_t PVT_GLITCH_CHARGE_RESET[] = {
+    {EFUSE_BLK1, 149, 1}, 	 // [] Represents whether to trigger reset or charge pump when PVT power glitch happened. 1:Trigger charge pump.  0:Trigger reset,
+};
+
+static const esp_efuse_desc_t PVT_GLITCH_MODE[] = {
+    {EFUSE_BLK1, 150, 2}, 	 // [] Represents the configuration of glitch mode.,
+};
+
+static const esp_efuse_desc_t PVT_PUMP_LIMIT[] = {
+    {EFUSE_BLK1, 152, 8}, 	 // [] Represents the configuration voltage monitor limit for charge pump.,
+};
+
+static const esp_efuse_desc_t PUMP_DRV[] = {
+    {EFUSE_BLK1, 160, 4}, 	 // [] Use to configure charge pump voltage gain.,
+};
+
+static const esp_efuse_desc_t WAFER_VERSION_MINOR[] = {
+    {EFUSE_BLK1, 164, 4}, 	 // [] Minor chip version,
+};
+
+static const esp_efuse_desc_t WAFER_VERSION_MAJOR[] = {
+    {EFUSE_BLK1, 168, 2}, 	 // [] Major chip version,
+};
+
+static const esp_efuse_desc_t DISABLE_WAFER_VERSION_MAJOR[] = {
+    {EFUSE_BLK1, 170, 1}, 	 // [] Disables check of wafer version major,
 };
 
 static const esp_efuse_desc_t PKG_VERSION[] = {
-    {EFUSE_BLK1, 128, 3}, 	 // [] Package version,
+    {EFUSE_BLK1, 171, 3}, 	 // [] Package version,
+};
+
+static const esp_efuse_desc_t OCODE[] = {
+    {EFUSE_BLK1, 176, 8}, 	 // [] ADC OCode calibration at 3.4 V,
+};
+
+static const esp_efuse_desc_t DCDC_OCODE[] = {
+    {EFUSE_BLK1, 184, 8}, 	 // [] DCDC OCode calibration at 3.4 V,
 };
 
 static const esp_efuse_desc_t OPTIONAL_UNIQUE_ID[] = {
     {EFUSE_BLK2, 0, 128}, 	 // [] Optional unique 128-bit ID,
 };
 
-static const esp_efuse_desc_t BLK_VERSION_MINOR[] = {
-    {EFUSE_BLK2, 130, 3}, 	 // [] BLK_VERSION_MINOR of BLOCK2. 1: RF Calibration data in BLOCK1,
+static const esp_efuse_desc_t SPI_LDO_1V2_ADJ[] = {
+    {EFUSE_BLK2, 128, 4}, 	 // [] SPI LDO adjustment for 1.2 V,
 };
 
-static const esp_efuse_desc_t BLK_VERSION_MAJOR[] = {
-    {EFUSE_BLK2, 133, 2}, 	 // [] BLK_VERSION_MAJOR of BLOCK2,
+static const esp_efuse_desc_t SPI_LDO_1V8_ADJ[] = {
+    {EFUSE_BLK2, 132, 4}, 	 // [] SPI LDO adjustment for 1.8 V,
 };
 
-static const esp_efuse_desc_t DISABLE_BLK_VERSION_MAJOR[] = {
-    {EFUSE_BLK2, 135, 1}, 	 // [] Disables check of blk version major,
+static const esp_efuse_desc_t PVT_DRVB[] = {
+    {EFUSE_BLK2, 136, 5}, 	 // [] PVT DRVB calibration at 3.4 V,
 };
 
-static const esp_efuse_desc_t TEMP_CALIB[] = {
-    {EFUSE_BLK2, 136, 9}, 	 // [] Temperature calibration data,
+static const esp_efuse_desc_t TEMP_CALI[] = {
+    {EFUSE_BLK2, 141, 10}, 	 // [] Temperature difference between chip and calibration equipment (1 sign bit and 9 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_AVE_INITCODE_ATTEN0[] = {
-    {EFUSE_BLK2, 145, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 151, 9}, 	 // [] ADC1 average initcode at attenuation 0 minus 1750,
 };
 
 static const esp_efuse_desc_t ADC1_AVE_INITCODE_ATTEN1[] = {
-    {EFUSE_BLK2, 155, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 160, 9}, 	 // [] ADC1 average initcode at attenuation 1 minus 1750,
 };
 
 static const esp_efuse_desc_t ADC1_AVE_INITCODE_ATTEN2[] = {
-    {EFUSE_BLK2, 165, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 169, 9}, 	 // [] ADC1 average initcode at attenuation 2 minus 1750,
 };
 
 static const esp_efuse_desc_t ADC1_AVE_INITCODE_ATTEN3[] = {
-    {EFUSE_BLK2, 175, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 178, 9}, 	 // [] ADC1 average initcode at attenuation 3 minus 1750,
 };
 
 static const esp_efuse_desc_t ADC1_HI_DOUT_ATTEN0[] = {
-    {EFUSE_BLK2, 185, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 187, 9}, 	 // [] ADC1 high output at attenuation 0 minus 2500 (1 sign bit and 8 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_HI_DOUT_ATTEN1[] = {
-    {EFUSE_BLK2, 195, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 196, 9}, 	 // [] ADC1 high output at attenuation 1 minus 2500 (1 sign bit and 8 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_HI_DOUT_ATTEN2[] = {
-    {EFUSE_BLK2, 205, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 205, 9}, 	 // [] ADC1 high output at attenuation 2 minus 2550 (1 sign bit and 8 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_HI_DOUT_ATTEN3[] = {
-    {EFUSE_BLK2, 215, 10}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 214, 9}, 	 // [] ADC1 high output at attenuation 3 minus 2550 (1 sign bit and 8 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_CH0_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK2, 225, 4}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 223, 3}, 	 // [] ADC1 channel 0 initcode difference at attenuation 0 (1 sign bit and 2 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_CH1_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK2, 229, 4}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 226, 3}, 	 // [] ADC1 channel 1 initcode difference at attenuation 0 (1 sign bit and 2 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_CH2_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK2, 233, 4}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 229, 3}, 	 // [] ADC1 channel 2 initcode difference at attenuation 0 (1 sign bit and 2 data bits),
 };
 
 static const esp_efuse_desc_t ADC1_CH3_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK2, 237, 4}, 	 // [] ADC1 calibration data,
+    {EFUSE_BLK2, 232, 3}, 	 // [] ADC1 channel 3 initcode difference at attenuation 0 (1 sign bit and 2 data bits),
 };
 
-static const esp_efuse_desc_t ADC1_CH4_ATTEN0_INITCODE_DIFF[] = {
-    {EFUSE_BLK2, 241, 4}, 	 // [] ADC1 calibration data,
+static const esp_efuse_desc_t VDD_3V4_DOUT[] = {
+    {EFUSE_BLK2, 245, 10}, 	 // [] ADC output at VDD 3.4 V minus 1023,
 };
 
 static const esp_efuse_desc_t USER_DATA[] = {
@@ -773,8 +841,32 @@ static const esp_efuse_desc_t KEY5[] = {
     {EFUSE_BLK9, 0, 256}, 	 // [BLOCK_KEY5] Key5 or user data,
 };
 
-static const esp_efuse_desc_t SYS_DATA_PART2[] = {
-    {EFUSE_BLK10, 0, 256}, 	 // [BLOCK_SYS_DATA2] System data part 2 (reserved),
+static const esp_efuse_desc_t ACTIVE_DCDC_1V25[] = {
+    {EFUSE_BLK10, 0, 4}, 	 // [] Active DCDC DBIAS for 1.25 V minus 16,
+};
+
+static const esp_efuse_desc_t ACTIVE_DCDC_1V55[] = {
+    {EFUSE_BLK10, 4, 4}, 	 // [] Active DCDC DBIAS for 1.55 V minus 16,
+};
+
+static const esp_efuse_desc_t SLP_DCDC[] = {
+    {EFUSE_BLK10, 8, 5}, 	 // [] DCDC DBIAS in sleep for 0.75 V,
+};
+
+static const esp_efuse_desc_t LSLP_HP_DRVB[] = {
+    {EFUSE_BLK10, 13, 5}, 	 // [] HP DRVB in light sleep for 0.67 V,
+};
+
+static const esp_efuse_desc_t RXIQ_VERSION[] = {
+    {EFUSE_BLK10, 18, 3}, 	 // [] RF RXIQ calibration version,
+};
+
+static const esp_efuse_desc_t RXIQ_0[] = {
+    {EFUSE_BLK10, 21, 7}, 	 // [] RF RXIQ calibration data 0,
+};
+
+static const esp_efuse_desc_t RXIQ_1[] = {
+    {EFUSE_BLK10, 28, 7}, 	 // [] RF RXIQ calibration data 1,
 };
 
 
@@ -788,6 +880,11 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS[] = {
 
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RD_DIS[] = {
     &WR_DIS_RD_DIS[0],    		// [] wr_dis of RD_DIS
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_GLITCH_EN[] = {
+    &WR_DIS_PVT_GLITCH_EN[0],    		// [] wr_dis of PVT_GLITCH_EN
     NULL
 };
 
@@ -817,7 +914,7 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SPI_DOWNLOAD_MSPI_DIS[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DIS_TWAI[] = {
-    &WR_DIS_DIS_TWAI[0],    		// [WR_DIS.DIS_CAN] wr_dis of DIS_TWAI
+    &WR_DIS_DIS_TWAI[0],    		// [] wr_dis of DIS_TWAI
     NULL
 };
 
@@ -833,6 +930,11 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DIS_PAD_JTAG[] = {
 
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DIS_DOWNLOAD_MANUAL_ENCRYPT[] = {
     &WR_DIS_DIS_DOWNLOAD_MANUAL_ENCRYPT[0],    		// [] wr_dis of DIS_DOWNLOAD_MANUAL_ENCRYPT
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_POWERGLITCH_EN1[] = {
+    &WR_DIS_POWERGLITCH_EN1[0],    		// [] wr_dis of POWERGLITCH_EN1
     NULL
 };
 
@@ -891,6 +993,11 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_KEY_PURPOSE_5[] = {
     NULL
 };
 
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_XTS_DPA_PSEUDO_LEVEL[] = {
+    &WR_DIS_XTS_DPA_PSEUDO_LEVEL[0],    		// [] wr_dis of XTS_DPA_PSEUDO_LEVEL
+    NULL
+};
+
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SEC_DPA_LEVEL[] = {
     &WR_DIS_SEC_DPA_LEVEL[0],    		// [] wr_dis of SEC_DPA_LEVEL
     NULL
@@ -937,7 +1044,7 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DIS_DIRECT_BOOT[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DIS_USB_SERIAL_JTAG_ROM_PRINT[] = {
-    &WR_DIS_DIS_USB_SERIAL_JTAG_ROM_PRINT[0],    		// [WR_DIS.DIS_USB_PRINT] wr_dis of DIS_USB_SERIAL_JTAG_ROM_PRINT
+    &WR_DIS_DIS_USB_SERIAL_JTAG_ROM_PRINT[0],    		// [] wr_dis of DIS_USB_SERIAL_JTAG_ROM_PRINT
     NULL
 };
 
@@ -996,83 +1103,8 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_MAC_EXT[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_VERSION[] = {
-    &WR_DIS_RXIQ_VERSION[0],    		// [] wr_dis of RXIQ_VERSION
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_0[] = {
-    &WR_DIS_RXIQ_0[0],    		// [] wr_dis of RXIQ_0
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_1[] = {
-    &WR_DIS_RXIQ_1[0],    		// [] wr_dis of RXIQ_1
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ACTIVE_HP_DBIAS[] = {
-    &WR_DIS_ACTIVE_HP_DBIAS[0],    		// [] wr_dis of ACTIVE_HP_DBIAS
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ACTIVE_LP_DBIAS[] = {
-    &WR_DIS_ACTIVE_LP_DBIAS[0],    		// [] wr_dis of ACTIVE_LP_DBIAS
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DSLP_DBIAS[] = {
-    &WR_DIS_DSLP_DBIAS[0],    		// [] wr_dis of DSLP_DBIAS
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DBIAS_VOL_GAP[] = {
-    &WR_DIS_DBIAS_VOL_GAP[0],    		// [] wr_dis of DBIAS_VOL_GAP
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_WAFER_VERSION_MINOR[] = {
-    &WR_DIS_WAFER_VERSION_MINOR[0],    		// [] wr_dis of WAFER_VERSION_MINOR
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_WAFER_VERSION_MAJOR[] = {
-    &WR_DIS_WAFER_VERSION_MAJOR[0],    		// [] wr_dis of WAFER_VERSION_MAJOR
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DISABLE_WAFER_VERSION_MAJOR[] = {
-    &WR_DIS_DISABLE_WAFER_VERSION_MAJOR[0],    		// [] wr_dis of DISABLE_WAFER_VERSION_MAJOR
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_FLASH_CAP[] = {
-    &WR_DIS_FLASH_CAP[0],    		// [] wr_dis of FLASH_CAP
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_FLASH_TEMP[] = {
-    &WR_DIS_FLASH_TEMP[0],    		// [] wr_dis of FLASH_TEMP
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_FLASH_VENDOR[] = {
-    &WR_DIS_FLASH_VENDOR[0],    		// [] wr_dis of FLASH_VENDOR
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PKG_VERSION[] = {
-    &WR_DIS_PKG_VERSION[0],    		// [] wr_dis of PKG_VERSION
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SYS_DATA_PART1[] = {
-    &WR_DIS_SYS_DATA_PART1[0],    		// [] wr_dis of BLOCK2
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_OPTIONAL_UNIQUE_ID[] = {
-    &WR_DIS_OPTIONAL_UNIQUE_ID[0],    		// [] wr_dis of OPTIONAL_UNIQUE_ID
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_CELL_SELECT[] = {
+    &WR_DIS_PVT_CELL_SELECT[0],    		// [] wr_dis of PVT_CELL_SELECT
     NULL
 };
 
@@ -1091,8 +1123,103 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DISABLE_BLK_VERSION_MAJOR[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_TEMP_CALIB[] = {
-    &WR_DIS_TEMP_CALIB[0],    		// [] wr_dis of TEMP_CALIB
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_FLASH_CAP[] = {
+    &WR_DIS_FLASH_CAP[0],    		// [] wr_dis of FLASH_CAP
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_FLASH_VENDOR[] = {
+    &WR_DIS_FLASH_VENDOR[0],    		// [] wr_dis of FLASH_VENDOR
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_TEMP[] = {
+    &WR_DIS_TEMP[0],    		// [] wr_dis of TEMP
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_LIMIT[] = {
+    &WR_DIS_PVT_LIMIT[0],    		// [] wr_dis of PVT_LIMIT
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_GLITCH_CHARGE_RESET[] = {
+    &WR_DIS_PVT_GLITCH_CHARGE_RESET[0],    		// [] wr_dis of PVT_GLITCH_CHARGE_RESET
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_GLITCH_MODE[] = {
+    &WR_DIS_PVT_GLITCH_MODE[0],    		// [] wr_dis of PVT_GLITCH_MODE
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_PUMP_LIMIT[] = {
+    &WR_DIS_PVT_PUMP_LIMIT[0],    		// [] wr_dis of PVT_PUMP_LIMIT
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PUMP_DRV[] = {
+    &WR_DIS_PUMP_DRV[0],    		// [] wr_dis of PUMP_DRV
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_WAFER_VERSION_MINOR[] = {
+    &WR_DIS_WAFER_VERSION_MINOR[0],    		// [] wr_dis of WAFER_VERSION_MINOR
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_WAFER_VERSION_MAJOR[] = {
+    &WR_DIS_WAFER_VERSION_MAJOR[0],    		// [] wr_dis of WAFER_VERSION_MAJOR
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DISABLE_WAFER_VERSION_MAJOR[] = {
+    &WR_DIS_DISABLE_WAFER_VERSION_MAJOR[0],    		// [] wr_dis of DISABLE_WAFER_VERSION_MAJOR
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PKG_VERSION[] = {
+    &WR_DIS_PKG_VERSION[0],    		// [] wr_dis of PKG_VERSION
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_OCODE[] = {
+    &WR_DIS_OCODE[0],    		// [] wr_dis of OCODE
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_DCDC_OCODE[] = {
+    &WR_DIS_DCDC_OCODE[0],    		// [] wr_dis of DCDC_OCODE
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SYS_DATA_PART1[] = {
+    &WR_DIS_SYS_DATA_PART1[0],    		// [] wr_dis of BLOCK2
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_OPTIONAL_UNIQUE_ID[] = {
+    &WR_DIS_OPTIONAL_UNIQUE_ID[0],    		// [] wr_dis of OPTIONAL_UNIQUE_ID
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SPI_LDO_1V2_ADJ[] = {
+    &WR_DIS_SPI_LDO_1V2_ADJ[0],    		// [] wr_dis of SPI_LDO_1V2_ADJ
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SPI_LDO_1V8_ADJ[] = {
+    &WR_DIS_SPI_LDO_1V8_ADJ[0],    		// [] wr_dis of SPI_LDO_1V8_ADJ
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_PVT_DRVB[] = {
+    &WR_DIS_PVT_DRVB[0],    		// [] wr_dis of PVT_DRVB
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_TEMP_CALI[] = {
+    &WR_DIS_TEMP_CALI[0],    		// [] wr_dis of TEMP_CALI
     NULL
 };
 
@@ -1156,8 +1283,8 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ADC1_CH3_ATTEN0_INITCODE_DIFF[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ADC1_CH4_ATTEN0_INITCODE_DIFF[] = {
-    &WR_DIS_ADC1_CH4_ATTEN0_INITCODE_DIFF[0],    		// [] wr_dis of ADC1_CH4_ATTEN0_INITCODE_DIFF
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_VDD_3V4_DOUT[] = {
+    &WR_DIS_VDD_3V4_DOUT[0],    		// [] wr_dis of VDD_3V4_DOUT
     NULL
 };
 
@@ -1206,6 +1333,41 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_BLOCK_SYS_DATA2[] = {
     NULL
 };
 
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ACTIVE_DCDC_1V25[] = {
+    &WR_DIS_ACTIVE_DCDC_1V25[0],    		// [] wr_dis of ACTIVE_DCDC_1V25
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_ACTIVE_DCDC_1V55[] = {
+    &WR_DIS_ACTIVE_DCDC_1V55[0],    		// [] wr_dis of ACTIVE_DCDC_1V55
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SLP_DCDC[] = {
+    &WR_DIS_SLP_DCDC[0],    		// [] wr_dis of SLP_DCDC
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_LSLP_HP_DRVB[] = {
+    &WR_DIS_LSLP_HP_DRVB[0],    		// [] wr_dis of LSLP_HP_DRVB
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_VERSION[] = {
+    &WR_DIS_RXIQ_VERSION[0],    		// [] wr_dis of RXIQ_VERSION
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_0[] = {
+    &WR_DIS_RXIQ_0[0],    		// [] wr_dis of RXIQ_0
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_RXIQ_1[] = {
+    &WR_DIS_RXIQ_1[0],    		// [] wr_dis of RXIQ_1
+    NULL
+};
+
 const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_USB_EXCHG_PINS[] = {
     &WR_DIS_USB_EXCHG_PINS[0],    		// [] wr_dis of USB_EXCHG_PINS
     NULL
@@ -1222,7 +1384,7 @@ const esp_efuse_desc_t* ESP_EFUSE_WR_DIS_SOFT_DIS_JTAG[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_RD_DIS[] = {
-    &RD_DIS[0],    		// [] Disable reading from BlOCK4-10
+    &RD_DIS[0],    		// [] Disable reading from BLOCK4-9
     NULL
 };
 
@@ -1256,103 +1418,83 @@ const esp_efuse_desc_t* ESP_EFUSE_RD_DIS_BLOCK_KEY5[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_RD_DIS_BLOCK_SYS_DATA2[] = {
-    &RD_DIS_BLOCK_SYS_DATA2[0],    		// [RD_DIS.SYS_DATA_PART2] rd_dis of BLOCK_SYS_DATA2
-    NULL
-};
-
 const esp_efuse_desc_t* ESP_EFUSE_PVT_GLITCH_EN[] = {
-    &PVT_GLITCH_EN[0],    		// [] Represents whether pvt glitch is enabled
+    &PVT_GLITCH_EN[0],    		// [] Represents whether to enable PVT power glitch monitor function.1: Enable. 0: Disable
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_ICACHE[] = {
-    &DIS_ICACHE[0],    		// [] Represents whether icache is disabled
+    &DIS_ICACHE[0],    		// [] Represents whether icache is disabled or enabled. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_USB_JTAG[] = {
-    &DIS_USB_JTAG[0],    		// [] Represents whether the function of usb switch to jtag is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_USB_JTAG[0],    		// [] Represents whether the USB-to-JTAG function in USB Serial/JTAG is disabled.  1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_POWERGLITCH_EN[] = {
-    &POWERGLITCH_EN[0],    		// [] Represents whether power glitch function is enabled. 1: enabled. 0: disabled
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_DIS_USJ[] = {
-    &DIS_USJ[0],    		// [] Represents whether usb serial jtag is disabled
+    &POWERGLITCH_EN[0],    		// [] Represents whether to enable power glitch function.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_FORCE_DOWNLOAD[] = {
-    &DIS_FORCE_DOWNLOAD[0],    		// [] Represents whether the function that forces chip into download mode is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_FORCE_DOWNLOAD[0],    		// [] Represents whether the function that forces chip into Download mode is disabled.  1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SPI_DOWNLOAD_MSPI_DIS[] = {
-    &SPI_DOWNLOAD_MSPI_DIS[0],    		// [] Represents whether SPI0 controller during boot_mode_download is disabled or enabled. 1: disabled. 0: enabled
+    &SPI_DOWNLOAD_MSPI_DIS[0],    		// [] Represents accessing MSPI flash/MSPI RAM by SYS AXI matrix is disabled during boot_mode_download. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_TWAI[] = {
-    &DIS_TWAI[0],    		// [DIS_CAN] Represents whether TWAI function is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_TWAI[0],    		// [] Represents whether TWAI function is disabled.  1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_JTAG_SEL_ENABLE[] = {
-    &JTAG_SEL_ENABLE[0],    		// [] Set this bit to enable selection between usb_to_jtag and pad_to_jtag through strapping gpio25 when both EFUSE_DIS_PAD_JTAG and EFUSE_DIS_USB_JTAG are equal to 0
+    &JTAG_SEL_ENABLE[0],    		// [] Represents whether the selection of a JTAG signal source through the strapping pin value is enabled when both EFUSE_DIS_PAD_JTAG and EFUSE_DIS_USB_JTAG are configured to 0. For more information; please refer to Chapter Placeholder. 1: Enabled 0: Disabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SOFT_DIS_JTAG[] = {
-    &SOFT_DIS_JTAG[0],    		// [] Represents whether JTAG is disabled in soft way. Odd number: disabled. Even number: enabled
+    &SOFT_DIS_JTAG[0],    		// [] Represents whether PAD JTAG is disabled in the soft way. It can be restarted via HMAC.  Odd count of bits with a value of 1: Disabled Even count of bits with a value of 1: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_PAD_JTAG[] = {
-    &DIS_PAD_JTAG[0],    		// [] Represents whether JTAG is disabled in the hard way(permanently). 1: disabled. 0: enabled
+    &DIS_PAD_JTAG[0],    		// [] Represents whether PAD JTAG is disabled in the hard way (permanently). 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_DOWNLOAD_MANUAL_ENCRYPT[] = {
-    &DIS_DOWNLOAD_MANUAL_ENCRYPT[0],    		// [] Represents whether flash encrypt function is disabled or enabled(except in SPI boot mode). 1: disabled. 0: enabled
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_USB_DREFH[] = {
-    &USB_DREFH[0],    		// [] USB drefh
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_USB_DREFL[] = {
-    &USB_DREFL[0],    		// [] USB drefl
+    &DIS_DOWNLOAD_MANUAL_ENCRYPT[0],    		// [] Represents whether flash encryption is disabled (except in SPI boot mode). 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_USB_EXCHG_PINS[] = {
-    &USB_EXCHG_PINS[0],    		// [] Represents whether the D+ and D- pins is exchanged. 1: exchanged. 0: not exchanged
+    &USB_EXCHG_PINS[0],    		// [] Represents whether the D+ and D- pins is exchanged. 1: Exchanged 0: Not exchanged
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_VDD_SPI_AS_GPIO[] = {
-    &VDD_SPI_AS_GPIO[0],    		// [] Represents whether vdd spi pin is functioned as gpio. 1: functioned. 0: not functioned
+    &VDD_SPI_AS_GPIO[0],    		// [] Represents whether vdd spi pin is functioned as gpio. 1: Functioned 0: Not functioned
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ECDSA_CURVE_MODE[] = {
-    &ECDSA_CURVE_MODE[0],    		// [] ECDSA curve mode. 0: only P256. 1: only P192. 2: both P192 and P256. 3: only P256
+    &ECDSA_CURVE_MODE[0],    		// [] Represents the configuration of the curve of ECDSA calculation. 0: Only enable P256 1: Only enable P192 2: Both enable P256 and P192 3: Only enable P256
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ECC_FORCE_CONST_TIME[] = {
-    &ECC_FORCE_CONST_TIME[0],    		// [] ECC force const time
+    &ECC_FORCE_CONST_TIME[0],    		// [] Represents whether to permanently turn on ECC const-time mode. 0: Disabled 1: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_XTS_DPA_PSEUDO_LEVEL[] = {
-    &XTS_DPA_PSEUDO_LEVEL[0],    		// [] XTS DPA pseudo level
+    &XTS_DPA_PSEUDO_LEVEL[0],    		// [] Represents control method of xts pseudo-round anti-dpa attack function. 0: Controlled by register 1-3: The higher the value is; the more pseudo-rounds are inserted to the xts-aes calculation.
     NULL
 };
 
@@ -1362,12 +1504,12 @@ const esp_efuse_desc_t* ESP_EFUSE_IO_LDO_ADJUST[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_VDD_SPI_LDO_ADJUST[] = {
-    &VDD_SPI_LDO_ADJUST[0],    		// [] Represents configuration of FLASH LDO mode and voltage
+    &VDD_SPI_LDO_ADJUST[0],    		// [] Represents configuration of FLASH LDO mode and voltage.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_WDT_DELAY_SEL[] = {
-    &WDT_DELAY_SEL[0],    		// [] Represents whether RTC watchdog timeout threshold is selected at startup. 1: selected. 0: not selected
+    &WDT_DELAY_SEL[0],    		// [] Represents RTC watchdog timeout threshold. 0: The originally configured STG0 threshold x 2 1: The originally configured STG0 threshold x 4 2: The originally configured STG0 threshold x 8 3: The originally configured STG0 threshold x 16
     NULL
 };
 
@@ -1392,92 +1534,102 @@ const esp_efuse_desc_t* ESP_EFUSE_SECURE_BOOT_KEY_REVOKE2[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_0[] = {
-    &KEY_PURPOSE_0[0],    		// [KEY0_PURPOSE] Represents the purpose of Key0
+    &KEY_PURPOSE_0[0],    		// [KEY0_PURPOSE] Represents the purpose of Key0. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_1[] = {
-    &KEY_PURPOSE_1[0],    		// [KEY1_PURPOSE] Represents the purpose of Key1
+    &KEY_PURPOSE_1[0],    		// [KEY1_PURPOSE] Represents the purpose of Key1. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_2[] = {
-    &KEY_PURPOSE_2[0],    		// [KEY2_PURPOSE] Represents the purpose of Key2
+    &KEY_PURPOSE_2[0],    		// [KEY2_PURPOSE] Represents the purpose of Key2. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_3[] = {
-    &KEY_PURPOSE_3[0],    		// [KEY3_PURPOSE] Represents the purpose of Key3
+    &KEY_PURPOSE_3[0],    		// [KEY3_PURPOSE] Represents the purpose of Key3. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_4[] = {
-    &KEY_PURPOSE_4[0],    		// [KEY4_PURPOSE] Represents the purpose of Key4
+    &KEY_PURPOSE_4[0],    		// [KEY4_PURPOSE] Represents the purpose of Key4. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_KEY_PURPOSE_5[] = {
-    &KEY_PURPOSE_5[0],    		// [KEY5_PURPOSE] Represents the purpose of Key5
+    &KEY_PURPOSE_5[0],    		// [KEY5_PURPOSE] Represents the purpose of Key5. See Table tab:efuse-key-purpose.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SEC_DPA_LEVEL[] = {
-    &SEC_DPA_LEVEL[0],    		// [] Represents the spa secure level by configuring the clock random divide mode
+    &SEC_DPA_LEVEL[0],    		// [] Represents the security level of anti-DPA attack. The level is adjusted by configuring the clock random frequency division mode. 0: Security level is SEC_DPA_OFF 1: Security level is SEC_DPA_LOW 2: Security level is SEC_DPA_MIDDLE 3: Security level is SEC_DPA_HIGH For more information; please refer to Chapter mod:sysreg > Section sec:sysreg-anti-dpa-attack-security-control.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_IO_LDO_1P8[] = {
-    &IO_LDO_1P8[0],    		// [] Represents select IO LDO voltage to 1.8V or 3.3V.\\ 1: 1.8V\\ 0: 3.3V
+    &IO_LDO_1P8[0],    		// [] Represents select IO LDO voltage to 1.8V or 3.3V. 1: 1.8V 0: 3.3V
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_CRYPT_DPA_ENABLE[] = {
-    &CRYPT_DPA_ENABLE[0],    		// [] Represents whether anti-dpa attack is enabled. 1:enabled. 0: disabled
+    &CRYPT_DPA_ENABLE[0],    		// [] Represents whether defense against DPA attack is enabled. 1: Enabled 0: Disabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SECURE_BOOT_EN[] = {
-    &SECURE_BOOT_EN[0],    		// [] Represents whether secure boot is enabled or disabled. 1: enabled. 0: disabled
+    &SECURE_BOOT_EN[0],    		// [] Represents whether Secure Boot is enabled. 1: Enabled 0: Disabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SECURE_BOOT_AGGRESSIVE_REVOKE[] = {
-    &SECURE_BOOT_AGGRESSIVE_REVOKE[0],    		// [] Represents whether revoking aggressive secure boot is enabled or disabled. 1: enabled. 0: disabled
+    &SECURE_BOOT_AGGRESSIVE_REVOKE[0],    		// [] Represents whether aggressive revocation of Secure Boot is enabled. 1: Enabled 0: Disabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_POWERGLITCH_EN1[] = {
-    &POWERGLITCH_EN1[0],    		// [] Represents whether to enable power glitch function when chip power on
+    &POWERGLITCH_EN1[0],    		// [] Represents whether to enable power glitch function when chip power on.
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_DCDC_CCM_EN[] = {
+    &DCDC_CCM_EN[0],    		// [] Represents whether change DCDC to CCM mode
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_FLASH_TPUW[] = {
-    &FLASH_TPUW[0],    		// [] Represents the flash waiting time after power-up; in unit of ms. When the value less than 15; the waiting time is the programmed value. Otherwise; the waiting time is 2 times the programmed value
+    &FLASH_TPUW[0],    		// [] Represents the flash waiting time after power-up. Measurement unit: ms. When the value is less than 15; the waiting time is the programmed value. Otherwise; the waiting time is a fixed value; i.e. 30 ms.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_DOWNLOAD_MODE[] = {
-    &DIS_DOWNLOAD_MODE[0],    		// [] Represents whether Download mode is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_DOWNLOAD_MODE[0],    		// [] Represents whether all download modes are disabled. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_DIRECT_BOOT[] = {
-    &DIS_DIRECT_BOOT[0],    		// [] Represents whether direct boot mode is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_DIRECT_BOOT[0],    		// [] Represents whether direct boot mode is disabled. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_USB_SERIAL_JTAG_ROM_PRINT[] = {
-    &DIS_USB_SERIAL_JTAG_ROM_PRINT[0],    		// [DIS_USB_PRINT] Set this bit to disable USB-Serial-JTAG print during rom boot
+    &DIS_USB_SERIAL_JTAG_ROM_PRINT[0],    		// [] Represents whether print from USB-Serial-JTAG during ROM boot is disabled. 1: Disabled 0: Enabled
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_FLASH_LDO_EFUSE_SEL[] = {
+    &FLASH_LDO_EFUSE_SEL[0],    		// [] Selects the source of the default flash LDO voltage. 0: strapping pin; 1: eFuse
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_DIS_USB_SERIAL_JTAG_DOWNLOAD_MODE[] = {
-    &DIS_USB_SERIAL_JTAG_DOWNLOAD_MODE[0],    		// [] Represents whether the USB-Serial-JTAG download function is disabled or enabled. 1: disabled. 0: enabled
+    &DIS_USB_SERIAL_JTAG_DOWNLOAD_MODE[0],    		// [] Represents whether the USB-Serial-JTAG download function is disabled. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ENABLE_SECURITY_DOWNLOAD[] = {
-    &ENABLE_SECURITY_DOWNLOAD[0],    		// [] Represents whether security download is enabled or disabled. 1: enabled. 0: disabled
+    &ENABLE_SECURITY_DOWNLOAD[0],    		// [] Represents whether security download is enabled. Only UART is supported for download. Reading/writing RAM or registers is not supported (i.e. Stub download is not supported). 1: Enabled 0: Disabled
     NULL
 };
 
@@ -1487,27 +1639,32 @@ const esp_efuse_desc_t* ESP_EFUSE_UART_PRINT_CONTROL[] = {
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_FORCE_SEND_RESUME[] = {
-    &FORCE_SEND_RESUME[0],    		// [] Represents whether ROM code is forced to send a resume command during SPI boot. 1: forced. 0:not forced
+    &FORCE_SEND_RESUME[0],    		// [] Represents whether ROM code is forced to send a resume command during SPI boot. 1: Forced 0: Not forced
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SECURE_VERSION[] = {
-    &SECURE_VERSION[0],    		// [] Represents the version used by ESP-IDF anti-rollback feature
+    &SECURE_VERSION[0],    		// [] Represents the security version used by ESP-IDF anti-rollback feature.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_SECURE_BOOT_DISABLE_FAST_WAKE[] = {
-    &SECURE_BOOT_DISABLE_FAST_WAKE[0],    		// [] Represents whether FAST VERIFY ON WAKE is disabled or enabled when Secure Boot is enabled. 1: disabled. 0: enabled
+    &SECURE_BOOT_DISABLE_FAST_WAKE[0],    		// [] Represents whether FAST VERIFY ON WAKE is disabled when Secure Boot is enabled. 1: Disabled 0: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_HYS_EN_PAD0[] = {
-    &HYS_EN_PAD0[0],    		// [] Set bits to enable hysteresis function of PAD0~5
+    &HYS_EN_PAD0[0],    		// [] Represents whether to enable the hysteresis function of pad 0-5. 0: Disabled 1: Enabled
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_HYS_EN_PAD1[] = {
-    &HYS_EN_PAD1[0],    		// [] Set bits to enable hysteresis function of PAD6~27
+    &HYS_EN_PAD1[0],    		// [] Represents whether to enable the hysteresis function of pad 6-27. 0: Disabled 1: Enabled
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_FLASH_LDO_POWER_SEL[] = {
+    &FLASH_LDO_POWER_SEL[0],    		// [] Selects the flash LDO voltage. 0: 1.2 V; 1: 1.8 V
     NULL
 };
 
@@ -1527,88 +1684,18 @@ const esp_efuse_desc_t* ESP_EFUSE_MAC_EXT[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_RXIQ_VERSION[] = {
-    &RXIQ_VERSION[0],    		// [] Stores RF Calibration data. RXIQ version
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_RXIQ_0[] = {
-    &RXIQ_0[0],    		// [] Stores RF Calibration data. RXIQ data 0
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_RXIQ_1[] = {
-    &RXIQ_1[0],    		// [] Stores RF Calibration data. RXIQ data 1
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_ACTIVE_HP_DBIAS[] = {
-    &ACTIVE_HP_DBIAS[0],    		// [] Stores the PMU active hp dbias
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_ACTIVE_LP_DBIAS[] = {
-    &ACTIVE_LP_DBIAS[0],    		// [] Stores the PMU active lp dbias
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_DSLP_DBIAS[] = {
-    &DSLP_DBIAS[0],    		// [] Stores the PMU sleep dbias
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_DBIAS_VOL_GAP[] = {
-    &DBIAS_VOL_GAP[0],    		// [] Stores the low 1 bit of dbias_vol_gap
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WAFER_VERSION_MINOR[] = {
-    &WAFER_VERSION_MINOR[0],    		// [] Stores the wafer version minor
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_WAFER_VERSION_MAJOR[] = {
-    &WAFER_VERSION_MAJOR[0],    		// [] Stores the wafer version major
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_DISABLE_WAFER_VERSION_MAJOR[] = {
-    &DISABLE_WAFER_VERSION_MAJOR[0],    		// [] Disables check of wafer version major
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_FLASH_CAP[] = {
-    &FLASH_CAP[0],    		// [] Stores the flash cap
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_FLASH_TEMP[] = {
-    &FLASH_TEMP[0],    		// [] Stores the flash temp
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_FLASH_VENDOR[] = {
-    &FLASH_VENDOR[0],    		// [] Stores the flash vendor
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_PKG_VERSION[] = {
-    &PKG_VERSION[0],    		// [] Package version
-    NULL
-};
-
-const esp_efuse_desc_t* ESP_EFUSE_OPTIONAL_UNIQUE_ID[] = {
-    &OPTIONAL_UNIQUE_ID[0],    		// [] Optional unique 128-bit ID
+const esp_efuse_desc_t* ESP_EFUSE_PVT_CELL_SELECT[] = {
+    &PVT_CELL_SELECT[0],    		// [] Represents the selection of Power glitch monitor PVT cell.
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_BLK_VERSION_MINOR[] = {
-    &BLK_VERSION_MINOR[0],    		// [] BLK_VERSION_MINOR of BLOCK2. 1: RF Calibration data in BLOCK1
+    &BLK_VERSION_MINOR[0],    		// [] Minor version of BLOCK2
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_BLK_VERSION_MAJOR[] = {
-    &BLK_VERSION_MAJOR[0],    		// [] BLK_VERSION_MAJOR of BLOCK2
+    &BLK_VERSION_MAJOR[0],    		// [] Major version of BLOCK2
     NULL
 };
 
@@ -1617,73 +1704,163 @@ const esp_efuse_desc_t* ESP_EFUSE_DISABLE_BLK_VERSION_MAJOR[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_TEMP_CALIB[] = {
-    &TEMP_CALIB[0],    		// [] Temperature calibration data
+const esp_efuse_desc_t* ESP_EFUSE_FLASH_CAP[] = {
+    &FLASH_CAP[0],    		// [] Mark the capacity of in-package Flash
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_FLASH_VENDOR[] = {
+    &FLASH_VENDOR[0],    		// [] Mark the vendor of in-package Flash
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_TEMP[] = {
+    &TEMP[0],    		// [] Mark the specified maximum ambient temperature that ESP Chip can work properly
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PVT_LIMIT[] = {
+    &PVT_LIMIT[0],    		// [] Represents the threshold of power glitch monitor.
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PVT_GLITCH_CHARGE_RESET[] = {
+    &PVT_GLITCH_CHARGE_RESET[0],    		// [] Represents whether to trigger reset or charge pump when PVT power glitch happened. 1:Trigger charge pump.  0:Trigger reset
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PVT_GLITCH_MODE[] = {
+    &PVT_GLITCH_MODE[0],    		// [] Represents the configuration of glitch mode.
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PVT_PUMP_LIMIT[] = {
+    &PVT_PUMP_LIMIT[0],    		// [] Represents the configuration voltage monitor limit for charge pump.
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PUMP_DRV[] = {
+    &PUMP_DRV[0],    		// [] Use to configure charge pump voltage gain.
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WAFER_VERSION_MINOR[] = {
+    &WAFER_VERSION_MINOR[0],    		// [] Minor chip version
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_WAFER_VERSION_MAJOR[] = {
+    &WAFER_VERSION_MAJOR[0],    		// [] Major chip version
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_DISABLE_WAFER_VERSION_MAJOR[] = {
+    &DISABLE_WAFER_VERSION_MAJOR[0],    		// [] Disables check of wafer version major
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PKG_VERSION[] = {
+    &PKG_VERSION[0],    		// [] Package version
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_OCODE[] = {
+    &OCODE[0],    		// [] ADC OCode calibration at 3.4 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_DCDC_OCODE[] = {
+    &DCDC_OCODE[0],    		// [] DCDC OCode calibration at 3.4 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_OPTIONAL_UNIQUE_ID[] = {
+    &OPTIONAL_UNIQUE_ID[0],    		// [] Optional unique 128-bit ID
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_SPI_LDO_1V2_ADJ[] = {
+    &SPI_LDO_1V2_ADJ[0],    		// [] SPI LDO adjustment for 1.2 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_SPI_LDO_1V8_ADJ[] = {
+    &SPI_LDO_1V8_ADJ[0],    		// [] SPI LDO adjustment for 1.8 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_PVT_DRVB[] = {
+    &PVT_DRVB[0],    		// [] PVT DRVB calibration at 3.4 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_TEMP_CALI[] = {
+    &TEMP_CALI[0],    		// [] Temperature difference between chip and calibration equipment (1 sign bit and 9 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_AVE_INITCODE_ATTEN0[] = {
-    &ADC1_AVE_INITCODE_ATTEN0[0],    		// [] ADC1 calibration data
+    &ADC1_AVE_INITCODE_ATTEN0[0],    		// [] ADC1 average initcode at attenuation 0 minus 1750
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_AVE_INITCODE_ATTEN1[] = {
-    &ADC1_AVE_INITCODE_ATTEN1[0],    		// [] ADC1 calibration data
+    &ADC1_AVE_INITCODE_ATTEN1[0],    		// [] ADC1 average initcode at attenuation 1 minus 1750
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_AVE_INITCODE_ATTEN2[] = {
-    &ADC1_AVE_INITCODE_ATTEN2[0],    		// [] ADC1 calibration data
+    &ADC1_AVE_INITCODE_ATTEN2[0],    		// [] ADC1 average initcode at attenuation 2 minus 1750
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_AVE_INITCODE_ATTEN3[] = {
-    &ADC1_AVE_INITCODE_ATTEN3[0],    		// [] ADC1 calibration data
+    &ADC1_AVE_INITCODE_ATTEN3[0],    		// [] ADC1 average initcode at attenuation 3 minus 1750
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_HI_DOUT_ATTEN0[] = {
-    &ADC1_HI_DOUT_ATTEN0[0],    		// [] ADC1 calibration data
+    &ADC1_HI_DOUT_ATTEN0[0],    		// [] ADC1 high output at attenuation 0 minus 2500 (1 sign bit and 8 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_HI_DOUT_ATTEN1[] = {
-    &ADC1_HI_DOUT_ATTEN1[0],    		// [] ADC1 calibration data
+    &ADC1_HI_DOUT_ATTEN1[0],    		// [] ADC1 high output at attenuation 1 minus 2500 (1 sign bit and 8 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_HI_DOUT_ATTEN2[] = {
-    &ADC1_HI_DOUT_ATTEN2[0],    		// [] ADC1 calibration data
+    &ADC1_HI_DOUT_ATTEN2[0],    		// [] ADC1 high output at attenuation 2 minus 2550 (1 sign bit and 8 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_HI_DOUT_ATTEN3[] = {
-    &ADC1_HI_DOUT_ATTEN3[0],    		// [] ADC1 calibration data
+    &ADC1_HI_DOUT_ATTEN3[0],    		// [] ADC1 high output at attenuation 3 minus 2550 (1 sign bit and 8 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_CH0_ATTEN0_INITCODE_DIFF[] = {
-    &ADC1_CH0_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 calibration data
+    &ADC1_CH0_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 channel 0 initcode difference at attenuation 0 (1 sign bit and 2 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_CH1_ATTEN0_INITCODE_DIFF[] = {
-    &ADC1_CH1_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 calibration data
+    &ADC1_CH1_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 channel 1 initcode difference at attenuation 0 (1 sign bit and 2 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_CH2_ATTEN0_INITCODE_DIFF[] = {
-    &ADC1_CH2_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 calibration data
+    &ADC1_CH2_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 channel 2 initcode difference at attenuation 0 (1 sign bit and 2 data bits)
     NULL
 };
 
 const esp_efuse_desc_t* ESP_EFUSE_ADC1_CH3_ATTEN0_INITCODE_DIFF[] = {
-    &ADC1_CH3_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 calibration data
+    &ADC1_CH3_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 channel 3 initcode difference at attenuation 0 (1 sign bit and 2 data bits)
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_ADC1_CH4_ATTEN0_INITCODE_DIFF[] = {
-    &ADC1_CH4_ATTEN0_INITCODE_DIFF[0],    		// [] ADC1 calibration data
+const esp_efuse_desc_t* ESP_EFUSE_VDD_3V4_DOUT[] = {
+    &VDD_3V4_DOUT[0],    		// [] ADC output at VDD 3.4 V minus 1023
     NULL
 };
 
@@ -1727,7 +1904,37 @@ const esp_efuse_desc_t* ESP_EFUSE_KEY5[] = {
     NULL
 };
 
-const esp_efuse_desc_t* ESP_EFUSE_SYS_DATA_PART2[] = {
-    &SYS_DATA_PART2[0],    		// [BLOCK_SYS_DATA2] System data part 2 (reserved)
+const esp_efuse_desc_t* ESP_EFUSE_ACTIVE_DCDC_1V25[] = {
+    &ACTIVE_DCDC_1V25[0],    		// [] Active DCDC DBIAS for 1.25 V minus 16
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_ACTIVE_DCDC_1V55[] = {
+    &ACTIVE_DCDC_1V55[0],    		// [] Active DCDC DBIAS for 1.55 V minus 16
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_SLP_DCDC[] = {
+    &SLP_DCDC[0],    		// [] DCDC DBIAS in sleep for 0.75 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_LSLP_HP_DRVB[] = {
+    &LSLP_HP_DRVB[0],    		// [] HP DRVB in light sleep for 0.67 V
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_RXIQ_VERSION[] = {
+    &RXIQ_VERSION[0],    		// [] RF RXIQ calibration version
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_RXIQ_0[] = {
+    &RXIQ_0[0],    		// [] RF RXIQ calibration data 0
+    NULL
+};
+
+const esp_efuse_desc_t* ESP_EFUSE_RXIQ_1[] = {
+    &RXIQ_1[0],    		// [] RF RXIQ calibration data 1
     NULL
 };

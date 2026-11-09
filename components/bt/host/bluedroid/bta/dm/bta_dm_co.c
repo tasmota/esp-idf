@@ -107,20 +107,20 @@ BOOLEAN bta_dm_co_get_compress_memory(tBTA_SYS_ID id, UINT8 **memory_p, UINT32 *
 **
 ** Parameters       bt_io_cap  - IO capabilities
 **
-** @return          - ESP_BT_STATUS_SUCCESS : success
+** @return          - ESP_OK : success
 **                  - other  : failed
 **
 *******************************************************************************/
 #if (CLASSIC_BT_INCLUDED == TRUE)
 esp_err_t bta_dm_co_bt_set_io_cap(UINT8 bt_io_cap)
 {
-    esp_err_t ret = ESP_BT_STATUS_SUCCESS;
+    esp_err_t ret = ESP_OK;
 
     if(bt_io_cap < BTM_IO_CAP_MAX ) {
         btm_cb.devcb.loc_io_caps = bt_io_cap;
-        ret = ESP_BT_STATUS_SUCCESS;
+        ret = ESP_OK;
     } else {
-        ret = ESP_BT_STATUS_FAIL;
+        ret = ESP_FAIL;
         APPL_TRACE_ERROR("%s error:Invalid io cap value.",__func__);
     }
 
@@ -376,6 +376,11 @@ void bta_dm_co_ble_io_req(BD_ADDR bd_addr,  tBTA_IO_CAP *p_io_cap,
         *p_resp_key = bte_appl_cfg.ble_resp_key;
     }
 
+#if (SMP_CTKD_INCLUDED == FALSE)
+    *p_init_key &= ~BTM_BLE_LINK_KEY_MASK;
+    *p_resp_key &= ~BTM_BLE_LINK_KEY_MASK;
+#endif
+
     if (bte_appl_cfg.ble_max_key_size >= 7 && bte_appl_cfg.ble_max_key_size <= 16) {
         *p_max_key_size = bte_appl_cfg.ble_max_key_size;
     }
@@ -406,6 +411,9 @@ void bta_dm_co_ble_set_init_key_req(UINT8 init_key)
 {
 #if (SMP_INCLUDED == TRUE)
    init_key &= 0x0f;  // 4~7bit reserved, only used the 0~3bit
+#if (SMP_CTKD_INCLUDED == FALSE)
+   init_key &= ~BTM_BLE_LINK_KEY_MASK;
+#endif
    bte_appl_cfg.ble_init_key = init_key;
    APPL_TRACE_DEBUG("%s: init_key set to 0x%x", __func__, init_key);
 #endif
@@ -415,6 +423,9 @@ void bta_dm_co_ble_set_rsp_key_req(UINT8 rsp_key)
 {
 #if (SMP_INCLUDED == TRUE)
    rsp_key &= 0x0f;  // 4~7bit reserved, only used the 0~3bit
+#if (SMP_CTKD_INCLUDED == FALSE)
+   rsp_key &= ~BTM_BLE_LINK_KEY_MASK;
+#endif
    bte_appl_cfg.ble_resp_key = rsp_key;
    APPL_TRACE_DEBUG("%s: rsp_key set to 0x%x", __func__, rsp_key);
 #endif  ///SMP_INCLUDED == TRUE

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -223,7 +223,7 @@ typedef struct {
     };
 } adc_digi_output_data_t;
 
-#elif SOC_IS(ESP32C6) || SOC_IS(ESP32H2) || SOC_IS(ESP32C5) || SOC_IS(ESP32C61) || SOC_IS(ESP32H4)
+#elif SOC_IS(ESP32C6) || SOC_IS(ESP32H2) || SOC_IS(ESP32C5) || SOC_IS(ESP32C61) || SOC_IS(ESP32H4) || SOC_IS(ESP32H21)
 /**
  * @brief ADC digital controller (DMA mode) output data format.
  *        Used to analyze the acquired ADC (DMA) data.
@@ -238,6 +238,25 @@ typedef struct {
                                             If (channel > ADC_CHANNEL_MAX), The data is invalid. */
             uint32_t reserved17_31: 15; /*!<Reserved 17-31. */
         } type2;                        /*!<When the configured output format is 12bit. */
+        uint32_t val;                   /*!<Raw data value */
+    };
+} adc_digi_output_data_t;
+
+#elif SOC_IS(ESP32S31)
+/**
+ * @brief ADC digital controller (DMA mode) output data format.
+ *        Used to analyze the acquired ADC (DMA) data.
+ */
+typedef struct {
+    union {
+        struct {
+            uint32_t data:          17; /*!<ADC conversion data. 17-bit raw comparator vector, not a
+                                            monotonic SAR code; do not scale it as Dout * Vmax / 2^bitwidth.
+                                            Use the ADC calibration driver to convert it to millivolts. */
+            uint32_t channel:       4;  /*!<ADC channel index. */
+            uint32_t unit:          1;  /*!<ADC unit index info. 0: ADC1; 1: ADC2. */
+            uint32_t reserved22_31: 10; /*!<Reserved. */
+        } type2;                        /*!<When the configured output format is 17bit.*/
         uint32_t val;                   /*!<Raw data value */
     };
 } adc_digi_output_data_t;

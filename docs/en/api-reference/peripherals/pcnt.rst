@@ -50,15 +50,19 @@ To install a PCNT unit, there is a configuration structure that needs to be give
 
 .. list::
 
+    -  :cpp:member:`pcnt_unit_config_t::group_id` specifies which PCNT peripheral group (hardware instance) to allocate the unit from. Must be a valid group index in range ``[0, PCNT_LL_INST_NUM)``. When you have multiple independent PCNT groups on a chip (e.g., ESP32-S31), this field allows you to pin a unit to a specific group.
+    -  :cpp:member:`pcnt_unit_config_t::clk_src` selects the clock source for the PCNT unit.
     -  :cpp:member:`pcnt_unit_config_t::low_limit` and :cpp:member:`pcnt_unit_config_t::high_limit` specify the range for the internal hardware counter. The counter will reset to zero automatically when it crosses either the high or low limit.
+    -  :cpp:member:`pcnt_unit_config_t::intr_priority` sets the interrupt priority. If it is set to ``0``, the driver will allocate an interrupt with a default priority. Otherwise, the driver will use the given priority.
     -  :cpp:member:`pcnt_unit_config_t::flags::accum_count` sets whether to create an internal accumulator for the counter. This is helpful when you want to extend the counter's width, which by default is 16 bit at most, defined in the hardware. See also :ref:`pcnt-compensate-overflow-loss` for how to use this feature to compensate the overflow loss.
     :SOC_PCNT_SUPPORT_STEP_NOTIFY: -  :cpp:member:`pcnt_unit_config_t::flags::en_step_notify_up` Configure whether to enable watch step to count in the positive direction.
     :SOC_PCNT_SUPPORT_STEP_NOTIFY: -  :cpp:member:`pcnt_unit_config_t::flags::en_step_notify_down` Configure whether to enable watch step to count in the negative direction.
-    -  :cpp:member:`pcnt_unit_config_t::intr_priority` sets the priority of the interrupt. If it is set to ``0``, the driver will allocate an interrupt with a default priority. Otherwise, the driver will use the given priority.
 
 .. note::
 
-    Since all PCNT units share the same interrupt source, when installing multiple PCNT units make sure that the interrupt priority :cpp:member:`pcnt_unit_config_t::intr_priority` is the same for each unit.
+    All units within the **same PCNT group** share the same hardware interrupt source and the same peripheral clock. Therefore, when installing multiple PCNT units in the same group, the following constraints apply:
+
+    - Both :cpp:member:`pcnt_unit_config_t::intr_priority` and :cpp:member:`pcnt_unit_config_t::clk_src` must be the same for all units within the same group. If there is a mismatch, :cpp:func:`pcnt_new_unit` will return :c:macro:`ESP_ERR_INVALID_ARG`.
 
 Unit allocation and initialization is done by calling a function :cpp:func:`pcnt_new_unit` with :cpp:type:`pcnt_unit_config_t` as an input parameter. The function will return a PCNT unit handle only when it runs correctly. Specifically, when there are no more free PCNT units in the pool (i.e., unit resources have been used up), then this function will return :c:macro:`ESP_ERR_NOT_FOUND` error.
 
@@ -106,7 +110,7 @@ If a previously created PCNT channel is no longer needed, it is recommended to r
 
 .. note::
 
-    In PCNT, the GPIOs involved can be reconfigured for pull-up or pull-down after initializing PCNT using functions such as :cpp:func:`gpio_pullup_en` and :cpp:func:`gpio_pullup_dis`.
+    The PCNT driver does not configure internal pull-up or pull-down resistors for the edge or level signal GPIOs. If your signal source needs a defined idle level, configure the GPIO pull mode explicitly with functions such as :cpp:func:`gpio_set_pull_mode`, :cpp:func:`gpio_pullup_en`, and :cpp:func:`gpio_pullup_dis`.
 
 .. _pcnt-setup-channel-actions:
 
@@ -252,8 +256,12 @@ This function should be called when the unit is in the init state. Otherwise, it
 
     The PCNT unit can receive a clear signal from the GPIO. The parameters that can be configured for the clear signal are listed in :cpp:type:`pcnt_clear_signal_config_t`:
 
-        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` specify the GPIO numbers used by **clear** signal. The default active level is high, and the input mode is pull-down enabled.
-        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` is used to decide whether to invert the input signal before it going into PCNT hardware. The invert is done by GPIO matrix instead of PCNT hardware. The input mode is pull-up enabled when the input signal is inverted.
+        -  :cpp:member:`pcnt_clear_signal_config_t::clear_signal_gpio_num` specifies the GPIO number used by the **clear** signal. The default active level is high.
+        -  :cpp:member:`pcnt_clear_signal_config_t::flags::invert_clear_signal` is used to decide whether to invert the input signal before it goes into PCNT hardware. The inversion is done by the GPIO matrix instead of PCNT hardware.
+
+    .. note::
+
+        The PCNT driver does not configure internal pull-up or pull-down resistors for the clear signal GPIO. If the clear signal requires a defined idle level, configure the GPIO pull mode explicitly with GPIO APIs.
 
     This signal acts in the same way as calling :cpp:func:`pcnt_unit_clear_count`, but is not subject to software latency, and is suitable for use in situations with low latency requirements. Also please note, the flip frequency of this signal can not be too high.
 
@@ -338,7 +346,7 @@ The internal hardware counter will be cleared to zero automatically when it reac
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When power management is enabled (i.e., :ref:`CONFIG_PM_ENABLE` is on), the system adjusts the APB frequency before entering light sleep, which can cause the PCNT glitch filter to misinterpret valid signals as noise.
+When power management is enabled (i.e., :menuitem:`CONFIG_PM_ENABLE` is on), the system adjusts the APB frequency before entering light sleep, which can cause the PCNT glitch filter to misinterpret valid signals as noise.
 
 To prevent this, the driver can acquire a power management lock of type :cpp:enumerator:`ESP_PM_APB_FREQ_MAX`, ensuring the APB frequency remains constant. This lock is acquired when the PCNT unit is enabled via :cpp:func:`pcnt_unit_enable` and released when the unit is disabled via :cpp:func:`pcnt_unit_disable`.
 
@@ -349,7 +357,7 @@ IRAM Safe
 
 By default, the PCNT interrupt will be deferred when the Cache is disabled for reasons like writing/erasing Flash. Thus the alarm interrupt will not get executed in time, which is not expected in a real-time application.
 
-There is a Kconfig option :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
+There is a Kconfig option :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
 
 1. Enables the interrupt being serviced even when cache is disabled
 2. Places all functions that used by the ISR into IRAM [2]_
@@ -357,7 +365,7 @@ There is a Kconfig option :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` that:
 
 This allows the interrupt to run while the cache is disabled but comes at the cost of increased IRAM consumption.
 
-There is another Kconfig option :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` that can put commonly used IO control functions into IRAM as well. So that these functions can also be executable when the cache is disabled. These IO control functions are as follows:
+There is another Kconfig option :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` that can put commonly used IO control functions into IRAM as well. So that these functions can also be executable when the cache is disabled. These IO control functions are as follows:
 
 - :cpp:func:`pcnt_unit_start`
 - :cpp:func:`pcnt_unit_stop`
@@ -385,9 +393,9 @@ Other functions that take the :cpp:type:`pcnt_unit_handle_t` and :cpp:type:`pcnt
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` controls where to place the PCNT control functions (IRAM or Flash), see :ref:`pcnt-iram-safe` for more information.
-- :ref:`CONFIG_PCNT_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see :ref:`pcnt-iram-safe` for more information.
-- :ref:`CONFIG_PCNT_ENABLE_DEBUG_LOG` is used to enabled the debug log output. Enabling this option increases the firmware binary size.
+- :menuitem:`CONFIG_PCNT_CTRL_FUNC_IN_IRAM` controls where to place the PCNT control functions (IRAM or Flash), see :ref:`pcnt-iram-safe` for more information.
+- :menuitem:`CONFIG_PCNT_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see :ref:`pcnt-iram-safe` for more information.
+- :menuitem:`CONFIG_PCNT_ENABLE_DEBUG_LOG` is used to enabled the debug log output. Enabling this option increases the firmware binary size.
 
 Application Examples
 --------------------

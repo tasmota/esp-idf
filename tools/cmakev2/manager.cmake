@@ -25,9 +25,9 @@ function(__init_component_manager)
     endif()
 
     # Set IDF_COMPONENT_MANAGER_INTERFACE_VERSION.
-    # Defaults to 4. Allow overriding via env/CMake.
+    # Defaults to 6. Allow overriding via env/CMake.
     __get_default_value(VARIABLE IDF_COMPONENT_MANAGER_INTERFACE_VERSION
-                        DEFAULT 4
+                        DEFAULT 6
                         OUTPUT cmgr_iface)
     idf_build_set_property(IDF_COMPONENT_MANAGER_INTERFACE_VERSION ${cmgr_iface})
 
@@ -36,6 +36,17 @@ function(__init_component_manager)
                         DEFAULT ""
                         OUTPUT deps_lock_file)
     idf_build_set_property(DEPENDENCIES_LOCK "${deps_lock_file}")
+endfunction()
+
+function(__component_manager_get_command var)
+    idf_build_get_property(python PYTHON)
+    if(DEFINED ENV{IDF_COMPONENT_WRAPPER} AND NOT "$ENV{IDF_COMPONENT_WRAPPER}" STREQUAL "")
+        set(component_manager_cmd
+            "${python}" "$ENV{IDF_COMPONENT_WRAPPER}" "idf_component_manager.prepare_components")
+    else()
+        set(component_manager_cmd "${python}" "-m" "idf_component_manager.prepare_components")
+    endif()
+    set(${var} ${component_manager_cmd} PARENT_SCOPE)
 endfunction()
 
 #[[
@@ -51,6 +62,14 @@ endfunction()
     3. If the component manager run failed, error out.
 #]]
 function(__fetch_components_from_registry)
+    # __KCONFGEN_QUIET stays YES (set by the bootstrap path in project.cmake)
+    # across intermediate iterations of the loop below, because each
+    # iteration's kconfgen pass runs against a partial component set when the
+    # component manager exits 10. Warnings from those passes are transient.
+    # We only flip the flag to NO on the iteration where the component
+    # manager succeeds, so the final kconfgen pass against the complete
+    # component set emits genuine warnings.
+
     # Iteratively run the component manager and Kconfig until stable or error out.
     set(__cmgr_round 0)
     while(TRUE)
@@ -59,6 +78,11 @@ function(__fetch_components_from_registry)
 
         # Run the component manager for all discovered components
         __download_component_level_managed_components(RESULT cmgr_result)
+
+        # Only the final (successful) iteration should emit kconfgen warnings.
+        if(cmgr_result EQUAL 0)
+            idf_build_set_property(__KCONFGEN_QUIET NO)
+        endif()
 
         # Re-collect Kconfig and regenerate sdkconfig with managed components included
         __generate_sdkconfig()
@@ -122,22 +146,19 @@ function(__download_managed_component)
         idf_die("RESULT option is required")
     endif()
 
-    idf_build_get_property(python PYTHON)
+    __component_manager_get_command(component_manager_cmd)
     idf_build_get_property(project_dir PROJECT_DIR)
     idf_build_get_property(component_manager_interface_version IDF_COMPONENT_MANAGER_INTERFACE_VERSION)
     idf_build_get_property(dependencies_lock_file DEPENDENCIES_LOCK)
-    idf_build_get_property(sdkconfig_json __SDKCONFIG_JSON)
-
     # Invoke the component manager
-    execute_process(COMMAND ${python}
-        "-m"
-        "idf_component_manager.prepare_components"
+    execute_process(COMMAND ${component_manager_cmd}
         "--project_dir=${project_dir}"
         "--lock_path=${dependencies_lock_file}"
-        "--sdkconfig_json_file=${sdkconfig_json}"
         "--interface_version=${component_manager_interface_version}"
+        "--use_sdk_json=true"
         "prepare_dependencies"
         "--local_components_list_file=${ARG_COMPONENTS_LIST_FILE}"
+        "--build_dir=${build_dir}"
         "--managed_components_list_file=${ARG_MANAGED_OUTPUT_FILE}"
         RESULT_VARIABLE result
         ERROR_VARIABLE error)
@@ -183,7 +204,8 @@ function(__download_component_level_managed_components)
     foreach(interface ${component_interfaces})
         __idf_component_get_property_unchecked(name ${interface} COMPONENT_NAME)
         __idf_component_get_property_unchecked(dir ${interface} COMPONENT_DIR)
-        set(__contents "${__contents}  - name: \"${name}\"\n    path: \"${dir}\"\n")
+        __idf_component_get_property_unchecked(source ${interface} COMPONENT_SOURCE)
+        set(__contents "${__contents}  - name: \"${name}\"\n    path: \"${dir}\"\n    source: \"${source}\"\n")
     endforeach()
     file(WRITE ${local_components_list_file} "${__contents}")
 
@@ -285,31 +307,52 @@ function(__inject_requirements_for_component_from_manager component_name)
 
     idf_dbg("Injecting requirements for component '${component_name}' from the component manager")
 
-    idf_build_get_property(python PYTHON)
     idf_build_get_property(project_dir PROJECT_DIR)
     idf_build_get_property(build_dir BUILD_DIR)
     idf_build_get_property(dependencies_lock_file DEPENDENCIES_LOCK)
-    idf_build_get_property(sdkconfig_json __SDKCONFIG_JSON)
     idf_build_get_property(component_manager_interface_version IDF_COMPONENT_MANAGER_INTERFACE_VERSION)
     idf_build_get_property(idf_path IDF_PATH)
     idf_build_get_property(component_prefix PREFIX)
-    idf_component_get_property(component_source "${component_name}" COMPONENT_SOURCE)
     idf_component_get_property(component_dir "${component_name}" COMPONENT_DIR)
 
     # The component manager will inject requirements for this component. To do this, it needs to files:
     #
-    # 1. An input file which states the component's source type. This is a minimal build system v1-style file
-    #    which contains the component's source type. To make the component manager happy, we create a file with
-    #    shim __component_set_property(), which calls idf_component_set_property(). The component manager will
-    #    modify this file by adding the component's requirements. TODO: Improve this.
+    # 1. An input file which seeds the component manager with one entry per
+    #    discovered component, each carrying its __COMPONENT_SOURCE. This is a
+    #    minimal build system v1-style file consumed by the manager via the
+    #    shim __component_set_property(), which calls idf_component_set_property().
+    #    Seeding the whole project ensures handle_project_requirements()'s
+    #    known_components matches the project-wide list v1 provides, so its
+    #    _choose_component() can rewrite a manifest-declared namespaced dep
+    #    (e.g. "lvgl__lvgl") to its locally-shadowing short name ("lvgl") when
+    #    a local component shadows a managed dependency. Without seeding, the
+    #    manager would only see the one component being processed and the
+    #    rewrite would never fire. The manager then modifies this file by
+    #    appending the component's resolved requirements. TODO: Improve this.
     # 2. A file which lists the components with manifests. This file is created by the component manager,
     #    and is deleted after the component manager is done. This works for build system v1 where we provide
     #    a global list of components with manifests. However, for build system v2, we need to provide this file
     #    for each component. Hence, we create this file and place it in the build directory.
+    # Iterate COMPONENT_INTERFACES (not COMPONENTS_DISCOVERED) and read each
+    # component's properties via __idf_component_get_property_unchecked so the
+    # COMPONENT_SOURCE comes from the component's own interface target rather
+    # than the alias-aware lookup. After __init_component_interface_cache
+    # short-name aliasing fires (e.g. a higher-priority "example__cmp" rebinds
+    # the cache entry "cmp" to its own interface), the name-based getter
+    # returns the alias target's source -- in that case both "cmp" and
+    # "example__cmp" would be seeded as "project_managed_components" and the
+    # manager's _override_requirements_by_component_sources would reject the
+    # duplicate.
     set(out_file "${build_dir}/component_requires.${component_name}.temp.cmake")
-    set(cmgr_target "___${component_prefix}_${component_name}")
-    # We only provide component source to the component manager
-    file(WRITE "${out_file}" "__component_set_property(${cmgr_target} __COMPONENT_SOURCE \"${component_source}\")\n")
+    idf_build_get_property(component_interfaces COMPONENT_INTERFACES)
+    set(requires_content "")
+    foreach(seed_interface IN LISTS component_interfaces)
+        __idf_component_get_property_unchecked(seed_name "${seed_interface}" COMPONENT_NAME)
+        __idf_component_get_property_unchecked(seed_source "${seed_interface}" COMPONENT_SOURCE)
+        string(APPEND requires_content
+            "__component_set_property(___${component_prefix}_${seed_name} __COMPONENT_SOURCE \"${seed_source}\")\n")
+    endforeach()
+    file(WRITE "${out_file}" "${requires_content}")
 
     # Create components_with_manifests_list.temp file with only this component if it has a manifest
     set(components_with_manifests_file "${build_dir}/components_with_manifests_list.temp")
@@ -320,13 +363,12 @@ function(__inject_requirements_for_component_from_manager component_name)
     endif()
 
     # Call component manager to inject requirements
-    execute_process(COMMAND ${python}
-        "-m"
-        "idf_component_manager.prepare_components"
+    __component_manager_get_command(component_manager_cmd)
+    execute_process(COMMAND ${component_manager_cmd}
         "--project_dir=${project_dir}"
         "--lock_path=${dependencies_lock_file}"
-        "--sdkconfig_json_file=${sdkconfig_json}"
         "--interface_version=${component_manager_interface_version}"
+        "--use_sdk_json=true"
         "inject_requirements"
         "--idf_path=${idf_path}"
         "--build_dir=${build_dir}"

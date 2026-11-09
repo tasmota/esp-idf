@@ -16,6 +16,7 @@ api-reference/ethernet/esp_eth                  api-reference/network/esp_eth
 api-reference/mesh/index                        api-reference/network/index
 api-reference/mesh/esp_mesh                     api-reference/network/esp_mesh
 api-reference/peripherals/can                   api-reference/peripherals/twai
+api-reference/peripherals/mcpwm                api-reference/peripherals/mcpwm/index
 api-reference/peripherals/usb                   "https://docs.espressif.com/projects/esp-usb/en/latest/{IDF_TARGET_PATH_NAME}/introduction.html"
 api-reference/peripherals/usb_device            "https://docs.espressif.com/projects/esp-usb/en/latest/{IDF_TARGET_PATH_NAME}/usb_device.html"
 api-reference/peripherals/usb_host              "https://docs.espressif.com/projects/esp-usb/en/latest/{IDF_TARGET_PATH_NAME}/usb_host.html"
@@ -77,6 +78,7 @@ get-started-cmake/get-started-pico-kit          hw-reference/esp32/get-started-p
 get-started-cmake/get-started-pico-kit-v3       hw-reference/esp32/get-started-pico-kit-v3
 
 api-guides/build-system-cmake                   api-guides/build-system
+api-guides/app_trace                            api-guides/tracing/index
 api-guides/freertos-smp                         api-reference/system/freertos_idf
 api-guides/ulp-cmake                            api-guides/ulp
 api-guides/unit-tests-cmake                     api-guides/unit-tests
@@ -87,6 +89,7 @@ api-guides/ulp-risc-v                           api-reference/system/ulp-risc-v
 api-guides/console                              api-reference/system/console
 api-guides/event-handling                       api-reference/system/esp_event
 api-guides/wifi                                 api-guides/wifi-driver/index
+api-guides/openthread                           api-guides/openthread/index
 
 api-reference/network/tcpip_adapter             migration-guides/tcpip-adapter
 api-reference/system/system                     api-reference/system/misc_system_api
@@ -129,3 +132,6 @@ get-started/windows-setup-update                get-started/windows-setup
 
 # Kconfig documentation got pretty serious file structure changes
 api-reference/kconfig                          api-reference/kconfig-reference
+
+# The LE Audio overview page 'ble-audio' is now the 'esp-ble-audio' landing page
+api-guides/ble/ble-audio                        api-guides/esp-ble-audio/ble-audio-index

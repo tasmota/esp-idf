@@ -1,0 +1,281 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Maintains the trace snapshot consumed by the coredump writer. */
+
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "esp_attr.h"
+#include "soc/soc_caps.h"
+#include "hal/riscv_trace_hal.h"
+#include "hal/riscv_trace_ll.h"
+#include "hal/efuse_hal.h"
+#include "esp_app_desc.h"
+#include "esp_riscv_trace.h"
+#include "esp_riscv_trace_priv.h"
+#include "esp_riscv_trace_snapshot.h"
+
+/* Per-core snapshot descriptors, reached through g_esp_riscv_trace_snapshot.cores_addr. */
+static esp_riscv_trace_snapshot_core_desc_t s_core_desc[SOC_CPU_CORES_NUM];
+
+/* Target-wide encoder parameters, reached through g_esp_riscv_trace_snapshot.encoder_params_addr. */
+static esp_riscv_trace_encoder_params_t s_encoder_params;
+
+/* Target ELF SHA-256 hash, reached through g_esp_riscv_trace_snapshot.app_elf_sha256_addr. */
+static uint8_t s_app_elf_sha256[32];
+
+esp_riscv_trace_snapshot_desc_t g_esp_riscv_trace_snapshot = {
+    .abi_major = ESP_RISCV_TRACE_SNAPSHOT_ABI_MAJOR,
+    .abi_minor = ESP_RISCV_TRACE_SNAPSHOT_ABI_MINOR,
+    .snapshot_desc_size = ESP_RISCV_TRACE_SNAPSHOT_DESC_SIZE,
+    .core_desc_size = ESP_RISCV_TRACE_SNAPSHOT_CORE_DESC_SIZE,
+    .cores_addr = (uint32_t)(uintptr_t)s_core_desc,
+    .core_count = SOC_CPU_CORES_NUM,
+    .encoder_params_addr = (uint32_t)(uintptr_t) &s_encoder_params,
+    .encoder_params_size = ESP_RISCV_TRACE_ENCODER_PARAMS_SIZE,
+    .app_elf_sha256_addr = (uint32_t)(uintptr_t)s_app_elf_sha256,
+};
+
+static portMUX_TYPE s_snapshot_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint8_t s_active_capture_cores;
+
+/*
+ * Writers set an odd write_seq before updates and an even one afterward.
+ * Hardware fences keep descriptor stores inside that interval.
+ * Setting bit 0 instead of incrementing also keeps it odd over a writer interrupted by a panic.
+ */
+FORCE_INLINE_ATTR void write_seq_begin(void)
+{
+    g_esp_riscv_trace_snapshot.write_seq |= 1u;
+    __asm__ __volatile__("fence w, w" ::: "memory");
+}
+
+FORCE_INLINE_ATTR void write_seq_end(void)
+{
+    __asm__ __volatile__("fence w, w" ::: "memory");
+    g_esp_riscv_trace_snapshot.write_seq++;
+}
+
+static void snapshot_write_begin(void)
+{
+    portENTER_CRITICAL(&s_snapshot_lock);
+    write_seq_begin();
+}
+
+static void snapshot_write_end(void)
+{
+    write_seq_end();
+    portEXIT_CRITICAL(&s_snapshot_lock);
+}
+
+FORCE_INLINE_ATTR uint16_t snapshot_memory_mode_from_hw(bool loop)
+{
+    return loop ? ESP_RISCV_TRACE_MEMORY_MODE_LOOP : ESP_RISCV_TRACE_MEMORY_MODE_LINEAR;
+}
+
+FORCE_INLINE_ATTR uint16_t snapshot_resync_mode_from_hw(uint32_t hw_mode)
+{
+    switch (hw_mode) {
+    case RISCV_TRACE_RESYNC_DISABLED: return ESP_RISCV_TRACE_RESYNC_MODE_DISABLED;
+    case RISCV_TRACE_RESYNC_PACKET:   return ESP_RISCV_TRACE_RESYNC_MODE_PACKET;
+    case RISCV_TRACE_RESYNC_CYCLE:    return ESP_RISCV_TRACE_RESYNC_MODE_CYCLE;
+    default:                          return ESP_RISCV_TRACE_RESYNC_MODE_UNKNOWN;
+    }
+}
+
+static uint16_t snapshot_address_mode_from_hal(riscv_trace_hal_context_t *hal)
+{
+#if SOC_RISCV_TRACE_HAS_CONFIG_REG
+    return riscv_trace_hal_get_full_address(hal) ? ESP_RISCV_TRACE_ADDRESS_MODE_FULL
+           : ESP_RISCV_TRACE_ADDRESS_MODE_DELTA;
+#else
+    (void)hal;
+    /* Without a config register the encoder is fixed in delta mode. */
+    return ESP_RISCV_TRACE_ADDRESS_MODE_DELTA;
+#endif
+}
+
+static void fill_encoder_params(esp_riscv_trace_encoder_params_t *params)
+{
+    memset(params, 0, sizeof(*params));
+    params->params_version = ESP_RISCV_TRACE_ENCODER_PARAMS_VERSION;
+    params->params_size = ESP_RISCV_TRACE_ENCODER_PARAMS_SIZE;
+    params->ecause_width_p = SOC_RISCV_TRACE_ECAUSE_WIDTH;
+#if SOC_RISCV_TRACE_FILTER_SUPPORTED
+    params->filter_excint_p = 1;
+    params->filter_privilege_p = 1;
+    params->filter_tval_p = 1;
+#endif
+    params->iaddress_lsb_p = 1;
+    params->iaddress_width_p = 32;
+    params->iretire_width_p = 1;
+    params->itype_width_p = 3;
+    params->nocontext_p = 1;
+    params->notime_p = 1;
+    params->privilege_width_p = SOC_RISCV_TRACE_PRIV_WIDTH;
+    params->retires_p = 1;
+    params->taken_branches_p = 1;
+}
+
+static void write_target_identity(void)
+{
+    g_esp_riscv_trace_snapshot.target_id = (uint16_t)CONFIG_IDF_FIRMWARE_CHIP_ID;
+    g_esp_riscv_trace_snapshot.chip_revision = (uint16_t)efuse_hal_chip_revision();
+
+    const esp_app_desc_t *desc = esp_app_get_description();
+    memcpy(s_app_elf_sha256, desc->app_elf_sha256, sizeof(s_app_elf_sha256));
+    g_esp_riscv_trace_snapshot.app_elf_sha256_size = (uint8_t)sizeof(s_app_elf_sha256);
+}
+
+void esp_riscv_trace_snapshot_early_init(int core_id)
+{
+    snapshot_write_begin();
+    s_core_desc[core_id].core_id = (uint16_t)core_id;
+
+    /* Core 0 writes the shared data. */
+    if (core_id == 0) {
+        write_target_identity();
+        fill_encoder_params(&s_encoder_params);
+        g_esp_riscv_trace_snapshot.magic = ESP_RISCV_TRACE_SNAPSHOT_MAGIC;
+    }
+    snapshot_write_end();
+}
+
+void esp_riscv_trace_snapshot_write_core_desc(int core_id, const esp_riscv_trace_handle_t handle)
+{
+    esp_riscv_trace_snapshot_core_desc_t *desc = &s_core_desc[core_id];
+    riscv_trace_hal_context_t *hal = &handle->hal;
+
+    snapshot_write_begin();
+    desc->buffer_addr = (uint32_t)(uintptr_t)handle->buffer;
+    desc->capacity = (uint32_t)handle->buffer_size;
+    desc->packet_format = SOC_RISCV_TRACE_PACKET_FORMAT_VER;
+    desc->memory_mode = snapshot_memory_mode_from_hw(riscv_trace_hal_get_mem_loop(hal));
+    desc->address_mode = snapshot_address_mode_from_hal(hal);
+    desc->resync_mode = snapshot_resync_mode_from_hw(riscv_trace_hal_get_resync_mode(hal));
+    desc->resync_threshold = riscv_trace_hal_get_resync_threshold(hal);
+    desc->state = ESP_RISCV_TRACE_SNAPSHOT_STATE_READY;
+    desc->head_valid = 0;
+    snapshot_write_end();
+}
+
+/* Records the encoder status read after a stop or a panic freeze. */
+FORCE_INLINE_ATTR void core_desc_set_status(esp_riscv_trace_snapshot_core_desc_t *desc, uint32_t fifo_status,
+                                            uint32_t intr_status, uint32_t head_offset, bool head_valid)
+{
+    desc->fifo_status_raw = fifo_status;
+    desc->intr_status_raw = intr_status;
+    desc->fifo_empty = (fifo_status & TRACE_FIFO_EMPTY_M) ? 1 : 0;
+    desc->memory_full = (intr_status & TRACE_MEM_FULL_INTR_RAW_M) ? 1 : 0;
+    desc->fifo_overflow = (intr_status & TRACE_FIFO_OVERFLOW_INTR_RAW_M) ? 1 : 0;
+    desc->head_offset = head_valid ? head_offset : 0;
+    desc->head_valid = head_valid ? 1 : 0;
+}
+
+/* Records a capture start. The mode fields describe this capture, which may differ from init. */
+FORCE_INLINE_ATTR void core_desc_set_capturing(int core_id, const esp_riscv_trace_capture_cfg_t *cfg)
+{
+    esp_riscv_trace_snapshot_core_desc_t *desc = &s_core_desc[core_id];
+    /* A restart of a running capture, such as an OpenOCD takeover, is counted once. */
+    if (desc->state != ESP_RISCV_TRACE_SNAPSHOT_STATE_CAPTURING) {
+        if (s_active_capture_cores == 0) {
+            g_esp_riscv_trace_snapshot.capture_reason = ESP_RISCV_TRACE_CAPTURE_REASON_UNKNOWN;
+        }
+        s_active_capture_cores++;
+    }
+    desc->state = ESP_RISCV_TRACE_SNAPSHOT_STATE_CAPTURING;
+    desc->memory_mode = snapshot_memory_mode_from_hw(cfg->mem_loop);
+    desc->resync_mode = snapshot_resync_mode_from_hw(cfg->resync_mode);
+    desc->resync_threshold = cfg->resync_threshold;
+    core_desc_set_status(desc, 0, 0, 0, false);
+}
+
+FORCE_INLINE_ATTR void core_desc_set_stopped(int core_id, uint32_t fifo_status, uint32_t intr_status,
+                                             uint32_t head_offset, bool head_valid)
+{
+    esp_riscv_trace_snapshot_core_desc_t *desc = &s_core_desc[core_id];
+    bool was_capturing = (desc->state == ESP_RISCV_TRACE_SNAPSHOT_STATE_CAPTURING);
+    desc->state = ESP_RISCV_TRACE_SNAPSHOT_STATE_STOPPED;
+    core_desc_set_status(desc, fifo_status, intr_status, head_offset, head_valid);
+
+    if (was_capturing && s_active_capture_cores > 0) {
+        s_active_capture_cores--;
+    }
+    if (s_active_capture_cores == 0) {
+        g_esp_riscv_trace_snapshot.capture_reason = ESP_RISCV_TRACE_CAPTURE_REASON_EXPLICIT_STOP;
+    }
+}
+
+void esp_riscv_trace_snapshot_start(int core_id, const esp_riscv_trace_capture_cfg_t *cfg)
+{
+    snapshot_write_begin();
+    core_desc_set_capturing(core_id, cfg);
+    snapshot_write_end();
+}
+
+void esp_riscv_trace_snapshot_stop(int core_id, uint32_t fifo_status, uint32_t intr_status,
+                                   uint32_t head_offset, bool head_valid)
+{
+    snapshot_write_begin();
+    core_desc_set_stopped(core_id, fifo_status, intr_status, head_offset, head_valid);
+    snapshot_write_end();
+}
+
+/* An odd write_seq means a normal writer was halted in the middle of an update. */
+bool esp_riscv_trace_snapshot_busy(void)
+{
+    return (g_esp_riscv_trace_snapshot.write_seq & 1u) != 0;
+}
+
+/* Every core is halted and esp_riscv_trace_snapshot_busy() was false, so no lock is taken. */
+void esp_riscv_trace_snapshot_start_nolock(int core_id, const esp_riscv_trace_capture_cfg_t *cfg)
+{
+    write_seq_begin();
+    core_desc_set_capturing(core_id, cfg);
+    write_seq_end();
+}
+
+void esp_riscv_trace_snapshot_stop_nolock(int core_id, uint32_t fifo_status, uint32_t intr_status,
+                                          uint32_t head_offset, bool head_valid)
+{
+    write_seq_begin();
+    core_desc_set_stopped(core_id, fifo_status, intr_status, head_offset, head_valid);
+    write_seq_end();
+}
+
+/*
+ * The panic handler has already stalled the other cores
+ * (esp_cpu_stall), so this core is the sole writer. Taking s_snapshot_lock
+ * could deadlock against a stalled core that still holds it, so update
+ * lock-free.
+ */
+void esp_riscv_trace_snapshot_panic_write(const esp_riscv_trace_snapshot_panic_core_t *cores, int count)
+{
+    write_seq_begin();
+
+    bool any_capturing = false;
+    for (int core_id = 0; core_id < count; core_id++) {
+        const esp_riscv_trace_snapshot_panic_core_t *cs = &cores[core_id];
+        /* Replace state possibly left by an interrupted normal writer. */
+        if (!cs->present) {
+            continue;
+        }
+
+        esp_riscv_trace_snapshot_core_desc_t *desc = &s_core_desc[core_id];
+        desc->state = cs->state;
+        core_desc_set_status(desc, cs->fifo_status_raw, cs->intr_status_raw, cs->head_offset, cs->head_valid);
+
+        if (cs->capturing) {
+            any_capturing = true;
+        }
+    }
+
+    if (any_capturing) {
+        g_esp_riscv_trace_snapshot.capture_reason = ESP_RISCV_TRACE_CAPTURE_REASON_PANIC;
+    }
+
+    write_seq_end();
+}

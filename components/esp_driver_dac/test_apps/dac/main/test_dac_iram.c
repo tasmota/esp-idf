@@ -24,7 +24,7 @@ typedef struct {
 static void IRAM_ATTR test_dac_direct_set_safety(void *usr_ctx)
 {
     dac_oneshot_handle_t handle = (dac_oneshot_handle_t)usr_ctx;
-    dac_oneshot_output_voltage(handle, 128);
+    dac_oneshot_output_code(handle, 128);
 }
 
 static void IRAM_ATTR test_dac_dma_iram_safety(void *usr_ctx)
@@ -68,8 +68,6 @@ TEST_CASE("DAC_IRAM_safe_test", "[dac]")
         .desc_num = 8,
         .buf_size = 2048,
         .freq_hz = 40000,
-        .offset = 0,
-        .clk_src = DAC_DIGI_CLK_SRC_DEFAULT,     // If the frequency is out of range, try 'DAC_DIGI_CLK_SRC_APLL'
         /* Assume the data in buffer is 'A B C D E F'
          * DAC_CHANNEL_MODE_SIMUL:
          *      - channel 0: A B C D E F

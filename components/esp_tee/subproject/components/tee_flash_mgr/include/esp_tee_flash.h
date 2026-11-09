@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,7 +9,7 @@
 
 #include "esp_err.h"
 
-#include "bootloader_flash_priv.h"
+#include "esp_private/bootloader_flash_internal.h"
 #include "esp_flash_partitions.h"
 #include "esp_image_format.h"
 
@@ -78,6 +78,13 @@ esp_err_t esp_tee_flash_set_running_ree_partition(uint32_t paddr);
 esp_partition_info_t *esp_tee_flash_get_running_ree_partition(void);
 
 /**
+ * @brief Fetch the running TEE app partition (the one the bootloader booted)
+ *
+ * @return esp_partition_info_t*  Partition table entry for the running TEE app partition
+ */
+esp_partition_info_t *esp_tee_flash_get_running_tee_partition(void);
+
+/**
  * @brief Check if the given virtual address falls within the TEE flash protected region
  *
  * @param vaddr Virtual address to check
@@ -133,3 +140,15 @@ bool esp_tee_flash_check_prange_in_tee_region(const size_t paddr, const size_t l
  * @return bool true if any part of the range overlaps with active TEE partition, false otherwise
  */
 bool esp_tee_flash_check_prange_in_active_tee_part(const size_t paddr, const size_t len);
+
+/**
+ * @brief Check if the given physical address range overlaps a write-protected flash region.
+ *        The partition table is always protected; the bootloader is protected unless
+ *        CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is set. Use only for write/erase operations.
+ *
+ * @param paddr Starting physical address of the range to check
+ * @param len   Length of the address range in bytes
+ *
+ * @return bool true if the range overlaps the write-protected region, false otherwise
+ */
+bool esp_tee_flash_check_prange_write_protected(const size_t paddr, const size_t len);

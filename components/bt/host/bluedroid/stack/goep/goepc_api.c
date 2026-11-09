@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -54,6 +54,13 @@ void GOEPC_Deinit(void)
 {
 #if (GOEP_DYNAMIC_MEMORY)
     if (goepc_cb_ptr) {
+#endif
+        for (int i = 0; i < GOEPC_MAX_CONNECTION; ++i) {
+            if (goepc_cb.ccb[i].allocated) {
+                GOEPC_Close(goepc_cb.ccb[i].allocated);
+            }
+        }
+#if (GOEP_DYNAMIC_MEMORY)
         osi_free(goepc_cb_ptr);
         goepc_cb_ptr = NULL;
     }
@@ -84,7 +91,7 @@ UINT16 GOEPC_Open(tOBEX_SVR_INFO *svr, tGOEPC_EVT_CBACK callback, UINT16 *out_ha
 
         p_ccb = goepc_allocate_ccb();
         if (p_ccb == NULL) {
-            ret =  GOEP_NO_RESOURCES;
+            ret = GOEP_NO_RESOURCES;
             break;
         }
 

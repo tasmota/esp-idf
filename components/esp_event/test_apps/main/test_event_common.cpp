@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -181,6 +181,30 @@ TEST_CASE("registering event twice with same handler yields updated handler arg"
 
     TEST_ASSERT_EQUAL(1, count_first);
     TEST_ASSERT_EQUAL(1, count_second);
+}
+
+static void self_unregister_legacy_handler(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
+{
+    esp_event_loop_handle_t loop = (esp_event_loop_handle_t) event_handler_arg;
+    TEST_ESP_OK(esp_event_handler_unregister_with(loop, event_base, event_id, self_unregister_legacy_handler));
+}
+
+/* A legacy handler unregistering itself defers removal via an internal cleanup event
+ * left on the queue. Deleting the loop must drain it without leaking. */
+TEST_CASE("deleting loop with queued legacy cleanup event does not leak", "[event][linux]")
+{
+    EV_LoopFix loop_fix;
+
+    TEST_ESP_OK(esp_event_handler_register_with(loop_fix.loop,
+                                                s_test_base1,
+                                                TEST_EVENT_BASE1_EV1,
+                                                self_unregister_legacy_handler,
+                                                loop_fix.loop));
+
+    TEST_ESP_OK(esp_event_post_to(loop_fix.loop, s_test_base1, TEST_EVENT_BASE1_EV1, NULL, 0, portMAX_DELAY));
+
+    /* ZERO_DELAY runs a single event, leaving the deferred cleanup event queued. */
+    TEST_ESP_OK(esp_event_loop_run(loop_fix.loop, ZERO_DELAY));
 }
 
 TEST_CASE("registering event handler instance twice works", "[event][linux]")
@@ -898,6 +922,97 @@ TEST_CASE("handler instance can unregister itself", "[event][linux]")
 }
 
 typedef struct {
+    esp_event_handler_instance_t context;
+    esp_event_loop_handle_t loop;
+    esp_event_base_t unreg_base;
+    int32_t unreg_id;
+    bool use_instance;
+    int count;
+} unregister_level_test_data_t;
+
+static void test_handler_unregister_self_at_level(void* event_handler_arg,
+                                                  esp_event_base_t event_base,
+                                                  int32_t event_id,
+                                                  void* event_data)
+{
+    unregister_level_test_data_t *test_data = (unregister_level_test_data_t*) event_handler_arg;
+    (void) event_base;
+    (void) event_id;
+    (void) event_data;
+
+    (test_data->count)++;
+
+    if (test_data->use_instance) {
+        TEST_ESP_OK(esp_event_handler_instance_unregister_with(test_data->loop,
+                                                               test_data->unreg_base,
+                                                               test_data->unreg_id,
+                                                               test_data->context));
+    } else {
+        TEST_ESP_OK(esp_event_handler_unregister_with(test_data->loop,
+                                                      test_data->unreg_base,
+                                                      test_data->unreg_id,
+                                                      test_handler_unregister_self_at_level));
+    }
+}
+
+static void test_self_unregister_at_registration_level(esp_event_base_t unreg_base, int32_t unreg_id, bool use_instance)
+{
+    EV_LoopFix loop_fix;
+
+    unregister_level_test_data_t test_data = {
+        .context = NULL,
+        .loop = loop_fix.loop,
+        .unreg_base = unreg_base,
+        .unreg_id = unreg_id,
+        .use_instance = use_instance,
+        .count = 0,
+    };
+
+    if (use_instance) {
+        TEST_ESP_OK(esp_event_handler_instance_register_with(loop_fix.loop,
+                                                             unreg_base,
+                                                             unreg_id,
+                                                             test_handler_unregister_self_at_level,
+                                                             &test_data,
+                                                             &(test_data.context)));
+    } else {
+        TEST_ESP_OK(esp_event_handler_register_with(loop_fix.loop,
+                                                    unreg_base,
+                                                    unreg_id,
+                                                    test_handler_unregister_self_at_level,
+                                                    &test_data));
+    }
+
+    TEST_ESP_OK(esp_event_post_to(loop_fix.loop, s_test_base1, TEST_EVENT_BASE1_EV1, NULL, 0, portMAX_DELAY));
+    TEST_ESP_OK(esp_event_loop_run(loop_fix.loop, ZERO_DELAY));
+    TEST_ASSERT_EQUAL(1, test_data.count);
+
+    TEST_ESP_OK(esp_event_post_to(loop_fix.loop, s_test_base1, TEST_EVENT_BASE1_EV1, NULL, 0, portMAX_DELAY));
+    TEST_ESP_OK(esp_event_loop_run(loop_fix.loop, pdMS_TO_TICKS(10)));
+    TEST_ASSERT_EQUAL(1, test_data.count);
+}
+
+TEST_CASE("legacy loop-level handler can unregister itself", "[event][linux]")
+{
+    test_self_unregister_at_registration_level(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, false);
+}
+
+TEST_CASE("legacy base-level handler can unregister itself", "[event][linux]")
+{
+    test_self_unregister_at_registration_level(s_test_base1, ESP_EVENT_ANY_ID, false);
+}
+
+TEST_CASE("loop-level handler instance can unregister itself", "[event][linux]")
+{
+    test_self_unregister_at_registration_level(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, true);
+}
+
+TEST_CASE("base-level handler instance can unregister itself", "[event][linux]")
+{
+    test_self_unregister_at_registration_level(s_test_base1, ESP_EVENT_ANY_ID, true);
+}
+
+typedef struct {
     size_t counter;
     size_t test_data[4];
 } ordered_dispatch_test_data_t;
@@ -1075,6 +1190,34 @@ TEST_CASE("events handlers for any base are dispatched in the order they are reg
     }
 
     TEST_ASSERT_EQUAL_INT_ARRAY(ref_arr, test_data.test_data, 4);
+}
+
+TEST_CASE("loop-level handler registered after a specific handler is dispatched after it", "[event][linux]")
+{
+    EV_LoopFix loop_fix;
+
+    ordered_dispatch_test_data_t test_data = {
+        .counter = 0,
+        .test_data = {},
+    };
+
+    TEST_ESP_OK(esp_event_handler_register_with(loop_fix.loop,
+                                                s_test_base1,
+                                                TEST_EVENT_BASE1_EV1,
+                                                test_event_ordered_dispatch_0,
+                                                &test_data));
+    TEST_ESP_OK(esp_event_handler_register_with(loop_fix.loop,
+                                                ESP_EVENT_ANY_BASE,
+                                                ESP_EVENT_ANY_ID,
+                                                test_event_ordered_dispatch_1,
+                                                &test_data));
+
+    TEST_ESP_OK(esp_event_post_to(loop_fix.loop, s_test_base1, TEST_EVENT_BASE1_EV1, NULL, 0, portMAX_DELAY));
+    TEST_ESP_OK(esp_event_loop_run(loop_fix.loop, ZERO_DELAY));
+
+    TEST_ASSERT_EQUAL(2, test_data.counter);
+    TEST_ASSERT_EQUAL(0, test_data.test_data[0]);
+    TEST_ASSERT_EQUAL(1, test_data.test_data[1]);
 }
 
 static void test_create_loop_handler(void* handler_args, esp_event_base_t base, int32_t id, void* event_data)

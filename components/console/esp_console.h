@@ -55,6 +55,7 @@ typedef struct {
     BaseType_t task_core_id;       //!< repl task affinity, i.e. which core the task is pinned to
     const char *prompt;            //!< prompt (NULL represents default: "esp> ")
     size_t max_cmdline_length;     //!< maximum length of a command line. If 0, default value will be used
+    size_t max_cmdline_args;       //!< maximum number of command line arguments to parse. If 0, default value will be used
 } esp_console_repl_config_t;
 
 /**
@@ -70,6 +71,7 @@ typedef struct {
         .task_core_id = tskNO_AFFINITY,   \
         .prompt = NULL,                   \
         .max_cmdline_length = 0,          \
+        .max_cmdline_args = 0,            \
 }
 
 typedef enum {
@@ -453,6 +455,7 @@ esp_err_t esp_console_start_repl(esp_console_repl_t *repl);
  * @brief Stop REPL environment
  *
  * @param[in] repl REPL handle returned from esp_console_new_repl_xxx
+ * @note This function waits for the console task to exit before it returns.
  * @return
  *      - ESP_OK on success
  *      - others on failure

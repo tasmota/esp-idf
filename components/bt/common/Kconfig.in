@@ -1,3 +1,15 @@
+config BT_BTC_TASK_STACK_SIZE
+    int "Bluetooth event (callback to application) task stack size"
+    depends on BT_BLUEDROID_ENABLED || BT_NIMBLE_BLUFI_ENABLE || (BT_NIMBLE_ENABLED && BLE_MESH)
+    default 3072 if BT_BLUEDROID_ENABLED
+    default 4096 if BT_NIMBLE_ENABLED
+    help
+        Stack size of BTC_TASK, which delivers Bluetooth events and profile
+        callbacks to the application.
+
+        With Bluedroid this task is always created. With NimBLE it is created
+        when BluFi or ESP BLE Mesh is enabled.
+
 config BT_ALARM_MAX_NUM
     int "Maximum number of Bluetooth alarms"
     default 50
@@ -6,10 +18,54 @@ config BT_ALARM_MAX_NUM
         This option decides the maximum number of alarms which
         could be used by Bluetooth host.
 
+config BT_BLE_HOST_ALLOW_SUB_SPEC_MIN_CONN_INT
+    bool "Allow BLE connection interval below Bluetooth Core Spec minimum (disable host check)"
+    depends on BT_BLE_ENABLED || BT_NIMBLE_ENABLED
+    default n
+    help
+        When enabled, BLE host-side validation accepts connection interval
+        values below the Bluetooth Core Specification minimum of 0x0006
+        (7.5 ms), down to non-zero values. The BLE controller still enforces
+        what is actually supported in hardware and firmware.
+
+        End users should NOT set this option directly. In typical IDF builds it
+        follows the active Controller integration when that Controller supports
+        this mode; use the Controller's own configuration instead of toggling
+        this host symbol manually.
+
+menu "OSAL (OS abstraction layer)"
+    depends on BT_ENABLED
+
+    config BT_OSAL_ENABLED
+        bool "Enable the Bluetooth OS abstraction layer"
+        default n
+        help
+            Build the Bluetooth OS abstraction layer (bt_osal): a host-agnostic
+            wrapper over the OS primitives the Bluetooth stack and the BLE
+            profiles rely on — event queues, mutexes, semaphores, callouts
+            (one-shot timers), time conversion and critical sections.
+
+            Disable to leave the OSAL sources out of the build when nothing
+            uses them. A component that relies on the OSAL should
+            "select BT_OSAL_ENABLED" in its own Kconfig.
+
+    config BT_OSAL_USE_ESP_TIMER
+        bool "Use esp_timer to implement the OSAL callout"
+        depends on BT_OSAL_ENABLED
+        default y
+        help
+            Use esp_timer instead of the FreeRTOS software timer to implement the OSAL
+            callout. esp_timer offers higher precision and runs its callbacks in a
+            dedicated high-priority task rather than the shared FreeRTOS timer task.
+
+            Disable to fall back to the FreeRTOS software timer.
+
+endmenu
+
 choice BT_SMP_CRYPTO_STACK
     prompt "SMP cryptographic stack"
     depends on (BT_BLE_SMP_ENABLE || BT_SMP_ENABLE || BT_NIMBLE_SECURITY_ENABLE || BT_LE_SECURITY_ENABLE || \
-        BT_CTRL_BREDR_ENABLE)
+        BT_CTRL_BREDR_ENABLE || BT_BLE_FEAT_ENC_ADV_DATA)
     default BT_SMP_CRYPTO_STACK_TINYCRYPT
     help
         Select the cryptographic library to use for SMP operations (AES, AES-CMAC, ECDH P-256).
@@ -160,9 +216,7 @@ menu "BT Logs"
     menuconfig BT_LOG_CRITICAL_ONLY
         bool "Enable bandwidth-optimized log mode (critical logs only)"
         default n
-        depends on !BT_STACK_NO_LOG
         select BLE_LOG_ENABLED
-        select BLE_COMPRESSED_LOG_ENABLE
         help
             Enable bandwidth-optimized logging for the BLE Log Async Output
             system. When enabled, only high-severity logs are captured and
@@ -175,9 +229,9 @@ menu "BT Logs"
     if BT_LOG_CRITICAL_ONLY
         config BT_LOG_CRITICAL_ONLY_CTRL
             bool "Controller: bandwidth-optimized logging"
-            depends on SOC_ESP_NIMBLE_CONTROLLER || BT_CTRL_RUN_IN_FLASH_ONLY
+            depends on SOC_ESP_NIMBLE_CONTROLLER || BLE_LOG_IS_ESP_LEGACY_CONTROLLER
             select BT_LE_CONTROLLER_LOG_ENABLED if SOC_ESP_NIMBLE_CONTROLLER
-            select BT_CTRL_LE_LOG_EN if !SOC_ESP_NIMBLE_CONTROLLER
+            select BT_CTRL_LE_LOG_EN if BLE_LOG_IS_ESP_LEGACY_CONTROLLER
             default y
             help
                 Enable controller log output via the async transport with
@@ -186,7 +240,6 @@ menu "BT Logs"
 
         config BT_LOG_CRITICAL_ONLY_HOST
             bool "Host: bandwidth-optimized logging"
-            select BLE_HOST_COMPRESSED_LOG_ENABLE if BT_BLUEDROID_ENABLED
             default y
             help
                 Enable host stack log encoding via the async transport.
@@ -203,6 +256,16 @@ menu "BT Logs"
                 Enable mesh log encoding via the async transport.
                 The per-level compression options are configured in:
                 Settings of BLE Log Compression → BLE Mesh log compression.
+
+        config BT_LOG_CRITICAL_ONLY_ISO
+            bool "ISO: bandwidth-optimized logging"
+            depends on BT_ISO
+            select BLE_ISO_COMPRESSED_LOG_ENABLE
+            default y
+            help
+                Enable BLE Audio/ISO log encoding via the async transport.
+                The per-level compression options are configured in:
+                Settings of BLE Log Compression → BLE Audio/ISO log compression.
     endif # BT_LOG_CRITICAL_ONLY
 
     source "$IDF_PATH/components/bt/common/ble_log/Kconfig.in"

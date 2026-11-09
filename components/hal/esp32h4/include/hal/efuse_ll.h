@@ -17,6 +17,15 @@
 extern "C" {
 #endif
 
+typedef enum {
+    EFUSE_CONTROLLER_STATE_RESET            = 0,    ///< efuse_controllerid is on reset state.
+    EFUSE_CONTROLLER_STATE_IDLE             = 1,    ///< efuse_controllerid is on idle state.
+    EFUSE_CONTROLLER_STATE_READ_INIT        = 2,    ///< efuse_controllerid is on read init state.
+    EFUSE_CONTROLLER_STATE_READ_BLK0        = 3,    ///< efuse_controllerid is on reading block0 state.
+    EFUSE_CONTROLLER_STATE_BLK0_CRC_CHECK   = 4,    ///< efuse_controllerid is on checking block0 crc state.
+    EFUSE_CONTROLLER_STATE_READ_RS_BLK      = 5,    ///< efuse_controllerid is on reading RS block state.
+} efuse_controller_state_t;
+
 // Always inline these functions even no gcc optimization is applied.
 
 /******************* eFuse fields *************************/
@@ -88,6 +97,28 @@ __attribute__((always_inline)) static inline uint32_t efuse_ll_get_ecdsa_key_blk
     return EFUSE.ecdsa.cur_ecdsa_p256_blk;
 }
 
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_coding_error(unsigned index)
+{
+    switch (index) {
+    case 0:
+        return EFUSE.rd_repeat_data_err0.val;
+    case 1:
+        return EFUSE.rd_repeat_data_err1.val;
+    case 2:
+        return EFUSE.rd_repeat_data_err2.val;
+    case 3:
+        return EFUSE.rd_repeat_data_err3.val;
+    case 4:
+        return EFUSE.rd_repeat_data_err4.val;
+    case 5:
+        return EFUSE.rd_rs_data_err0.val;
+    case 6:
+        return EFUSE.rd_rs_data_err1.val;
+    default:
+        return 0;
+    }
+}
+
 /******************* eFuse control functions *************************/
 
 __attribute__((always_inline)) static inline bool efuse_ll_get_read_cmd(void)
@@ -152,6 +183,11 @@ __attribute__((always_inline)) static inline void efuse_ll_rs_bypass_update(void
 }
 
 /******************* eFuse control functions *************************/
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_controller_state(void)
+{
+    return EFUSE.status.state;
+}
 
 #ifdef __cplusplus
 }

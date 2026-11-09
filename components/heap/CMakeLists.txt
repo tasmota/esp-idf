@@ -13,7 +13,7 @@ set(srcs "heap_caps_base.c"
          "multi_heap.c")
 
 # the root dir of TLSF submodule contains headers with static inline
-# functions used in the esp_rom component for TLSF patches. Therefore,
+# functions used in the heap ROM patches. Therefore,
 # the tlsf/ dir must be included in the list of public includes.
 set(includes "include"
              "tlsf")
@@ -49,18 +49,52 @@ endif()
 if(NOT BOOTLOADER_BUILD)
     list(APPEND srcs "port/memory_layout_utils.c")
     list(APPEND srcs "port/${target}/memory_layout.c")
+
+    if(CONFIG_HEAP_TLSF_USE_ROM_IMPL)
+        list(APPEND includes "rom_patches/include"
+                             "rom_patches/${target}")
+
+        if(CONFIG_ESP_ROM_TLSF_CHECK_PATCH)
+            # This file shall be included in the build if TLSF in ROM is activated
+            list(APPEND srcs "rom_patches/rom_patch_tlsf.c")
+        endif()
+
+        if(CONFIG_ESP_ROM_MULTI_HEAP_WALK_PATCH)
+            # This file shall be included in the build if TLSF in ROM is activated
+            list(APPEND srcs "rom_patches/rom_patch_multi_heap.c")
+        endif()
+    endif()
 endif()
+
+set(ldfragments linker.lf)
 
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS ${includes}
                     PRIV_INCLUDE_DIRS ${priv_includes}
-                    LDFRAGMENTS linker.lf
-                    PRIV_REQUIRES soc)
+                    LDFRAGMENTS ${ldfragments}
+                    PRIV_REQUIRES soc esp_system)
+
+if(CONFIG_HEAP_TLSF_USE_ROM_IMPL AND NOT BOOTLOADER_BUILD)
+    # After registering the component, set the tlsf_set_rom_patches symbol as undefined
+    # to force the linker to integrate the whole rom_patch_tlsf.c object file inside the
+    # final binary. This is necessary because tlsf_set_rom_patches is a constructor, thus,
+    # there is no explicit reference/call to it in IDF.
+    if(CONFIG_ESP_ROM_TLSF_CHECK_PATCH)
+        target_link_libraries(${COMPONENT_LIB} PRIVATE "-u tlsf_set_rom_patches")
+    endif()
+
+    if(CONFIG_ESP_ROM_MULTI_HEAP_WALK_PATCH)
+        target_link_libraries(${COMPONENT_LIB} PRIVATE "-u esp_rom_include_multi_heap_patch")
+    endif()
+
+    target_linker_script(${COMPONENT_LIB} INTERFACE "port/${target}/ld/${target}.rom.heap.ld")
+endif()
 
 if(CONFIG_HEAP_TRACING)
     set(WRAP_FUNCTIONS
         heap_caps_realloc_base
         heap_caps_malloc_base
+        heap_caps_calloc_base
         heap_caps_aligned_alloc_base
         heap_caps_free)
 
@@ -78,4 +112,39 @@ else()
             target_compile_options(${COMPONENT_TARGET} PRIVATE "-DMULTI_HEAP_FREERTOS")
         endif()
     endif()
+endif()
+
+# KASAN heap integration: hook into alloc/free to maintain shadow memory.
+# heap_kasan.c holds the implementation (compiled without KASAN instrumentation).
+# heap_kasan_hooks.c provides strong (non-weak) overrides of the hook stubs;
+# it intentionally avoids including esp_heap_caps.h to prevent GCC from
+# inheriting the 'weak' attribute from the declarations in that header.
+if(CONFIG_COMPILER_KASAN AND CONFIG_HEAP_USE_HOOKS)
+    target_sources(${COMPONENT_LIB} PRIVATE
+        "heap_kasan.c"
+        "heap_kasan_hooks.c"
+    )
+    # Sources excluded from KASAN instrumentation:
+    #   heap_kasan.c / heap_kasan_hooks.c implement the sanitizer hooks themselves
+    #     (instrumenting them would cause infinite recursion).
+    #   heap_caps_init.c runs while heap metadata is being brought up: the first
+    #     allocations happen before the shadow is fully initialised, and the
+    #     memcpy of the registered-heaps array touches DRAM regions whose
+    #     shadow state is still being populated.
+    set_source_files_properties(
+        "heap_caps_init.c"
+        "heap_kasan.c"
+        "heap_kasan_hooks.c"
+        PROPERTIES COMPILE_OPTIONS "-fno-sanitize=kernel-address"
+    )
+    idf_component_get_property(esp_system_lib esp_system COMPONENT_LIB)
+    target_link_libraries(${COMPONENT_LIB} PRIVATE ${esp_system_lib})
+    # Force the linker to include our strong hook definitions.  Without this,
+    # --gc-sections would silently discard them because the call site in
+    # heap_caps_base.c uses a weak-symbol pointer (if (hook != NULL) ...) which
+    # doesn't create a strong reference that the linker follows.
+    target_link_libraries(${COMPONENT_LIB} INTERFACE
+        "-u esp_heap_trace_alloc_hook"
+        "-u esp_heap_trace_free_hook"
+    )
 endif()

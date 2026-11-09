@@ -27,6 +27,9 @@
 #define I2S_LL_GET(_attr)       I2S_LL_ ## _attr
 #define I2S_LL_SUPPORT(_feat)   I2S_LL_SUPPORT_ ## _feat
 #define I2S_LL_INST_NUM         2  // ESP32S31 has 2 I2S instances
+#define I2S_LL_PCM2PDM_SUPPORTED_PORT_MASK    (1U << 0)  // PCM2PDM is supported on I2S0
+#define I2S_LL_PDM2PCM_SUPPORTED_PORT_MASK    (1U << 0)  // PDM2PCM is supported on I2S0
+#define I2S_LL_BT_DEST_SUPPORTED_PORT_MASK    (1U << 0)  // Bluetooth destination is supported on I2S0
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,25 +82,30 @@ extern "C" {
             [I2S_DIR_RX - 1] = {  \
                 [I2S_ETM_TASK_START] = I2S0_TASK_START_RX, \
                 [I2S_ETM_TASK_STOP] = I2S0_TASK_STOP_RX, \
+                [I2S_ETM_TASK_SYNC_FIFO] = -1, \
             },  \
             [I2S_DIR_TX - 1] = {  \
                 [I2S_ETM_TASK_START] = I2S0_TASK_START_TX, \
                 [I2S_ETM_TASK_STOP] = I2S0_TASK_STOP_TX, \
+                [I2S_ETM_TASK_SYNC_FIFO] = I2S0_TASK_SYNC_CHECK, \
             },  \
         },  \
         [1] = {  \
             [I2S_DIR_RX - 1] = {  \
                 [I2S_ETM_TASK_START] = I2S1_TASK_START_RX, \
                 [I2S_ETM_TASK_STOP] = I2S1_TASK_STOP_RX, \
+                [I2S_ETM_TASK_SYNC_FIFO] = -1, \
             },  \
             [I2S_DIR_TX - 1] = {  \
                 [I2S_ETM_TASK_START] = I2S1_TASK_START_TX, \
                 [I2S_ETM_TASK_STOP] = I2S1_TASK_STOP_TX, \
+                [I2S_ETM_TASK_SYNC_FIFO] = I2S1_TASK_SYNC_CHECK, \
             },  \
         },  \
     }[i2s_port][(chan_dir) - 1][task]
 
 #define I2S_LL_ETM_MAX_THRESH_NUM       (0x3FFFUL)
+#define I2S_LL_TX_SYNC_INT_EVENT        (BIT(4))
 
 /**
  * @brief Enable the bus clock for I2S module
@@ -345,7 +353,7 @@ static inline void i2s_ll_tx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
         case I2S_CLK_SRC_APLL:
             HP_SYS_CLKRST.i2s0_tx_ctrl0.reg_i2s0_tx_clk_src_sel = 1;
             return;
-        case I2S_CLK_SRC_RTC_FAST:
+        case I2S_CLK_SRC_RC_FAST:
             HP_SYS_CLKRST.i2s0_tx_ctrl0.reg_i2s0_tx_clk_src_sel = 2;
             return;
         case I2S_CLK_SRC_EXTERNAL:
@@ -363,7 +371,7 @@ static inline void i2s_ll_tx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
         case I2S_CLK_SRC_APLL:
             HP_SYS_CLKRST.i2s1_tx_ctrl0.reg_i2s1_tx_clk_src_sel = 1;
             return;
-        case I2S_CLK_SRC_RTC_FAST:
+        case I2S_CLK_SRC_RC_FAST:
             HP_SYS_CLKRST.i2s1_tx_ctrl0.reg_i2s1_tx_clk_src_sel = 2;
             return;
         case I2S_CLK_SRC_EXTERNAL:
@@ -396,7 +404,7 @@ static inline void i2s_ll_rx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
         case I2S_CLK_SRC_APLL:
             HP_SYS_CLKRST.i2s0_rx_ctrl0.reg_i2s0_rx_clk_src_sel = 1;
             return;
-        case I2S_CLK_SRC_RTC_FAST:
+        case I2S_CLK_SRC_RC_FAST:
             HP_SYS_CLKRST.i2s0_rx_ctrl0.reg_i2s0_rx_clk_src_sel = 2;
             return;
         case I2S_CLK_SRC_EXTERNAL:
@@ -414,7 +422,7 @@ static inline void i2s_ll_rx_clk_set_src(i2s_dev_t *hw, i2s_clock_src_t src)
         case I2S_CLK_SRC_APLL:
             HP_SYS_CLKRST.i2s1_rx_ctrl0.reg_i2s1_rx_clk_src_sel = 1;
             return;
-        case I2S_CLK_SRC_RTC_FAST:
+        case I2S_CLK_SRC_RC_FAST:
             HP_SYS_CLKRST.i2s1_rx_ctrl0.reg_i2s1_rx_clk_src_sel = 2;
             return;
         case I2S_CLK_SRC_EXTERNAL:
@@ -454,7 +462,7 @@ static inline i2s_clock_src_t i2s_ll_tx_clk_get_src(i2s_dev_t *hw)
     case 1:
         return (i2s_clock_src_t)I2S_CLK_SRC_APLL;
     case 2:
-        return (i2s_clock_src_t)I2S_CLK_SRC_RTC_FAST;
+        return (i2s_clock_src_t)I2S_CLK_SRC_RC_FAST;
     case 3:
         return (i2s_clock_src_t)I2S_CLK_SRC_EXTERNAL;
     default:
@@ -487,7 +495,7 @@ static inline i2s_clock_src_t i2s_ll_rx_clk_get_src(i2s_dev_t *hw)
     case 1:
         return (i2s_clock_src_t)I2S_CLK_SRC_APLL;
     case 2:
-        return (i2s_clock_src_t)I2S_CLK_SRC_RTC_FAST;
+        return (i2s_clock_src_t)I2S_CLK_SRC_RC_FAST;
     case 3:
         return (i2s_clock_src_t)I2S_CLK_SRC_EXTERNAL;
     default:
@@ -665,6 +673,7 @@ static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, const hal_utils_clk_div_t *
  *
  * @param hw Peripheral I2S hardware instance address.
  */
+__attribute__((always_inline))
 static inline void i2s_ll_tx_update(i2s_dev_t *hw)
 {
     hw->tx_conf.tx_update = 1;
@@ -724,6 +733,45 @@ static inline void i2s_ll_tx_stop(i2s_dev_t *hw)
 static inline void i2s_ll_rx_stop(i2s_dev_t *hw)
 {
     hw->rx_conf.rx_start = 0;
+}
+
+/**
+ * @brief Set I2S TX data destination
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param to_bt true: route TX data to Bluetooth; false: route TX data to the DMA memory path (default).
+ */
+static inline void i2s_ll_tx_set_destination(i2s_dev_t *hw, bool to_bt)
+{
+    hw->destination.tx_destination = to_bt ? 1 : 0;
+}
+
+/**
+ * @brief Set I2S RX data destination
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param to_bt true: route RX data to Bluetooth; false: route RX data to the DMA memory path (default).
+ */
+static inline void i2s_ll_rx_set_destination(i2s_dev_t *hw, bool to_bt)
+{
+    hw->destination.rx_destination = to_bt ? 1 : 0;
+}
+
+/**
+ * @brief Set I2S data destination
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param dir I2S channel direction
+ * @param destination I2S data destination
+ */
+static inline void i2s_ll_set_destination(i2s_dev_t *hw, i2s_dir_t dir, i2s_destination_t destination)
+{
+    bool to_bt = (destination == I2S_DESTINATION_BT);
+    if (dir == I2S_DIR_TX) {
+        i2s_ll_tx_set_destination(hw, to_bt);
+    } else {
+        i2s_ll_rx_set_destination(hw, to_bt);
+    }
 }
 
 /**
@@ -1761,58 +1809,176 @@ static inline uint32_t i2s_ll_tx_get_ideal_cnt(i2s_dev_t *hw)
 }
 
 /**
- * @brief Set TX sync software threshold
+ * @brief Get TX FIFO synchronization difference count value
  *
- * @param hw Peripheral I2S hardware instance address.
- * @param thres Software threshold value
+ * @param hw    Peripheral I2S hardware instance address.
+ * @return
+ *      fifo count value
  */
-static inline void i2s_ll_tx_set_sync_sw_thres(i2s_dev_t *hw, uint32_t thres)
+__attribute__((always_inline))
+static inline uint32_t i2s_ll_tx_get_fifo_sync_diff_count(i2s_dev_t *hw)
 {
-    hw->sync_sw_thres.tx_cnt_diff_sw_thres = thres;
+    return hw->cnt_diff.tx_cnt_diff;
 }
 
 /**
- * @brief Set TX sync hardware threshold
+ * @brief  Reset TX FIFO synchronization difference counter
  *
- * @param hw Peripheral I2S hardware instance address.
- * @param thres Hardware threshold value
+ * @param hw    Peripheral I2S hardware instance address.
  */
-static inline void i2s_ll_tx_set_sync_hw_thres(i2s_dev_t *hw, uint32_t thres)
+__attribute__((always_inline))
+static inline void i2s_ll_tx_reset_fifo_sync_diff_counter(i2s_dev_t *hw)
 {
-    hw->sync_hw_thres.tx_cnt_diff_hw_thres = thres;
+    hw->cnt_diff.tx_cnt_diff_rst = 1;
+    hw->cnt_diff.tx_cnt_diff_rst = 0;
 }
 
 /**
- * @brief Enable TX hardware sync
+ * @brief Set TX FIFO synchronization difference threshold for manual handling
+ * @note  If diff_count is greater than manual_threshold, a TX sync interrupt is triggered for software handling.
  *
- * @param hw Peripheral I2S hardware instance address.
- * @param enable Set true to enable hardware sync
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param thresh Difference counter threshold. When the difference count exceeds this value,
+ *               the TX sync interrupt is triggered.
  */
-static inline void i2s_ll_tx_enable_hw_sync(i2s_dev_t *hw, bool enable)
+__attribute__((always_inline))
+static inline void i2s_ll_tx_set_fifo_sync_diff_counter_manual_threshold(i2s_dev_t *hw, uint32_t thresh)
+{
+    hw->sync_sw_thres.tx_cnt_diff_sw_thres = thresh;
+}
+
+/**
+ * @brief Set TX FIFO synchronization difference threshold for automatic hardware supplementation
+ * @note  If diff_count is greater than or equal to auto_threshold and less than manual_threshold,
+ *        hardware will synchronize the data automatically.
+ *
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param thresh Difference counter threshold. When the difference count reaches this value,
+ *               hardware auto-synchronization is triggered.
+ */
+__attribute__((always_inline))
+static inline void i2s_ll_tx_set_fifo_sync_diff_counter_auto_threshold(i2s_dev_t *hw, uint32_t thresh)
+{
+    hw->sync_hw_thres.tx_cnt_diff_hw_thres = thresh;
+}
+
+/**
+ * @brief Enable TX FIFO synchronization hardware mode
+ *
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param enable Set true to enable hardware mode
+ */
+__attribute__((always_inline))
+static inline void i2s_ll_tx_enable_hw_fifo_sync(i2s_dev_t *hw, bool enable)
 {
     hw->hw_sync_conf.tx_hw_sync_en = enable;
 }
 
 /**
- * @brief Set TX hardware sync supplement mode
+ * @brief Set TX FIFO synchronization hardware data supplementation mode
+ * @note  It determines the supplementation data when the actual sent data is less than the `diff_count - threshold`
  *
- * @param hw Peripheral I2S hardware instance address.
- * @param mode Supplement mode: 0 = last data, 1 = configured data
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param mode  Data supplementation mode
  */
-static inline void i2s_ll_tx_set_hw_sync_suppl_mode(i2s_dev_t *hw, bool mode)
+__attribute__((always_inline))
+static inline void i2s_ll_tx_set_hw_fifo_sync_suppl_mode(i2s_dev_t *hw, i2s_tx_fifo_sync_suppl_mode_t mode)
 {
     hw->hw_sync_conf.tx_hw_sync_suppl_mode = mode;
 }
 
 /**
- * @brief Set TX hardware sync supplement data
+ * @brief Set TX FIFO synchronization hardware supplementation data when `tx_hw_sync_suppl_mode` is 1
  *
- * @param hw Peripheral I2S hardware instance address.
- * @param data Supplement data value
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param data  Data to be supplemented when `tx_hw_sync_suppl_mode` is 1
  */
-static inline void i2s_ll_tx_set_hw_sync_suppl_data(i2s_dev_t *hw, uint32_t data)
+__attribute__((always_inline))
+static inline void i2s_ll_tx_set_hw_fifo_sync_static_suppl_data(i2s_dev_t *hw, uint32_t data)
 {
     hw->hw_sync_data.tx_hw_sync_suppl_data = data;
+}
+
+/**
+ * @brief Get I2S interrupt status register address
+ */
+__attribute__((always_inline))
+static inline volatile void *i2s_ll_get_interrupt_status_reg(i2s_dev_t *hw)
+{
+    return (volatile void *)&hw->int_st;
+}
+
+/**
+ * @brief Get I2S interrupt status by mask
+ *
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param mask  Interrupt status mask
+ * @return Interrupt status
+ */
+__attribute__((always_inline))
+static inline uint32_t i2s_ll_get_interrupt_status(i2s_dev_t *hw, uint32_t mask)
+{
+    return hw->int_st.val & mask;
+}
+
+/**
+ * @brief Clear I2S interrupt status by mask
+ *
+ * @param hw    Peripheral I2S hardware instance address.
+ * @param mask  Interrupt status mask
+ */
+__attribute__((always_inline))
+static inline void i2s_ll_clear_interrupt_status(i2s_dev_t *hw, uint32_t mask)
+{
+    hw->int_clr.val = mask;
+}
+
+/**
+ * @brief Enable I2S interrupt for specific event mask
+ *
+ * @param hw     Peripheral I2S hardware instance address.
+ * @param mask   Event mask
+ * @param enable True to enable, false to disable
+ */
+__attribute__((always_inline))
+static inline void i2s_ll_enable_interrupt(i2s_dev_t *hw, uint32_t mask, bool enable)
+{
+    if (enable) {
+        hw->int_ena.val |= mask;
+    } else {
+        hw->int_ena.val &= ~mask;
+    }
+}
+
+/**
+ * @brief Check whether an I2S data destination is supported on the specified port
+ */
+static inline bool i2s_ll_is_destination_supported(int port_id, i2s_destination_t destination)
+{
+    switch (destination) {
+    case I2S_DESTINATION_DMA:
+        return true;
+    case I2S_DESTINATION_BT:
+        return (I2S_LL_BT_DEST_SUPPORTED_PORT_MASK & (1U << port_id)) != 0;
+    default:
+        return false;
+    }
+}
+
+/**
+ * @brief Check whether I2S TX PCM2PDM converter is supported on the specified port
+ */
+static inline bool i2s_ll_is_pcm2pdm_supported(int port_id)
+{
+    return (I2S_LL_PCM2PDM_SUPPORTED_PORT_MASK & (1U << port_id)) != 0;
+}
+
+/**
+ * @brief Check whether I2S RX PDM2PCM converter is supported on the specified port
+ */
+static inline bool i2s_ll_is_pdm2pcm_supported(int port_id)
+{
+    return (I2S_LL_PDM2PCM_SUPPORTED_PORT_MASK & (1U << port_id)) != 0;
 }
 
 #ifdef __cplusplus

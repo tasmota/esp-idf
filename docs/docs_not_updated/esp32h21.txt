@@ -1,5 +1,5 @@
 index.rst
-api-guides/openthread.rst
+api-guides/openthread/index.rst
 api-guides/wifi-expansion.rst
 api-guides/deep-sleep-stub.rst
 api-guides/lwip.rst
@@ -28,9 +28,7 @@ api-guides/ble/blufi.rst
 api-guides/ble/ble-feature-support-status.rst
 api-guides/file-system-considerations.rst
 api-guides/RF_calibration.rst
-api-guides/usb-otg-console.rst
 api-guides/current-consumption-measurement-modules.rst
-api-guides/dfu.rst
 about.rst
 get-started/index.rst
 get-started/flashing-troubleshooting.rst
@@ -82,6 +80,7 @@ api-reference/bluetooth/esp_gattc.rst
 api-reference/bluetooth/bt_le.rst
 api-reference/bluetooth/controller_vhci.rst
 api-reference/bluetooth/esp_spp.rst
+api-reference/bluetooth/esp_opp.rst
 api-reference/bluetooth/esp_sdp.rst
 api-reference/bluetooth/esp_blufi.rst
 api-reference/bluetooth/bt_common.rst
@@ -121,11 +120,7 @@ api-reference/system/random.rst
 api-reference/system/esp_https_ota.rst
 api-reference/system/sleep_modes.rst
 api-reference/system/ota.rst
-api-reference/system/efuse.rst
 api-reference/system/inc/power_management_esp32h21.rst
-api-reference/system/inc/show-efuse-table_ESP32-H21.rst
-api-reference/system/inc/espefuse_summary_ESP32-H21.rst
-api-reference/system/inc/espefuse_summary_ESP32-H21_dump.rst
 api-reference/system/power_management.rst
 security/vulnerabilities.rst
 security/tee/index.rst

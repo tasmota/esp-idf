@@ -518,9 +518,6 @@ esp_err_t esp_hf_client_register_data_callback(esp_hf_client_incoming_data_cb_t 
     if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (recv == NULL || send == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
 
     btc_msg_t msg;
     msg.sig = BTC_SIG_API_CALL;
@@ -648,13 +645,15 @@ esp_err_t esp_hf_client_audio_data_send(esp_hf_sync_conn_hdl_t sync_conn_hdl, es
         return ESP_ERR_INVALID_ARG;
     }
 
-    BTA_HfClientAudioDataSend(sync_conn_hdl, (uint8_t *)audio_buf, audio_buf->data, audio_buf->data_len);
-    return ESP_OK;
+    if (btc_hf_client_audio_data_send(sync_conn_hdl, (uint8_t *)audio_buf, audio_buf->data, audio_buf->data_len) == BT_STATUS_SUCCESS) {
+        return ESP_OK;
+    }
+    return ESP_FAIL;
 }
 
-void esp_hf_client_pcm_resample_init(uint32_t src_sps, uint32_t bits, uint32_t channels)
+esp_err_t esp_hf_client_pcm_resample_init(uint32_t src_sps, uint32_t bits, uint32_t channels)
 {
-    BTA_DmPcmInitSamples(src_sps, bits, channels);
+    return (BTA_DmPcmInitSamples(src_sps, bits, channels) == BTA_SUCCESS) ? ESP_OK : ESP_FAIL;
 }
 
 void esp_hf_client_pcm_resample_deinit(void)

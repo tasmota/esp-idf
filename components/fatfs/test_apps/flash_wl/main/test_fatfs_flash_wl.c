@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,6 +10,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/unistd.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include "unity.h"
 #include "esp_partition.h"
@@ -195,6 +196,13 @@ TEST_CASE("(WL) overwrite and append file", "[fatfs][wear_levelling]")
     test_teardown();
 }
 
+TEST_CASE("(WL) fcntl F_SETFL preserves access mode", "[fatfs][wear_levelling]")
+{
+    test_setup();
+    test_fatfs_fcntl_setfl("/spiflash/fcntl.txt");
+    test_teardown();
+}
+
 TEST_CASE("(WL) can lseek", "[fatfs][wear_levelling]")
 {
     test_setup();
@@ -216,14 +224,12 @@ TEST_CASE("(WL) can ftruncate", "[fatfs][wear_levelling]")
     test_teardown();
 }
 
-#if FF_USE_EXPAND
 TEST_CASE("(WL) can esp_vfs_fat_create_contiguous_file", "[fatfs][wear_levelling]")
 {
     test_setup();
     test_fatfs_create_contiguous_file("/spiflash", "/spiflash/expand.txt");
     test_teardown();
 }
-#endif
 
 TEST_CASE("(WL) stat returns correct values", "[fatfs][wear_levelling]")
 {
@@ -260,6 +266,195 @@ TEST_CASE("(WL) link copies a file, rename moves a file", "[fatfs][wear_levellin
     test_teardown();
 }
 
+TEST_CASE("(WL) rename to an existing destination", "[fatfs][wear_levelling]")
+{
+    test_setup();
+
+    const char *src = "/spiflash/ren_src.txt";
+    const char *dst = "/spiflash/ren_dst.txt";
+
+    FILE *f = fopen(src, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_TRUE(fputs("source", f) >= 0);
+    TEST_ASSERT_EQUAL(0, fclose(f));
+
+    f = fopen(dst, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_TRUE(fputs("destination", f) >= 0);
+    TEST_ASSERT_EQUAL(0, fclose(f));
+
+    char buf[32];
+    errno = 0;
+    int ret = rename(src, dst);
+
+#ifdef CONFIG_FATFS_VFS_RENAME_REPLACES_DESTINATION
+    /* POSIX behavior: the destination is replaced. */
+    TEST_ASSERT_EQUAL(0, ret);
+
+    memset(buf, 0, sizeof(buf));
+    f = fopen(dst, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_NOT_NULL(fgets(buf, sizeof(buf), f));
+    TEST_ASSERT_EQUAL(0, fclose(f));
+    TEST_ASSERT_EQUAL_STRING("source", buf);
+
+    TEST_ASSERT_NULL(fopen(src, "r"));
+
+    TEST_ASSERT_EQUAL(0, unlink(dst));
+#else
+    /* Default FatFs behavior: the rename is refused and nothing changes. */
+    TEST_ASSERT_EQUAL(-1, ret);
+    TEST_ASSERT_EQUAL(EEXIST, errno);
+
+    memset(buf, 0, sizeof(buf));
+    f = fopen(dst, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_NOT_NULL(fgets(buf, sizeof(buf), f));
+    TEST_ASSERT_EQUAL(0, fclose(f));
+    TEST_ASSERT_EQUAL_STRING("destination", buf);
+
+    memset(buf, 0, sizeof(buf));
+    f = fopen(src, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_NOT_NULL(fgets(buf, sizeof(buf), f));
+    TEST_ASSERT_EQUAL(0, fclose(f));
+    TEST_ASSERT_EQUAL_STRING("source", buf);
+
+    TEST_ASSERT_EQUAL(0, unlink(src));
+    TEST_ASSERT_EQUAL(0, unlink(dst));
+#endif
+
+    test_teardown();
+}
+
+TEST_CASE("(WL) rename obeys the POSIX rules on directories", "[fatfs][wear_levelling]")
+{
+    test_setup();
+
+    const char *file = "/spiflash/ren_f.txt";
+    const char *dir = "/spiflash/ren_d";
+    const char *dir2 = "/spiflash/ren_d2";
+
+    FILE *f = fopen(file, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_TRUE(fputs("payload", f) >= 0);
+    TEST_ASSERT_EQUAL(0, fclose(f));
+    TEST_ASSERT_EQUAL(0, mkdir(dir, 0755));
+
+    struct stat st;
+
+    /* A file may not replace a directory, and the directory must survive. */
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(file, dir));
+#ifdef CONFIG_FATFS_VFS_RENAME_REPLACES_DESTINATION
+    TEST_ASSERT_EQUAL(EISDIR, errno);
+#else
+    TEST_ASSERT_EQUAL(EEXIST, errno);
+#endif
+    TEST_ASSERT_EQUAL(0, stat(dir, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+
+    /* A directory may not replace a file, and the file must survive. */
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(dir, file));
+#ifdef CONFIG_FATFS_VFS_RENAME_REPLACES_DESTINATION
+    TEST_ASSERT_EQUAL(ENOTDIR, errno);
+#else
+    TEST_ASSERT_EQUAL(EEXIST, errno);
+#endif
+    TEST_ASSERT_EQUAL(0, stat(file, &st));
+    TEST_ASSERT_FALSE(S_ISDIR(st.st_mode));
+
+    /* A directory may not replace a non-empty directory. */
+    TEST_ASSERT_EQUAL(0, mkdir(dir2, 0755));
+    f = fopen("/spiflash/ren_d2/occupant.txt", "w");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL(0, fclose(f));
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(dir, dir2));
+#ifdef CONFIG_FATFS_VFS_RENAME_REPLACES_DESTINATION
+    TEST_ASSERT_EQUAL(ENOTEMPTY, errno);
+#else
+    TEST_ASSERT_EQUAL(EEXIST, errno);
+#endif
+    TEST_ASSERT_EQUAL(0, stat("/spiflash/ren_d2/occupant.txt", &st));
+
+    TEST_ASSERT_EQUAL(0, unlink("/spiflash/ren_d2/occupant.txt"));
+
+    /* A directory may replace an empty one. */
+    errno = 0;
+    int ret = rename(dir, dir2);
+#ifdef CONFIG_FATFS_VFS_RENAME_REPLACES_DESTINATION
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_EQUAL(0, stat(dir2, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+    TEST_ASSERT_EQUAL(-1, stat(dir, &st));
+    TEST_ASSERT_EQUAL(0, rmdir(dir2));
+#else
+    TEST_ASSERT_EQUAL(-1, ret);
+    TEST_ASSERT_EQUAL(EEXIST, errno);
+    TEST_ASSERT_EQUAL(0, rmdir(dir));
+    TEST_ASSERT_EQUAL(0, rmdir(dir2));
+#endif
+    TEST_ASSERT_EQUAL(0, unlink(file));
+
+    test_teardown();
+}
+
+/* Only meaningful with the option enabled: without it f_rename() happily moves
+ * the directory into its own tree, which corrupts the volume, so there is no
+ * safe way to exercise the case. */
+#ifdef CONFIG_FATFS_VFS_RENAME_REJECTS_SELF_NESTING
+TEST_CASE("(WL) rename refuses to move a directory into itself", "[fatfs][wear_levelling]")
+{
+    test_setup();
+
+    const char *dir = "/spiflash/mv_d";
+    TEST_ASSERT_EQUAL(0, mkdir(dir, 0755));
+
+    struct stat st;
+
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(dir, "/spiflash/mv_d/child"));
+    TEST_ASSERT_EQUAL(EINVAL, errno);
+    TEST_ASSERT_EQUAL(0, stat(dir, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+
+    /* Nesting is rejected at any depth, not just directly below the source. */
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(dir, "/spiflash/mv_d/a/b"));
+    TEST_ASSERT_EQUAL(EINVAL, errno);
+
+    /* The destination is matched by directory entry rather than by path bytes,
+     * so a spelling that differs only in case is caught as well. */
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(dir, "/spiflash/MV_D/child"));
+    TEST_ASSERT_EQUAL(EINVAL, errno);
+    TEST_ASSERT_EQUAL(0, stat(dir, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+
+    /* The 8.3 alias of a long name denotes the same directory, which a
+     * comparison of path bytes would not recognise. */
+    const char *long_dir = "/spiflash/longdirname";
+    TEST_ASSERT_EQUAL(0, mkdir(long_dir, 0755));
+    errno = 0;
+    TEST_ASSERT_EQUAL(-1, rename(long_dir, "/spiflash/LONGDI~1/child"));
+    TEST_ASSERT_EQUAL(EINVAL, errno);
+    TEST_ASSERT_EQUAL(0, stat(long_dir, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+    TEST_ASSERT_EQUAL(0, rmdir(long_dir));
+
+    /* A name that merely shares a prefix is a different directory, and moving
+     * the directory elsewhere stays allowed. */
+    TEST_ASSERT_EQUAL(0, rename(dir, "/spiflash/mv_dd"));
+    TEST_ASSERT_EQUAL(0, stat("/spiflash/mv_dd", &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+    TEST_ASSERT_EQUAL(0, rmdir("/spiflash/mv_dd"));
+
+    test_teardown();
+}
+#endif // CONFIG_FATFS_VFS_RENAME_REJECTS_SELF_NESTING
+
 TEST_CASE("(WL) can create and remove directories", "[fatfs][wear_levelling]")
 {
     test_setup();
@@ -278,6 +473,34 @@ TEST_CASE("(WL) readdir, stat work as expected", "[fatfs][wear_levelling]")
 {
     test_setup();
     test_fatfs_readdir_stat("/spiflash/dir");
+    test_teardown();
+}
+
+TEST_CASE("(WL) readdir stat cache with two open directories", "[fatfs][wear_levelling]")
+{
+    test_setup();
+    test_fatfs_readdir_stat_dual_opendir("/spiflash/readdir_cache");
+    test_teardown();
+}
+
+TEST_CASE("(WL) readdir stat cache stale after truncate", "[fatfs][wear_levelling]")
+{
+    test_setup();
+    test_fatfs_readdir_stat_stale_after_truncate("/spiflash/readdir_cache");
+    test_teardown();
+}
+
+TEST_CASE("(WL) readdir stat cache stale after unlink", "[fatfs][wear_levelling]")
+{
+    test_setup();
+    test_fatfs_readdir_stat_stale_after_unlink("/spiflash/readdir_cache");
+    test_teardown();
+}
+
+TEST_CASE("(WL) readdir stat cache concurrent dual opendir", "[fatfs][wear_levelling]")
+{
+    test_setup();
+    test_fatfs_readdir_stat_concurrent_dual_opendir("/spiflash/readdir_cache");
     test_teardown();
 }
 

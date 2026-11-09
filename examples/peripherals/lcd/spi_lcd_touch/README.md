@@ -140,7 +140,7 @@ I (457) example: Install LVGL tick timer
 I (457) example: Register io panel event callback for LVGL flush ready notification
 I (457) example: Create LVGL task
 I (467) example: Starting LVGL task
-I (547) example: Display LVGL Meter Widget
+I (547) example: Display LVGL demo UI
 I (557) main_task: Returned from app_main()
 ```
 
@@ -149,8 +149,6 @@ I (557) main_task: Returned from app_main()
 ### Documentation Links
 
 -   [ESP-IDF SPI LCD Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/lcd/spi_lcd.html)
--   [LVGL Documentation](https://docs.lvgl.io/master/)
--   [ESP Component Registry](https://components.espressif.com/)
 
 ## Troubleshooting
 

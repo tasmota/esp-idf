@@ -18,6 +18,9 @@
 #endif
 #include "soc/efuse_reg.h"
 #include "soc/pcr_reg.h"
+#if SOC_HUK_SUPPORTED
+#include "soc/huk_reg.h"
+#endif
 #include "soc/lp_analog_peri_reg.h"
 #include "soc/lp_wdt_reg.h"
 #include "soc/spi_mem_reg.h"
@@ -29,6 +32,7 @@
 
 #include "unity.h"
 #include "esp_tee.h"
+#include "esp_private/hw_stack_guard.h"
 #include "secure_service_num.h"
 
 #define ALIGN_DOWN_TO_MMU_PAGE_SIZE(addr)  ((addr) & ~((SOC_MMU_PAGE_SIZE) - 1))
@@ -82,16 +86,6 @@ TEST_CASE("Test APM violation: HMAC", "[apm_violation]")
 }
 #endif
 
-#if SOC_DIG_SIGN_SUPPORTED
-TEST_CASE("Test APM violation: DS", "[apm_violation]")
-{
-    uint32_t val = UINT32_MAX;
-    val = REG_READ(DS_Z_MEM);
-    TEST_ASSERT_EQUAL(0, val);
-    TEST_FAIL_MESSAGE("APM violation should have been generated");
-}
-#endif
-
 TEST_CASE("Test APM violation: SHA PCR", "[apm_violation]")
 {
     uint32_t val = 0;
@@ -99,12 +93,48 @@ TEST_CASE("Test APM violation: SHA PCR", "[apm_violation]")
     TEST_FAIL_MESSAGE("APM violation should have been generated");
 }
 
+#if SOC_ECDSA_SUPPORTED
+TEST_CASE("Test APM violation: ECDSA PCR", "[apm_violation]")
+{
+    uint32_t val = 0;
+    REG_WRITE(PCR_ECDSA_CONF_REG, val);
+    TEST_FAIL_MESSAGE("APM violation should have been generated");
+}
+#endif
+
+#if SOC_MPI_SUPPORTED
+TEST_CASE("Test APM violation: RSA PCR", "[apm_violation]")
+{
+    uint32_t val = 0;
+    REG_WRITE(PCR_RSA_CONF_REG, val);
+    TEST_FAIL_MESSAGE("APM violation should have been generated");
+}
+#endif
+
 TEST_CASE("Test APM violation: ECC PCR", "[apm_violation]")
 {
     uint32_t val = 0;
     REG_WRITE(PCR_ECC_CONF_REG, val);
     TEST_FAIL_MESSAGE("APM violation should have been generated");
 }
+
+#if SOC_HUK_SUPPORTED
+TEST_CASE("Test APM violation: HUK", "[apm_violation]")
+{
+    uint32_t val = 0;
+    REG_WRITE(HUK_CLK_REG, val);
+    TEST_FAIL_MESSAGE("APM violation should have been generated");
+}
+#endif
+
+#if SOC_KEY_MANAGER_SUPPORT_KEY_DEPLOYMENT
+TEST_CASE("Test APM violation: KM PCR", "[apm_violation]")
+{
+    uint32_t val = 0;
+    REG_WRITE(PCR_KM_CONF_REG, val);
+    TEST_FAIL_MESSAGE("APM violation should have been generated");
+}
+#endif
 
 // NOTE: For C6/H2, SWDT and BOD are protected using PMP, thus this test
 // generates a store access fault instead of APM violation
@@ -226,6 +256,25 @@ TEST_CASE("Test REE-TEE isolation: DROM-W1", "[exception]")
 {
     const uint32_t test_addr = ALIGN_DOWN_TO_MMU_PAGE_SIZE((uint32_t)&_instruction_reserved_start);
     *(uint32_t *)(test_addr - 0x04) = 0xbadc0de;
+    TEST_FAIL_MESSAGE("Exception should have been generated");
+}
+
+TEST_CASE("Test REE-TEE isolation: Corrupted SP", "[exception]")
+{
+    uintptr_t atk_sp = (uintptr_t)&_iram_start - 0x100;
+
+    /* Disable U-mode interrupts so the tick cannot preempt before the ecall */
+    __asm__ volatile("csrci ustatus, 0x1\n\t" : : : "memory");
+
+    /* Stop the REE-owned HW stack guard, as a malicious REE could */
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+    esp_hw_stack_guard_monitor_stop();
+#endif
+
+    /* Cross into the TEE with the doctored sp; the handler rejects it and panics */
+    __asm__ volatile("mv sp, %0\n\t"
+                     "ecall\n\t" : : "r"(atk_sp) : "memory");
+
     TEST_FAIL_MESSAGE("Exception should have been generated");
 }
 

@@ -10,6 +10,96 @@ This page briefly lists all of the vulnerabilities that are discovered and fixed
 CVE-2026
 --------
 
+CVE-2026-81508
+~~~~~~~~~~~~~~
+
+Heap Out-of-Bounds Read in Bluedroid A2DP Sink Media Packet Processing
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-xcpr-5mqp-9qvv`_
+
+CVE-2026-81507
+~~~~~~~~~~~~~~
+
+Bluetooth Classic L2CAP Heap Memory Disclosure Allowing Unauthorized Access to Sensitive Data
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-v335-fxwc-rc44`_
+
+CVE-2026-55687
+~~~~~~~~~~~~~~
+
+Stack-Based Out-of-Bounds Write in JPEG Decoder DQT Marker Parsing
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF (ESP32-P4 SoC only)
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-v6r2-f6p2-88cj`_
+
+CVE-2026-46532
+~~~~~~~~~~~~~~
+
+Heap Out-of-Bounds Read in Bluedroid AVRCP Target Parser
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-3pp8-42fh-3j3c`_
+
+CVE-2026-45542
+~~~~~~~~~~~~~~
+
+Heap buffer overflow in protocomm Security2 over Bluetooth
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-9r76-858f-v6jh`_
+
+CVE-2026-45541
+~~~~~~~~~~~~~~
+
+Remote Null Pointer Dereference in WebSocket Server
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-3j8v-xgrq-5vg8`_
+
+CVE-2026-45329
+~~~~~~~~~~~~~~
+
+Out-of-Bounds Read in ESP-TEE Secure Service Wrappers
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-w82j-7q63-7pqm`_
+
+CVE-2026-45328
+~~~~~~~~~~~~~~
+
+Out-of-Bounds Write in ESP-TEE Secure Service Wrappers
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-mmgp-73p4-92xp`_
+
+CVE-2026-45160
+~~~~~~~~~~~~~~
+
+Out-of-bounds Read in lwIP DHCP Server Option Parser
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-g764-gwc3-75m5`_
+
 CVE-2026-25532
 ~~~~~~~~~~~~~~
 
@@ -24,23 +114,23 @@ WPS Enrollee Fragment Integer Underflow Vulnerability
 CVE-2026-25508
 ~~~~~~~~~~~~~~
 
+Out-of-Bounds Read Vulnerability in BLE Provisioning
+
+* Espressif Advisory: NA (Published on GitHub)
+* Impact: Applicable for ESP-IDF
+* Resolution: Please see advisory for details
+* Advisory pointer: `GHSA-9j5x-rf36-54x9`_
+
+
+CVE-2026-25507
+~~~~~~~~~~~~~~
+
 Use-after-free Vulnerability in BLE Provisioning
 
 * Espressif Advisory: NA (Published on GitHub)
 * Impact: Applicable for ESP-IDF
 * Resolution: Please see advisory for details
 * Advisory pointer: `GHSA-h7r3-gmg9-xjmg`_
-
-
-CVE-2026-25507
-~~~~~~~~~~~~~~
-
-Out-of-bounds Read Vulnerability in BLE Provisioning
-
-* Espressif Advisory: NA (Published on GitHub)
-* Impact: Applicable for ESP-IDF
-* Resolution: Please see advisory for details
-* Advisory pointer: `GHSA-9j5x-rf36-54x9`_
 
 
 CVE-2025
@@ -320,3 +410,12 @@ Security Advisory Concerning Wi-Fi Authentication Bypass
 .. _`GHSA-m2h2-683f-9mw7` : https://github.com/espressif/esp-idf/security/advisories/GHSA-m2h2-683f-9mw7
 .. _`GHSA-h7r3-gmg9-xjmg` : https://github.com/espressif/esp-idf/security/advisories/GHSA-h7r3-gmg9-xjmg
 .. _`GHSA-9j5x-rf36-54x9` : https://github.com/espressif/esp-idf/security/advisories/GHSA-9j5x-rf36-54x9
+.. _`GHSA-3j8v-xgrq-5vg8` : https://github.com/espressif/esp-idf/security/advisories/GHSA-3j8v-xgrq-5vg8
+.. _`GHSA-9r76-858f-v6jh` : https://github.com/espressif/esp-idf/security/advisories/GHSA-9r76-858f-v6jh
+.. _`GHSA-mmgp-73p4-92xp` : https://github.com/espressif/esp-idf/security/advisories/GHSA-mmgp-73p4-92xp
+.. _`GHSA-w82j-7q63-7pqm` : https://github.com/espressif/esp-idf/security/advisories/GHSA-w82j-7q63-7pqm
+.. _`GHSA-3pp8-42fh-3j3c` : https://github.com/espressif/esp-idf/security/advisories/GHSA-3pp8-42fh-3j3c
+.. _`GHSA-g764-gwc3-75m5` : https://github.com/espressif/esp-idf/security/advisories/GHSA-g764-gwc3-75m5
+.. _`GHSA-v6r2-f6p2-88cj` : https://github.com/espressif/esp-idf/security/advisories/GHSA-v6r2-f6p2-88cj
+.. _`GHSA-v335-fxwc-rc44` : https://github.com/espressif/esp-idf/security/advisories/GHSA-v335-fxwc-rc44
+.. _`GHSA-xcpr-5mqp-9qvv` : https://github.com/espressif/esp-idf/security/advisories/GHSA-xcpr-5mqp-9qvv

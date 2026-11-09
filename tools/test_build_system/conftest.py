@@ -15,6 +15,7 @@ from _pytest.fixtures import FixtureRequest
 from _pytest.main import Session
 from _pytest.nodes import Item
 from test_build_system_helpers import EXT_IDF_PATH
+from test_build_system_helpers import FAILED_COMMAND_LOG_DIR_ENV
 from test_build_system_helpers import EnvDict
 from test_build_system_helpers import IdfPyFunc
 from test_build_system_helpers import get_idf_build_env
@@ -36,7 +37,31 @@ def _get_git_submodule_paths(repo_path: Path) -> list[str]:
     return submodule_paths
 
 
-def _create_idf_copy_via_worktree(path_from: Path, path_to: Path) -> str:
+def _is_materialized_submodule(path: Path) -> bool:
+    """Whether path holds submodule content rather than a placeholder.
+
+    ``git worktree add`` leaves a submodule as an empty directory or as a
+    gitlink file, and both are unusable as component sources.
+    """
+    try:
+        return path.is_dir() and any(path.iterdir())
+    except OSError:
+        return False
+
+
+def _copy_submodule(src_submodule: Path, dst_submodule: Path) -> None:
+    """Replace the worktree placeholder with the submodule content of the source repo."""
+    # rmtree() cannot remove a gitlink file (even with ignore_errors=True), and
+    # copytree() would then leave a file where CMake expects a directory
+    # (e.g. mbedtls/include).
+    if dst_submodule.is_file() or dst_submodule.is_symlink():
+        dst_submodule.unlink()
+    elif dst_submodule.exists():
+        shutil.rmtree(dst_submodule)
+    shutil.copytree(src_submodule, dst_submodule, symlinks=True, ignore=shutil.ignore_patterns('.git'))
+
+
+def _create_idf_copy_via_worktree(path_from: Path, path_to: Path) -> str | None:
     """
     Create IDF copy using git worktree (fast) + copying submodule directories.
 
@@ -44,6 +69,18 @@ def _create_idf_copy_via_worktree(path_from: Path, path_to: Path) -> str:
     appear as empty directories. We copy submodule content from the source
     repo (which has them already checked out) instead of running git submodule
     update (which can fail due to auth issues on CI).
+
+    Return the worktree branch name, or None if a submodule could not be
+    materialized. In that case the worktree is removed again and the caller
+    creates the copy with shutil.copytree instead. Leaving a placeholder behind
+    would produce a copy that only fails once a test builds it, as a missing
+    include directory or source file of the affected component.
+
+    After copying submodules, remove the worktree's top-level ``.git`` file so
+    the result matches the old ``shutil.copytree`` behavior (no git repo at
+    ``IDF_PATH``). Otherwise CMake's ``git_submodule_check`` runs inside the
+    copy, sees missing submodule gitlinks, and tries ``git submodule update``,
+    which fails because submodule directories already contain copied files.
     """
     import uuid
 
@@ -61,26 +98,33 @@ def _create_idf_copy_via_worktree(path_from: Path, path_to: Path) -> str:
         src_submodule = path_from / submodule_rel_path
         dst_submodule = path_to / submodule_rel_path
 
-        # Only copy if source submodule exists and has content
-        if src_submodule.exists() and any(src_submodule.iterdir()):
+        # Nothing to copy when the source checkout did not materialize the submodule.
+        if _is_materialized_submodule(src_submodule):
             logging.debug(f'copying submodule {submodule_rel_path}')
-            # Remove the empty directory created by worktree
-            if dst_submodule.exists():
-                shutil.rmtree(dst_submodule, ignore_errors=True)
-            # Copy the submodule content
-            shutil.copytree(src_submodule, dst_submodule, symlinks=True, ignore=shutil.ignore_patterns('.git'))
+            _copy_submodule(src_submodule, dst_submodule)
+
+        if not _is_materialized_submodule(dst_submodule):
+            logging.warning(f'submodule {submodule_rel_path} could not be copied into {path_to}')
+            _cleanup_worktree(path_from, path_to, branch_name)
+            return None
+
+    # Match old shutil-based idf_copy: no top-level .git (see docstring above).
+    (path_to / '.git').unlink(missing_ok=True)
 
     return branch_name
 
 
 def _cleanup_worktree(path_from: Path, path_to: Path, branch_name: str) -> None:
-    """Remove git worktree and its temporary branch."""
+    """Remove worktree checkout directory and metadata; delete the temporary branch."""
     logging.debug(f'removing git worktree at {path_to}')
-    # Remove the worktree
+    # ``git worktree remove`` does not work once we deleted ``path_to/.git``;
+    # remove the directory and prune orphaned worktree metadata from the source repo.
+    shutil.rmtree(path_to, ignore_errors=True)
     subprocess.run(
-        ['git', 'worktree', 'remove', '--force', str(path_to)],
+        ['git', 'worktree', 'prune'],
         cwd=path_from,
-        check=False,  # Don't fail if already removed
+        capture_output=False,
+        check=False,
     )
     # Delete the temporary branch
     subprocess.run(
@@ -143,21 +187,31 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 @pytest.fixture(scope='session')
 def _session_work_dir(request: FixtureRequest) -> typing.Generator[tuple[Path, bool], None, None]:
     work_dir = request.config.getoption('--work-dir')
+    previous_log_dir = os.environ.get(FAILED_COMMAND_LOG_DIR_ENV)
 
     if work_dir:
-        work_dir = os.path.join(work_dir, datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
-        logging.debug(f'using work directory: {work_dir}')
-        os.makedirs(work_dir, exist_ok=True)
+        # resolve allows using relative paths with --work-dir option
+        work_dir_path = Path(work_dir).resolve() / datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d_%H-%M-%S')
+        logging.debug(f'using work directory: {work_dir_path}')
+        os.makedirs(work_dir_path, exist_ok=True)
         clean_dir = None
         is_temp_dir = False
     else:
-        work_dir = mkdtemp()
-        logging.debug(f'created temporary work directory: {work_dir}')
-        clean_dir = work_dir
+        work_dir_path = Path(mkdtemp()).resolve()
+        logging.debug(f'created temporary work directory: {work_dir_path}')
+        clean_dir = work_dir_path
         is_temp_dir = True
 
-    # resolve allows using relative paths with --work-dir option
-    yield Path(work_dir).resolve(), is_temp_dir
+    log_dir = work_dir_path / 'failed_command_logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    os.environ[FAILED_COMMAND_LOG_DIR_ENV] = str(log_dir)
+
+    yield work_dir_path, is_temp_dir
+
+    if previous_log_dir is None:
+        os.environ.pop(FAILED_COMMAND_LOG_DIR_ENV, None)
+    else:
+        os.environ[FAILED_COMMAND_LOG_DIR_ENV] = previous_log_dir
 
     if clean_dir:
         logging.debug(f'cleaning up {clean_dir}')
@@ -231,30 +285,27 @@ def test_app_copy(func_work_dir: Path, request: FixtureRequest) -> typing.Genera
 
 
 @pytest.fixture
-def test_git_template_app(func_work_dir: Path, request: FixtureRequest) -> typing.Generator[Path, None, None]:
-    # sanitize test name in case pytest.mark.parametrize was used
+def minimal_git_app(func_work_dir: Path, request: FixtureRequest) -> typing.Generator[Path, None, None]:
     test_name_sanitized = request.node.name.replace('[', '_').replace(']', '')
-    copy_to = test_name_sanitized + '_app'
-    path_to = func_work_dir / copy_to
+    path_to = func_work_dir / (test_name_sanitized + '_app')
 
-    logging.debug(f'cloning git-template app to {path_to}')
+    logging.debug(f'creating minimal git app at {path_to}')
     path_to.mkdir()
-    # No need to clone full repository, just a single master branch
-    subprocess.run(
-        [
-            'git',
-            'clone',
-            '--single-branch',
-            '-b',
-            'master',
-            '--depth',
-            '1',
-            'https://github.com/espressif/esp-idf-template.git',
-            '.',
-        ],
-        cwd=path_to,
-        capture_output=True,
+    (path_to / 'CMakeLists.txt').write_text(
+        'cmake_minimum_required(VERSION 3.22)\n'
+        'include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n'
+        'project(app-template)\n'
     )
+    (path_to / 'main').mkdir()
+    (path_to / 'main' / 'CMakeLists.txt').write_text('idf_component_register(SRCS "main.c")\n')
+    (path_to / 'main' / 'main.c').write_text('void app_main(void) {}\n')
+    for cmd in [
+        ['git', 'init'],
+        ['git', 'add', '.'],
+        ['git', '-c', 'user.email=test@test.com', '-c', 'user.name=Test', 'commit', '-m', 'init'],
+        ['git', 'tag', 'v1.0'],
+    ]:
+        subprocess.run(cmd, cwd=path_to, capture_output=True, check=True)
 
     old_cwd = Path.cwd()
     os.chdir(path_to)
@@ -297,6 +348,8 @@ def idf_copy(func_work_dir: Path, request: FixtureRequest) -> typing.Generator[P
         # Clean up any partial worktree before fallback
         if path_to.exists():
             shutil.rmtree(path_to, ignore_errors=True)
+
+    if branch_name is None:
         _create_idf_copy_via_shutil(path_from, path_to)
 
     os.environ['IDF_PATH'] = str(path_to)
@@ -313,9 +366,35 @@ def idf_copy(func_work_dir: Path, request: FixtureRequest) -> typing.Generator[P
             shutil.rmtree(path_to, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True, scope='session')
+def idf_py_terminal_env() -> typing.Generator[None, None, None]:
+    """Set terminal env so idf.py subprocesses produce consistent output.
+
+    COLUMNS=200 raises Rich's non-TTY default of 80, preventing most line wrapping.
+    Messages with long file paths can still exceed 200 characters; use
+    normalize_output() for assertions on those.
+    """
+    keys = ('COLUMNS', 'LINES', 'NO_COLOR', 'FORCE_COLOR', 'PY_COLORS', 'TERM')
+    saved = {k: os.environ.get(k) for k in keys}
+    os.environ['COLUMNS'] = '200'
+    os.environ['LINES'] = '40'
+    os.environ['NO_COLOR'] = '1'
+    for k in ('FORCE_COLOR', 'PY_COLORS'):
+        os.environ.pop(k, None)
+    yield
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 @pytest.fixture(name='default_idf_env')
-def fixture_default_idf_env() -> EnvDict:
-    return get_idf_build_env(os.environ['IDF_PATH'])  # type: ignore
+def fixture_default_idf_env(request: FixtureRequest) -> EnvDict:
+    env = get_idf_build_env(os.environ['IDF_PATH'])  # type: ignore
+    if request.config.getoption('buildv2', False):
+        env['IDF_BUILD_V2'] = '1'
+    return env
 
 
 @pytest.fixture

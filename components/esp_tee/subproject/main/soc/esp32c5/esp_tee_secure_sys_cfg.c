@@ -10,11 +10,9 @@
 #include "riscv/encoding.h"
 
 #include "hal/apm_hal.h"
-#include "hal/aes_ll.h"
-#include "hal/sha_ll.h"
-#include "hal/hmac_ll.h"
-#include "hal/ds_ll.h"
-#include "hal/ecc_ll.h"
+#include "hal/efuse_hal.h"
+#include "hal/key_mgr_ll.h"
+#include "hal/key_mgr_types.h"
 
 #include "soc/clic_reg.h"
 #include "soc/interrupts.h"
@@ -43,6 +41,28 @@ static const char *TAG = "esp_tee_secure_sys_cfg";
 extern uint32_t _vector_table;
 extern uint32_t _mtvt_table;
 
+/* NOTE: The ECDSA/HMAC/DS key selectors live in the Key Manager, so it stays clocked */
+static void tee_init_key_mgr(void)
+{
+    /* NOTE: With flash encryption enabled, the KM is already initialized by the ROM/bootloader */
+    if (!efuse_hal_flash_encryption_enabled()) {
+        key_mgr_ll_power_up();
+        key_mgr_ll_enable_bus_clock(true);
+        key_mgr_ll_enable_peripheral_clock(true);
+        key_mgr_ll_reset_register();
+
+        while (key_mgr_ll_get_state() != ESP_KEY_MGR_STATE_IDLE) {
+        }
+    }
+
+    key_mgr_ll_set_key_usage(ESP_KEY_MGR_ECDSA_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+    key_mgr_ll_set_key_usage(ESP_KEY_MGR_FLASH_XTS_AES_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+    key_mgr_ll_set_key_usage(ESP_KEY_MGR_HMAC_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+    key_mgr_ll_set_key_usage(ESP_KEY_MGR_DS_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
+
+    ESP_LOGI(TAG, "Key Manager: Not supported with ESP-TEE - REE access disabled");
+}
+
 void esp_tee_soc_secure_sys_init(void)
 {
     ESP_LOGI(TAG, "Current privilege level - 0x%x", esp_cpu_get_curr_privilege_level());
@@ -70,14 +90,9 @@ void esp_tee_soc_secure_sys_init(void)
         REG_CLR_BIT(DR_REG_INTMTX_BASE + 4 * i, BIT(8));
     }
 
-    /* TODO: IDF-8958
-     * The values for the secure interrupt number and priority and
-     * the interrupt priority threshold (for both M and U mode) need
-     * to be investigated further
-     */
     esprv_int_set_threshold(0);
 
-    esprv_int_set_priority(TEE_SECURE_INUM, 7);
+    esprv_int_set_priority(TEE_SECURE_INUM, TEE_SECURE_INUM_PRIO);
     esprv_int_set_type(TEE_SECURE_INUM, ESP_CPU_INTR_TYPE_LEVEL);
     esprv_int_enable(BIT(TEE_SECURE_INUM));
     esprv_int_set_vectored(TEE_SECURE_INUM, true);
@@ -114,12 +129,10 @@ void esp_tee_soc_secure_sys_init(void)
     esp_tee_protect_intr_src(ETS_SHA_INTR_SOURCE);          // SHA
     esp_tee_protect_intr_src(ETS_ECC_INTR_SOURCE);          // ECC
 
-    /* Disable protected crypto peripheral clocks; they will be toggled as needed when the peripheral is in use */
-    aes_ll_enable_bus_clock(false);
-    sha_ll_enable_bus_clock(false);
-    hmac_ll_enable_bus_clock(false);
-    ds_ll_enable_bus_clock(false);
-    ecc_ll_enable_bus_clock(false);
+    /* Set the key usage for the ECDSA/XTS-AES/HMAC/DS peripherals to eFuse */
+    tee_init_key_mgr();
+    /* Reset the protected crypto peripherals and leave their clocks disabled */
+    esp_tee_soc_reset_crypto_peripherals();
 }
 
 IRAM_ATTR inline void esp_tee_switch_to_ree(uint32_t ns_entry_addr)

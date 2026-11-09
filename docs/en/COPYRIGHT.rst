@@ -19,7 +19,7 @@ Firmware Components
 
 These third party libraries can be included into the application (firmware) produced by ESP-IDF.
 
-* :component:`Newlib <esp_libc>` is licensed under the BSD License, with copyright held by the respective parties, as described in :component_file:`COPYING.NEWLIB <esp_libc/COPYING.NEWLIB>`. If :ref:`CONFIG_LIBC_PICOLIBC<CONFIG_LIBC_PICOLIBC>` is enabled, see also :component_file:`COPYING.picolibc <esp_libc/COPYING.picolibc>`.
+* :component:`Newlib <esp_libc>` is licensed under the BSD License, with copyright held by the respective parties, as described in :component_file:`COPYING.NEWLIB <esp_libc/COPYING.NEWLIB>`. If :menuitem:`CONFIG_LIBC_PICOLIBC` is enabled, see also :component_file:`COPYING.picolibc <esp_libc/COPYING.picolibc>`.
 
 :component:`Picolibc <esp_libc>` is licensed under the BSD License, with copyright held by the respective parties, as described in :component_file:`COPYING.picolibc <esp_libc/COPYING.NEWLIB>`.
 
@@ -56,6 +56,8 @@ These third party libraries can be included into the application (firmware) prod
 * :component:`BLE Mesh <bt/esp_ble_mesh>` is adapted from Zephyr Project, Copyright (C) 2017-2018 Intel Corporation and licensed under Apache License 2.0.
 
 * :component:`BLE Audio <bt/esp_ble_audio>` is adapted from Zephyr Project, Copyright (C) 2017-2018 Intel Corporation and licensed under Apache License 2.0.
+
+* :component:`BLE ISO <bt/esp_ble_iso>` is adapted from Zephyr Project, Copyright (C) 2017-2018 Intel Corporation and licensed under Apache License 2.0.
 
 * `mynewt-nimble`_, Copyright (C) 2015-2018 The Apache Software Foundation, is licensed under Apache License 2.0 as described in :component_file:`LICENSE file <bt/host/nimble/nimble/LICENSE>`.
 

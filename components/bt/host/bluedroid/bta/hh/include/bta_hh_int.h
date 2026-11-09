@@ -28,6 +28,8 @@
 #include "bta/bta_sys.h"
 #include "bta/utl.h"
 #include "bta/bta_hh_api.h"
+#include "osi/pkt_queue.h"
+#include "osi/thread.h"
 
 //#if BTA_HH_LE_INCLUDED == TRUE
 #include "bta/bta_gatt_api.h"
@@ -82,7 +84,7 @@ typedef UINT16 tBTA_HH_INT_EVT;         /* HID host internal events */
 #define BTA_HH_FST_TRANS_CB_EVT         BTA_HH_GET_RPT_EVT
 #define BTA_HH_FST_BTE_TRANS_EVT        HID_TRANS_GET_REPORT
 
-/* sub event code used for device maintainence API call */
+/* sub event code used for device maintenance API call */
 #define BTA_HH_ADD_DEV          0
 #define BTA_HH_REMOVE_DEV       1
 
@@ -201,7 +203,7 @@ typedef struct {
 
 #define BTA_HH_LE_PROTO_MODE_BIT        0x01
 #define BTA_HH_LE_CP_BIT                0x02
-    UINT8                   option_char; /* control point char exisit or not */
+    UINT8                   option_char; /* control point char exist or not */
 
     BOOLEAN                 expl_incl_srvc;
     UINT8                   incl_srvc_inst; /* assuming only one included service : battery service */
@@ -354,6 +356,7 @@ extern void bta_hh_add_device_to_list(tBTA_HH_DEV_CB *p_cb, UINT8 handle,
 extern void bta_hh_update_di_info(tBTA_HH_DEV_CB *p_cb, UINT16 vendor_id, UINT16 product_id,
                                   UINT16 version, UINT8 flag);
 extern void bta_hh_cleanup_disable(tBTA_HH_STATUS status);
+extern void bta_hh_free_disc_db(void);
 
 extern UINT8 bta_hh_dev_handle_to_cb_idx(UINT8 dev_handle);
 

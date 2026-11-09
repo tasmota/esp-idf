@@ -231,8 +231,8 @@ static void twai_intr_handler_main(void *arg)
         //Note: This event will never occur if there is a periph reset event
         twai_handle_rx_buffer_frames(p_twai_obj, &task_woken, &alert_req);
     }
-    if (events & TWAI_HAL_EVENT_TX_BUFF_FREE) {
-        twai_handle_tx_buffer_frame(p_twai_obj, (events & TWAI_HAL_EVENT_TX_SUCCESS), &task_woken, &alert_req);
+    if (events & TWAI_HAL_EVENT_TX0_DONE) {
+        twai_handle_tx_buffer_frame(p_twai_obj, (events & TWAI_HAL_EVENT_TX0_SUCCESS), &task_woken, &alert_req);
     }
 
     //Handle events that only require alerting (i.e. no handler)
@@ -370,6 +370,7 @@ static void twai_free_driver_obj(twai_obj_t *p_obj)
 
 #if TWAI_USE_RETENTION_LINK
     const periph_retention_module_t retention_id = twai_reg_retention_info[p_obj->controller_id].module_id;
+    sleep_retention_module_detach(retention_id);
     if (sleep_retention_is_module_created(retention_id)) {
         assert(sleep_retention_is_module_inited(retention_id));
         sleep_retention_module_free(retention_id);
@@ -443,6 +444,7 @@ static esp_err_t twai_alloc_driver_obj(const twai_general_config_t *g_config, tw
                 .arg = p_obj,
             },
         },
+        .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
         .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
     };
     if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
@@ -452,6 +454,10 @@ static esp_err_t twai_alloc_driver_obj(const twai_general_config_t *g_config, tw
     if (g_config->general_flags.sleep_allow_pd) {
         if (sleep_retention_module_allocate(module) != ESP_OK) {
             ESP_LOGW(TWAI_TAG, "create retention module failed, power domain can't turn off");
+        } else {
+            if (sleep_retention_module_attach(module) != ESP_OK) {
+                ESP_LOGW(TWAI_TAG, "attach retention module failed, power domain can't turn off");
+            }
         }
     }
 #endif
@@ -810,7 +816,8 @@ esp_err_t twai_receive_v2(twai_handle_t handle, twai_message_t *message, TickTyp
     message->extd = header.ide;
     message->rtr = header.rtr;
     //Set remaining bytes of data to 0
-    memset(message->data + message->data_length_code, 0, TWAI_FRAME_MAX_LEN - message->data_length_code);
+    uint8_t data_length = (header.dlc > TWAI_FRAME_MAX_LEN) ? TWAI_FRAME_MAX_LEN : header.dlc;
+    memset(message->data + data_length, 0, TWAI_FRAME_MAX_LEN - data_length);
     return ESP_OK;
 }
 

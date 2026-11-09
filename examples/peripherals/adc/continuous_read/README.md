@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- | -------- |
+| Supported Targets | ESP32 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
 
 # ADC DMA Example
 
@@ -14,7 +14,7 @@ This example shows how to use ADC Continuous Read Mode (DMA Mode) to read from G
 * A development board with ESP32, ESP32-S and ESP32-C SoC
 * A USB cable for power supply and programming
 
-Please refer to the `channel` array defined in `adc_dma_example_main.c`. These GPIOs should be connected to voltage sources (0 ~ 3.3V). If other ADC unit(s) / channel(s) are selected in your application,
+Please refer to the `channel` array defined in `continuous_read_main.c`. These GPIOs should be connected to voltage sources (0 ~ 3.3V; on ESP32-S31 the single-ended range is about -2 V to 2 V). If other ADC unit(s) / channel(s) are selected in your application,
 feel free to modify these definitions.
 
 ### Configure the project

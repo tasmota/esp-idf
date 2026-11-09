@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <stdatomic.h>
+#include <sys/param.h>
 #include "esp_types.h"
 #include "esp_attr.h"
 #include "esp_check.h"
@@ -16,7 +17,6 @@
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
 #include "esp_rom_sys.h"
-#include "soc/lldesc.h"
 #include "soc/soc_caps.h"
 #include "soc/spi_periph.h"
 #include "soc/soc_memory_layout.h"
@@ -242,13 +242,20 @@ esp_err_t spi_slave_initialize(spi_host_device_t host, const spi_bus_config_t *b
                 .arg = spihost[host],
             },
         },
+        .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
         .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM),
     };
 
     if (ESP_OK == sleep_retention_module_init(spi_reg_retention_info[host - 1].module_id, &init_param)) {
-        if ((bus_config->flags & SPICOMMON_BUSFLAG_SLP_ALLOW_PD) && (sleep_retention_module_allocate(spi_reg_retention_info[host - 1].module_id) != ESP_OK)) {
-            // even though the sleep retention create failed, SPI driver should still work, so just warning here
-            ESP_LOGW(SPI_TAG, "Alloc sleep recover failed, spi may hold power on");
+        if ((bus_config->flags & SPICOMMON_BUSFLAG_SLP_ALLOW_PD)) {
+            if (sleep_retention_module_allocate(spi_reg_retention_info[host - 1].module_id) != ESP_OK) {
+                // even though the sleep retention create failed, SPI driver should still work, so just warning here
+                ESP_LOGW(SPI_TAG, "Alloc sleep recover failed, spi may hold power on");
+            } else {
+                if (sleep_retention_module_attach(spi_reg_retention_info[host - 1].module_id) != ESP_OK) {
+                    ESP_LOGW(SPI_TAG, "attach sleep recover failed, spi may hold power on");
+                }
+            }
         }
     } else {
         // even the sleep retention init failed, SPI driver should still work, so just warning here
@@ -332,6 +339,7 @@ esp_err_t spi_slave_free(spi_host_device_t host)
 
 #if SOC_SPI_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
     const periph_retention_module_t retention_id = spi_reg_retention_info[spihost[host]->id - 1].module_id;
+    sleep_retention_module_detach(retention_id);
     if (sleep_retention_is_module_created(retention_id)) {
         assert(sleep_retention_is_module_inited(retention_id));
         sleep_retention_module_free(retention_id);
@@ -404,8 +412,9 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_uninstall_priv_trans(spi_host_device_t 
         if (trans->tx_buffer && (trans->tx_buffer != priv_trans->tx_buffer)) {
             free(priv_trans->tx_buffer);
         }
-        if (trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
-            memcpy(trans->rx_buffer, priv_trans->rx_buffer, (trans->length + 7) / 8);
+        if (priv_trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
+            size_t compatible_len = trans->rx_length ? trans->rx_length : trans->length;
+            memcpy(trans->rx_buffer, priv_trans->rx_buffer, (MIN(compatible_len, trans->trans_len) + 7) / 8);
             free(priv_trans->rx_buffer);
         }
     }
@@ -421,12 +430,14 @@ static esp_err_t SPI_SLAVE_ATTR spi_slave_setup_priv_trans(spi_host_device_t hos
     }
 
     bool auto_malloc = (trans->flags & SPI_SLAVE_TRANS_DMA_BUFFER_ALIGN_AUTO);
-    esp_err_t ret = spicommon_dma_setup_priv_buffer(spihost[host]->id, (uint32_t *)trans->tx_buffer, (trans->length + 7) / 8, true, true, auto_malloc, &priv_trans->tx_buffer);
+    size_t tx_bytes_len = ((trans->length ? trans->length : trans->tx_length) + 7) / 8;
+    size_t rx_bytes_len = ((trans->length ? trans->length : trans->rx_length) + 7) / 8;
+    esp_err_t ret = spicommon_dma_setup_priv_buffer(spihost[host]->id, (uint32_t *)trans->tx_buffer, tx_bytes_len, true, true, auto_malloc, &priv_trans->tx_buffer);
     if (ret != ESP_OK) {
         spi_slave_uninstall_priv_trans(host, priv_trans);
         return ret;
     }
-    ret = spicommon_dma_setup_priv_buffer(spihost[host]->id, (uint32_t *)trans->rx_buffer, (trans->length + 7) / 8, false, true, auto_malloc, &priv_trans->rx_buffer);
+    ret = spicommon_dma_setup_priv_buffer(spihost[host]->id, (uint32_t *)trans->rx_buffer, rx_bytes_len, false, true, auto_malloc, &priv_trans->rx_buffer);
     if (ret != ESP_OK) {
         spi_slave_uninstall_priv_trans(host, priv_trans);
     }
@@ -438,13 +449,19 @@ esp_err_t SPI_SLAVE_ATTR spi_slave_queue_trans(spi_host_device_t host, const spi
     BaseType_t r;
     SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
     SPI_CHECK(spihost[host], "host not slave", ESP_ERR_INVALID_ARG);
-    SPI_CHECK(trans_desc->length <= spihost[host]->bus_attr->max_transfer_sz * 8, "data transfer > host maximum", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(!(trans_desc->length && (trans_desc->tx_length || trans_desc->rx_length)), "length and tx_length/rx_length are mutually exclusive", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(trans_desc->length <= spihost[host]->bus_attr->max_transfer_sz * 8, "tx data transfer > host maximum", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(trans_desc->tx_length <= spihost[host]->bus_attr->max_transfer_sz * 8, "tx data transfer > host maximum", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(trans_desc->rx_length <= spihost[host]->bus_attr->max_transfer_sz * 8, "rx data transfer > host maximum", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(!trans_desc->tx_buffer || (trans_desc->tx_length || trans_desc->length), "set tx_buffer but no length or tx_length", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(!trans_desc->rx_buffer || (trans_desc->rx_length || trans_desc->length), "set rx_buffer but no length or rx_length", ESP_ERR_INVALID_ARG);
 
     spi_slave_trans_priv_t priv_trans = {.trans = (spi_slave_transaction_t *)trans_desc};
     SPI_CHECK(ESP_OK == spi_slave_setup_priv_trans(host, &priv_trans), "slave setup priv_trans failed", ESP_ERR_NO_MEM);
 
     r = xQueueSend(spihost[host]->trans_queue, (void *)&priv_trans, ticks_to_wait);
     if (!r) {
+        spi_slave_uninstall_priv_trans(host, &priv_trans);
         return ESP_ERR_TIMEOUT;
     }
     esp_intr_enable(spihost[host]->intr);
@@ -490,7 +507,12 @@ esp_err_t SPI_SLAVE_ISR_ATTR spi_slave_queue_trans_isr(spi_host_device_t host, c
     BaseType_t do_yield = pdFALSE;
     ESP_RETURN_ON_FALSE_ISR(is_valid_host(host), ESP_ERR_INVALID_ARG, SPI_TAG, "invalid host");
     ESP_RETURN_ON_FALSE_ISR(spihost[host], ESP_ERR_INVALID_ARG, SPI_TAG, "host not slave");
-    ESP_RETURN_ON_FALSE_ISR(trans_desc->length <= spihost[host]->bus_attr->max_transfer_sz * 8, ESP_ERR_INVALID_ARG, SPI_TAG, "data transfer > host maximum");
+    ESP_RETURN_ON_FALSE_ISR(!(trans_desc->length && (trans_desc->tx_length || trans_desc->rx_length)), ESP_ERR_INVALID_ARG, SPI_TAG, "length and tx_length/rx_length are mutually exclusive");
+    ESP_RETURN_ON_FALSE_ISR(trans_desc->length <= spihost[host]->bus_attr->max_transfer_sz * 8, ESP_ERR_INVALID_ARG, SPI_TAG, "tx data transfer > host maximum");
+    ESP_RETURN_ON_FALSE_ISR(trans_desc->tx_length <= spihost[host]->bus_attr->max_transfer_sz * 8, ESP_ERR_INVALID_ARG, SPI_TAG, "tx data transfer > host maximum");
+    ESP_RETURN_ON_FALSE_ISR(trans_desc->rx_length <= spihost[host]->bus_attr->max_transfer_sz * 8, ESP_ERR_INVALID_ARG, SPI_TAG, "rx data transfer > host maximum");
+    ESP_RETURN_ON_FALSE_ISR(!trans_desc->tx_buffer || (trans_desc->tx_length || trans_desc->length), ESP_ERR_INVALID_ARG, SPI_TAG, "set tx_buffer but no length or tx_length");
+    ESP_RETURN_ON_FALSE_ISR(!trans_desc->rx_buffer || (trans_desc->rx_length || trans_desc->length), ESP_ERR_INVALID_ARG, SPI_TAG, "set rx_buffer but no length or rx_length");
 
     spi_slave_trans_priv_t priv_trans = {
         .trans = (spi_slave_transaction_t *)trans_desc,
@@ -499,8 +521,8 @@ esp_err_t SPI_SLAVE_ISR_ATTR spi_slave_queue_trans_isr(spi_host_device_t host, c
     };
     if (spihost[host]->bus_attr->dma_enabled) {
         // isr api is not allowed to auto_malloc, so don't need to 'uninstall' anything here, return directly
-        ESP_RETURN_ON_ERROR_ISR(spicommon_dma_setup_priv_buffer(host, (uint32_t *)trans_desc->tx_buffer, (trans_desc->length + 7) / 8, true, true, false, &priv_trans.tx_buffer), SPI_TAG, "");
-        ESP_RETURN_ON_ERROR_ISR(spicommon_dma_setup_priv_buffer(host, (uint32_t *)trans_desc->rx_buffer, (trans_desc->length + 7) / 8, false, true, false, &priv_trans.rx_buffer), SPI_TAG, "");
+        ESP_RETURN_ON_ERROR_ISR(spicommon_dma_setup_priv_buffer(host, (uint32_t *)trans_desc->tx_buffer, ((trans_desc->length ? trans_desc->length : trans_desc->tx_length) + 7) / 8, true, true, false, &priv_trans.tx_buffer), SPI_TAG, "");
+        ESP_RETURN_ON_ERROR_ISR(spicommon_dma_setup_priv_buffer(host, (uint32_t *)trans_desc->rx_buffer, ((trans_desc->length ? trans_desc->length : trans_desc->rx_length) + 7) / 8, false, true, false, &priv_trans.rx_buffer), SPI_TAG, "");
     }
     r = xQueueSendFromISR(spihost[host]->trans_queue, (void *)&priv_trans, &do_yield);
     if (!r) {
@@ -581,14 +603,14 @@ esp_err_t SPI_SLAVE_ATTR spi_slave_transmit(spi_host_device_t host, spi_slave_tr
 static void SPI_SLAVE_ISR_ATTR s_spi_slave_dma_prepare_data(spi_dma_ctx_t *dma_ctx, spi_slave_hal_context_t *hal)
 {
     if (hal->rx_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_rx, hal->rx_buffer, ((hal->bitlen + 7) / 8), true);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, hal->rx_buffer, (hal->rx_bitlen + 7) / 8, true);
 
         spi_dma_reset(dma_ctx->rx_dma_chan);
         spi_slave_hal_hw_prepare_rx(hal->hw);
         spi_dma_start(dma_ctx->rx_dma_chan, dma_ctx->dmadesc_rx);
     }
     if (hal->tx_buffer) {
-        spicommon_dma_desc_setup_link(dma_ctx->dmadesc_tx, hal->tx_buffer, (hal->bitlen + 7) / 8, false);
+        spicommon_dma_desc_setup_link(dma_ctx, 0, hal->tx_buffer, (hal->tx_bitlen + 7) / 8, false);
 
         spi_dma_reset(dma_ctx->tx_dma_chan);
         spi_slave_hal_hw_prepare_tx(hal->hw);
@@ -710,7 +732,8 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         //We have a transaction. Send it.
         host->cur_trans = priv_trans;
 
-        hal->bitlen = priv_trans.trans->length;
+        hal->tx_bitlen = priv_trans.trans->tx_length ? priv_trans.trans->tx_length : priv_trans.trans->length;
+        hal->rx_bitlen = priv_trans.trans->rx_length ? priv_trans.trans->rx_length : priv_trans.trans->length;
         hal->rx_buffer = priv_trans.rx_buffer;
         hal->tx_buffer = priv_trans.tx_buffer;
 

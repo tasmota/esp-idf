@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -125,6 +125,7 @@ extern "C" {
     .ext_clk_freq_hz = 0, \
     .mclk_multiple = I2S_MCLK_MULTIPLE_256, \
     .bclk_div = 8, \
+    .flags = {}, \
 }
 
 /**
@@ -165,6 +166,9 @@ typedef struct {
                                                  */
     i2s_mclk_multiple_t     mclk_multiple;      /*!< The multiple of MCLK to the sample rate, only take effect for master role */
     uint32_t                bclk_div;           /*!< The division from MCLK to BCLK, only take effect for slave role, it shouldn't be smaller than 8. Increase this field when data sent by slave lag behind */
+    struct {
+        uint32_t            clk_src_adjustable : 1; /*!< Set to enable clock source frequency adjustment. Only supported for `I2S_CLK_SRC_APLL` for now */
+    } flags;                                    /*!< I2S clock configuration flags */
 } i2s_tdm_clk_config_t;
 
 /**
@@ -196,8 +200,11 @@ typedef struct {
  * @brief Initialize I2S channel to TDM mode
  * @note  Only allowed to be called when the channel state is REGISTERED, (i.e., channel has been allocated, but not initialized)
  *        and the state will be updated to READY if initialization success, otherwise the state will return to REGISTERED.
- * @note  When initialize the TDM mode with a same configuration as another channel on a same port,
- *        these two channels can constitude as full-duplex mode automatically
+ * @note  When initializing the TDM mode on a channel that shares the same BCLK/WS configuration and
+ *        the same frame timing (sample rate and total bits per frame) as the other channel on the same port,
+ *        these two channels can constitute full-duplex mode automatically. The slot layout, clock source,
+ *        external clock frequency, and MCLK configuration may differ (e.g. a TDM channel can pair with
+ *        an STD channel) as long as the total bits per frame are equal and the BCLK/WS frequency matches.
  *
  * @param[in]   handle      I2S channel handler
  * @param[in]   tdm_cfg     Configurations for TDM mode, including clock, slot and GPIO

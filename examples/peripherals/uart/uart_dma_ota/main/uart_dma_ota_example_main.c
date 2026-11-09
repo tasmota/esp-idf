@@ -1,20 +1,22 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
+#include "freertos/ringbuf.h"
 #include "driver/uart.h"
 #include "driver/uhci.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_err.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 
 static const char *TAG = "uhci-example";
 
@@ -22,48 +24,31 @@ static const char *TAG = "uhci-example";
 #define EXAMPLE_UART_BAUD_RATE CONFIG_UART_BAUD_RATE
 #define EXAMPLE_UART_RX_IO CONFIG_UART_RX_IO
 #define UART_DMA_OTA_BUFFER_SIZE (10 * 1024)
+#define UART_DMA_OTA_RINGBUF_SIZE (10 * 1024)
 
-typedef enum {
-    UHCI_EVT_PARTIAL_DATA,
-    UHCI_EVT_EOF,
-} uhci_event_t;
+// One second without any new data is treated as end-of-transfer.
+#define UART_DMA_OTA_IDLE_TIMEOUT_MS 1000
 
 typedef struct {
-    QueueHandle_t uhci_queue;
-    size_t receive_size;
-    uint8_t *ota_data1;
-    uint8_t *ota_data2;
-    bool use_ota_data1;
-} ota_example_context_t;
+    RingbufHandle_t ringbuf;
+    volatile bool rx_overflow;
+} ota_rx_context_t;
 
 static bool s_uhci_rx_event_cbs(uhci_controller_handle_t uhci_ctrl, const uhci_rx_event_data_t *edata, void *user_ctx)
 {
-    ota_example_context_t *ctx = (ota_example_context_t *)user_ctx;
-    BaseType_t xTaskWoken = 0;
-    uhci_event_t evt = 0;
+    ota_rx_context_t *ctx = (ota_rx_context_t *)user_ctx;
+    BaseType_t xTaskWoken = pdFALSE;
 
-    if (edata->flags.totally_received) {
-        evt = UHCI_EVT_EOF;
-    } else {
-        evt = UHCI_EVT_PARTIAL_DATA;
+    // Copy each chunk out of the DMA storage buffer before it gets overwritten. In continuous mode
+    // the driver keeps the DMA running across frames, so this fires for every partial node and every
+    // frame EOF without any gap in between.
+    if (xRingbufferSendFromISR(ctx->ringbuf, edata->data, edata->recv_size, &xTaskWoken) != pdTRUE) {
+        ctx->rx_overflow = true;
     }
-
-    // Choose the buffer to store received data
-    ctx->receive_size = edata->recv_size;
-    if (ctx->use_ota_data1) {
-        ctx->ota_data1 = edata->data;
-    } else {
-        ctx->ota_data2 = edata->data;
-    }
-
-    // Toggle the buffer for the next receive
-    ctx->use_ota_data1 = !ctx->use_ota_data1;
-
-    xQueueSendFromISR(ctx->uhci_queue, &evt, &xTaskWoken);
-    return xTaskWoken;
+    return xTaskWoken == pdTRUE;
 }
 
-static void perform_ota_update(uhci_controller_handle_t uhci_ctrl, ota_example_context_t *ctx)
+static void perform_ota_update(uhci_controller_handle_t uhci_ctrl, ota_rx_context_t *ctx)
 {
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
     if (!ota_partition) {
@@ -75,25 +60,38 @@ static void perform_ota_update(uhci_controller_handle_t uhci_ctrl, ota_example_c
     ESP_ERROR_CHECK(esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle));
     ESP_LOGI(TAG, "OTA process started");
 
-    uhci_event_t evt;
-    uint32_t received_size = 0;
+    // Storage buffer for continuous reception. The driver splits it across the DMA nodes and uses it
+    // as a ring, so the OTA image can be much larger than the buffer itself.
     uint8_t *pdata = heap_caps_calloc(1, UART_DMA_OTA_BUFFER_SIZE, MALLOC_CAP_DEFAULT);
     assert(pdata);
-    ESP_ERROR_CHECK(uhci_receive(uhci_ctrl, pdata, UART_DMA_OTA_BUFFER_SIZE));
-    while (1) {
-        if (xQueueReceive(ctx->uhci_queue, &evt, portMAX_DELAY) == pdTRUE) {
-            uint8_t *data_to_write = ctx->use_ota_data1 ? ctx->ota_data2 : ctx->ota_data1;
-            ESP_ERROR_CHECK(esp_ota_write(ota_handle, data_to_write, ctx->receive_size));
-            received_size += ctx->receive_size;
-            if (evt == UHCI_EVT_EOF) {
-                break;
-            }
+    ESP_ERROR_CHECK(uhci_start_receive_continuous(uhci_ctrl, pdata, UART_DMA_OTA_BUFFER_SIZE));
 
+    size_t total_received_size = 0;
+    while (1) {
+        size_t item_size = 0;
+        uint8_t *data = xRingbufferReceive(ctx->ringbuf, &item_size, pdMS_TO_TICKS(UART_DMA_OTA_IDLE_TIMEOUT_MS));
+        if (data) {
+            ESP_ERROR_CHECK(esp_ota_write(ota_handle, data, item_size));
+            vRingbufferReturnItem(ctx->ringbuf, data);
+            total_received_size += item_size;
+        } else if (total_received_size > 0) {
+            // The ring buffer stayed empty for the whole timeout after data had started flowing:
+            // the sender is done. A NULL return only happens when the ring buffer is drained, so no
+            // received bytes are left behind here.
+            break;
+        }
+
+        if (ctx->rx_overflow) {
+            ESP_LOGE(TAG, "RX ring buffer overflow, please reduce the baud rate or increase the ring buffer size");
+            abort();
         }
     }
+
+    // Stop the continuous reception before releasing the storage buffer.
+    ESP_ERROR_CHECK(uhci_stop_receive(uhci_ctrl));
     free(pdata);
 
-    ESP_LOGI(TAG, "Total received size: %ld", received_size);
+    ESP_LOGI(TAG, "Total received size: %zu", total_received_size);
     ESP_ERROR_CHECK(esp_ota_end(ota_handle));
     ESP_ERROR_CHECK(esp_ota_set_boot_partition(ota_partition));
 }
@@ -118,7 +116,7 @@ void app_main(void)
         .max_receive_internal_mem = UART_DMA_OTA_BUFFER_SIZE,
         .max_transmit_size = UART_DMA_OTA_BUFFER_SIZE,
         .dma_burst_size = 32,
-        .rx_eof_flags.idle_eof = 1, // receive finishes when rx line turns idle.
+        .rx_eof_flags.idle_eof = 1, // deliver a frame (EOF) whenever the rx line turns idle.
     };
 
     uhci_controller_handle_t uhci_ctrl;
@@ -126,25 +124,23 @@ void app_main(void)
 
     ESP_LOGI(TAG, "UHCI initialized, baud rate is %d, rx pin is %d", uart_config.baud_rate, EXAMPLE_UART_RX_IO);
 
-    ota_example_context_t *ctx = calloc(1, sizeof(ota_example_context_t));
-    assert(ctx);
-
-    ctx->uhci_queue = xQueueCreate(2, sizeof(uhci_event_t));
-    assert(ctx->uhci_queue);
-
-    ctx->use_ota_data1 = true;  // Start with ota_data1
+    ota_rx_context_t ctx = {
+        .ringbuf = xRingbufferCreate(UART_DMA_OTA_RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF),
+        .rx_overflow = false,
+    };
+    assert(ctx.ringbuf);
 
     uhci_event_callbacks_t uhci_cbs = {
         .on_rx_trans_event = s_uhci_rx_event_cbs,
     };
 
-    ESP_ERROR_CHECK(uhci_register_event_callbacks(uhci_ctrl, &uhci_cbs, ctx));
+    ESP_ERROR_CHECK(uhci_register_event_callbacks(uhci_ctrl, &uhci_cbs, &ctx));
 
-    perform_ota_update(uhci_ctrl, ctx);
+    perform_ota_update(uhci_ctrl, &ctx);
 
     ESP_ERROR_CHECK(uhci_del_controller(uhci_ctrl));
 
-    free(ctx);
+    vRingbufferDelete(ctx.ringbuf);
     ESP_LOGI(TAG, "OTA update successful. Rebooting...");
     esp_restart();
 }

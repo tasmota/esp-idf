@@ -14,8 +14,7 @@ set(crypto_port_inc_dirs "${COMPONENT_DIR}/port/aes/include"
 # Supporting headers
 list(APPEND crypto_port_inc_dirs "${heap_dir}/include")
 
-idf_component_register(SRCS "${srcs}"
-                       INCLUDE_DIRS "${include_dirs}" "${crypto_port_inc_dirs}"
+idf_component_register(INCLUDE_DIRS "${include_dirs}" "${crypto_port_inc_dirs}"
                        PRIV_REQUIRES "${priv_requires}")
 
 # Only build mbedtls libraries
@@ -31,17 +30,18 @@ include_directories("${COMPONENT_DIR}/port/include")
 # Add PSA driver include directory globally for mbedtls targets
 include_directories("${COMPONENT_DIR}/port/psa_driver/include")
 
-# Import mbedtls library targets
-add_subdirectory(mbedtls)
-
-# Set TF_PSA_CRYPTO_CONFIG_FILE before processing subdirectories to prevent override
+# Set TF_PSA_CRYPTO_USER_CONFIG_FILE before add_subdirectory so that
+# all targets (including extras, platform, utilities) pick it up
 set(
     TF_PSA_CRYPTO_USER_CONFIG_FILE "${COMPONENT_DIR}/esp_tee/esp_tee_mbedtls_config.h"
     CACHE STRING "Path to the PSA Crypto configuration file"
     FORCE
 )
 
-set(mbedtls_targets mbedtls tfpsacrypto builtin mbedx509 everest p256m)
+# Import mbedtls library targets
+add_subdirectory(mbedtls)
+
+set(mbedtls_targets mbedtls tfpsacrypto builtin mbedx509 everest p256-m extras platform utilities)
 
 target_sources(tfpsacrypto PRIVATE "${COMPONENT_DIR}/port/esp_hardware.c")
 
@@ -50,6 +50,7 @@ foreach(target ${mbedtls_targets})
                                     -DMBEDTLS_CONFIG_FILE="${COMPONENT_DIR}/esp_tee/esp_tee_mbedtls_config.h")
     set_config_files_compile_definitions(${target})
     target_compile_definitions(${target} PUBLIC MBEDTLS_MAJOR_VERSION=4)
+    target_compile_definitions(${target} PUBLIC __STDC_WANT_LIB_EXT1__=0)
     if(CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU") # TODO IDF-10087
         target_compile_options(${target} PRIVATE "-fno-analyzer")
     endif()

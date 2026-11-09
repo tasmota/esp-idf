@@ -24,6 +24,14 @@
 #include "hal/wdt_hal.h"
 #endif
 #include "hal/uart_ll.h"
+#include "hal/sec_ll.h"
+#include "hal/riscv_trace_hal.h"
+#include "esp_memory_utils.h"
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD && CONFIG_COMPILER_ENABLE_RISCV_ZCMP
+#include "esp_private/hw_stack_guard.h"
+#endif
+
+extern int _bss_end;
 
 #include "esp32h4/rom/cache.h"
 #include "esp32h4/rom/ets_sys.h"
@@ -31,6 +39,9 @@
 
 void esp_system_reset_modules_on_exit(void)
 {
+    // A software reset leaves the trace encoders running, and they would write into RAM after restart
+    riscv_trace_hal_stop_all_encoders();
+
     // Flush any data left in UART FIFOs before reset the UART peripheral
     for (int i = 0; i < SOC_UART_HP_NUM; ++i) {
         if (uart_ll_is_enabled(i)) {
@@ -81,55 +92,24 @@ void esp_system_reset_modules_on_exit(void)
     CLEAR_PERI_REG_MASK(PCR_HMAC_CONF_REG, PCR_HMAC_RST_EN);
     SET_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_ECC_MEM_LP_CTRL_REG, PCR_ECC_MEM_LP_EN);
+    SET_PERI_REG_MASK(PCR_ECC_MEM_LP_CTRL_REG, PCR_ECC_MEM_FORCE_CTRL);
+
+    // Reset crypto clk mux to XTAL (always-on); otherwise if the parent is gated off,
+    // next-boot ROM encryption ops can hang.
+    sec_ll_crypto_clk_src_sel(SOC_MOD_CLK_XTAL);
 
     // UART's sclk is controlled in the PCR register and does not reset with the UART module. The ROM missed enabling
     // it when initializing the ROM UART. If it is not turned on, it will trigger LP_WDT in the ROM.
     uart_ll_sclk_enable(&UART0);
 }
 
-/* "inner" restart function for after RTOS, interrupts & anything else on this
- * core are already stopped. Stalls other core, resets hardware,
- * triggers restart.
-*/
-void esp_restart_noos(void)
+static void IRAM_ATTR __attribute__((noinline, noreturn)) esp_restart_noos_inner(void)
 {
-    // Disable interrupts
-    rv_utils_intr_global_disable();
-#if SOC_RTC_WDT_SUPPORTED
-    // Enable RTC watchdog for 1 second
-    wdt_hal_context_t rtc_wdt_ctx;
-    wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, false);
-    uint32_t stage_timeout_ticks = (uint32_t)(1000ULL * rtc_clk_slow_freq_get_hz() / 1000ULL);
-    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
-    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE0, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_SYSTEM);
-    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE1, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_RTC);
-    //Enable flash boot mode so that flash booting after restart is protected by the RTC WDT.
-    wdt_hal_set_flashboot_en(&rtc_wdt_ctx, true);
-    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
-#endif /* SOC_RTC_WDT_SUPPORTED */
-
     const uint32_t core_id = esp_cpu_get_core_id();
-#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
-    const uint32_t other_core_id = (core_id == 0) ? 1 : 0;
-    esp_cpu_reset(other_core_id);
-    esp_cpu_stall(other_core_id);
-#endif
-
-#if SOC_WDT_SUPPORTED
-    // Disable TG0/TG1 watchdogs
-    wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
-    wdt_hal_write_protect_disable(&wdt0_context);
-    wdt_hal_disable(&wdt0_context);
-    wdt_hal_write_protect_enable(&wdt0_context);
-
-    wdt_hal_context_t wdt1_context = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
-    wdt_hal_write_protect_disable(&wdt1_context);
-    wdt_hal_disable(&wdt1_context);
-    wdt_hal_write_protect_enable(&wdt1_context);
-#endif /* SOC_WDT_SUPPORTED */
 
     // Disable cache
-    Cache_Disable_Cache(CACHE_MAP_ALL);
+    Cache_Disable_Cache(CACHE_MAP_MASK);
 
     esp_system_reset_modules_on_exit();
 
@@ -161,4 +141,65 @@ void esp_restart_noos(void)
     }
 #endif
     ESP_INFINITE_LOOP();
+}
+
+/* "inner" restart function for after RTOS, interrupts & anything else on this
+ * core are already stopped. Stalls other core, resets hardware,
+ * triggers restart.
+*/
+void esp_restart_noos(void)
+{
+    // Disable interrupts
+    rv_utils_intr_global_disable();
+#if SOC_RTC_WDT_SUPPORTED
+    // Enable RTC watchdog for 1 second
+    wdt_hal_context_t rtc_wdt_ctx;
+    wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, false);
+    uint32_t stage_timeout_ticks = (uint32_t)(1000ULL * rtc_clk_slow_freq_get_hz() / 1000ULL);
+    wdt_hal_write_protect_disable(&rtc_wdt_ctx);
+    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE0, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_SYSTEM);
+    wdt_hal_config_stage(&rtc_wdt_ctx, WDT_STAGE1, stage_timeout_ticks, WDT_STAGE_ACTION_RESET_RTC);
+    //Enable flash boot mode so that flash booting after restart is protected by the RTC WDT.
+    wdt_hal_set_flashboot_en(&rtc_wdt_ctx, true);
+    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
+#endif /* SOC_RTC_WDT_SUPPORTED */
+
+#if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
+    const uint32_t core_id = esp_cpu_get_core_id();
+    const uint32_t other_core_id = (core_id == 0) ? 1 : 0;
+    esp_cpu_reset(other_core_id);
+    esp_cpu_stall(other_core_id);
+#endif
+
+#if SOC_WDT_SUPPORTED
+    // Disable TG0/TG1 watchdogs
+    wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
+    wdt_hal_write_protect_disable(&wdt0_context);
+    wdt_hal_disable(&wdt0_context);
+    wdt_hal_write_protect_enable(&wdt0_context);
+
+    wdt_hal_context_t wdt1_context = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
+    wdt_hal_write_protect_disable(&wdt1_context);
+    wdt_hal_disable(&wdt1_context);
+    wdt_hal_write_protect_enable(&wdt1_context);
+#endif /* SOC_WDT_SUPPORTED */
+
+#ifdef CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+    if (esp_ptr_external_ram(esp_cpu_get_sp())) {
+        // If stack is in external RAM (CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM), switch SP to
+        // internal RAM before disabling the cache to avoid a "Cache disabled but cached memory
+        // region accessed" crash.
+
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD && CONFIG_COMPILER_ENABLE_RISCV_ZCMP
+        // Stop hw stack guard before changing SP: new SP is outside task stack bounds.
+        // rtc_clk_cpu_set_to_default_config() (called later) uses vPortEnterCritical() via
+        // ENABLE_CLK_GATE, which can trigger DIG-661 (assist-debug interrupt with mstatus.mie=0).
+        esp_hw_stack_guard_monitor_stop();
+#endif
+        uint32_t new_sp = ESP_ALIGN_DOWN((uint32_t)&_bss_end, 16);
+        rv_utils_set_sp((void *)new_sp);
+    }
+#endif
+
+    esp_restart_noos_inner();
 }

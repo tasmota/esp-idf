@@ -22,14 +22,13 @@ extern "C" {
 
 #define PSA_KEY_LOCATION_ESP_RSA_DS ((psa_key_location_t) 0x800003)
 
-/* IDF-15427: ESP-PSA driver does not support persistent RSA DS keys as of now */
-#if 0
-/* @brief Construct a lifetime for ESP RSA DS keys with default persistence */
+/**
+ * @brief Construct a persistent lifetime for ESP RSA DS keys
+ */
 #define PSA_KEY_LIFETIME_ESP_RSA_DS \
     PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION( \
         PSA_KEY_PERSISTENCE_DEFAULT, \
         PSA_KEY_LOCATION_ESP_RSA_DS)
-#endif
 
 /**
  * @brief Construct a volatile lifetime for ESP RSA DS keys
@@ -38,6 +37,89 @@ extern "C" {
     PSA_KEY_LIFETIME_FROM_PERSISTENCE_AND_LOCATION( \
         PSA_KEY_PERSISTENCE_VOLATILE, \
         PSA_KEY_LOCATION_ESP_RSA_DS)
+
+/**
+ * @brief Buffer size needed to serialize an ESP-RSA DS key into the persistent
+ *        storage layout used by this driver.
+ *
+ * The size depends on the key source: eFuse-sourced keys and Key Manager-sourced
+ * keys (KM-capable SoCs only) use different inline storage structs. The source
+ * is inferred from @p opaque_key — the Key Manager layout is selected when
+ * @p opaque_key->key_recovery_info is non-NULL.
+ *
+ * @param opaque_key  User-facing opaque key (must be non-NULL).
+ * @return Storage buffer size in bytes, or 0 if @p opaque_key is NULL.
+ */
+size_t esp_rsa_ds_persistent_key_buffer_size(const esp_rsa_ds_opaque_key_t *opaque_key);
+
+/**
+ * @brief Serialize an ESP-RSA DS key into the persistent storage layout that
+ *        this driver expects when loading a persistent key from PSA storage.
+ *
+ * Custom PSA ITS backends that synthesize persistent RSA-DS key blobs at
+ * read time can use this helper to produce the @c key_data payload, then wrap
+ * it with esp_psa_its_pack_key_blob() to build the full PSA persistent key blob.
+ *
+ * The output layout (eFuse vs Key Manager) is selected automatically from
+ * @p opaque_key, mirroring the import path. Validation of @p opaque_key is
+ * performed before serialization.
+ *
+ * @param opaque_key  User-facing opaque key.
+ * @param buf         Output buffer (caller-allocated, sized via
+ *                    esp_rsa_ds_persistent_key_buffer_size()).
+ * @param buf_size    Size of @p buf in bytes.
+ * @param[out] out_len Bytes written to @p buf on success.
+ *
+ * @return PSA_SUCCESS on success
+ * @return PSA_ERROR_INVALID_ARGUMENT if any required input is NULL or the
+ *                                    opaque key fields are invalid
+ * @return PSA_ERROR_BUFFER_TOO_SMALL if @p buf_size is insufficient
+ */
+psa_status_t esp_rsa_ds_format_persistent_key_buffer(const esp_rsa_ds_opaque_key_t *opaque_key,
+                                                 uint8_t *buf, size_t buf_size,
+                                                 size_t *out_len);
+
+/**
+ * @brief Parse an ESP-RSA DS persistent key buffer.
+ *
+ * Inverse of esp_rsa_ds_format_persistent_key_buffer(): validates the
+ * key-storage metadata (version + source) in @p buf, then fills @p out
+ * with the same opaque-key shape the format path consumes.
+ *
+ * The caller owns the storage for @p out, including the @c esp_ds_data_ctx_t
+ * it points to (@p out->ds_data_ctx must be non-NULL before the call).
+ * On success, scalar fields (@c efuse_key_id, @c rsa_length_bits) are filled
+ * into the caller's @c esp_ds_data_ctx_t, and the @c esp_ds_data pointer
+ * — together with @c out->key_recovery_info on KM-capable SoCs — aliases
+ * into @p buf. Those pointers remain valid only for as long as @p buf is,
+ * and must not be written through.
+ *
+ * The key source (eFuse vs Key Manager) is conveyed implicitly: on success,
+ * @c out->key_recovery_info is non-NULL iff the buffer was produced from a
+ * Key-Manager-backed key. This mirrors how the format path discriminates
+ * via the same field.
+ *
+ * Custom PSA ITS backends that accept writes (translating PSA-formatted
+ * blobs handed to psa_its_set() into a native storage format) can use this
+ * helper after first stripping the PSA wrapper with esp_psa_its_unpack_key_blob().
+ *
+ * @param buf       Input buffer (as produced by esp_rsa_ds_format_persistent_key_buffer()
+ *                  or written by the driver's import path).
+ * @param buf_len   Length of @p buf in bytes.
+ * @param[in,out] out  Opaque key to fill. @p out->ds_data_ctx must point to a
+ *                  caller-allocated @c esp_ds_data_ctx_t.
+ *
+ * @return PSA_SUCCESS on success
+ * @return PSA_ERROR_INVALID_ARGUMENT if @p buf, @p out, or @p out->ds_data_ctx
+ *                                    is NULL, or @p buf_len is too small, or
+ *                                    the buffer is internally inconsistent
+ *                                    (e.g. invalid RSA length)
+ * @return PSA_ERROR_DATA_INVALID     if the metadata version or key source is
+ *                                    unrecognized, or the embedded esp_ds_data_t
+ *                                    does not match the declared key length
+ */
+psa_status_t esp_rsa_ds_parse_persistent_key_buffer(const uint8_t *buf, size_t buf_len,
+                                                    esp_rsa_ds_opaque_key_t *out);
 
 /**
  * @brief Start the RSA DS opaque sign hash operation
@@ -145,15 +227,23 @@ psa_status_t esp_rsa_ds_opaque_import_key(
     size_t *bits);
 
 /**
- * @brief Return the size of the RSA DS opaque key in bytes
+ * @brief Return the storage buffer size required for an RSA DS opaque key
  *
- * @param key_type Key type
- * @param key_bits Key bits
- * @return Size of the RSA DS opaque key in bytes
+ * For volatile keys, returns a small pointer-based storage size.
+ * For persistent keys, inspects the user-facing import data to determine
+ * the key source and returns the corresponding inline storage struct size.
+ *
+ * @param attributes Key attributes (used to check persistence)
+ * @param key_type   Key type
+ * @param data       Import data (user-facing esp_rsa_ds_opaque_key_t)
+ * @param data_length Length of import data
+ * @return Size of the storage buffer in bytes, or 0 on error
  */
 size_t esp_rsa_ds_opaque_size_function(
+    const psa_key_attributes_t *attributes,
     psa_key_type_t key_type,
-    size_t key_bits);
+    const uint8_t *data,
+    size_t data_length);
 
 /**
  * @brief Set the timeout for the RSA DS session

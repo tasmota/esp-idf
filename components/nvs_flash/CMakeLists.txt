@@ -63,7 +63,12 @@ else()
     set(requires esp_partition esp_blockdev)
     set(priv_requires spi_flash)
     if(NOT ${target} STREQUAL "linux")
-        list(APPEND priv_requires esp_libc esptool_py nvs_sec_provider)
+        # mbedtls is needed for NVS encryption (nvs_encrypted_partition.cpp).
+        # It used to be pulled in transitively via bootloader_support, but
+        # that dep was removed in the bootloader_support / esp_image_verify
+        # split. Declare it explicitly so `idf::mbedtls` exists for the
+        # target_link_libraries() call below.
+        list(APPEND priv_requires esp_libc esptool_py nvs_sec_provider mbedtls)
     endif()
 
     idf_component_register(SRCS "${srcs}"
@@ -71,6 +76,8 @@ else()
                         PRIV_REQUIRES "${priv_requires}"
                         INCLUDE_DIRS "include"
                         PRIV_INCLUDE_DIRS "private_include")
+
+    idf_define_esp_err_codes(HEADERS include/nvs.h)
 
     # If we use the linux target, we need to redirect the crc functions to the linux
     if(${target} STREQUAL "linux")
@@ -89,8 +96,18 @@ else()
         target_link_libraries(${COMPONENT_LIB} PRIVATE idf::mbedtls)
     endif()
 
-    if(CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU") # TODO IDF-10088
-        target_compile_options(${COMPONENT_LIB} PUBLIC "-fno-analyzer")
+    if(CONFIG_COMPILER_STATIC_ANALYZER AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        # GCC fanalyzer false-positive on std::unique_ptr return path in nvs_cxx_api.cpp (TODO GCC-366)
+        set_source_files_properties(
+            src/nvs_cxx_api.cpp
+            PROPERTIES COMPILE_OPTIONS
+            "-Wno-error=analyzer-use-of-uninitialized-value;-Wno-analyzer-use-of-uninitialized-value")
+        # In-place page rebuild unlinks list nodes before destroying them. -fanalyzer reports
+        # that as a leak of '<unknown>' in intrusive_list::erase (lines that only rewrite linkage).
+        set_source_files_properties(
+            src/nvs_pagemanager.cpp
+            PROPERTIES COMPILE_OPTIONS
+            "-Wno-analyzer-malloc-leak")
     endif()
 
 endif() #non-OS build

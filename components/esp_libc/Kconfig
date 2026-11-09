@@ -1,4 +1,5 @@
 menu "LibC"
+    depends on !IDF_TARGET_LINUX
 
     choice LIBC
         prompt "LibC to build application with"
@@ -52,6 +53,22 @@ menu "LibC"
         help
             Enable this option to include be able to call the lock API from
             code that runs while cache is disabled, e.g. IRAM interrupts.
+
+    config LIBC_LIBGCC_IN_IRAM
+        bool "Place all libgcc functions in IRAM"
+        depends on !ESP_ROM_HAS_LIBGCC
+        default n
+        help
+            On targets whose ROM does not provide libgcc, 64-bit integer helpers
+            (shifts, multiply, divide, and similar) are always placed in IRAM.
+            The compiler emits those calls for uint64_t arithmetic, including
+            from IRAM interrupts and other code that runs while the flash cache
+            is disabled.
+
+            Enable this option to also place the remaining libgcc functions in
+            IRAM, including software double-precision helpers. Leave it disabled
+            to keep those functions in flash and reduce IRAM use. The same
+            choice applies to compiler-rt builtins when building with Clang.
 
     choice LIBC_STDOUT_LINE_ENDING
         prompt "Line ending for console output"
@@ -177,6 +194,7 @@ menu "LibC"
         bool "Use performance-optimized memXXX/strXXX functions on misaligned memory access"
         default y
         depends on ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY
+        depends on !(IDF_TARGET_ESP32C5 && ESP32C5_REV_MIN_FULL >= 103)
         help
             Enables performance-optimized implementations of memory and string functions
             when handling misaligned memory.

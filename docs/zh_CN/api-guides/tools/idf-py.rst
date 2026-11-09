@@ -25,7 +25,7 @@ IDF 前端工具 - ``idf.py``
 
     idf.py create-project <project name>
 
-此命令将创建一个新的 ESP-IDF 工程。此外，使用 ``--path`` 选项可指定工程创建路径。
+此命令用于创建一个新的 ESP-IDF 工程。此外，使用 ``--path`` 参数，可以指定项目的创建路径。使用 ``--cpp`` 参数，可以生成 C++ 源文件（<项目名称>.cpp），而不是生成默认的 ``.c`` 文件，同时 ``app_main`` 函数将保持 C 语言链接方式。
 
 创建新组件：``create-component``
 ----------------------------------------
@@ -134,7 +134,7 @@ ESP-IDF 支持多个目标芯片，运行 ``idf.py --list-targets`` 查看当前
 
 每次成功烧录后，构建系统会在构建目录中保存所有已烧录文件（引导加载程序、分区表、应用程序以及其他任何资源）的副本，文件名带有 ``_flashed`` 后缀（例如，``bootloader_flashed.bin``、``partition-table_flashed.bin``）。下次执行 ``idf.py flash`` 命令时会自动使用这些文件，以便快速重新烧录。
 
-无论是否启用 :ref:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` 选项，快速重新烧录都可正常工作。启用该选项可调整应用程序二进制文件的布局，使修改集中在局部区域，从而进一步提升重新烧录的效率，需要重写的 flash 扇区会减少。但该选项可能会增加应用程序二进制文件的大小，不建议用于生产构建。
+无论是否启用 :menuitem:`CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES` 选项，快速重新烧录都可正常工作。启用该选项可调整应用程序二进制文件的布局，使修改集中在局部区域，从而进一步提升重新烧录的效率，需要重写的 flash 扇区会减少。但该选项可能会增加应用程序二进制文件的大小，不建议用于生产构建。
 
 全量烧录
 ^^^^^^^^
@@ -317,7 +317,7 @@ ESP-IDF 的 MCP（Model Context Protocol，模型上下文协议）服务器可�
 
   eim run "idf.py mcp-server"
 
-2. 直接使用 ``idf.py``：在已激活 ESP-IDF 环境的 shell 中运行 ``idf.py mcp-server`` 命令启动 MCP 服务器。必须在有效的 ESP-IDF 项目目录中执行该命令，或者使用 ``idf.py -C <project_dir> mcp-server`` 指定项目路径。
+2. 直接使用 ``idf.py``：在已激活 ESP-IDF 环境的 shell 中运行 ``idf.py mcp-server`` 命令启动 MCP 服务器。该服务器可以在任何目录下启动。使用 ``idf.py -C <project_dir> mcp-server`` 或设置 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量来配置默认项目。如果在启动时未配置任何项目，则在每次调用工具时显式传递项目目录。
 
 .. code-block:: bash
 
@@ -327,21 +327,38 @@ ESP-IDF 的 MCP（Model Context Protocol，模型上下文协议）服务器可�
 
     MCP 服务器需要通过 EIM 安装器来安装 ``mcp`` 功能。有关如何安装特定功能，请参见 `EIM 文档 ＞ CLI 配置 - 全局功能 <https://docs.espressif.com/projects/idf-im-ui/en/latest/cli_configuration.html#global-features-all-versions>`_。
 
+.. note::
+
+    ``mcp-server`` 使用 stdout 作为 MCP JSON-RPC 传输通道。使用该命令时， ``idf.py`` 不会打印通常的信息（例如 ``Executing action:``）。为避免其他输出写入 stdout，该命令不能与其他 ``idf.py`` 命令组合使用。
+
 可用工具与资源
 ^^^^^^^^^^^^^^
 
-MCP 服务器提供以下可用的命令：
+MCP 服务器提供以下工具：
 
 - ``set target``：设置 ESP-IDF 的目标芯片（esp32，esp32s3，esp32c6 等）
 - ``build project``：使用当前目标构建 ESP-IDF 项目
-- ``flash project``：将已构建的项目烧录到已连接的设备，通过端口名称进行指定。
+- ``flash project``：将已构建的项目烧录到已连接的设备，通过端口名称进行指定
 - ``clean project``：清理构建产物
+- ``create project``：基于示例模板创建新的 ESP-IDF 项目，可在尚无项目时使用
+- ``monitor device``：在已烧录的设备上运行一次脚本化的串口监视会话，并等待预期的输出。参见 :ref:`mcp-monitor-device`
+
+项目工具接受可选的 ``project_dir`` 参数。当省略该参数时，工具将默认使用启动时配置的目录（该目录可通过 ``-C`` 参数或 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量指定）。在同时处理多个项目，或启动时未配置默认项目的情况下，你可以明确指示 AI 模型使用某个特定的项目目录。``create project`` 和 ``monitor device`` 工具是例外：前者使用新项目的上级 ``path``；后者与设备交互，而不是针对项目目录。
 
 同时提供以下资源：
 
 - ``project://config``：获取当前项目配置
 - ``project://status``：获取当前项目的构建状态和构建产物
 - ``project://devices``：获取已连接的设备列表
+
+.. _mcp-monitor-device:
+
+监视设备
+^^^^^^^^
+
+AI 助手可以通过 ``monitor device`` 工具观察已烧录设备的打印输出，只需用自然语言提问即可。例如“烧录并检查设备是否在 30 秒内打印 ``Minimum free heap size``”。AI 助手会等待该输出，然后告知你结果。
+
+完整的串口日志会保存在一个文件中。如果你需要了解详细信息，可以让 AI 助手搜索日志文件。
 
 将 ESP-IDF MCP 服务器添加至 IDE 和 AI 智能体
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -459,6 +476,8 @@ ESP-IDF 支持 `CMake presets`_ 以简化多个构建配置的管理。此功能
 
 完整示例请参阅 :example_file:`Multiple Build Configurations Example <build_system/cmake/multi_config/README.md>`。
 
+.. _idf_py_global_options:
+
 全局选项
 ==============
 
@@ -471,6 +490,8 @@ ESP-IDF 支持 `CMake presets`_ 以简化多个构建配置的管理。此功能
 .. important::
 
     注意，某些旧版本 CCache_ 在某些平台上存在 bug，因此如果文件没有按预期重新构建，可禁用 CCache_ 并重新构建。可以通过将环境变量 ``IDF_CCACHE_ENABLE`` 设置为非零值来默认启用 CCache_。
+
+- ``--configdep`` 或 ``--no-configdep`` 用于启用或禁用基于 ``esp-idf-configdep`` 的重建优化。该工具会对编译器生成的依赖文件进行后处理，以减少因 ``sdkconfig.h`` 变更而导致的不必要重建。若重建时仅有少量配置选项频繁变更，这一功能尤为有用。该功能默认启用。若要永久启用 configdep，请将 ``IDF_CONFIGDEP_ENABLE`` 环境变量设置为 ``1``；若要永久禁用，则设置为 ``0``。
 
 - ``-v`` 会使 ``idf.py`` 和构建系统生成详细的构建输出，有助于调试构建错误。
 - ``--cmake-warn-uninitialized`` （或 ``-w``）将使 CMake 只显示在工程目录中发现的变量未初始化的警告，该选项仅控制 CMake 内部的 CMake 变量警告，不控制其他类型的构建警告。将环境变量 ``IDF_CMAKE_WARN_UNINITIALIZED`` 设置为非零值，可永久启用该选项。

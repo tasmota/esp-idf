@@ -10,7 +10,7 @@
 #include "esp_partition.h"
 #include "esp_flash_partitions.h"
 #include "esp_image_format.h"
-#include "../bootloader_flash/include/bootloader_flash_priv.h"
+#include "esp_private/bootloader_flash_internal.h"
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
 #include "esp_err.h"
@@ -288,7 +288,7 @@ void reset_output_pin(uint32_t num_pin)
 
 void mark_app_valid(void)
 {
-#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK
     TEST_ESP_OK(esp_ota_mark_app_valid_cancel_rollback());
 #endif
 }

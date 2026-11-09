@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,7 @@
 #include "multi_heap.h"
 #include "esp_log.h"
 #include "heap_private.h"
+#include "heap_kasan_layout.h"
 #include "esp_system.h"
 
 /*
@@ -345,10 +346,12 @@ esp_err_t heap_caps_monitor_local_minimum_free_size_start(void)
 
     heap = SLIST_FIRST(&registered_heaps);
     for (size_t counter = 0; counter < min_free_bytes_monitoring.counter; counter++) {
-        size_t old_minimum = multi_heap_reset_minimum_free_bytes(heap->heap);
+        if (heap->heap != NULL) {
+            size_t old_minimum = multi_heap_reset_minimum_free_bytes(heap->heap);
 
-        if (min_free_bytes_monitoring.values[counter] > old_minimum) {
-            min_free_bytes_monitoring.values[counter] = old_minimum;
+            if (min_free_bytes_monitoring.values[counter] > old_minimum) {
+                min_free_bytes_monitoring.values[counter] = old_minimum;
+            }
         }
 
         heap = SLIST_NEXT(heap, next);
@@ -367,7 +370,9 @@ esp_err_t heap_caps_monitor_local_minimum_free_size_stop(void)
     MULTI_HEAP_LOCK(&min_free_bytes_monitoring.mux);
     heap_t *heap = SLIST_FIRST(&registered_heaps);
     for (size_t counter = 0; counter < min_free_bytes_monitoring.counter; counter++) {
-        multi_heap_restore_minimum_free_bytes(heap->heap, min_free_bytes_monitoring.values[counter]);
+        if (heap->heap != NULL) {
+            multi_heap_restore_minimum_free_bytes(heap->heap, min_free_bytes_monitoring.values[counter]);
+        }
 
         heap = SLIST_NEXT(heap, next);
     }
@@ -476,13 +481,22 @@ void heap_caps_dump_all(void)
 
 size_t heap_caps_get_allocated_size( void *ptr )
 {
+    /* The heap layout is:
+     * [block-owner][left redzone][user][right redzone]
+     * so undo the KASAN shift before removing the block-owner word.
+     */
+    ptr = KASAN_USER_TO_PTR(ptr);
     // add the block owner bytes back to ptr before handing over
     // to multi heap layer.
     ptr = MULTI_HEAP_REMOVE_BLOCK_OWNER_OFFSET(ptr);
     heap_t *heap = find_containing_heap(ptr);
     assert(heap);
     size_t size = multi_heap_get_allocated_size(heap->heap, ptr);
-    return MULTI_HEAP_REMOVE_BLOCK_OWNER_SIZE(size);
+    size = MULTI_HEAP_REMOVE_BLOCK_OWNER_SIZE(size);
+    if (size > 2 * KASAN_RZ) {
+        size -= 2 * KASAN_RZ;
+    }
+    return size;
 }
 
 size_t heap_caps_get_containing_block_size(void *ptr)

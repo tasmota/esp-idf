@@ -199,8 +199,13 @@ typedef UINT8 tSMP_KEYS;
                                   SMP_SEC_KEY_TYPE_CSRK)
 
 /* default security key distribution value */
+#if (SMP_CTKD_INCLUDED == TRUE)
 #define SMP_SEC_DEFAULT_KEY      (SMP_SEC_KEY_TYPE_ENC | SMP_SEC_KEY_TYPE_ID | \
                                   SMP_SEC_KEY_TYPE_CSRK | SMP_SEC_KEY_TYPE_LK)
+#else
+#define SMP_SEC_DEFAULT_KEY      (SMP_SEC_KEY_TYPE_ENC | SMP_SEC_KEY_TYPE_ID | \
+                                  SMP_SEC_KEY_TYPE_CSRK)
+#endif
 
 #define SMP_SC_KEY_STARTED      0   /* passkey entry started */
 #define SMP_SC_KEY_ENTERED      1   /* passkey digit entered */
@@ -226,6 +231,9 @@ typedef struct {
     BOOLEAN is_pair_cancel;
     BOOLEAN smp_over_br;
     tSMP_AUTH_REQ auth_mode;
+    /* TRUE when the local stack refused the procedure (e.g. hardened re-pairing)
+       and the stored bond must be kept regardless of REMOVE_BOND_ON_PAIR_FAIL_AS_*. */
+    BOOLEAN keep_bond;
 } tSMP_CMPL;
 
 typedef struct {

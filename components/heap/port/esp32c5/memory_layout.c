@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,7 +11,6 @@
 #include "soc/soc.h"
 #include "heap_memory_layout.h"
 #include "esp_heap_caps.h"
-#include "esp_rom_caps.h"
 
 #if CONFIG_SECURE_ENABLE_TEE
 #define SRAM_DIRAM_TEE_ORG               (SOC_DIRAM_IRAM_LOW)
@@ -74,18 +73,6 @@ const size_t soc_memory_type_count = sizeof(soc_memory_types) / sizeof(soc_memor
  */
 #define APP_USABLE_DRAM_END                 (SOC_ROM_STACK_START - SOC_ROM_STACK_SIZE)
 
-#if CONFIG_SECURE_BOOT && ESP_ROM_SUPPORT_SECURE_BOOT_FAST_WAKEUP
-#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
-#define ESP_SECURE_BOOT_DIGEST_LEN 48
-#else /* !CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS */
-#define ESP_SECURE_BOOT_DIGEST_LEN 32
-#endif /* CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS */
-
-#define APP_USABLE_RTC_MEM_END              (SOC_RTC_DATA_HIGH - ESP_SECURE_BOOT_DIGEST_LEN)
-#else
-#define APP_USABLE_RTC_MEM_END              (SOC_RTC_DATA_HIGH)
-#endif
-
 const soc_memory_region_t soc_memory_regions[] = {
 #if CONFIG_SPIRAM
     { SOC_EXTRAM_DATA_LOW,  (SOC_EXTRAM_DATA_HIGH - SOC_EXTRAM_DATA_LOW),   SOC_MEMORY_TYPE_SPIRAM, 0,                      false}, //SPI SRAM, if available
@@ -93,7 +80,7 @@ const soc_memory_region_t soc_memory_regions[] = {
     { SOC_DIRAM_DRAM_LOW,   (APP_USABLE_DRAM_END - SOC_DIRAM_DRAM_LOW),     SOC_MEMORY_TYPE_RAM,    SOC_DIRAM_IRAM_LOW,     false}, //D/IRAM, can be used as trace memory
     { APP_USABLE_DRAM_END,  (SOC_DIRAM_DRAM_HIGH - APP_USABLE_DRAM_END),    SOC_MEMORY_TYPE_RAM,    APP_USABLE_DRAM_END,    true},  //D/IRAM, can be used as trace memory (ROM reserved area)
 #ifdef CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP
-    { SOC_RTC_DATA_LOW,     (APP_USABLE_RTC_MEM_END - SOC_RTC_DATA_LOW),    SOC_MEMORY_TYPE_RTCRAM, 0,                      false}, //LPRAM
+    { SOC_RTC_DATA_LOW,     (SOC_RTC_DATA_HIGH - SOC_RTC_DATA_LOW),         SOC_MEMORY_TYPE_RTCRAM, 0,                      false}, //LPRAM
 #endif
 };
 
@@ -115,10 +102,16 @@ SOC_RESERVE_MEMORY_REGION((intptr_t)&_data_start, (intptr_t)&_heap_start, dram_d
 // Target has a shared D/IRAM virtual address, no need to calculate I_D_OFFSET like previous chips
 SOC_RESERVE_MEMORY_REGION((intptr_t)&_iram_start, (intptr_t)&_iram_end, iram_code);
 
+#if CONFIG_ULP_COPROC_RUN_FROM_HP_MEM
+extern uint32_t _ulp_hp_mem_resv_start;
+extern uint32_t _ulp_hp_mem_resv_end;
+SOC_RESERVE_MEMORY_REGION((intptr_t)&_ulp_hp_mem_resv_start, (intptr_t)&_ulp_hp_mem_resv_end, ulp_hp_mem);
+#endif
+
 /* NOTE: When ESP-TEE is enabled, the start of the internal SRAM
-* is used by the TEE and is protected from any REE access using
-* memory protection mechanisms employed by ESP-TEE.
-*/
+ * is used by the TEE and is protected from any REE access using
+ * memory protection mechanisms employed by ESP-TEE.
+ */
 #if CONFIG_SECURE_ENABLE_TEE
 SOC_RESERVE_MEMORY_REGION((intptr_t)SRAM_DIRAM_TEE_ORG, (intptr_t)(SRAM_DIRAM_TEE_END), tee_diram);
 #endif

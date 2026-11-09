@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
 import http.server
@@ -135,10 +135,6 @@ def test_tee_cli_attestation(dut: Dut) -> None:
     dut.expect('ESP-TEE: Secure services demonstration', timeout=30)
     time.sleep(1)
 
-    att_key_id = dut.app.sdkconfig.get('SECURE_TEE_ATT_KEY_STR_ID')
-    dut.write(f'tee_sec_stg_gen_key {att_key_id} 1')
-    dut.expect(r'Generated ECDSA_SECP256R1 key with ID (\S+)', timeout=30)
-
     # Get the Entity Attestation token from TEE and verify its signature
     dut.write('tee_att_info')
     dut.expect(r'Attestation token - Length: (\d+)', timeout=30)
@@ -241,7 +237,8 @@ def test_tee_cli_secure_ota_wifi(dut: Dut) -> None:
                     raise ValueError('Updated user app is not running')
             else:
                 dut.write(f'tee_ota https://{host_ip}:{str(server_port)}/{tee_bin}')
-                dut.expect('esp_tee_ota_end succeeded', timeout=150)
+                # NOTE: esp_tee_ota_end() restarts the device; the offset check in
+                # the next iteration confirms the update
                 dut.expect('Prepare to restart system!', timeout=150)
 
     finally:

@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | --------- |
 
 # BLE SPP central example
 
@@ -103,8 +103,8 @@ See the Getting Started Guide for full steps to configure and use ESP-IDF to bui
 This is the console output on successful connection:
 
 ```
-I (...) NimBLE_SPP_BLE_CENT: BLE client UART task started
-I (...) NimBLE_SPP_BLE_CENT: BLE Host Task Started
+I (...) NimBLE_SPP_CLIENT: BLE client UART task started
+I (...) NimBLE_SPP_CLIENT: BLE Host Task Started
 I (...) NimBLE: GAP procedure initiated: stop advertising.
 
 I (...) NimBLE: GAP procedure initiated: discovery;
@@ -143,9 +143,9 @@ I (...) NimBLE: received notification; conn_handle=0 attr_handle=16 attr_len=1
 
 I (...) NimBLE: GATT procedure initiated: write;
 I (...) NimBLE: att_handle=16 len=1
-I (...) NimBLE_SPP_BLE_CENT: Write in uart task success!
+I (...) NimBLE_SPP_CLIENT: Write in uart task success!
 
 I (...) NimBLE: GATT procedure initiated: write;
 I (...) NimBLE: att_handle=16 len=1
-I (...) NimBLE_SPP_BLE_CENT: Write in uart task success!
+I (...) NimBLE_SPP_CLIENT: Write in uart task success!
 ```

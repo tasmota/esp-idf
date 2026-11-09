@@ -58,10 +58,35 @@ static bool i3c_master_bus_occupied(i3c_master_bus_num_t bus_num)
 // Forward declaration for DMA transaction handler
 static esp_err_t do_dma_transaction_handler(i3c_master_bus_handle_t bus_handle, i3c_transaction_desc_t *trans);
 
+// RX FIFO level counts 32-bit words. Copy only the remaining user read length.
+static void read_rx_fifo_into_buffer(i3c_master_bus_handle_t i3c_master)
+{
+    size_t fifo_bytes = (size_t)i3c_master_ll_get_rx_fifo_full_count(i3c_master->hal.dev) * 4;
+    size_t copy_size = MIN(fifo_bytes, i3c_master->read_buffer_left_size);
+
+    if (copy_size == 0 || i3c_master->read_fifo_buffer_pointer == NULL) {
+        return;
+    }
+
+    i3c_master_ll_read_rx_port(i3c_master->hal.dev, i3c_master->read_fifo_buffer_pointer, copy_size);
+    i3c_master->read_buffer_left_size -= copy_size;
+    i3c_master->read_fifo_buffer_pointer += copy_size;
+}
+
 static esp_err_t do_fifo_transaction_handler(i3c_master_bus_handle_t bus_handle, i3c_transaction_desc_t *trans)
 {
     bus_handle->cur_trans = trans;
-    bus_handle->read_buffer_left_size = trans->read_buffer ? trans->command_table[0].cmd_h.regular.dl : 0;
+    // Combined write+read stores the read length on a later command, not command 0.
+    size_t read_size = 0;
+    if (trans->read_buffer) {
+        for (size_t i = 0; i < trans->command_table_num; i++) {
+            if (trans->command_table[i].cmd_l.regular.rnw == I3C_MASTER_LL_TRANSFER_DIR_READ) {
+                read_size = trans->command_table[i].cmd_h.regular.dl;
+                break;
+            }
+        }
+    }
+    bus_handle->read_buffer_left_size = read_size;
     bus_handle->read_fifo_buffer_pointer = trans->read_buffer;
 
     size_t actual_write_size = 0;
@@ -141,11 +166,7 @@ static bool handle_transfer_complete_int(i3c_master_bus_handle_t i3c_master)
 
     if (i3c_master->use_dma_transaction == false) {
         portENTER_CRITICAL_SAFE(&i3c_master->spinlock);
-        size_t rx_fifo_content = i3c_master_ll_get_rx_fifo_full_count(i3c_master->hal.dev) * 4;
-        i3c_master_ll_read_rx_port(i3c_master->hal.dev, i3c_master->read_fifo_buffer_pointer, rx_fifo_content);
-
-        i3c_master->read_buffer_left_size -= rx_fifo_content;
-        i3c_master->read_fifo_buffer_pointer += rx_fifo_content;
+        read_rx_fifo_into_buffer(i3c_master);
         portEXIT_CRITICAL_SAFE(&i3c_master->spinlock);
     }
 
@@ -231,11 +252,7 @@ static void handle_rx_data_buf_threshold_int(i3c_master_bus_handle_t i3c_master)
 {
     if (i3c_master->use_dma_transaction == false) {
         portENTER_CRITICAL_SAFE(&i3c_master->spinlock);
-        size_t rx_fifo_content = i3c_master_ll_get_rx_fifo_full_count(i3c_master->hal.dev) * 4;
-        i3c_master_ll_read_rx_port(i3c_master->hal.dev, i3c_master->read_fifo_buffer_pointer, rx_fifo_content);
-
-        i3c_master->read_buffer_left_size -= rx_fifo_content;
-        i3c_master->read_fifo_buffer_pointer += rx_fifo_content;
+        read_rx_fifo_into_buffer(i3c_master);
         portEXIT_CRITICAL_SAFE(&i3c_master->spinlock);
     }
 }
@@ -369,9 +386,9 @@ static esp_err_t i3c_master_init_dma(i3c_master_bus_t *i3c_master_handle, const 
     ESP_GOTO_ON_ERROR(gdma_config_transfer(i3c_master_handle->dma_tx_chan, &transfer_cfg), err2, TAG, "Config DMA tx channel transfer failed");
 
     // create DMA link list
-    size_t int_mem_align = 0;
-    gdma_get_alignment_constraints(i3c_master_handle->dma_tx_chan, &int_mem_align, NULL);
-    i3c_master_handle->dma_buffer_alignment = I3C_ALIGN_UP(int_mem_align, I3C_MASTER_DMA_INTERFACE_ALIGNMENT);
+    gdma_channel_alignment_info_t align_info;
+    gdma_get_channel_alignment_constraints(i3c_master_handle->dma_tx_chan, &align_info);
+    i3c_master_handle->dma_buffer_alignment = I3C_ALIGN_UP(align_info.int_mem_alignment, I3C_MASTER_DMA_INTERFACE_ALIGNMENT);
     size_t num_dma_nodes = esp_dma_calculate_node_count(dma_config->max_transfer_size, i3c_master_handle->dma_buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
     gdma_link_list_config_t dma_link_config = {
         .item_alignment = 4,                   // 4 bytes alignment for AHB-DMA
@@ -478,7 +495,7 @@ static esp_err_t i3c_master_bus_destroy(i3c_master_bus_handle_t bus_handle)
     }
 
     if (bus_handle->clock_source) {
-        esp_clk_tree_enable_src((soc_module_clk_t)bus_handle->clock_source, false);
+        esp_clk_tree_release_src((soc_module_clk_t)bus_handle->clock_source);
     }
 
 #if CONFIG_PM_ENABLE
@@ -706,7 +723,8 @@ esp_err_t i3c_new_master_bus(const i3c_master_bus_config_t *bus_config, i3c_mast
     esp_err_t ret = ESP_OK;
     i3c_master_bus_t *i3c_master_handle = NULL;
 
-    i3c_master_handle = (i3c_master_bus_t*) heap_caps_calloc(1, sizeof(i3c_master_bus_t), I3C_MASTER_MEM_ALLOC_CAPS);
+    // always allocate memory from internal memory because the driver object contains atomic variable
+    i3c_master_handle = (i3c_master_bus_t*) heap_caps_calloc(1, sizeof(i3c_master_bus_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(i3c_master_handle, ESP_ERR_NO_MEM, TAG, "no mem for i3c master bus handle");
 
     s_i3c_master_platform.spinlock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
@@ -742,7 +760,7 @@ esp_err_t i3c_new_master_bus(const i3c_master_bus_config_t *bus_config, i3c_mast
     uint32_t periph_src_clk_hz = 0;
     i3c_master_handle->clock_source = bus_config->clock_source;
 
-    esp_clk_tree_enable_src((soc_module_clk_t)i3c_master_handle->clock_source, true);
+    esp_clk_tree_acquire_src((soc_module_clk_t)i3c_master_handle->clock_source, NULL);
     PERIPH_RCC_ATOMIC() {
         i3c_master_ll_set_source_clk(i3c_master_handle->hal.dev, i3c_master_handle->clock_source);
     }

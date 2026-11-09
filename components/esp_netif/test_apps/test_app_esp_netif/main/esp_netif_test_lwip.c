@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -18,6 +18,7 @@
 #include "test_utils.h"
 #include "memory_checks.h"
 #include "lwip/netif.h"
+#include "lwip/esp_pbuf_ref.h"
 #include "esp_netif_test.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -567,6 +568,8 @@ TEST(esp_netif, get_set_hostname)
  * - We create 10 netifs with prios: 0, 1, 2, 3, 4, 0, 0, ...., 0 (netifs[nr_of_netifs/2] has max_prio)
  * - We check the default netif is correct after bringing it down/up, overriding it
  * - We destroy the default netif and check again
+ * - We set and clear a manual override, then check if we are back to using auto-selection
+ * - We modify route_prio without changing the interface state, then explicitly re-evaluate the default netif
  * - We destroy the remaining netifs
  */
 TEST(esp_netif, route_priority)
@@ -615,6 +618,22 @@ TEST(esp_netif, route_priority)
     esp_netif_action_stop(netifs[max_prio_i], 0, 0, 0);
     // ...so the current default is on (max_prio-1)
     TEST_ASSERT_EQUAL_PTR(esp_netif_get_netif_impl(netifs[max_prio_i - 1]), netif_default);
+
+    // override the default with a low-prio netif, then clear the override
+    // and check if the auto-selected default is restored
+    int low_prio_i = max_prio_i + 1;  // netif with route_prio == 0 that is still up
+    esp_netif_set_default_netif(netifs[low_prio_i]);
+    TEST_ASSERT_EQUAL_PTR(esp_netif_get_netif_impl(netifs[low_prio_i]), netif_default);
+    TEST_ESP_OK(esp_netif_set_default_netif(NULL)); // remove override
+    TEST_ASSERT_EQUAL_PTR(esp_netif_get_netif_impl(netifs[max_prio_i - 1]), netif_default);
+
+    // change route_prio at runtime: the default netif does not change until we ask for re-evaluation
+    esp_netif_set_route_prio(netifs[low_prio_i], max_prio_i + 10);
+    TEST_ASSERT_EQUAL_PTR(esp_netif_get_netif_impl(netifs[max_prio_i - 1]), netif_default);
+    // trigger default netif re-evaluation
+    TEST_ESP_OK(esp_netif_set_default_netif(NULL));
+    TEST_ASSERT_EQUAL_PTR(esp_netif_get_netif_impl(netifs[low_prio_i]), netif_default);
+
     // destroy one by one and check it's been removed
     for (int i=0; i < override_prio_i; ++i) {
         esp_netif_destroy(netifs[i]);
@@ -740,6 +759,44 @@ TEST(esp_netif, initial_mtu_config_applied)
     esp_netif_destroy(n2);
 }
 
+static int s_l2_free_calls;
+static void test_l2_free(void *h, void *buffer)
+{
+    TEST_ASSERT_EQUAL_PTR((void *)0x1234, h);
+    TEST_ASSERT_EQUAL_PTR(&s_l2_free_calls, buffer);
+    ++s_l2_free_calls;
+}
+
+TEST(esp_netif, pbuf_uses_allocated_rx_free_callback)
+{
+    test_case_uses_tcpip();
+
+    esp_netif_driver_ifconfig_t driver_config = {
+        .handle = (void *)0x1234,
+        .driver_free_rx_buffer = test_l2_free,
+    };
+    esp_netif_config_t cfg = {
+        .base = ESP_NETIF_BASE_DEFAULT_WIFI_STA,
+        .driver = &driver_config,
+        .stack = ESP_NETIF_NETSTACK_DEFAULT_WIFI_STA,
+    };
+    esp_netif_t *esp_netif = esp_netif_new(&cfg);
+    TEST_ASSERT_NOT_NULL(esp_netif);
+
+    uint8_t payload = 0;
+    s_l2_free_calls = 0;
+    struct pbuf *pbuf = esp_pbuf_allocate(esp_netif, &payload, sizeof(payload), &s_l2_free_calls);
+    TEST_ASSERT_NOT_NULL(pbuf);
+
+    esp_netif_driver_ifconfig_t empty_driver_config = { };
+    TEST_ESP_OK(esp_netif_set_driver_config(esp_netif, &empty_driver_config));
+
+    TEST_ASSERT_EQUAL(1, pbuf_free(pbuf));
+    TEST_ASSERT_EQUAL(1, s_l2_free_calls);
+
+    esp_netif_destroy(esp_netif);
+}
+
 TEST_GROUP_RUNNER(esp_netif)
 {
     /**
@@ -770,6 +827,7 @@ TEST_GROUP_RUNNER(esp_netif)
     RUN_TEST_CASE(esp_netif, dhcp_server_state_transitions_mesh)
 #endif
     RUN_TEST_CASE(esp_netif, initial_mtu_config_applied)
+    RUN_TEST_CASE(esp_netif, pbuf_uses_allocated_rx_free_callback)
     RUN_TEST_CASE(esp_netif, route_priority)
     RUN_TEST_CASE(esp_netif, set_get_dnsserver)
     RUN_TEST_CASE(esp_netif, unified_netif_status_event)

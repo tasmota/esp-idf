@@ -26,6 +26,7 @@
 #include "soc/clk_tree_defs.h"
 #include "soc/hp_system_struct.h"
 #include "rom/opi_flash.h"
+#include "esp_rom_sys.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,10 +36,6 @@ extern "C" {
 #define PSRAM_CTRLR_LL_MSPI_ID_3            3
 #define PSRAM_CTRLR_LL_MSPI_ID_SYSTEM       PSRAM_CTRLR_LL_MSPI_ID_2
 #define PSRAM_CTRLR_LL_MSPI_ID_PERI         PSRAM_CTRLR_LL_MSPI_ID_3
-
-#define PSRAM_CTRLR_LL_PMS_REGION_NUMS      4
-#define PSRAM_CTRLR_LL_PMS_ATTR_WRITABLE    (1<<0)
-#define PSRAM_CTRLR_LL_PMS_ATTR_READABLE    (1<<1)
 
 #define PSRAM_CTRLR_LL_FIFO_MAX_BYTES       64
 
@@ -59,6 +56,14 @@ extern "C" {
                                                  PSRAM_CTRLR_LL_EVENT_TX_TRANS_UDF)
 
 #define PSRAM_CTRLR_LL_INTR_EVENT_SUPPORTED      1
+
+/**
+ * ESP32-P4 MSPI revision < 3.0 lacks SPIMEM CS force-control (cs_keep_active /
+ * cs0_dis / cs1_dis) needed to assert CE# and wake PSRAM from half-sleep.
+ * The device driver must issue a dummy MSPI write instead.
+ * Revision >= 3.0 can use psram_ctrlr_ll_half_sleep_wakeup().
+ */
+#define PSRAM_CTRLR_LL_MSPI_WAKEUP_WORKAROUND    (HAL_CONFIG(CHIP_SUPPORT_MIN_REV) < 300)
 
 /**
  * @brief Set PSRAM write cmd
@@ -700,101 +705,6 @@ static inline uint32_t psram_ctrlr_ll_get_page_size(uint32_t mspi_id)
 }
 
 /**
- * @brief Enable PMS ECC
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- * @param en           enable / disable
- */
-__attribute__((always_inline))
-static inline void psram_ctrlr_ll_enable_pms_region_ecc(uint32_t mspi_id, uint32_t region_id, bool en)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    SPIMEM2.smem_pmsn_attr[region_id].smem_pms_ecc = en;
-}
-
-/**
- * @brief Set PMS attr
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- * @param attr_mask    attribute mask
- */
-__attribute__((always_inline))
-static inline void psram_ctrlr_ll_set_pms_region_attr(uint32_t mspi_id, uint32_t region_id, uint32_t attr_mask)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    SPIMEM2.smem_pmsn_attr[region_id].smem_pms_wr_attr = 0;
-    SPIMEM2.smem_pmsn_attr[region_id].smem_pms_rd_attr = 0;
-    if (attr_mask & PSRAM_CTRLR_LL_PMS_ATTR_WRITABLE) {
-        SPIMEM2.smem_pmsn_attr[region_id].smem_pms_wr_attr = 1;
-    }
-    if (attr_mask & PSRAM_CTRLR_LL_PMS_ATTR_READABLE) {
-        SPIMEM2.smem_pmsn_attr[region_id].smem_pms_rd_attr = 1;
-    }
-}
-
-/**
- * @brief Set PMS address
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- * @param addr         start addr
- */
-__attribute__((always_inline))
-static inline void psram_ctrlr_ll_set_pms_region_start_addr(uint32_t mspi_id, uint32_t region_id, uint32_t addr)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    SPIMEM2.smem_pmsn_addr[region_id].smem_pms_addr_s = addr;
-}
-
-/**
- * @brief Set PMS size
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- * @param size         size
- */
-__attribute__((always_inline))
-static inline void psram_ctrlr_ll_set_pms_region_size(uint32_t mspi_id, uint32_t region_id, uint32_t size)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    SPIMEM2.smem_pmsn_size[region_id].smem_pms_size = size;
-}
-
-/**
- * @brief Get PMS address
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- */
-__attribute__((always_inline))
-static inline uint32_t psram_ctrlr_ll_get_pms_region_start_addr(uint32_t mspi_id, uint32_t region_id)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    return SPIMEM2.smem_pmsn_addr[region_id].smem_pms_addr_s;
-}
-
-/**
- * @brief Get PMS size
- *
- * @param mspi_id      mspi_id
- * @param region_id    region_id
- */
-__attribute__((always_inline))
-static inline uint32_t psram_ctrlr_ll_get_pms_region_size(uint32_t mspi_id, uint32_t region_id)
-{
-    (void)mspi_id;
-    HAL_ASSERT(region_id < PSRAM_CTRLR_LL_PMS_REGION_NUMS);
-    return SPIMEM2.smem_pmsn_size[region_id].smem_pms_size;
-}
-
-/**
  * @brief PSRAM common transaction
  *
  * See `opi_flash.h` for parameters
@@ -945,6 +855,29 @@ static inline void psram_ctrlr_ll_enable_core_err_resp(void)
 {
     HP_SYSTEM.core_err_resp_dis.val = 0x0;
 }
+
+#if !PSRAM_CTRLR_LL_MSPI_WAKEUP_WORKAROUND
+/**
+ * @brief Wake PSRAM from half-sleep via MSPI CS controls (P4 MSPI rev >= 3.0).
+ *
+ * MSPI2: mem_cs_oe_ctrl drives CS. MSPI3: cs_keep_active + cs0/cs1_dis for CE#.
+ * Restore MSPI2/MSPI3 cs settings when done.
+ */
+__attribute__((always_inline))
+static inline void psram_ctrlr_ll_half_sleep_wakeup(void)
+{
+    bool old_oe_ctrl = SPIMEM2.mem_misc.mem_cs_oe_ctrl;
+    SPIMEM2.mem_misc.mem_cs_oe_ctrl = 1;
+    SPIMEM3.misc.cs_keep_active = 1;
+    SPIMEM3.misc.cs0_dis = 1;
+    SPIMEM3.misc.cs1_dis = 0;
+    esp_rom_delay_us(3);
+    SPIMEM3.misc.cs1_dis = 1;
+    SPIMEM3.misc.cs0_dis = 0;
+    SPIMEM3.misc.cs_keep_active = 0;
+    SPIMEM2.mem_misc.mem_cs_oe_ctrl = old_oe_ctrl;
+}
+#endif
 
 #ifdef __cplusplus
 }

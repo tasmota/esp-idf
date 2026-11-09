@@ -6,7 +6,7 @@ Logging library
 Overview
 --------
 
-ESP-IDF provides a flexible logging system with two configurable versions, **Log V1** and **Log V2**, selectable via :ref:`CONFIG_LOG_VERSION`. This document outlines their features, configurations, usage guidelines, and performance comparisons.
+ESP-IDF provides a flexible logging system with two configurable versions, **Log V1** and **Log V2**, selectable via :menuitem:`CONFIG_LOG_VERSION`. This document outlines their features, configurations, usage guidelines, and performance comparisons.
 
 - **Log V1** (default): The original implementation designed for simplicity. It is optimized for early and DRAM logging but has higher flash usage and lacks flexibility.
 - **Log V2**: The enhanced implementation improves flexibility, reduces flash usage, and centralizes log formatting but requires a bit more stack.
@@ -62,9 +62,9 @@ Log Level Settings
 
 Log level settings control which logs are included in the binary and their visibility at runtime. There are two types of log level settings:
 
-- **Log level**: Specifies which log levels are displayed at runtime. The bootloader's **log level** is configured via :ref:`CONFIG_BOOTLOADER_LOG_LEVEL`, while the application's **log level** is set via :ref:`CONFIG_LOG_DEFAULT_LEVEL`. The current log level can be retrieved using the function ``esp_log_get_default_level``.
+- **Log level**: Specifies which log levels are displayed at runtime. The bootloader's **log level** is configured via :menuitem:`CONFIG_BOOTLOADER_LOG_LEVEL`, while the application's **log level** is set via :menuitem:`CONFIG_LOG_DEFAULT_LEVEL`. The current log level can be retrieved using the function ``esp_log_get_default_level``.
 
-- **Maximum log level**: Determines which log levels are included in the binary. Logs above this level are discarded at compile time and excluded from the final image. It can be set higher than the **log level**, allowing additional logs to be included in the binary and enabling them for debugging later if needed via :cpp:func:`esp_log_level_set`. The :ref:`CONFIG_LOG_MAXIMUM_LEVEL` option enables this feature for the application, but the bootloader does not support it. For the bootloader, the **maximum log level** is always the same as the **log level**.
+- **Maximum log level**: Determines which log levels are included in the binary. Logs above this level are discarded at compile time and excluded from the final image. It can be set higher than the **log level**, allowing additional logs to be included in the binary and enabling them for debugging later if needed via :cpp:func:`esp_log_level_set`. The :menuitem:`CONFIG_LOG_MAXIMUM_LEVEL` option enables this feature for the application, but the bootloader does not support it. For the bootloader, the **maximum log level** is always the same as the **log level**.
 
 Example for the application: if the **log level** is set to **Warning** and the **maximum log level** is set to **Debug**, the binary will include log messages of levels **Error**, **Warning**, **Info**, and **Debug**. However, at runtime, only log messages of levels **Error** and **Warning** will be outputted unless the log level is explicitly changed using :cpp:func:`esp_log_level_set`. The log level can be adjusted, increased or decreased, depending on the user's needs.
 
@@ -95,7 +95,7 @@ Runtime **Log Level** Setting
 
 Only the application supports changing the log level at runtime. The bootloader does not support this feature.
 
-By default, all log levels up to the **log level** are enabled at the startup. The function :cpp:func:`esp_log_level_set` can be used to set the **log level** globally or on a per-module basis. Modules are identified by their tags, which are human-readable ASCII zero-terminated strings. This functionality depends on :ref:`CONFIG_LOG_DYNAMIC_LEVEL_CONTROL`, which is enabled by default. If this feature is not required, you can disable it to reduce code size and improve performance.
+By default, all log levels up to the **log level** are enabled at the startup. The function :cpp:func:`esp_log_level_set` can be used to set the **log level** globally or on a per-module basis. Modules are identified by their tags, which are human-readable ASCII zero-terminated strings. This functionality depends on :menuitem:`CONFIG_LOG_DYNAMIC_LEVEL_CONTROL`, which is enabled by default. If this feature is not required, you can disable it to reduce code size and improve performance.
 
 Example: Set the log level to ``ERROR`` for all components (global setting):
 
@@ -103,7 +103,7 @@ Example: Set the log level to ``ERROR`` for all components (global setting):
 
    esp_log_level_set("*", ESP_LOG_ERROR);
 
-Adjusting log output per module (tag) depends on :ref:`CONFIG_LOG_TAG_LEVEL_IMPL`, which is enabled by default. If this feature is not required, you can disable it to reduce code size and improve performance:
+Adjusting log output per module (tag) depends on :menuitem:`CONFIG_LOG_TAG_LEVEL_IMPL`, which is enabled by default. If this feature is not required, you can disable it to reduce code size and improve performance:
 
 Example: Set the log level to ``WARNING`` only for the Wi-Fi component (module-specific setting):
 
@@ -190,24 +190,24 @@ Log Format
 
 The logging system supports the following formatting options, applicable for both the application and bootloader:
 
-- **Color**: Adds color codes to enhance log visibility globally. Controlled by :ref:`CONFIG_LOG_COLORS`, which is disabled by default because the ESP-IDF monitor tool (`idf.py monitor`) can detect the log level by its **level name** and apply the standard IDF color scheme.
+- **Color**: Adds color codes to enhance log visibility globally. Controlled by :menuitem:`CONFIG_LOG_COLORS`, which is disabled by default because the ESP-IDF monitor tool (`idf.py monitor`) can detect the log level by its **level name** and apply the standard IDF color scheme.
 
-  - For **Log V2**, the :ref:`CONFIG_LOG_COLORS_SUPPORT` option enables runtime support for adding color output to specific logs, files, or components, even if global color is disabled. To enable color for a specific context use ``ESP_LOG_COLOR_DISABLED``.
+  - For **Log V2**, the :menuitem:`CONFIG_LOG_COLORS_SUPPORT` option enables runtime support for adding color output to specific logs, files, or components, even if global color is disabled. To enable color for a specific context use ``ESP_LOG_COLOR_DISABLED``.
 
   .. note::
 
-    Please note that IDF Monitor requires the log message format described above in order to apply color highlighting automatically. The minimum required format is a log level name followed by a timestamp, and each log message must end with a newline character. For example, ``I (56): Log message\n``. If this format is not followed, such as when the timestamp is disabled, automatic log coloring will not work. In these cases, it is recommended to enable :ref:`CONFIG_LOG_COLORS` in the menuconfig. Another limitation is that for multi-line log messages, only the first line will be colored correctly.
+    Please note that IDF Monitor requires the log message format described above in order to apply color highlighting automatically. The minimum required format is a log level name followed by a timestamp, and each log message must end with a newline character. For example, ``I (56): Log message\n``. If this format is not followed, such as when the timestamp is disabled, automatic log coloring will not work. In these cases, it is recommended to enable :menuitem:`CONFIG_LOG_COLORS` in the menuconfig. Another limitation is that for multi-line log messages, only the first line will be colored correctly.
 
 - **Level Name**: A single letter (I, W, E, D, V) indicating log verbosity, displayed at the start of each message. Useful for identifying log levels, especially when color is disabled, as utilized by the ESP-IDF monitor tool.
 
-- **Timestamp**: Adds a timestamp to log messages globally. Controlled by :ref:`CONFIG_LOG_TIMESTAMP_SOURCE`.
+- **Timestamp**: Adds a timestamp to log messages globally. Controlled by :menuitem:`CONFIG_LOG_TIMESTAMP_SOURCE`.
 
   - **None**: No timestamp. Useful for log analysis or debugging where timing is not critical. Saves processing power and memory. Available only for **Log V2**.
   - **Milliseconds since boot** `(18532)` (default): Derived from the RTOS tick count multiplied by the tick period.
   - **System time (HH:MM:SS.sss)** `(14:31:18.532)`: Displays time in hours, minutes, seconds, and milliseconds.
   - **System time (YY-MM-DD HH:MM:SS.sss)** `(2023-08-15 14:31:18.532)`: Similar to the above, but also includes the date.
   - **Unix time in milliseconds** `(1692099078532)`: Displays Unix time in milliseconds.
-  - For **Log V2**, the :ref:`CONFIG_LOG_TIMESTAMP_SUPPORT` option enables runtime support for adding timestamp output to specific logs, files, or components, even if global timestamp is disabled. To enable the **Milliseconds since boot** timestamp for a specific context, use ``ESP_LOG_TIMESTAMP_DISABLED``.
+  - For **Log V2**, the :menuitem:`CONFIG_LOG_TIMESTAMP_SUPPORT` option enables runtime support for adding timestamp output to specific logs, files, or components, even if global timestamp is disabled. To enable the **Milliseconds since boot** timestamp for a specific context, use ``ESP_LOG_TIMESTAMP_DISABLED``.
 
 - **Tag**: Displays a user-defined identifier for the source module.
 
@@ -226,15 +226,15 @@ The following options are applicable only for **Log V2** and are used alongside 
   - Default: ``0`` (enables all formatting items such as color, timestamps, tags, and end line).
   - Define as ``1`` to disable all formatting items for the specified scope.
 
-- **ESP_LOG_COLOR_DISABLED**: Requires :ref:`CONFIG_LOG_COLORS_SUPPORT` to be enabled.
+- **ESP_LOG_COLOR_DISABLED**: Requires :menuitem:`CONFIG_LOG_COLORS_SUPPORT` to be enabled.
 
-  - If global color (:ref:`CONFIG_LOG_COLORS`) is disabled, define as ``0`` to enable color output for the specified scope.
-  - If global color (:ref:`CONFIG_LOG_COLORS`) is enabled, define as ``1`` to disable color output for the specified scope.
+  - If global color (:menuitem:`CONFIG_LOG_COLORS`) is disabled, define as ``0`` to enable color output for the specified scope.
+  - If global color (:menuitem:`CONFIG_LOG_COLORS`) is enabled, define as ``1`` to disable color output for the specified scope.
 
-- **ESP_LOG_TIMESTAMP_DISABLED**: Requires :ref:`CONFIG_LOG_TIMESTAMP_SUPPORT` to be enabled.
+- **ESP_LOG_TIMESTAMP_DISABLED**: Requires :menuitem:`CONFIG_LOG_TIMESTAMP_SUPPORT` to be enabled.
 
-  - If global timestamping (:ref:`CONFIG_LOG_TIMESTAMP_SOURCE`) is disabled, define as ``0`` to enable tick timestamp output for the specified scope.
-  - If global timestamping (:ref:`CONFIG_LOG_TIMESTAMP_SOURCE`) is enabled, define as ``1`` to disable tick timestamp output for the specified scope.
+  - If global timestamping (:menuitem:`CONFIG_LOG_TIMESTAMP_SOURCE`) is disabled, define as ``0`` to enable tick timestamp output for the specified scope.
+  - If global timestamping (:menuitem:`CONFIG_LOG_TIMESTAMP_SOURCE`) is enabled, define as ``1`` to disable tick timestamp output for the specified scope.
 
 - **ESP_LOG_MODE_BINARY_EN**: Requires ``CONFIG_LOG_MODE_BINARY`` or ``CONFIG_BOOTLOADER_LOG_MODE_BINARY`` to be enabled.
 
@@ -295,7 +295,7 @@ The logging library allows adjusting log output per module (tag) at runtime usin
 
 There are three settings that control the ability to change the log level at runtime globally or per module (tag):
 
-- **Dynamic Log Level Control** (:ref:`CONFIG_LOG_DYNAMIC_LEVEL_CONTROL`, enabled by default): Enables runtime log level changes via :cpp:func:`esp_log_level_set`. This feature increases flexibility but adds memory and performance overhead. If binary size is a concern and dynamic log level changes are unnecessary, consider disabling this option, especially when :ref:`CONFIG_LOG_TAG_LEVEL_IMPL` is set to **None**, to minimize program size.
+- **Dynamic Log Level Control** (:menuitem:`CONFIG_LOG_DYNAMIC_LEVEL_CONTROL`, enabled by default): Enables runtime log level changes via :cpp:func:`esp_log_level_set`. This feature increases flexibility but adds memory and performance overhead. If binary size is a concern and dynamic log level changes are unnecessary, consider disabling this option, especially when :menuitem:`CONFIG_LOG_TAG_LEVEL_IMPL` is set to **None**, to minimize program size.
 
   If your application does not require dynamic log level adjustments, disabling this option can improve efficiency by:
 
@@ -307,7 +307,7 @@ There are three settings that control the ability to change the log level at run
 
   - Boosting log operation performance by up to 10 times.
 
-- **Tag-Level Checks** (:ref:`CONFIG_LOG_TAG_LEVEL_IMPL`, default **Cache + Linked List**): Determines how per-tag log level checks are performed, affecting memory usage and lookup speed:
+- **Tag-Level Checks** (:menuitem:`CONFIG_LOG_TAG_LEVEL_IMPL`, default **Cache + Linked List**): Determines how per-tag log level checks are performed, affecting memory usage and lookup speed:
 
   - **None**: Disables per-tag log level checks entirely, reducing overhead but removing runtime flexibility.
 
@@ -315,21 +315,21 @@ There are three settings that control the ability to change the log level at run
 
   - **Cache + Linked List** (Default): It is a hybrid mode that combines caching with a **linked list** for log tag level checks. This hybrid approach offers a balance between speed and memory usage. The cache stores recently accessed log tags and their corresponding log levels, providing faster lookups for frequently used tags. The cache approach compares the tag pointers, which is faster than performing full string comparisons. For less frequently used tags, the **linked list** is utilized to search for the log level. This option may not work properly when dynamic tag definitions are used, as it relies on tag pointer comparisons in the cache, which are not suitable for dynamically defined tags. This hybrid approach improves the efficiency of log level retrieval by leveraging the speed of caching for common tags and the memory efficiency of a linked list for less frequently used tags. Selecting this option automatically enables **Dynamic Log Level Control**.
 
-    There are some cache configurations to balance memory usage and lookup performance. These settings determine how log tag levels are stored and accessed: :ref:`CONFIG_LOG_TAG_LEVEL_CACHE_IMPL`.
+    There are some cache configurations to balance memory usage and lookup performance. These settings determine how log tag levels are stored and accessed: :menuitem:`CONFIG_LOG_TAG_LEVEL_CACHE_IMPL`.
 
     - **Array**: A simple implementation without reordering, suitable for low-memory applications that prioritize simplicity.
 
-    - **Binary Min-Heap** (default): An optimized implementation for fast lookups with automatic reordering. Ideal for high-performance applications with sufficient memory. The **Cache Size** (:ref:`CONFIG_LOG_TAG_LEVEL_IMPL_CACHE_SIZE`) defines the capacity, which defaults to 31 entries.
+    - **Binary Min-Heap** (default): An optimized implementation for fast lookups with automatic reordering. Ideal for high-performance applications with sufficient memory. The **Cache Size** (:menuitem:`CONFIG_LOG_TAG_LEVEL_IMPL_CACHE_SIZE`) defines the capacity, which defaults to 31 entries.
 
     A larger cache size enhances lookup performance for frequently accessed log tags but increases memory consumption. In contrast, a smaller cache size conserves memory but may result in more frequent evictions of less commonly used log tags.
 
-- **Master Log Level** (:ref:`CONFIG_LOG_MASTER_LEVEL`, disabled by default): It is an optional setting designed for specific debugging scenarios. It enables a global "master" log level check that occurs before timestamps and tag cache lookups. This is useful for compiling numerous logs that can be selectively enabled or disabled at runtime while minimizing performance impact when log output is unnecessary.
+- **Master Log Level** (:menuitem:`CONFIG_LOG_MASTER_LEVEL`, disabled by default): It is an optional setting designed for specific debugging scenarios. It enables a global "master" log level check that occurs before timestamps and tag cache lookups. This is useful for compiling numerous logs that can be selectively enabled or disabled at runtime while minimizing performance impact when log output is unnecessary.
 
   Common use cases include temporarily disabling logs during time-critical or CPU-intensive operations and re-enabling them later.
 
   .. note:: For **Log V1**, this feature may significantly increase program size based on the number of compiled logs. For **Log V2**, the impact is minimal as the check is integrated within the log handler.
 
-  If enabled, the master log level defaults to :ref:`CONFIG_LOG_DEFAULT_LEVEL` and can be adjusted at runtime using :cpp:func:`esp_log_set_level_master`. This global check takes precedence over ``esp_log_get_default_level``.
+  If enabled, the master log level defaults to :menuitem:`CONFIG_LOG_DEFAULT_LEVEL` and can be adjusted at runtime using :cpp:func:`esp_log_set_level_master`. This global check takes precedence over ``esp_log_get_default_level``.
 
   The snippet below shows how it works. Setting the **Master log level** to ``ESP_LOG_NONE`` disables all logging globally. :cpp:func:`esp_log_level_set` does not currently affect logging. However, after the **Master log level** is adjusted to a higher level, logs will be printed as configured by :cpp:func:`esp_log_level_set`:
 
@@ -665,7 +665,7 @@ Enabling **Log V2** increases IRAM usage while reducing the overall application 
 
     On chips where IRAM and DRAM share the same memory pool, this also reduces available heap by the same amount (about 1.2 KB).
 
-    To eliminate this cost, disable :ref:`CONFIG_LOG_API_CONSTRAINED_ENV_SAFE` (enabled by default). When disabled:
+    To eliminate this cost, disable :menuitem:`CONFIG_LOG_API_CONSTRAINED_ENV_SAFE` (enabled by default). When disabled:
 
     - ``ESP_DRAM_LOGx`` and ``ESP_EARLY_LOGx`` expand directly to ``esp_rom_printf()`` (a true ROM function, zero IRAM cost), bypassing the ``esp_log()`` pipeline entirely.
     - Normal ``ESP_LOGx`` calls in constrained environments will use the standard ``vprintf`` function. If ``vprintf`` resides in flash, such calls may crash. Use ``ESP_DRAM_LOGx`` for any logging that must work with cache disabled or from an ISR.
@@ -687,6 +687,54 @@ General-purpose macros (**ESP_LOGx**) ensure thread safety by acquiring locks du
 
 Logs are first written to a memory buffer before being sent to the UART, ensuring thread-safe operations across different tasks. Avoid logging from constrained environments unless necessary to maintain reliable log output.
 
+Custom Message Handling
+-----------------------
+
+Use :cpp:func:`esp_log_set_handler` to inspect, encode, redirect, or suppress ordinary logs in V1 and V2. It installs one application-wide callback and a caller-owned context. Level filtering runs before the callback.
+
+For example, an application can save warnings and errors for later diagnosis while keeping normal console output:
+
+.. code-block:: c
+
+    static bool handle_log(esp_log_msg_t *message, void *ctx)
+    {
+        esp_log_level_t level = message->config.opts.log_level;
+        if (level == ESP_LOG_WARN || level == ESP_LOG_ERROR) {
+            save_diagnostic(message, ctx);
+        }
+        return true;
+    }
+
+Here, ``save_diagnostic()`` is application code that encodes and saves the message; ``ctx`` holds its output state. Install the callback during initialization, after that state is ready:
+
+.. code-block:: c
+
+    ESP_ERROR_CHECK(esp_log_set_handler(handle_log, diagnostics_ctx, NULL));
+
+- Return ``true`` to continue with standard output after your processing.
+- Return ``false`` to finish without standard output, whether you saved the message yourself or discarded it.
+- Pass NULL as the callback to restore standard output.
+
+See :example:`system/log/log_handler` for a complete example: warnings and errors are copied to a file, sensor messages to another file, and a separate component consumes its own audit messages. Formatting, file setup, and teardown are shown there.
+
+Combining Handlers
+^^^^^^^^^^^^^^^^^^
+
+Installing another callback replaces the active one. To extend existing behavior, pass a pointer to an ``esp_log_handler_t`` field in the new context as ``previous``. The library fills it before the new callback can run. Your callback can consume selected messages by returning ``false``, or explicitly call the saved function with its saved context and return its result. If no previous function exists, return ``true`` for standard output.
+
+This creates an application-owned chain: the last installed wrapper runs first. Returning ``true`` alone does not call the previous handler. Remove wrappers in reverse order by restoring their saved pairs.
+
+Message Data and Lifetime
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The tag and level are directly available in :cpp:type:`esp_log_msg_t`; no console line parsing is needed. In V1, standard macros include the prefix and newline in the format and arguments. In V2 text mode, metadata is separate; check ``timestamp_valid`` before using the timestamp. In binary mode, the format may be an ELF-only address and must not be treated as a readable printf string.
+
+Messages and their data are borrowed for the callback. Use ``va_copy()`` when reading arguments that another handler or standard output will also need. For asynchronous output, encode or copy the required data before returning.
+
+Install from normal task context. Callbacks run synchronously in the logging task and may run concurrently in different tasks. **Replacement does not wait for old calls:** keep contexts and output resources alive until all calls using them have finished, including calls through saved handlers. Coordinate chain changes between components.
+
+Early, DRAM, bootloader, and recursively emitted logs bypass the handler and use standard output. Log V2 also detects constrained contexts and bypasses the handler. Log V1 performs no runtime context check: use ordinary logs only in normal execution contexts. Recursive bypass affects only the current task; output functions must not recursively log. Standard text output still uses :cpp:func:`esp_log_set_vprintf`; binary output keeps its existing path.
+
 Application Example
 -------------------
 
@@ -705,3 +753,6 @@ API Reference
 .. include-build-file:: inc/esp_log_timestamp.inc
 .. include-build-file:: inc/esp_log_color.inc
 .. include-build-file:: inc/esp_log_write.inc
+
+.. include-build-file:: inc/esp_log_message.inc
+.. include-build-file:: inc/esp_log_handler.inc

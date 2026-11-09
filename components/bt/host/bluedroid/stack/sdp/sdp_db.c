@@ -68,15 +68,15 @@ tSDP_RECORD *sdp_db_service_search (tSDP_RECORD *p_rec, tSDP_UUID_SEQ *p_seq)
 
     /* If NULL, start at the beginning, else start at the first specified record */
     if (!p_rec) {
-	p_node = list_begin(sdp_cb.server_db.p_record_list);
+    p_node = list_begin(sdp_cb.server_db.p_record_list);
     } else {
-	/* get node in the record list with given p_rec */
+    /* get node in the record list with given p_rec */
         p_node = list_get_node(sdp_cb.server_db.p_record_list, p_rec);
-	if (p_node == NULL) {
-	    return NULL;
-	}
-	/* get next node */
-	p_node = list_next(p_node);
+    if (p_node == NULL) {
+        return NULL;
+    }
+    /* get next node */
+    p_node = list_next(p_node);
     }
 
     /* Look through the records. The spec says that a match occurs if */
@@ -178,8 +178,8 @@ tSDP_RECORD *sdp_db_find_record (UINT32 handle)
 
     /* Look through the records for the caller's handle */
     for(p_node = list_begin(sdp_cb.server_db.p_record_list); p_node; p_node = list_next(p_node)) {
-	p_rec = list_node(p_node);
-    	if (p_rec->record_handle == handle) {
+    p_rec = list_node(p_node);
+        if (p_rec->record_handle == handle) {
             return (p_rec);
         }
     }
@@ -446,7 +446,7 @@ BOOLEAN SDP_AddAttribute (UINT32 handle, UINT16 attr_id, UINT8 attr_type,
 
     /* Find the record in the database */
     for(p_node = list_begin(sdp_cb.server_db.p_record_list); p_node; p_node = list_next(p_node)) {
-	p_rec= list_node(p_node);
+    p_rec= list_node(p_node);
         if (p_rec->record_handle == handle) {
             tSDP_ATTRIBUTE  *p_attr = &p_rec->attribute[0];
 
@@ -498,13 +498,12 @@ BOOLEAN SDP_AddAttribute (UINT32 handle, UINT16 attr_id, UINT8 attr_type,
                 }
             }
 
-            if ((attr_len > 0) && (p_val != 0)) {
+            if (attr_len > 0) {
                 p_attr->len  = attr_len;
                 memcpy (&p_rec->attr_pad[p_rec->free_pad_ptr], p_val, (size_t)attr_len);
                 p_attr->value_ptr = &p_rec->attr_pad[p_rec->free_pad_ptr];
                 p_rec->free_pad_ptr += attr_len;
-            } else if ((attr_len == 0 && p_attr->len != 0) || /* if truncate to 0 length, simply don't add */
-                       p_val == 0) {
+            } else if (attr_len == 0 && p_attr->len != 0) { /* if truncate to 0 length, simply don't add */
                 SDP_TRACE_ERROR("SDP_AddAttribute fail, length exceed maximum: ID %d: attr_len:%d \n",
                                 attr_id, attr_len );
                 p_attr->id   = p_attr->type = p_attr->len  = 0;
@@ -889,7 +888,7 @@ BOOLEAN SDP_DeleteAttribute (UINT32 handle, UINT16 attr_id)
 
     /* Find the record in the database */
     for(p_node = list_begin(sdp_cb.server_db.p_record_list); p_node; p_node = list_next(p_node)) {
-	p_rec= list_node(p_node);
+    p_rec= list_node(p_node);
         if (p_rec->record_handle == handle) {
             tSDP_ATTRIBUTE  *p_attr = &p_rec->attribute[0];
 
@@ -957,9 +956,12 @@ INT32 SDP_ReadRecord(UINT32 handle, UINT8 *p_data, INT32 *p_data_len)
     UINT16          start = 0;
     UINT16          end = 0xffff;
     tSDP_ATTRIBUTE  *p_attr;
-    UINT16          rem_len;
+    INT32          rem_len;
     UINT8           *p_rsp;
 
+    if (p_data_len && *p_data_len <= 3) {
+        return offset;
+    }
     /* Find the record in the database */
     p_rec = sdp_db_find_record(handle);
     if (p_rec && p_data && p_data_len) {
@@ -968,12 +970,17 @@ INT32 SDP_ReadRecord(UINT32 handle, UINT8 *p_data, INT32 *p_data_len)
             /* Check if attribute fits. Assume 3-byte value type/length */
             rem_len = *p_data_len - (UINT16) (p_rsp - p_data);
 
-            if (p_attr->len > (UINT32)(rem_len - 6)) {
+            UINT16 required_len = sdpu_get_attrib_entry_len(p_attr);
+            if (rem_len < (INT32)required_len) {
                 break;
             }
 
             p_rsp = sdpu_build_attrib_entry (p_rsp, p_attr);
 
+            // Check overflow
+            if (p_attr->id == UINT16_MAX) {
+                break;
+            }
             /* next attr id */
             start = p_attr->id + 1;
         }

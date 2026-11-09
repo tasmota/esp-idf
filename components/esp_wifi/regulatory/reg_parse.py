@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2008 Johannes Berg <johannes@sipsolutions.net>
 # SPDX-FileCopyrightText: 2008 Michael Green <Michael.Green@Atheros.com>
 #
-# SPDX-FileContributor: 2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileContributor: 2025-2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 #
 # Copyright (c) 2008, Luis R. Rodriguez <mcgrof@gmail.com>
@@ -23,13 +23,14 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 import math
-import sys
 from collections import OrderedDict
 from collections import defaultdict
-from collections.abc import Callable
 from functools import total_ordering
 from math import ceil
 from typing import TextIO
+
+from esp_pylib.logger import log
+from rich.markup import escape
 
 flag_definitions: dict[str, int] = {
     'NO-OFDM': 1 << 0,
@@ -291,13 +292,8 @@ class Country:
     permissions_2g = property(_get_permissions_2g_tuple)
 
 
-class MySyntaxError(Exception):
-    pass
-
-
 class DBParser:
-    def __init__(self, warn: Callable[[str], None] | None = None) -> None:
-        self._warn_callout = warn or sys.stderr.write
+    def __init__(self) -> None:
         self._lineno: int = 0
         self._comments: list[str] = []
         self._banddup: dict[str, str] = {}
@@ -361,10 +357,10 @@ class DBParser:
 
     def _syntax_error(self, txt: str | None = None) -> None:
         txt = f' ({txt})' if txt else ''
-        raise MySyntaxError(f'Syntax error in line {self._lineno}{txt}')
+        log.die(f'Syntax error in line {self._lineno}{escape(txt)}')
 
     def _warn(self, txt: str) -> None:
-        self._warn(f'Warning (line {self._lineno}): {txt}\n')
+        log.warn(f'line {self._lineno}: {escape(txt)}')
 
     def channel_to_freq(self, channel: int) -> int:
         if channel == 14:
@@ -561,7 +557,10 @@ class DBParser:
                 self._warn(f"country '{cname}' not alpha2")
             cname_bytes = cname.encode('ascii')
             if cname_bytes not in self._countries:
-                self._countries[cname_bytes] = Country(dfs_region, comments=self._comments)
+                try:
+                    self._countries[cname_bytes] = Country(dfs_region, comments=self._comments)
+                except DFSRegionError as e:
+                    self._syntax_error(f'Invalid DFS region {e.dfs_region}')
             self._current_countries[cname_bytes] = self._countries[cname_bytes]
         self._comments = []
 
@@ -707,9 +706,25 @@ class DBParser:
 class Regdomain:
     def __init__(self) -> None:
         self.regdomain_countries: dict[bytes, int] = {}
-        self.typical_regulatory: dict[str, list] = {}
+        self.typical_regulatory: dict[str, tuple[Permission, ...]] = {}
         self.regdomain_countries_2g: dict[bytes, int] = {}
-        self.typical_regulatory_2g: dict[str, list] = {}
+        self.typical_regulatory_2g: dict[str, tuple[Permission, ...]] = {}
+
+    @staticmethod
+    def _permission_cmp_key(permission: Permission) -> tuple[int, int, int, int, int]:
+        """Return reduced fields aligned with generated C rule granularity."""
+        max_eirp = int(permission.power.max_eirp) if permission.power else 0
+        return (
+            int(permission.freqband.start),
+            int(permission.freqband.end),
+            int(permission.freqband.maxbw),
+            max_eirp,
+            permission.dfs,
+        )
+
+    def _permissions_cmp_key(self, permissions: tuple[Permission, ...]) -> tuple[tuple[int, int, int, int, int], ...]:
+        """Build a reduced comparison key from a country's permission set."""
+        return tuple(self._permission_cmp_key(permission) for permission in permissions)
 
     def build_typical_regdomains(self, countries: dict[bytes, Country]) -> None:
         """Populate typical regulatory domains based on country permissions."""
@@ -731,26 +746,32 @@ class Regdomain:
         """Simplify country permissions by building typical regdomains."""
         self.build_typical_regdomains(countries)
         perm_list = list(self.typical_regulatory.values())
+        perm_key_to_index = {self._permissions_cmp_key(permissions): idx for idx, permissions in enumerate(perm_list)}
 
         for cn, country in countries.items():
             cn_str = cn.decode('utf-8')
             permissions = country.permissions
-            if permissions not in perm_list:
+            permissions_key = self._permissions_cmp_key(permissions)
+            if permissions_key not in perm_key_to_index:
                 self.typical_regulatory[cn_str] = permissions
                 perm_list.append(permissions)
-            self.regdomain_countries[cn] = perm_list.index(permissions)
+                perm_key_to_index[permissions_key] = len(perm_list) - 1
+            self.regdomain_countries[cn] = perm_key_to_index[permissions_key]
 
     def simplify_countries_2g(self, countries: dict[bytes, Country]) -> None:
         """Simplify country permissions by building typical regdomains."""
         self.build_typical_regdomains_2g(countries)
 
         perm_list = list(self.typical_regulatory_2g.values())
+        perm_key_to_index = {self._permissions_cmp_key(permissions): idx for idx, permissions in enumerate(perm_list)}
 
         for cn, country in countries.items():
             cn_str = cn.decode('utf-8')
             permissions = country.permissions_2g
+            permissions_key = self._permissions_cmp_key(permissions)
 
-            if permissions not in perm_list:
+            if permissions_key not in perm_key_to_index:
                 self.typical_regulatory_2g[cn_str] = permissions
                 perm_list.append(permissions)
-            self.regdomain_countries_2g[cn] = perm_list.index(permissions)
+                perm_key_to_index[permissions_key] = len(perm_list) - 1
+            self.regdomain_countries_2g[cn] = perm_key_to_index[permissions_key]

@@ -12,7 +12,11 @@ To ensure security, the EAT is cryptographically protected. The remote relying p
 
 .. note::
 
-  - Support for Attestation can be toggled using the option :ref:`CONFIG_SECURE_TEE_ATTESTATION` (enabled by default).
+  - Support for Attestation can be toggled using the option :menuitem:`CONFIG_SECURE_TEE_ATTESTATION` (enabled by default).
+
+  - The attestation signing key (identified by :menuitem:`CONFIG_SECURE_TEE_ATT_KEY_STR_ID`) is owned exclusively by the TEE. When the TEE generates this key, it is marked with the ``SEC_STORAGE_FLAG_TEE_ONLY`` flag, and the REE is denied any access to it through the secure service interface - it cannot use the key for signing, regenerate it, or clear it. This ensures that the attestation evidence can only ever be signed from within the TEE.
+
+  - In addition, the reserved key ID is treated as TEE-owned even before the key exists, which prevents the REE from "squatting" the ID with a key of its own before the TEE provisions it. If the key is pre-provisioned as part of an NVS image (see :doc:`Secure Storage <tee-sec-storage>`), it **must** be generated with the ``--tee-only`` flag of the :component_file:`esp_tee_sec_stg_keygen.py<esp_tee/scripts/esp_tee_sec_stg_keygen/esp_tee_sec_stg_keygen.py>`  tool.
 
 Attestation Flow
 ----------------
@@ -107,6 +111,12 @@ EAT: Claim Table
     * - Client ID
       - Relying Party identification
       -
+    * - Chip ID
+      - SoC chip identifier
+      -
+    * - UEID
+      - Universal Entity Identifiers, factory-burnt in eFuse
+      - Device MAC address and the Optional Unique ID from eFuse
     * - Device ID
       - Device identification (should be unique)
       - SHA256 digest of the device MAC address
@@ -161,6 +171,12 @@ EAT: Software Measurement
     * - Secure Padding status
       -
       - For more details, refer :ref:`here <secure_padding>`.
+    * - Digest: Code hash
+      - SHA256 of the image segments alone, leaving out the packaging metadata (image header, app descriptor, checksum and appended digest)
+      - Applicable only to the TEE; matches the host-side tool :component_file:`esp_tee/scripts/esp_tee_code_hash/esp_tee_code_hash.py`
+    * - Digest: Code hash version
+      - Version of the definition used for the code hash
+      - Applicable only to the TEE; ``0`` means the claim is absent
 
 
 Sample EAT in JSON format
@@ -176,9 +192,14 @@ Sample EAT in JSON format
       "key_id": "tee_att_key0"
     },
     "eat": {
-      "auth_challenge":"dcb9b53143ad6b081dad1a05c7ebda4e314d388762215799cf24ed52e9387678"
+      "auth_challenge":"dcb9b53143ad6b081dad1a05c7ebda4e314d388762215799cf24ed52e9387678",
       "client_id": 262974944,
+      "chip_id": 13,
       "device_ver": 1,
+      "ueid": {
+        "mac": "d885ac67c978",
+        "optional_id": "94fa4d7e305682714d48e7bbd710c961"
+      },
       "device_id": "e8cddb2a7f9a5a7c61735d6dda26e4bd153c6d772a9be6f26bd321dfe25e0ac8",
       "instance_id": "1adba85e0df997fd961f25a9e312430cef162b5c69466cd5b172f1e65ac7360c",
       "psa_cert_ref": "0716053550477-10100",
@@ -186,9 +207,10 @@ Sample EAT in JSON format
       "sw_claims": {
         "tee": {
           "type": 1,
-          "ver": "v0.3.0",
-          "idf_ver": "v5.1.2-139-g07d83a7ced",
+          "ver": "1.2.0~v6.2.0",
+          "idf_ver": "v6.2-dev-3162-g9aa4f93857d",
           "secure_ver": 0,
+          "secure_ver_efuse": 0,
           "part_chip_rev": {
             "min": 0,
             "max": 99
@@ -198,14 +220,17 @@ Sample EAT in JSON format
             "calc_digest": "f732e7f285b7de7ac3167a867711eddbf17a2a05513d35e41cd1ebf2e0958b2e",
             "digest_validated": true,
             "sign_verified": true,
-            "secure_padding": true
+            "secure_padding": true,
+            "calc_code_hash": "33e9d223e4f861e9f7a9f5209ee27cd4f69894bcfcd76bd96bb90c98795a24cd",
+            "code_hash_ver": 1
           }
         },
         "app": {
           "type": 2,
           "ver": "v0.1.0",
-          "idf_ver": "v5.1.2-139-g07d83a7ced",
+          "idf_ver": "v6.2-dev-3162-g9aa4f93857d",
           "secure_ver": 0,
+          "secure_ver_efuse": 0,
           "part_chip_rev": {
             "min": 0,
             "max": 99
@@ -223,6 +248,7 @@ Sample EAT in JSON format
           "ver": "",
           "idf_ver": "",
           "secure_ver": -1,
+          "secure_ver_efuse": -1,
           "part_chip_rev": {
             "min": 0,
             "max": 99

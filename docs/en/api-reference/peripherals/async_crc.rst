@@ -1,5 +1,5 @@
 ============================
-Asynchronous CRC (Async CRC)
+Asynchronous CRC Calculation
 ============================
 
 :link_to_translation:`zh_CN:[中文]`
@@ -100,7 +100,8 @@ First, you need to install the Async CRC driver. The driver supports both AHB-GD
 When creating a driver instance, you need to configure:
 
 - **backlog**: Maximum number of pending CRC requests that can be queued. Higher values use more memory but provide better throughput for bursty workloads.
-- **dma_burst_size**: DMA transfer burst size in bytes.
+- **intr_priority**: DMA interrupt priority. Set to ``0`` to use the default low/medium priority, or set a non-zero value to request a specific interrupt priority.
+- **dma_burst_size**: DMA transfer burst size in bytes. Set to ``0`` to use the driver default (16 bytes), or to ``1`` to disable the data burst.
 
 The driver handle ``crc_hdl`` is an opaque pointer that you use for all subsequent operations.
 
@@ -161,15 +162,12 @@ For simpler use cases or when async operations are not required, use the blockin
     const char *data = "Hello, World!";
     size_t data_len = strlen(data);
 
-    // Blocking CRC with 1000ms timeout
-    ESP_ERROR_CHECK(esp_crc_calc_blocking(crc_hdl, data, data_len, &params, 1000, &crc_result));
+    // Blocking CRC, wait indefinitely
+    ESP_ERROR_CHECK(esp_crc_calc_blocking(crc_hdl, data, data_len, &params, -1, &crc_result));
 
     printf("CRC result: 0x%08X\n", crc_result);
 
-The blocking API supports:
-
-- **timeout_ms >= 0**: Wait for specified milliseconds
-- **timeout_ms < 0**: Wait indefinitely
+The blocking API only supports ``timeout_ms = -1``, which means waiting indefinitely until the CRC calculation completes.
 
 Uninstalling the Driver
 ------------------------
@@ -329,6 +327,7 @@ The ``dma_burst_size`` affects DMA transfer efficiency:
 
 - Larger burst sizes can improve throughput
 - Typical values: 16, 32, 64 bytes
+- Set to ``0`` to use the driver default (16 bytes), or to ``1`` to disable the data burst
 
 The optimal value depends on your chip's DMA controller capabilities.
 

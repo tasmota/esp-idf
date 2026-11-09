@@ -13,6 +13,10 @@ ULP LP 内核协处理器具有以下功能：
 * 当整个系统处于 active 模式时，可以访问所有的高功耗 (HP) SRAM 和外设。
 * 当 HP 系统处于睡眠模式时，可以访问低功耗 (LP) SRAM 和外设。
 
+.. only:: SOC_LP_CORE_HAS_PMP
+
+    在支持的芯片上，LP 内核提供 RISC-V 物理内存保护（PMP）。启用 :menuitem:`CONFIG_ULP_LP_CORE_MEMPROT` 后，LP 内核启动时会配置默认拒绝访问的 PMP 布局：LP RAM 分为可执行区（代码与只读数据）与可读写区（可写数据、栈与共享内存），LP 外设地址空间为可读写；启用 :menuitem:`CONFIG_ULP_HP_UART_CONSOLE_PRINT` 时还会为 HP UART MMIO 增加相应条目。PMP 不能与 :menuitem:`CONFIG_ULP_COPROC_RUN_FROM_HP_MEM` 同时启用。未落入允许区域的访问将触发加载、存储或取指访问异常。
+
 编译 ULP LP 内核代码
 --------------------
 
@@ -105,7 +109,7 @@ ULP LP 内核代码会与 ESP-IDF 项目共同编译，生成一个单独的二�
 
 若想编译和构建项目，请执行以下操作：
 
-1. 在 menuconfig 中启用 :ref:`CONFIG_ULP_COPROC_ENABLED`，并在 ``ULP Coprocessor types`` 菜单中勾选 :ref:`CONFIG_ULP_COPROC_TYPE_LP_CORE`。:ref:`CONFIG_ULP_COPROC_RESERVE_MEM` 选项为 ULP 保留 RTC 内存，因此必须设置为一个足够大的值，以存储 ULP LP 内核代码和数据。如果应用程序组件包含多个 ULP 程序，那么 RTC 内存的大小必须足够容纳其中最大的程序。
+1. 启用 :menuitem:`CONFIG_ULP_COPROC_ENABLED`，并勾选 :menuitem:`CONFIG_ULP_COPROC_TYPE_LP_CORE`。:menuitem:`CONFIG_ULP_COPROC_RESERVE_MEM` 选项为 ULP 保留 RTC 内存，因此必须设置为一个足够大的值，以存储 ULP LP 内核代码和数据。如果应用程序组件包含多个 ULP 程序，那么 RTC 内存的大小必须足够容纳其中最大的程序。
 
 2. 按照常规步骤构建应用程序（例如 ``idf.py app``）。
 
@@ -113,7 +117,7 @@ ULP LP 内核代码会与 ESP-IDF 项目共同编译，生成一个单独的二�
 
     1. **通过 C 编译器和汇编器运行每个源文件。** 此步骤会在组件构建目录中生成目标文件 ``.obj.c`` 或 ``.obj.S``，具体取决于处理的源文件。
 
-    2. **通过 C 预处理器运行链接器脚本模板。** 模板位于 ``components/ulp/ld`` 目录中。
+    2. **通过 C 预处理器运行链接器脚本模板。** 模板位于 ``components/ulp/subproject/components/lp_core/ld`` 目录中。
 
     3. **将对象文件链接到一个 ELF 输出文件中，** 即 ``ulp_app_name.elf``。在此阶段生成的映射文件 ``ulp_app_name.map`` 可用于调试。
 
@@ -202,6 +206,17 @@ ULP LP 内核代码会与 ESP-IDF 项目共同编译，生成一个单独的二�
 
     ESP_ERROR_CHECK( ulp_lp_core_run(&cfg) );
 
+从 HP 内存运行 LP 内核
+~~~~~~~~~~~~~~~~~~~~~~
+
+:menuitem:`CONFIG_ULP_COPROC_RUN_FROM_HP_MEM` 允许将 LP 内核应用的大部分代码和数据放到预留的 HP SRAM 中，而不是仅放在 LP RAM 中。当应用程序过大、无法完全放入 LP RAM 时，这种方式会很有用，同时仍然会将 LP 复位和处理程序代码保留在 LP 内存中。
+
+启用该选项后，:menuitem:`CONFIG_ULP_COPROC_RESERVE_HP_MEM_BYTES` 会在 HP SRAM 顶部预留一段专供 LP 内核使用的内存窗口。在调用 :cpp:func:`ulp_lp_core_load_binary` 时，位于 LP 内存的段仍会加载到预留的 LP 区域，而映射到 HP 内存窗口的代码段和数据段则会复制到预留的 HP SRAM 区域。
+
+该模式有一个重要限制：芯片进入 Deep-sleep 后，LP 内核无法继续运行，因为该睡眠模式下 HP SRAM 会被断电。因此，这种模式适用于 LP 内核只需要在 HP 系统保持上电时运行的场景；如果应用需要在 Deep-sleep 期间继续运行，则应继续使用默认的纯 LP 内存模式。
+
+:menuitem:`CONFIG_ULP_LP_CORE_MEMPROT` 不能与 HP 内存模式同时启用。
+
 ULP LP 内核程序流程
 -------------------
 
@@ -259,7 +274,7 @@ ULP LP 内核支持的外设
 ULP LP 内核中断
 ---------------
 
-配置 LP 内核协处理器，可以处理各种类型的中断，例如 LP IO 低/高电平中断或是 LP 定时器中断。只需重写 IDF 提供的任何一个弱处理函数，就可以注册一个中断处理程序。所有处理程序可见 :component_file:`ulp_lp_core_interrupts.h <ulp/lp_core/lp_core/include/ulp_lp_core_interrupts.h>`。有关特定目标可使用的中断的详细信息，请参阅 **{IDF_TARGET_NAME} 技术参考手册** [`PDF <{IDF_TARGET_TRM_CN_URL}#ulp>`__]。
+配置 LP 内核协处理器，可以处理各种类型的中断，例如 LP IO 低/高电平中断或是 LP 定时器中断。只需重写 IDF 提供的任何一个弱处理函数，就可以注册一个中断处理程序。所有处理程序可见 :component_file:`ulp_lp_core_interrupts.h <ulp/subproject/components/lp_core/include/ulp_lp_core_interrupts.h>`。有关特定目标可使用的中断的详细信息，请参阅 **{IDF_TARGET_NAME} 技术参考手册** [`PDF <{IDF_TARGET_TRM_CN_URL}#ulp>`__]。
 
 例如，要重写 LP IO 中断的处理程序，可以在 ULP LP 内核代码中定义以下函数：
 
@@ -297,7 +312,7 @@ ULP LP 内核的时钟源来自系统时钟 ``LP_FAST_CLK``，详情请参见 `�
 
     * 使用 LP UART 打印：LP 内核可以访问 LP UART 外设，在主 CPU 处于睡眠状态时独立打印信息。有关使用此驱动程序的示例，请参阅 :example:`system/ulp/lp_core/lp_uart/lp_uart_print`。
 
-* 通过 :ref:`CONFIG_ULP_HP_UART_CONSOLE_PRINT`，将 :cpp:func:`lp_core_printf` 路由到 HP-Core 控制台 UART，可以轻松地将 LP 内核信息打印到已经连接的 HP-Core 控制台 UART。此方法的缺点是需要主 CPU 处于唤醒状态，并且由于 LP 内核与 HP 内未同步，输出可能会交错。
+* 通过 :menuitem:`CONFIG_ULP_HP_UART_CONSOLE_PRINT`，将 :cpp:func:`lp_core_printf` 路由到 HP-Core 控制台 UART，可以轻松地将 LP 内核信息打印到已经连接的 HP-Core 控制台 UART。此方法的缺点是需要主 CPU 处于唤醒状态，并且由于 LP 内核与 HP 内未同步，输出可能会交错。
 
 * 通过共享变量共享程序状态：如 :ref:`ulp-lp-core-access-variables` 所述，主 CPU 和 ULP 内核都可以轻松访问 RTC 内存中的全局变量。若想了解 ULP 内核的运行状态，可以将状态信息从 ULP 写入变量中，并通过主 CPU 读取信息。这种方法的缺点在于它需要主 CPU 一直处于唤醒状态，而这通常很难实现。另外，若主 CPU 一直处于唤醒状态，可能会掩盖某些问题，因为部分问题只会在特定电源域断电时发生。
 
@@ -385,6 +400,102 @@ LP 内核调试特性
 #. 在 GDB 中设置硬件断点时，这些断点会同时应用到两个内核上，因此可用的硬件断点数量受 LP 内核支持数量（{IDF_TARGET_NAME} 有 {IDF_TARGET_SOC_CPU_BREAKPOINTS_NUM} 个）所限。
 #. OpenOCD 的 flash 支持被禁用。LP 内核应用程序完全在 RAM 中运行，且 GDB 可以为其使用软件断点，因而该限制无关紧要。但若想在 HP 内核运行的代码中调用的 flash 函数（例如 `app_main`）上设置断点，则需要通过 ``hb`` 和 ``thb`` GDB 命令显式请求设置硬件断点。
 #. 由于主程序和 ULP 程序被链接为独立的二进制文件，它们可能会拥有相同名称的全局符号（如函数或变量）。若通过函数名称设置断点，则 GDB 将为所有同名函数设置断点。在调试 LP 内核时，OpenOCD 不支持 flash，因此如果上述函数位于 flash 中，可能会引发问题。此时建议通过源代码行号或函数的内存地址来设置断点。
+
+使用自定义链接器脚本
+--------------------
+
+默认的 LP 内核链接器脚本由三个部分组成：**base**、**layout** 和 **checks**。构建时，这三个部分会拼接在一起，并由 C 预处理器处理。这种拆分方式在 ESP-IDF 与 LP 内核应用程序之间定义了稳定接口：ESP-IDF 负责与启动相关的关键约束，LP 内核应用程序负责内存映射和段放置，两者可以独立演进。
+
+- **base** 部分：定义 ``ENTRY``、中断向量表、HP/LP 共享内存段、默认栈顶 (``__stack_top``)、可用窗口边界以及下文所列的段边界宏。此部分不会被替换。
+- **layout** 部分：声明窗口内的内存区域和段放置。它通过组合宏来工作，不会重新实现启动代码。LP 内核应用程序可以替换此部分。
+- **checks** 部分：提供默认的 ``__stack_size`` （在 layout 标记 ``_lp_data_end`` 后，计算为 ``_lp_data_end`` 与 ``__stack_top`` 之间的空闲空间），并提供链接阶段的 ``ASSERT`` 语句，用于验证以下各项：复位向量放置正确、镜像适配预留内存，以及栈位于其边界内。验证失败时，构建会给出明确消息，而不是难以理解的链接器错误。
+
+自定义 layout 仅使用以下内容：
+
+- ``LP_CORE_USER_MEMORY_REGION_START``/``LP_CORE_USER_MEMORY_REGION_END``：空闲 LP-RAM 窗口的边界。只能在此窗口内声明区域和放置段。
+- ``LP_CORE_TEXT_START(region)``：首先组合到以 ``LP_CORE_USER_MEMORY_REGION_START`` 开始的区域中，在启动偏移处放置复位向量和早期处理程序。
+- ``LP_CORE_TEXT_END()``：在最后一个可执行段之后组合。
+- ``LP_CORE_DATA_START()``/``LP_CORE_DATA_END()``：组合在可写数据的前后。``LP_CORE_DATA_END()`` 标记可写数据的末尾 (``_lp_data_end``)，base 使用该标记计算栈大小并检查其边界，因此 layout 必须组合此宏（或自行赋值 ``_lp_data_end``）。
+
+这些宏会根据配置处理 layout，因此无论当前配置如何，layout 都以相同方式组合宏。向量表和 HP/LP 共享内存段由 base 提供，自定义 layout 不应声明或放置这些内容。layout 还可以使用栈窗口：``__stack_top`` 在 base 中默认为窗口顶部；确定 ``_lp_data_end`` 后，``__stack_size`` 在 checks 中默认为 ``_lp_data_end`` 与 ``__stack_top`` 之间的全部空闲空间。两者都是弱默认值，因此，如果 layout 需要在窗口顶部预留空间（例如栈保护区），可以覆盖其中任意一个。
+
+要使用 LP 内核应用程序自己的 layout，请将 ``LINKER_LAYOUT`` 选项传递给 ``ulp_embed_binary`` （或 ``ulp_add_project``）：
+
+.. code-block:: cmake
+
+    ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}"
+                     LINKER_LAYOUT "${CMAKE_CURRENT_LIST_DIR}/ulp/custom_layout.ld")
+
+最小自定义 layout 会在窗口上声明一个区域，并组合段边界宏：
+
+.. code-block:: none
+
+    PROVIDE(_my_marker = 0xCAFEBABE);
+
+    MEMORY
+    {
+        lp_ram(RWX) : ORIGIN = LP_CORE_USER_MEMORY_REGION_START, LENGTH = LP_CORE_USER_MEMORY_REGION_END - LP_CORE_USER_MEMORY_REGION_START
+    }
+
+    SECTIONS
+    {
+        LP_CORE_TEXT_START(lp_ram)                    /* LP 内核复位向量位于启动偏移处 */
+        .text   ALIGN(4) : { *(.text) *(.text*) } > lp_ram
+        .rodata ALIGN(4) : { *(.rodata) *(.rodata*) } > lp_ram
+        LP_CORE_TEXT_END()
+        LP_CORE_DATA_START()
+        .data   ALIGN(4) : { *(.data) *(.data*) *(.sdata) *(.sdata*) } > lp_ram
+        .bss    ALIGN(4) : { *(.bss) *(.bss*) *(.sbss) *(.sbss*) } > lp_ram
+        LP_CORE_DATA_END()
+    }
+
+共享内存和栈窗口来自 base，因此 layout 不声明这些内容，只需使用 ``LP_CORE_DATA_END()`` 标记其数据末尾。
+
+如需完全控制 LP RAM，例如将 LP RAM 重新划分为多个区域，并把代码或数据固定在特定地址，LP 内核应用程序可以声明自己的区域映射。每个地址都从两个窗口符号派生，同时仍需组合段边界宏。示例如下：
+
+.. code-block:: none
+
+    PROVIDE(_my_marker = 0xCAFEBABE);
+    _fixed_addr = LP_CORE_USER_MEMORY_REGION_START + 0x1780;
+
+    MEMORY
+    {
+        text(RWX) :         ORIGIN = LP_CORE_USER_MEMORY_REGION_START, LENGTH = _fixed_addr - LP_CORE_USER_MEMORY_REGION_START
+        fixed_region(RWX) : ORIGIN = _fixed_addr, LENGTH = 0x100
+        data(RW) :          ORIGIN = _fixed_addr + 0x100, LENGTH = LP_CORE_USER_MEMORY_REGION_END - (_fixed_addr + 0x100)
+    }
+
+    SECTIONS
+    {
+        LP_CORE_TEXT_START(text)                     /* LP 内核复位向量放置在应用程序的 text 区域 */
+
+        .text   ALIGN(4) : { *(.text) *(.text*) } > text
+        .rodata ALIGN(4) : { *(.rodata) *(.rodata*) } > text
+        LP_CORE_TEXT_END()
+
+        . = ORIGIN(fixed_region);                    /* 跳转到不连续的固定地址 */
+        .fixed_region ALIGN(4) : { KEEP(*(.fixed_region .fixed_region.*)) } > fixed_region
+
+        . = ORIGIN(data);
+        LP_CORE_DATA_START()
+        .data ALIGN(4) : { *(.data) *(.data*) *(.sdata) *(.sdata*) } > data
+        .bss  ALIGN(4) : { *(.bss) *(.bss*) *(.sbss) *(.sbss*) } > data
+        LP_CORE_DATA_END()
+    }
+
+layout 也可以接管栈，例如在可加载镜像之外保留栈溢出保护区。为此，可使用标记结束数据，并显式设置栈窗口：
+
+.. code-block:: none
+
+    .stack_guard (NOLOAD) : { . += 0x8; _guard = .; . += 0x4; } > lp_ram
+    LP_CORE_DATA_END()                               /* 标记 _lp_data_end */
+    __stack_top  = ORIGIN(lp_ram) + LENGTH(lp_ram);  /* 栈从区域顶部开始…… */
+    __stack_size = __stack_top - _lp_data_end;       /* ……并在剩余空间中向下增长 */
+
+随后，checks 会确认栈既不会伸入下方的数据，也不会侵入上方的共享区域。
+
+链接阶段的检查会使格式错误的 layout 构建失败，并给出明确消息，例如复位向量放置错误、镜像超出预留内存或栈与数据重叠。配置阶段还会拒绝不存在的 ``LINKER_LAYOUT`` 路径。``LINKER_LAYOUT`` 选项仅支持 LP-core ULP 类型，FSM 和经典 RISC-V ULP 类型会拒绝该选项。
+
 
 应用示例
 --------

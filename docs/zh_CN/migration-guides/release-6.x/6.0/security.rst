@@ -61,7 +61,6 @@ ESP-IDF v6.0 已升级至 Mbed TLS v4.0，**PSA Crypto 成为主要加密接口*
          - 4.97
 
 
-
 默认配置更改
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -123,6 +122,7 @@ ESP-IDF 提供了基于 NVS 的 PSA 内部可信存储 (ITS) 实现，因此无�
 
     现已通过 **PSA Crypto HMAC 驱动程序** 使用 HMAC 外设，而不是使用旧版 :cpp:func:`esp_hmac_calculate` API。应用需要填写 :cpp:type:`esp_hmac_opaque_key_t` 结构体，并通过 :cpp:func:`psa_import_key` API 使用 ``PSA_KEY_LIFETIME_ESP_HMAC`` 生命周期属性将其导入。然后可以使用 :cpp:func:`psa_mac_compute` API 计算 HMAC。
 
+
 BluFi
 -----
 
@@ -136,6 +136,7 @@ BluFi（基于 BLE 的 Wi-Fi 配网）功能受到 ESP-IDF v6.0 中 Mbed TLS v4.
 
   - 将设备固件升级至 ESP-IDF v6.0。
   - 将 BluFi 客户端应用更新至兼容 ESP-IDF v6.0 新版 BluFi 协议和安全协商的版本。
+
 
 引导加载程序支持
 ----------------
@@ -164,3 +165,12 @@ BluFi（基于 BLE 的 Wi-Fi 配网）功能受到 ESP-IDF v6.0 中 Mbed TLS v4.
     ------------
 
     - 当 SoC 具备 HMAC 外设并启用了 flash 加密时，如果同时还启用了 NVS 加密，则默认会选择基于 HMAC 的 NVS 加密方案，而不是基于 flash 加密的方案。如果你的应用程序之前使用基于 flash 加密的方案，则需要通过 ``menuconfig`` 或项目的 ``sdkconfig`` 文件，手动将 NVS 加密方案从 HMAC 配置为 flash 加密（即设置 ``CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC=y``）。
+
+
+Mbed TLS v4.1 迁移
+-------------------
+
+引导加载程序支持
+~~~~~~~~~~~~~~~~~~
+
+- 从 Mbed TLS 4.1 开始，已移除对旧版 NISTP192 的支持。

@@ -41,6 +41,8 @@ def test_ppa_esp32p4_rev1(dut: Dut) -> None:
     ],
     indirect=True,
 )
-@idf_parametrize('target', soc_filtered_targets('SOC_PPA_SUPPORTED == 1'), indirect=['target'])
+@idf_parametrize(
+    'target', soc_filtered_targets('SOC_PPA_SUPPORTED == 1 and SOC_FLASH_ENC_SUPPORTED == 1'), indirect=['target']
+)
 def test_ppa_flash_encryption(dut: Dut) -> None:
     dut.run_all_single_board_cases()

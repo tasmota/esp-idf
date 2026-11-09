@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -213,6 +213,10 @@ static void rfcomm_server_mgmt_callback(UINT32 code, UINT16 rfc_handle, void* da
         }
         else {
             OBEX_TL_RFCOMM_TRACE_WARNING("found duplicate rfcomm connection\n");
+            if (sr_mgmt_cb_arg != NULL) {
+                sr_mgmt_cb_arg->accept = FALSE;
+            }
+            return;
         }
 
         p_ccb->initiator = FALSE;
@@ -227,6 +231,7 @@ static void rfcomm_server_mgmt_callback(UINT32 code, UINT16 rfc_handle, void* da
         msg.conn_income.peer_mtu = p_ccb->mtu;
         msg.conn_income.our_mtu = p_ccb->mtu;
         msg.conn_income.svr_hdl = (p_scb->allocated << 8);
+        bdcpy(msg.conn_income.addr, p_ccb->addr);
         obex_tl_rfcomm_cb.callback(OBEX_TL_CONN_INCOME_EVT, &msg);
     }
     else {
@@ -276,7 +281,7 @@ static void rfcomm_event_callback(UINT32 code, UINT16 rfc_handle)
     }
 }
 
-void obex_tl_rfcomm_init(tOBEX_TL_CBACK *callback)
+UINT16 obex_tl_rfcomm_init(tOBEX_TL_CBACK *callback)
 {
     assert(callback != NULL);
 #if (OBEX_DYNAMIC_MEMORY)
@@ -284,19 +289,32 @@ void obex_tl_rfcomm_init(tOBEX_TL_CBACK *callback)
         obex_tl_rfcomm_cb_ptr = (tOBEX_TL_RFCOMM_CB *)osi_malloc(sizeof(tOBEX_TL_RFCOMM_CB));
         if (!obex_tl_rfcomm_cb_ptr) {
             OBEX_TL_RFCOMM_TRACE_ERROR("OBEX over RFCOMM transport layer initialize failed, no memory\n");
-            assert(0);
+            return OBEX_TL_FAILED;
         }
     }
 #endif /* #if (OBEX_DYNAMIC_MEMORY) */
     memset(&obex_tl_rfcomm_cb, 0, sizeof(tOBEX_TL_RFCOMM_CB));
     obex_tl_rfcomm_cb.callback = callback;
     obex_tl_rfcomm_cb.trace_level = BT_TRACE_LEVEL_ERROR;
+    return OBEX_TL_SUCCESS;
 }
 
 void obex_tl_rfcomm_deinit(void)
 {
 #if (OBEX_DYNAMIC_MEMORY)
     if (obex_tl_rfcomm_cb_ptr) {
+#endif
+        for (size_t i = 0; i < OBEX_TL_RFCOMM_NUM_CONN; i++) {
+            if (obex_tl_rfcomm_cb.ccb[i].rfc_handle != 0) {
+                RFCOMM_RemoveConnection(obex_tl_rfcomm_cb.ccb[i].rfc_handle);
+            }
+        }
+        for (size_t i = 0; i < OBEX_TL_RFCOMM_NUM_SERVER; i++) {
+            if (obex_tl_rfcomm_cb.scb[i].rfc_handle != 0) {
+                RFCOMM_RemoveServer(obex_tl_rfcomm_cb.scb[i].rfc_handle);
+            }
+        }
+#if (OBEX_DYNAMIC_MEMORY)
         osi_free(obex_tl_rfcomm_cb_ptr);
         obex_tl_rfcomm_cb_ptr = NULL;
     }

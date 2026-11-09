@@ -5,11 +5,11 @@
 
 :link_to_translation:`en:[English]`
 
-{IDF_TARGET_SBV2_SCHEME:default="RSA-PSS", esp32c2, esp32c61="ECDSA", esp32c6, esp32h2, esp32p4, esp32c5, esp32h21="RSA-PSS 或 ECDSA"}
+{IDF_TARGET_SBV2_SCHEME:default="RSA-PSS", esp32c2, esp32c61, esp32h4="ECDSA", esp32c6, esp32h2, esp32p4, esp32c5="RSA-PSS 或 ECDSA", esp32h21="RSA-PSS"}
 
-{IDF_TARGET_SBV2_KEY:default="RSA-3072", esp32c2, esp32c61="ECDSA-256 或 ECDSA-192", esp32c6, esp32h2, esp32p4, esp32h21="RSA-3072、ECDSA-256 或 ECDSA-192", esp32c5="RSA-3072、ECDSA-384、ECDSA-256 或 ECDSA-192"}
+{IDF_TARGET_SBV2_KEY:default="RSA-3072", esp32c2, esp32c61="ECDSA-256", esp32c6, esp32h2, esp32p4="RSA-3072、ECDSA-256", esp32h21="RSA-3072", esp32h4="ECDSA-384、ECDSA-256", esp32c5="RSA-3072、ECDSA-384、ECDSA-256"}
 
-{IDF_TARGET_SECURE_BOOT_OPTION_TEXT:default="", esp32c6, esp32h2, esp32p4, esp32h21="推荐使用 RSA，其验证时间更短。可以在菜单中选择 RSA 或 ECDSA 方案。", esp32c5="推荐使用 ECDSA，其验证时间更短。可以在菜单中选择 RSA 或 ECDSA 方案。"}
+{IDF_TARGET_SECURE_BOOT_OPTION_TEXT:default="", esp32c6, esp32h2, esp32p4="推荐使用 RSA，其验证时间更短。可以在菜单中选择 RSA 或 ECDSA 方案。", esp32c5="推荐使用 ECDSA，其验证时间更短。可以在菜单中选择 RSA 或 ECDSA 方案。"}
 
 {IDF_TARGET_SBV2_SCHEME_RECOMMENDATION:default="如果需要快速启动，推荐使用 RSA；如果需要较短的密钥长度，建议使用 ECDSA。", esp32c5="如果需要快速启动且需要较短的密钥长度，建议使用 ECDSA。"}
 
@@ -25,7 +25,7 @@
 
 {IDF_TARGET_CPU_FREQ:default="", esp32c5="240 MHz", esp32c6="160 MHz", esp32h2="96 MHz", esp32p4="360 MHz"}
 
-{IDF_TARGET_SBV2_DEFAULT_SCHEME:default="RSA", esp32c2, esp32c61, esp32c5="ECDSA (v2)"}
+{IDF_TARGET_SBV2_DEFAULT_SCHEME:default="RSA", esp32c2, esp32c61, esp32c5, esp32h4="ECDSA (v2)"}
 
 {IDF_TARGET_EFUSE_WR_DIS_RD_DIS:default="ESP_EFUSE_WR_DIS_RD_DIS", esp32="ESP_EFUSE_WR_DIS_EFUSE_RD_DISABLE"}
 
@@ -41,16 +41,28 @@
 
 .. only:: esp32
 
-    ESP32 v3.0 及以上芯片版本支持 ``Secure Boot v2`` 和 ``RSA App Signing Scheme`` 选项，可通过 :ref:`CONFIG_ESP32_REV_MIN` 设置芯片版本为 `v3.0` 及以上启用这两个选项。
+    ESP32 v3.0 及以上芯片版本支持 ``Secure Boot v2`` 和 ``RSA App Signing Scheme`` 选项，可通过 :menuitem:`CONFIG_ESP32_REV_MIN` 设置芯片版本为 `v3.0` 及以上启用这两个选项。
 
 .. only:: esp32c3
 
-    自 ESP32-C3 芯片版本 v0.3 起，提供了 ``Secure Boot v2`` 选项。请设置 :ref:`CONFIG_ESP32C3_REV_MIN` 为高于或等于 `v0.3`，以在 menuconfig 中使用上述选项。
+    自 ESP32-C3 芯片版本 v0.3 起，提供了 ``Secure Boot v2`` 选项。请设置 :menuitem:`CONFIG_ESP32C3_REV_MIN` 为高于或等于 `v0.3`，以在 menuconfig 中使用上述选项。
 
 
 .. note::
 
     在本指南中，最常用的命令形式为 ``idf.py secure-<command>``，这是对应 ``espsecure <command>`` 的封装。基于 ``idf.py`` 的命令能提供更好的用户体验，但与基于 ``espsecure`` 的命令相比，可能会损失一部分高级功能。
+
+.. only:: CONFIG_SECURE_BOOT_V2_ECDSA_INSECURE and SOC_SECURE_BOOT_V2_RSA
+
+    .. warning::
+
+        在 {IDF_TARGET_NAME} 上，基于 ECDSA 的 Secure Boot V2 方案在某些输入向量下无法正常工作，因此**不推荐使用**。请改用基于 RSA 的 Secure Boot V2 方案。如果仍需使用基于 ECDSA 的方案，请启用 :menuitem:`CONFIG_SECURE_BOOT_INSECURE` 和 :menuitem:`CONFIG_SECURE_BOOT_V2_FORCE_ENABLE_ECDSA`。该问题将在未来的硬件 ECO 版本中修复，详情请参阅硬件勘误文档。
+
+.. only:: CONFIG_SECURE_BOOT_V2_ECDSA_INSECURE and not SOC_SECURE_BOOT_V2_RSA
+
+    .. warning::
+
+        在 {IDF_TARGET_NAME} 上，基于 ECDSA 的 Secure Boot V2 方案在某些输入向量下存在漏洞，因此**不推荐用于量产**。如果仍需使用基于 ECDSA 的 Secure Boot V2 方案，请启用 :menuitem:`CONFIG_SECURE_BOOT_INSECURE` 和 :menuitem:`CONFIG_SECURE_BOOT_V2_FORCE_ENABLE_ECDSA`。该问题将在未来的硬件 ECO 版本中修复，详情请参阅硬件勘误文档。
 
 背景
 ----
@@ -75,9 +87,6 @@
 
 2. 二级引导加载程序加载特定应用程序镜像，并验证应用程序的 {IDF_TARGET_SBV2_SCHEME} 签名。若验证通过，则执行应用程序镜像。
 
-.. only:: SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED
-
-    默认情况下，{IDF_TARGET_NAME} 禁用 ECDSA-P192 曲线。如果提供的安全启动签名密钥使用的是 ECDSA-P192 曲线，为配置安全启动，系统将尝试启用 ECDSA-P192 曲线模式。然而，如果该曲线模式已被锁定，则无法启用 ECDSA-P192。在这种情况下，无法使用 ECDSA-P192 密钥配置安全启动。用户必须改为提供基于 ECDSA-P256 曲线或基于 RSA 的签名密钥。
 
 优势
 ----
@@ -254,7 +263,7 @@
 
 .. only:: SOC_SECURE_BOOT_V2_ECC
 
-    .. list-table:: ECDSA-256 / ECDSA-192 签名块的内容
+    .. list-table:: ECDSA-256 签名块的内容
         :widths: 10 10 40
         :header-rows: 1
 
@@ -275,7 +284,7 @@
           - 仅针对镜像内容的 SHA-256 哈希值，不包括签名块。
         * - 36
           - 1
-          - 曲线 ID。1 代表 NIST192p 曲线，2 代表 NIST256p 曲线。
+          - 曲线 ID。2 表示 NIST256p 曲线。
         * - 37
           - 64
           - ECDSA 公钥：32 字节的 X 坐标，后跟 32 字节的 Y 坐标。
@@ -349,7 +358,7 @@
 .. list::
 
     - 默认 flash MMU 页面大小为 64 KB
-    :SOC_MMU_PAGE_SIZE_CONFIGURABLE: - {IDF_TARGET_NAME} 支持配置 flash MMU 页面大小，``CONFIG_MMU_PAGE_SIZE`` 根据 :ref:`CONFIG_ESPTOOLPY_FLASHSIZE` 设置
+    :SOC_MMU_PAGE_SIZE_CONFIGURABLE: - {IDF_TARGET_NAME} 支持配置 flash MMU 页面大小，``CONFIG_MMU_PAGE_SIZE`` 根据 :menuitem:`CONFIG_ESPTOOLPY_FLASHSIZE` 设置
     - 在进行由 ``esptool`` 执行的 ``elf2image`` 转换时，可以通过使用选项 ``--secure-pad-v2`` 应用安全填充
 
 带有安全填充和签名块的安全启动 v2 签名镜像的内容如下表所示：
@@ -411,7 +420,7 @@
 验证数据分区
 ------------
 
-Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像。启用 :ref:`CONFIG_SECURE_SIGNED_DATA_PARTITION` 以验证子类型为 ``ESP_PARTITION_SUBTYPE_DATA_UNDEFINED`` 的数据分区。
+Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像。启用 :menuitem:`CONFIG_APP_UPDATE_SECURE_SIGNED_DATA_PARTITION` 以验证子类型为 ``ESP_PARTITION_SUBTYPE_DATA_UNDEFINED`` 的数据分区。
 
 数据分区镜像必须使用相同的签名密钥，通过 ``idf.py secure-sign-data`` 进行签名，并采用与应用镜像相同的格式。验证使用存储在 eFuse 中的一个或多个公钥摘要，并遵循 :ref:`verify_image` 中所述的流程。
 
@@ -423,7 +432,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 启用安全启动和/或 flash 加密都会增加引导加载程序的大小，因此可能需要更新分区表偏移量，请参阅 :ref:`bootloader-size`。
 
-禁用 :ref:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 时，引导加载程序将使用 ``esptool`` 的 ``elf2image`` 命令中的 ``--pad-to-size`` 选项进行扇区填充，每个扇区大小为 4 KB。
+禁用 :menuitem:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 时，引导加载程序将使用 ``esptool`` 的 ``elf2image`` 命令中的 ``--pad-to-size`` 选项进行扇区填充，每个扇区大小为 4 KB。
 
 
 .. _efuse-usage:
@@ -457,7 +466,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
     - SECURE_BOOT_AGGRESSIVE_REVOKE - 启用激进的密钥撤销。只要与此密钥的验证失败，密钥就会立即撤销。
 
-    为确保后续不会有攻击者添加受信任的密钥，应使用 KEY_REVOKEX 撤销所有未使用的密钥摘要槽。若未启用 :ref:`CONFIG_SECURE_BOOT_ALLOW_UNUSED_DIGEST_SLOTS`，应用程序启动时，将在 :cpp:func:`esp_secure_boot_init_checks` 中检查和修复撤销操作。
+    为确保后续不会有攻击者添加受信任的密钥，应使用 KEY_REVOKEX 撤销所有未使用的密钥摘要槽。若未启用 :menuitem:`CONFIG_SECURE_BOOT_ALLOW_UNUSED_DIGEST_SLOTS`，应用程序启动时，将在 :cpp:func:`esp_secure_boot_init_checks` 中检查和修复撤销操作。
 
 密钥必须为可读密钥，以便软件访问。如果密钥设置了读保护，软件只能读取到全为零的数据，导致签名验证失败，启动中止。
 
@@ -471,7 +480,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 .. only:: esp32
 
-    2. 对于 ESP32，安全启动 v2 仅适用于 ESP32 芯片版本 v3.0 及以上版本。请将芯片版本更改至 ESP32 芯片版本 v3.0 以查看 ``Secure Boot v2`` 选项。更改芯片版本时，请将 ``Component Config`` > ``ESP32- Specific`` 中的 ``Minimum Supported ESP32 Revision`` 设置为 v3.0。
+    2. 对于 ESP32，安全启动 v2 仅适用于 ESP32 芯片版本 v3.0 及以上版本。要查看 ``Secure Boot v2`` 选项，请将 :menuitem:`CONFIG_ESP32_REV_MIN` 设置为 v3.0。
 
     3. 在项目目录的基础上，明确指定安全启动签名密钥的路径。
 
@@ -530,9 +539,6 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 - 一旦启用安全启动，就无法再对 eFuse 密钥进行读保护，这可以避免攻击者对存储公共密钥摘要的 eFuse 块进行读保护，进而导致系统无法验证和处理签名，系统服务无法正常运行。有关读保护密钥的更多信息，请参阅下方详细说明。
 
-.. only:: SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED
-
-    启用安全启动后，ECDSA 曲线模式将锁定为写保护状态。因此，如果启用前未将曲线模式设置为使用 ECDSA-P192 密钥，那么之后将无法再配置或使用 ECDSA_DS 外设中的 ECDSA-P192 曲线。
 
 烧录读保护密钥
 ~~~~~~~~~~~~~~
@@ -558,9 +564,9 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
     :SOC_SECURE_BOOT_SUPPORTED:* 安全启动公共密钥摘要
     * 用户数据
 
-启用安全启动后，默认禁用 eFuses 读保护功能。如后续需在应用程序中对某个 eFuse（例如上述读保护密钥列表中的密钥）进行读保护，请在启用安全启动的同时启用配置项 :ref:`CONFIG_SECURE_BOOT_V2_ALLOW_EFUSE_RD_DIS`。
+启用安全启动后，默认禁用 eFuses 读保护功能。如后续需在应用程序中对某个 eFuse（例如上述读保护密钥列表中的密钥）进行读保护，请在启用安全启动的同时启用配置项 :menuitem:`CONFIG_SECURE_BOOT_V2_ALLOW_EFUSE_RD_DIS`。
 
-建议在启用安全启动之前，完成全部密钥的烧录。如需启用配置项 :ref:`CONFIG_SECURE_BOOT_V2_ALLOW_EFUSE_RD_DIS`，请在所有读保护 eFuse 密钥烧录后，使用 :cpp:func:`esp_efuse_write_field_bit` 烧录 eFuse {IDF_TARGET_EFUSE_WR_DIS_RD_DIS}。
+建议在启用安全启动之前，完成全部密钥的烧录。如需启用配置项 :menuitem:`CONFIG_SECURE_BOOT_V2_ALLOW_EFUSE_RD_DIS`，请在所有读保护 eFuse 密钥烧录后，使用 :cpp:func:`esp_efuse_write_field_bit` 烧录 eFuse {IDF_TARGET_EFUSE_WR_DIS_RD_DIS}。
 
 .. note::
 
@@ -581,11 +587,11 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
   .. only:: SOC_ECDSA_SUPPORT_CURVE_P384
 
-    传递 ``--version 2 --scheme ecdsa384``、 ``--version 2 --scheme ecdsa256`` 或 ``--version 2 --scheme ecdsa192`` 选择 ECDSA 方案，生成相应的 ECDSA 私钥。
+    传递 ``--version 2 --scheme ecdsa384`` 或 ``--version 2 --scheme ecdsa256`` 选择 ECDSA 方案，生成相应的 ECDSA 私钥。
 
   .. only:: not SOC_ECDSA_SUPPORT_CURVE_P384
 
-    传递 ``--version 2 --scheme ecdsa256`` 或 ``--version 2 --scheme ecdsa192`` 选择 ECDSA 方案，生成相应的 ECDSA 私钥。
+    传递 ``--version 2 --scheme ecdsa256`` 选择 ECDSA 方案，生成相应的 ECDSA 私钥。
 
 签名密钥的强度取决于 (a) 系统的随机数源和 (b) 所用算法的正确性。对于生产设备，建议从具有高质量熵源的系统生成签名密钥，并使用最佳的可用 {IDF_TARGET_SBV2_SCHEME} 密钥生成工具。
 
@@ -600,12 +606,6 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
       openssl genrsa -out my_secure_boot_signing_key.pem 3072
 
 .. only:: SOC_SECURE_BOOT_V2_ECC
-
-    生成 ECC NIST192p 曲线密钥
-
-    .. code-block::
-
-        openssl ecparam -name prime192v1 -genkey -noout -out my_secure_boot_signing_key.pem
 
     生成 ECC NIST256p 曲线密钥
 
@@ -623,7 +623,6 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 注意，安全启动系统的强度取决于能否保持签名密钥的私密性。
 
-
 .. _remote-sign-v2-image:
 
 远程镜像签名
@@ -634,7 +633,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 对于生产构建，将签名密钥存储在远程签名服务器上，而不是本地构建机器上，是一种比较好的方案，这也是默认的 ESP-IDF 安全启动配置。可以使用命令行工具 ``espsecure`` 在远程系统上为应用程序镜像和分区表数据签名，供安全启动使用。
 
-使用远程签名时，请禁用选项 :ref:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES`，并构建固件。此时，私钥无需存在于构建系统中。
+使用远程签名时，请禁用选项 :menuitem:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES`，并构建固件。此时，私钥无需存在于构建系统中。
 
 构建完应用程序镜像和分区表后，构建系统会使用 ``idf.py`` 打印签名步骤：
 
@@ -654,7 +653,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 如果存在为镜像生成的有效预计算签名及相应公钥，可以使用这些签名生成一个签名扇区，并将其附加到镜像中。注意，预计算的签名应计算在镜像中的所有字节，包括安全填充字节。
 
-在此情况下，应禁用选项 :ref:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 来构建固件镜像。该镜像将进行安全填充，并使用以下命令，生成带签名的二进制文件：
+在此情况下，应禁用选项 :menuitem:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 来构建固件镜像。该镜像将进行安全填充，并使用以下命令，生成带签名的二进制文件：
 
 .. code-block::
 
@@ -668,7 +667,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 为了提高安全性，可能需要使用外部硬件安全模块 (HSM) 存储私钥，该私钥无法直接访问，但具备一个接口，可以生成二进制文件及其相应公钥的签名。
 
-在此情况下，请禁用选项 :ref:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 并构建固件。随后，可以将已进行安全填充的镜像提供给外部硬件安全模块来生成签名。请参阅 `使用外部 HSM 签名 <https://docs.espressif.com/projects/esptool/en/latest/{IDF_TARGET_PATH_NAME}/espsecure/index.html#remote-signing-using-an-external-hsm>`_ 生成已签名镜像。
+在此情况下，请禁用选项 :menuitem:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 并构建固件。随后，可以将已进行安全填充的镜像提供给外部硬件安全模块来生成签名。请参阅 `使用外部 HSM 签名 <https://docs.espressif.com/projects/esptool/en/latest/{IDF_TARGET_PATH_NAME}/espsecure/index.html#remote-signing-using-an-external-hsm>`_ 生成已签名镜像。
 
 .. only:: SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS
 
@@ -724,11 +723,11 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
         espsecure signature-info-v2 datafile.bin
 
-    .. only:: SOC_ECDSA_SUPPORT_CURVE_P384
+    .. only:: SOC_SECURE_BOOT_V2_ECC and SOC_ECDSA_SUPPORT_CURVE_P384
 
       .. note::
 
-        如果 Secure Boot v2 配置为使用 ECDSA P-384 签名方案，则所有用于签名的密钥必须为 ECDSA-P384 密钥。不支持与 P-384 同时使用其他椭圆曲线（例如 P-192 或 P-256）密钥，否则在启动过程中会导致签名验证失败。
+        如果 Secure Boot v2 配置为使用 ECDSA P-384 签名方案，则所有用于签名的密钥必须为 ECDSA-P384 密钥。不支持与 P-384 同时使用其他椭圆曲线（例如 P-256）密钥，否则在启动过程中会导致签名验证失败。
 
     .. _secure-boot-v2-key-revocation:
 
@@ -742,9 +741,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
     .. note::
 
-        请注意，启用配置 :ref:`CONFIG_SECURE_BOOT_ALLOW_UNUSED_DIGEST_SLOTS` 只能确保 **应用程序** 不会撤销未使用的摘要槽。
-        若想在设备首次启动时启用安全启动，那么即使启用了上述配置，引导加载程序也会在启用安全启动时撤销未使用的摘要槽，因为保留未使用的密钥槽会构成安全隐患。
-        如果在开发流程中需要保留未使用摘要槽，则应从外部启用安全启动 (:ref:`enable-secure-boot-v2-externally`)，而不是在启动设备时启用安全启动，这样引导加载程序就无需启用安全启动，从而避免安全隐患。
+        启用配置 :menuitem:`CONFIG_SECURE_BOOT_ALLOW_UNUSED_DIGEST_SLOTS` 后，未使用的摘要槽在两种情况下都将保持未撤销状态：在 **应用程序** 运行时，以及在设备首次启动时由 **引导加载程序** 启用安全启动时。请注意，除非调试接口和下载接口已完全禁用，且远程接口已针对安全风险进行全面审计，否则保留未使用的密钥槽可能构成安全风险。
 
     保守方法
     ~~~~~~~~
@@ -773,7 +770,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
     ROM 代码具备一项额外功能，即在签名验证失败时可以撤销公钥摘要。
 
-    请烧录 ``SECURE_BOOT_AGGRESSIVE_REVOKE`` eFuse 或启用 :ref:`CONFIG_SECURE_BOOT_ENABLE_AGGRESSIVE_KEY_REVOKE` 以启用此功能。
+    请烧录 ``SECURE_BOOT_AGGRESSIVE_REVOKE`` eFuse 或启用 :menuitem:`CONFIG_SECURE_BOOT_ENABLE_AGGRESSIVE_KEY_REVOKE` 以启用此功能。
 
     撤销密钥仅适用于成功启用了安全启动的情况。此外，在签名块无效或镜像摘要无效的情况下不会撤销密钥，仅在签名验证失败时，即在 :ref:`verify_image` 的第 3 步中验证失败时，才会执行撤销操作。
 
@@ -787,7 +784,7 @@ Secure Boot v2 签名验证也可以在 OTA 更新期间验证数据分区镜像
 
 以下章节包含对各安全启动要素的详细参考描述。
 
-安全启动已集成到 ESP-IDF 构建系统中，因此 ``idf.py build`` 将进行应用程序镜像签名。启用 :ref:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 后，``idf.py bootloader`` 将生成一个已签名的引导加载程序。
+安全启动已集成到 ESP-IDF 构建系统中，因此 ``idf.py build`` 将进行应用程序镜像签名。启用 :menuitem:`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES` 后，``idf.py bootloader`` 将生成一个已签名的引导加载程序。
 
 当然，也可以使用 ``idf.py`` 或 ``openssl`` 工具生成独立的签名并对其进行验证。推荐使用 ``idf.py``，但如果需要在非 ESP-IDF 环境中生成或验证签名，也可以使用 ``openssl`` 命令，安全启动 v2 的签名生成符合标准签名算法。
 
@@ -821,7 +818,7 @@ Keyfile 是包含 {IDF_TARGET_SBV2_KEY} 签名公钥/私钥的 PEM 文件。
 
         openssl dgst -sha256 -binary BINARY_FILE  > DIGEST_BINARY_FILE
 
-    .. only:: SOC_ECDSA_SUPPORT_CURVE_P384
+    .. only:: SOC_SECURE_BOOT_V2_ECC and SOC_ECDSA_SUPPORT_CURVE_P384
 
         在使用 ECDSA-P384 签名方案的情况下，必须使用 SHA-384 来计算镜像的摘要。
 
@@ -929,7 +926,7 @@ Keyfile 是包含 {IDF_TARGET_SBV2_KEY} 签名公钥/私钥的 PEM 文件。
 
 .. only:: esp32
 
-    2. 确保 ``App Signing Scheme`` 设置为 ``RSA``。对于 ESP32 芯片版本 v3.0 的芯片，请将 :ref:`CONFIG_ESP32_REV_MIN` 设置为 ``v3.0``，启用 ``RSA`` 选项
+    2. 确保 ``App Signing Scheme`` 设置为 ``RSA``。对于 ESP32 芯片版本 v3.0 的芯片，请将 :menuitem:`CONFIG_ESP32_REV_MIN` 设置为 ``v3.0``，启用 ``RSA`` 选项
 
 .. only:: SOC_SECURE_BOOT_V2_RSA and not SOC_SECURE_BOOT_V2_ECC
 
@@ -944,7 +941,7 @@ Keyfile 是包含 {IDF_TARGET_SBV2_KEY} 签名公钥/私钥的 PEM 文件。
     2. 设置 ``App Signing Scheme`` 为 ``RSA`` 或 ``ECDSA (v2)``。
 
 
-3. 启用 :ref:`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`。
+3. 启用 :menuitem:`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`。
 
 4. 默认情况下，选择 ``Sign binaries during build`` 选项将启用 ``Require signed app images`` 功能，该功能会在构建过程中自动对二进制文件签名，在 ``Secure Boot private signing key`` 中指定的文件将用于镜像签名。
 

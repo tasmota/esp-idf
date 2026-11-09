@@ -65,6 +65,19 @@ void gdma_hal_set_burst_size(gdma_hal_context_t *hal, int chan_id, gdma_channel_
     }
 }
 
+bool gdma_hal_check_burst_size(gdma_hal_context_t *hal, uint32_t burst_sz)
+{
+    if (burst_sz & (burst_sz - 1)) {
+        // Not a power of 2
+        return false;
+    }
+    if (!hal->set_burst_size) {
+        // When a specific burst size cannot be set (using fixed burst size)
+        return true;
+    }
+    return (hal->priv_data->supported_burst_size_mask & burst_sz) != 0;
+}
+
 void gdma_hal_set_strategy(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir, bool en_owner_check, bool en_desc_write_back, bool eof_till_popped)
 {
     hal->set_strategy(hal, chan_id, dir, en_owner_check, en_desc_write_back, eof_till_popped);
@@ -125,3 +138,13 @@ void gdma_hal_set_weight(gdma_hal_context_t *hal, int chan_id, gdma_channel_dire
     hal->set_weight(hal, chan_id, dir, weight);
 }
 #endif // SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION
+
+void gdma_hal_request_link_switch_event(gdma_hal_context_t *hal, int chan_id, gdma_channel_direction_t dir)
+{
+    hal->request_link_switch_event(hal, chan_id, dir);
+}
+
+bool gdma_hal_is_tx_link_switch_event_supported(gdma_hal_context_t *hal)
+{
+    return hal->is_tx_link_switch_event_supported(hal);
+}

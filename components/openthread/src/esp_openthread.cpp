@@ -12,8 +12,8 @@
 #include "esp_openthread_common_macro.h"
 #include "esp_openthread_cli.h"
 #include "esp_openthread_dns64.h"
+#include "esp_openthread_instance.h"
 #include "esp_openthread_lock.h"
-#include "esp_openthread_ncp.h"
 #include "esp_openthread_netif_glue.h"
 #include "esp_openthread_platform.h"
 #include "esp_openthread_sleep.h"
@@ -26,7 +26,6 @@
 #include "openthread/instance.h"
 #include "openthread/logging.h"
 #include "openthread/netdata.h"
-#include "openthread/tasklet.h"
 #include "openthread/thread.h"
 
 #if CONFIG_OPENTHREAD_FTD
@@ -81,7 +80,7 @@ esp_err_t esp_openthread_init(const esp_openthread_platform_config_t *config)
                         "Failed to initialize OpenThread platform driver");
     esp_openthread_lock_acquire(portMAX_DELAY);
     esp_err_t ret = ESP_OK;
-    ESP_GOTO_ON_FALSE(otInstanceInitSingle() != NULL, ESP_FAIL, exit, OT_PLAT_LOG_TAG,
+    ESP_GOTO_ON_FALSE(esp_openthread_instances_init(), ESP_FAIL, exit, OT_PLAT_LOG_TAG,
                       "Failed to initialize OpenThread instance");
 #if CONFIG_OPENTHREAD_DNS64_CLIENT
     ESP_GOTO_ON_ERROR(esp_openthread_dns64_client_init(), exit, OT_PLAT_LOG_TAG,
@@ -177,7 +176,7 @@ static void mainloop_safe_exit(void *ctx)
 
 esp_err_t esp_openthread_mainloop_exit(void)
 {
-    return esp_openthread_task_queue_post(mainloop_safe_exit, NULL);
+    return esp_openthread_task_queue_post(mainloop_safe_exit, NULL, ESP_OPENTHREAD_TASK_QUEUE_TYPE_NORMAL);
 }
 
 esp_err_t esp_openthread_launch_mainloop(void)
@@ -203,7 +202,7 @@ esp_err_t esp_openthread_launch_mainloop(void)
 
         esp_openthread_lock_acquire(portMAX_DELAY);
         esp_openthread_platform_update(&mainloop);
-        if (otTaskletsArePending(instance)) {
+        if (esp_openthread_tasklets_are_pending(instance)) {
             mainloop.timeout.tv_sec = 0;
             mainloop.timeout.tv_usec = 0;
         }
@@ -222,18 +221,13 @@ esp_err_t esp_openthread_launch_mainloop(void)
         if (result >= 0) {
             esp_openthread_lock_acquire(portMAX_DELAY);
             error = esp_openthread_platform_process(instance, &mainloop);
-            while (otTaskletsArePending(instance)) {
-                otTaskletsProcess(instance);
-            }
+            esp_openthread_tasklets_process(instance);
             esp_openthread_lock_release();
             if (error != ESP_OK) {
                 ESP_LOGE(OT_PLAT_LOG_TAG, "esp_openthread_platform_process failed");
-                break;
             }
         } else {
-            error = ESP_FAIL;
-            ESP_LOGE(OT_PLAT_LOG_TAG, "OpenThread system polling failed");
-            break;
+            ESP_LOGE(OT_PLAT_LOG_TAG, "OpenThread system polling failed (errno: %d)", errno);
         }
     }
 #if CONFIG_OPENTHREAD_TASK_BLOCK_MONITOR
@@ -244,7 +238,9 @@ esp_err_t esp_openthread_launch_mainloop(void)
 
 esp_err_t esp_openthread_deinit(void)
 {
-    otInstanceFinalize(esp_openthread_get_instance());
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    esp_openthread_instances_deinit(esp_openthread_get_instance());
+    esp_openthread_lock_release();
     return esp_openthread_platform_deinit();
 }
 
@@ -271,7 +267,7 @@ static void ot_task_worker(void *aContext)
 #endif // CONFIG_OPENTHREAD_CLI
 
 #if CONFIG_OPENTHREAD_RADIO
-    otAppNcpInit(esp_openthread_get_instance());
+    esp_openthread_ncp_app_init(esp_openthread_get_instance());
 #endif
     xSemaphoreGive(s_ot_syn_semaphore);
 
@@ -312,11 +308,13 @@ esp_err_t esp_openthread_start(const esp_openthread_config_t *config)
 esp_err_t esp_openthread_stop(void)
 {
     ESP_RETURN_ON_FALSE(s_ot_syn_semaphore != NULL, ESP_ERR_INVALID_STATE, OT_PLAT_LOG_TAG, "OpenThread is not initialized");
+#if (CONFIG_OPENTHREAD_FTD || CONFIG_OPENTHREAD_MTD)
     esp_openthread_lock_acquire(portMAX_DELAY);
     otInstance *instance = esp_openthread_get_instance();
     bool is_thread_not_active = (otThreadGetDeviceRole(instance) == OT_DEVICE_ROLE_DISABLED && otIp6IsEnabled(instance) == false);
     esp_openthread_lock_release();
     ESP_RETURN_ON_FALSE(is_thread_not_active, ESP_ERR_INVALID_STATE, OT_PLAT_LOG_TAG, "Thread interface is still active");
+#endif
     esp_openthread_mainloop_exit();
     xSemaphoreTake(s_ot_syn_semaphore, portMAX_DELAY);
     vTaskDelete(s_ot_task_handle);

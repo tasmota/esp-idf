@@ -335,7 +335,7 @@ IP_EVENT_STA_LOST_IP
 
 This event arises when the IPV4 address becomes invalid.
 
-IP_EVENT_STA_LOST_IP does not arise immediately after the Wi-Fi disconnects. Instead, it starts an IPV4 address lost timer (configurable via :ref:`CONFIG_ESP_NETIF_LOST_IP_TIMER_ENABLE` and :ref:`CONFIG_ESP_NETIF_IP_LOST_TIMER_INTERVAL`). If the IPV4 address is got before the timer expires, IP_EVENT_STA_LOST_IP does not happen. Otherwise, the event arises when the IPV4 address lost timer expires.
+IP_EVENT_STA_LOST_IP does not arise immediately after the Wi-Fi disconnects. Instead, it starts an IPV4 address lost timer (configurable via :menuitem:`CONFIG_ESP_NETIF_LOST_IP_TIMER_ENABLE` and :menuitem:`CONFIG_ESP_NETIF_IP_LOST_TIMER_INTERVAL`). If the IPV4 address is got before the timer expires, IP_EVENT_STA_LOST_IP does not happen. Otherwise, the event arises when the IPV4 address lost timer expires.
 
 Generally, the application can ignore this event, because it is just a debug event to inform that the IPV4 address is lost.
 
@@ -387,9 +387,11 @@ The :ref:`wifi-event-connectionless-module-wake-interval-start` will arise at th
 
 
 
-{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4", esp32c3="10", esp32c6="10"}
+{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4"}
 
-{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c3="7", esp32c6="7"}
+{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c2="0"}
+
+{IDF_TARGET_SUPPORT_ENCRYPT_NUM:default="17", esp32c2="4"}
 
 .. _wifi-configuration:
 
@@ -513,68 +515,46 @@ API :cpp:func:`esp_wifi_set_config()` can be used to configure the station. And 
    * - threshold
      - The threshold is used to filter the found AP. If the RSSI or security mode is less than the configured threshold, the AP will be discarded.
 
-       If the RSSI is set to 0, it means the default threshold is used, and the default RSSI threshold is -127 dBm. If the authmode threshold is set to 0, it means the default threshold is used, and the default authmode threshold is open.
+       If the RSSI is set to 0, it means the default threshold is used, and the default RSSI threshold is -127 dBm. If the authmode threshold is set to 0, it means the default threshold is used, and the default authmode threshold is ``WIFI_AUTH_OPEN``.
 
 
 .. attention::
 
-    WEP/WPA security modes are deprecated in IEEE 802.11-2016 specifications and are recommended not to be used. These modes can be rejected using authmode threshold by setting threshold as WPA2 by threshold.authmode as ``WIFI_AUTH_WPA2_PSK``.
+    WEP and TKIP are deprecated in IEEE 802.11-2016 and should not be used. To make the station connect only to APs with WPA2 or higher security, set ``wifi_config_t.sta.threshold.authmode`` to ``WIFI_AUTH_WPA2_PSK``. APs below this threshold, such as OPEN, WEP, and WPA-PSK, will be ignored during connection filtering.
 
 AP Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
 API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
-.. only:: esp32 or esp32s2 or esp32s3 or esp32c3 or esp32c5 or esp32c6
+.. list-table::
+  :header-rows: 1
+  :widths: 15 55
 
-    .. list-table::
-      :header-rows: 1
-      :widths: 15 55
+  * - Field
+    - Description
+  * - ssid
+    - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ``ESP_aabbcc``, where “aabbcc” is the last three bytes of the AP MAC.
+  * - password
+    - Password of AP; if the auth mode is ``WIFI_AUTH_OPEN``, this field will be ignored.
+  * - ssid_len
+    - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
+  * - channel
+    - .. only:: SOC_WIFI_SUPPORT_5G
 
-      * - Field
-        - Description
-      * - ssid
-        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ``ESP_aabbcc``, where “aabbcc” is the last three bytes of the AP MAC.
-      * - password
-        - Password of AP; if the auth mode is ``WIFI_AUTH_OPEN``, this field will be ignored.
-      * - ssid_len
-        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
-      * - channel
-        - Channel of AP; if the channel is out of range, the Wi-Fi driver will return error. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
-      * - authmode
-        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to ``WIFI_AUTH_OPEN``.
-      * - ssid_hidden
-        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
-      * - max_connection
-        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}, the max_connection can be set up to {IDF_TARGET_MAX_CONN_STA_NUM}, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
-      * - beacon_interval
-        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
+         Channel of AP; set to 0 for auto selection (min channel: typically 1 for 2.4G, 36 for 5G). Other invalid values return ``ESP_ERR_INVALID_ARG``. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
 
+      .. only:: not SOC_WIFI_SUPPORT_5G
 
-.. only:: esp32c2
-
-    .. list-table::
-      :header-rows: 1
-      :widths: 15 55
-
-      * - Field
-        - Description
-      * - ssid
-        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ``ESP_aabbcc``, where “aabbcc” is the last three bytes of the AP MAC.
-      * - password
-        - Password of AP; if the auth mode is ``WIFI_AUTH_OPEN``, this field will be ignored.
-      * - ssid_len
-        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
-      * - channel
-        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
-      * - authmode
-        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to ``WIFI_AUTH_OPEN``.
-      * - ssid_hidden
-        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
-      * - max_connection
-        - The max number of stations allowed to connect in, the default value is 2. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is {IDF_TARGET_MAX_CONN_STA_NUM}, the max_connection can be set up to ({IDF_TARGET_MAX_CONN_STA_NUM} - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
-      * - beacon_interval
-        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
+         Channel of AP; set to 0 for auto selection (min channel: typically 1 for 2.4G). Other invalid values return ``ESP_ERR_INVALID_ARG``. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+  * - authmode
+    - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to ``WIFI_AUTH_OPEN``.
+  * - ssid_hidden
+    - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
+  * - max_connection
+    - The max number of stations allowed to connect in. {IDF_TARGET_NAME} supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that soft-AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is {IDF_TARGET_SUPPORT_ENCRYPT_NUM}, if :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}, the max_connection can be set up to {IDF_TARGET_MAX_CONN_STA_NUM}, otherwise the max_connection can be set up to ({IDF_TARGET_SUPPORT_ENCRYPT_NUM} - :menuitem:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+  * - beacon_interval
+    - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
 
 Wi-Fi Protocol Mode
@@ -944,6 +924,7 @@ Wi-Fi Bandwidth Mode
 
           1. If the STA connects to an AP on a DFS channel, the SoftAP is allowed to switch to the same DFS channel using CSA (Channel Switch Announcement).
           2. When the STA disconnects, the SoftAP will switch back to a non-DFS channel via CSA to remain compliant with regulations.
+          3. To completely prevent the SoftAP from operating on DFS channels, call :cpp:func:`esp_wifi_set_country()` to set ``policy`` to ``WIFI_COUNTRY_POLICY_MANUAL`` and restrict ``wifi_5g_channel_mask`` to the non-DFS channels of the current country/region. ``wifi_5g_channel_mask`` takes effect only when policy is ``WIFI_COUNTRY_POLICY_MANUAL``. Note: in this case, if the target AP operates on a DFS channel, the STA cannot connect to that AP. See :component_file:`esp_wifi/regulatory/esp_wifi_regulatory.txt` for the DFS channel range of each country/region.
 
 ..
 
@@ -1078,7 +1059,7 @@ Wi-Fi Country Code
       * - policy
         - Country/region policy. When the configured country/region conflicts with that of the connected AP, this field determines which information to use. Details are explained below.
       * - wifi_5g_channel_mask
-        - Bitmask indicating allowed 5 GHz channels for the station/AP. The mapping between channel numbers and bits can be found in :cpp:enum:`wifi_5g_channel_bit_t`.
+        - Bitmask indicating allowed 5 GHz channels for the station/AP. The mapping between channel numbers and bits can be found in :cpp:enum:`wifi_5g_channel_bit_t`. A mask of 0 means 5 GHz channels are allowed according to local regulatory rules. The configured mask takes effect only when ``policy`` is ``WIFI_COUNTRY_POLICY_MANUAL``. To disable DFS channels, restrict the mask to the non-DFS channels of the current country/region; the STA will then be unable to connect to an AP operating on a DFS channel.
 
     A default configuration example::
 

@@ -1,12 +1,15 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "unity.h"
+#include "esp_timer.h"
+#include "esp_rom_sys.h"
 #include "hal/mcpwm_ll.h"
 #include "driver/mcpwm_timer.h"
 #include "esp_private/mcpwm.h"
@@ -85,6 +88,87 @@ TEST_CASE("mcpwm_timer_start_stop", "[mcpwm]")
     printf("delete timers\r\n");
     for (int i = 0; i < num_timers; i++) {
         TEST_ESP_OK(mcpwm_del_timer(timers[i]));
+    }
+}
+
+#define TOLERANCE_PERCENT_RC_FAST 10 // 10% error allowed
+#define TARGET_TIMER_RESOLUTION_HZ 1000000U
+#define TIMER_RESOLUTION_TEST_DELAY_US 5000U
+#define TARGET_TIMER_PERIOD_TICKS \
+    (2ULL * TARGET_TIMER_RESOLUTION_HZ * TIMER_RESOLUTION_TEST_DELAY_US / 1000000ULL) // nominal period should be >= 2x measurement window
+
+TEST_CASE("mcpwm_timer_various_clk_src", "[mcpwm]")
+{
+    mcpwm_timer_clock_source_t clk_srcs[] = SOC_MCPWM_TIMER_CLKS;
+    const int num_timers = MCPWM_LL_GET(TIMERS_PER_GROUP) * MCPWM_LL_GET(GROUP_NUM);
+
+    for (size_t clk_src_idx = 0; clk_src_idx < sizeof(clk_srcs) / sizeof(clk_srcs[0]); clk_src_idx++) {
+        mcpwm_timer_clock_source_t clk_src = clk_srcs[clk_src_idx];
+        const uint32_t tolerance_percent = (soc_module_clk_t)clk_src == SOC_MOD_CLK_RC_FAST ? TOLERANCE_PERCENT_RC_FAST : 1;
+        mcpwm_timer_config_t config = {
+            .clk_src = clk_src,
+            .resolution_hz = TARGET_TIMER_RESOLUTION_HZ,
+            .period_ticks = TARGET_TIMER_PERIOD_TICKS,
+            .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
+        };
+
+        printf("create MCPWM timers with clock source: %d\r\n", clk_src);
+        mcpwm_timer_handle_t timers[num_timers];
+        for (int group_id = 0; group_id < MCPWM_LL_GET(GROUP_NUM); group_id++) {
+            config.group_id = group_id;
+            for (int timer_id = 0; timer_id < MCPWM_LL_GET(TIMERS_PER_GROUP); timer_id++) {
+                int timer_index = group_id * MCPWM_LL_GET(TIMERS_PER_GROUP) + timer_id;
+                TEST_ESP_OK(mcpwm_new_timer(&config, &timers[timer_index]));
+            }
+        }
+
+        printf("enable timers\r\n");
+        for (int i = 0; i < num_timers; i++) {
+            TEST_ESP_OK(mcpwm_timer_enable(timers[i]));
+        }
+
+        printf("check timer resolution\r\n");
+        for (int i = 0; i < num_timers; i++) {
+            uint32_t timer_resolution_hz = 0; // determined by mcpwm_new_timer()
+            TEST_ESP_OK(mcpwm_timer_get_resolution(timers[i], &timer_resolution_hz));
+
+            TEST_ESP_OK(mcpwm_timer_start_stop(timers[i], MCPWM_TIMER_START_NO_STOP));
+
+            uint32_t cnt_start = 0;
+            uint32_t cnt_end = 0;
+            mcpwm_timer_direction_t direction;
+
+            TEST_ESP_OK(mcpwm_timer_get_phase(timers[i], &cnt_start, &direction));
+            int64_t time_start_us = esp_timer_get_time();
+            esp_rom_delay_us(TIMER_RESOLUTION_TEST_DELAY_US);
+            TEST_ESP_OK(mcpwm_timer_get_phase(timers[i], &cnt_end, &direction));
+            int64_t time_end_us = esp_timer_get_time();
+
+            int64_t time_delta_us = time_end_us - time_start_us;
+            uint32_t expected_ticks = (uint64_t)timer_resolution_hz * time_delta_us / 1000000;
+            uint32_t tolerance_ticks = expected_ticks * tolerance_percent / 100;
+
+            uint32_t measured_ticks;
+            if (cnt_end >= cnt_start) {
+                measured_ticks = cnt_end - cnt_start;
+            } else {
+                measured_ticks = config.period_ticks - cnt_start + cnt_end;
+            }
+
+            TEST_ASSERT_EQUAL(MCPWM_TIMER_DIRECTION_UP, direction);
+            TEST_ASSERT_UINT32_WITHIN(tolerance_ticks, expected_ticks, measured_ticks);
+
+            // ensure timer has stopped
+            TEST_ESP_OK(mcpwm_timer_start_stop(timers[i], MCPWM_TIMER_STOP_EMPTY));
+            vTaskDelay(pdMS_TO_TICKS(20));
+            check_mcpwm_timer_phase(&timers[i], 1, 0, MCPWM_TIMER_DIRECTION_UP);
+        }
+
+        printf("disable and delete timers\r\n");
+        for (int i = 0; i < num_timers; i++) {
+            TEST_ESP_OK(mcpwm_timer_disable(timers[i]));
+            TEST_ESP_OK(mcpwm_del_timer(timers[i]));
+        }
     }
 }
 

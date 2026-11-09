@@ -56,10 +56,13 @@ extern "C" {
 #define BT_CSIP_READ_SIRK_REQ_RSP_OOB_ONLY      0x03
 
 /** Size of the Set Identification Resolving Key (SIRK) */
-#define BT_CSIP_SIRK_SIZE 16
+#define BT_CSIP_SIRK_SIZE                       16
 
 /** Size of the Resolvable Set Identifier (RSI) */
 #define BT_CSIP_RSI_SIZE                        6
+
+/** Maximum length of the Coordinated Set Name (CSIS v1.1), a 0-128 octet UTF-8 string */
+#define BT_CSIP_SET_NAME_MAX_LEN                128
 
 /* Coordinate Set Identification Service Error codes */
 /** Service is already locked */
@@ -83,7 +86,10 @@ extern "C" {
  */
 #define BT_CSIP_DATA_RSI(_rsi) BT_DATA(BT_DATA_CSIS_RSI, _rsi, BT_CSIP_RSI_SIZE)
 
-/** @brief Opaque Coordinated Set Identification Service instance. */
+/**
+ * @struct bt_csip_set_member_svc_inst
+ * @brief Opaque Coordinated Set Identification Service instance.
+ */
 struct bt_csip_set_member_svc_inst;
 
 /** Callback structure for the Coordinated Set Identification Service */
@@ -128,6 +134,17 @@ struct bt_csip_set_member_register_param {
      * If set to 0, the set size characteristic won't be initialized.
      */
     uint8_t set_size;
+
+    /**
+     * @brief Coordinated Set Name (CSIS v1.1), a 0-128 octet UTF-8 string.
+     *
+     * If @ref set_name_len is 0, the Coordinated Set Name characteristic
+     * won't be initialized.
+     */
+    uint8_t set_name[BT_CSIP_SET_NAME_MAX_LEN];
+
+    /** Length in octets of @ref set_name. */
+    uint8_t set_name_len;
 
     /**
      * @brief The unique Set Identity Resolving Key (SIRK)
@@ -177,7 +194,7 @@ struct bt_csip_set_member_register_param {
  *
  * @return The first CSIS attribute instance.
  */
-void *bt_csip_set_member_svc_decl_get_safe(const struct bt_csip_set_member_svc_inst *svc_inst);
+void *bt_csip_set_member_svc_decl_get(const struct bt_csip_set_member_svc_inst *svc_inst);
 
 /**
  * @brief Register a Coordinated Set Identification Service instance.
@@ -194,8 +211,8 @@ void *bt_csip_set_member_svc_decl_get_safe(const struct bt_csip_set_member_svc_i
  *
  * @return 0 if success, errno on failure.
  */
-int bt_csip_set_member_register_safe(const struct bt_csip_set_member_register_param *param,
-                                     struct bt_csip_set_member_svc_inst **svc_inst);
+int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *param,
+                                struct bt_csip_set_member_svc_inst **svc_inst);
 
 /**
  * @brief Unregister a Coordinated Set Identification Service instance.
@@ -206,7 +223,7 @@ int bt_csip_set_member_register_safe(const struct bt_csip_set_member_register_pa
  *
  * @return 0 if success, errno on failure.
  */
-int bt_csip_set_member_unregister_safe(struct bt_csip_set_member_svc_inst *svc_inst);
+int bt_csip_set_member_unregister(struct bt_csip_set_member_svc_inst *svc_inst);
 
 /**
  * @brief Set the SIRK of a service instance
@@ -214,8 +231,8 @@ int bt_csip_set_member_unregister_safe(struct bt_csip_set_member_svc_inst *svc_i
  * @param svc_inst  Pointer to the registered Coordinated Set Identification Service.
  * @param sirk      The new SIRK.
  */
-int bt_csip_set_member_sirk_safe(struct bt_csip_set_member_svc_inst *svc_inst,
-                                 const uint8_t sirk[BT_CSIP_SIRK_SIZE]);
+int bt_csip_set_member_sirk(struct bt_csip_set_member_svc_inst *svc_inst,
+                            const uint8_t sirk[BT_CSIP_SIRK_SIZE]);
 
 /**
  * @brief Set a new size and rank for a service instance
@@ -224,6 +241,8 @@ int bt_csip_set_member_sirk_safe(struct bt_csip_set_member_svc_inst *svc_inst,
  * It is important to note that a set cannot have multiple devices with the same rank in a set,
  * and it is up to the caller of this function to ensure that.
  * Similarly, it is important that the size is updated on all devices in the set at the same time.
+ * The rank of a device cannot be modified on its own, and a new rank can only be set if the @p size
+ * is different from the current set size.
  *
  * If @kconfig{CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE} is enabled, this will also send a
  * notification to all connected or bonded clients.
@@ -234,11 +253,29 @@ int bt_csip_set_member_sirk_safe(struct bt_csip_set_member_svc_inst *svc_inst,
  *
  * @retval -EINVAL @p svc_inst is NULL, @p size is less than 1, @p rank is less than 1 or higher
  *                 than @p size for a lockable @p svc_inst.
- * @retval -EALREADY @p size and @p rank are already the provided values.
+ * @retval -EALREADY @p size is already set.
  * @retval 0 Success.
  */
-int bt_csip_set_member_set_size_and_rank_safe(struct bt_csip_set_member_svc_inst *svc_inst, uint8_t size,
-                                              uint8_t rank);
+int bt_csip_set_member_set_size_and_rank(struct bt_csip_set_member_svc_inst *svc_inst, uint8_t size,
+                                         uint8_t rank);
+
+/**
+ * @brief Set the Coordinated Set Name (CSIS v1.1) of a service instance.
+ *
+ * If @kconfig{CONFIG_BT_CSIP_SET_MEMBER_SET_NAME_NOTIFIABLE} is enabled, this also notifies
+ * subscribed clients (the first ATT_MTU-3 octets if the name is longer).
+ *
+ * @param svc_inst The service instance.
+ * @param name The new name (UTF-8). May be NULL only if @p len is 0.
+ * @param len Length of @p name in octets (0 to @ref BT_CSIP_SET_NAME_MAX_LEN).
+ *
+ * @retval -EINVAL @p svc_inst is NULL, @p len exceeds BT_CSIP_SET_NAME_MAX_LEN, or @p name is
+ *                 NULL with a non-zero @p len.
+ * @retval -EALREADY The name is already set to this value.
+ * @retval 0 Success.
+ */
+int bt_csip_set_member_set_name(struct bt_csip_set_member_svc_inst *svc_inst,
+                                const uint8_t *name, uint8_t len);
 
 /** Struct to hold information about a service instance */
 struct bt_csip_set_member_set_info {
@@ -278,8 +315,8 @@ struct bt_csip_set_member_set_info {
  * @retval -EINVAL @p svc_inst or @p info is NULL.
  * @retval 0 Success.
  */
-int bt_csip_set_member_get_info_safe(const struct bt_csip_set_member_svc_inst *svc_inst,
-                                     struct bt_csip_set_member_set_info *info);
+int bt_csip_set_member_get_info(const struct bt_csip_set_member_svc_inst *svc_inst,
+                                struct bt_csip_set_member_set_info *info);
 
 /**
  * @brief Generate the Resolvable Set Identifier (RSI) value.
@@ -291,8 +328,8 @@ int bt_csip_set_member_get_info_safe(const struct bt_csip_set_member_svc_inst *s
  *
  * @return int      0 if on success, errno on error.
  */
-int bt_csip_set_member_generate_rsi_safe(const struct bt_csip_set_member_svc_inst *svc_inst,
-                                         uint8_t rsi[BT_CSIP_RSI_SIZE]);
+int bt_csip_set_member_generate_rsi(const struct bt_csip_set_member_svc_inst *svc_inst,
+                                    uint8_t rsi[BT_CSIP_RSI_SIZE]);
 
 /**
  * @brief Locks a specific Coordinated Set Identification Service instance on the server.
@@ -305,8 +342,8 @@ int bt_csip_set_member_generate_rsi_safe(const struct bt_csip_set_member_svc_ins
  *
  * @return 0 on success, GATT error on error.
  */
-int bt_csip_set_member_lock_safe(struct bt_csip_set_member_svc_inst *svc_inst,
-                                 bool lock, bool force);
+int bt_csip_set_member_lock(struct bt_csip_set_member_svc_inst *svc_inst,
+                            bool lock, bool force);
 
 /** Information about a specific set */
 struct bt_csip_set_coordinator_set_info {
@@ -379,7 +416,6 @@ typedef void (*bt_csip_set_coordinator_discover_cb)(
  * @return int Return 0 on success, or an errno value on error.
  */
 int bt_csip_set_coordinator_discover(struct bt_conn *conn);
-int bt_csip_set_coordinator_discover_safe(struct bt_conn *conn);
 
 /**
  * @brief Get the set member from a connection pointer
@@ -395,8 +431,6 @@ int bt_csip_set_coordinator_discover_safe(struct bt_conn *conn);
  */
 struct bt_csip_set_coordinator_set_member *
 bt_csip_set_coordinator_set_member_by_conn(const struct bt_conn *conn);
-struct bt_csip_set_coordinator_set_member *
-bt_csip_set_coordinator_set_member_by_conn_safe(const struct bt_conn *conn);
 
 /**
  * @typedef bt_csip_set_coordinator_lock_set_cb
@@ -501,8 +535,8 @@ struct bt_csip_set_coordinator_cb {
  *
  * @return true if the advertising data indicates a set member, false otherwise
  */
-bool bt_csip_set_coordinator_is_set_member_safe(const uint8_t sirk[BT_CSIP_SIRK_SIZE],
-                                                struct bt_data *data);
+bool bt_csip_set_coordinator_is_set_member(const uint8_t sirk[BT_CSIP_SIRK_SIZE],
+                                           struct bt_data *data);
 
 /**
  * @brief Registers callbacks for csip_set_coordinator.
@@ -511,7 +545,7 @@ bool bt_csip_set_coordinator_is_set_member_safe(const uint8_t sirk[BT_CSIP_SIRK_
  *
  * @return Return 0 on success, or an errno value on error.
  */
-int bt_csip_set_coordinator_register_cb_safe(struct bt_csip_set_coordinator_cb *cb);
+int bt_csip_set_coordinator_register_cb(struct bt_csip_set_coordinator_cb *cb);
 
 /**
  * @brief Callback function definition for bt_csip_set_coordinator_ordered_access()
@@ -552,7 +586,7 @@ typedef bool (*bt_csip_set_coordinator_ordered_access_t)(
  *                  be part of multiple sets.
  * @param cb        The callback function to be called for each member.
  */
-int bt_csip_set_coordinator_ordered_access_safe(
+int bt_csip_set_coordinator_ordered_access(
     const struct bt_csip_set_coordinator_set_member *members[],
     uint8_t count,
     const struct bt_csip_set_coordinator_set_info *set_info,
@@ -574,9 +608,9 @@ int bt_csip_set_coordinator_ordered_access_safe(
  *
  * @return Return 0 on success, or an errno value on error.
  */
-int bt_csip_set_coordinator_lock_safe(const struct bt_csip_set_coordinator_set_member **members,
-                                      uint8_t count,
-                                      const struct bt_csip_set_coordinator_set_info *set_info);
+int bt_csip_set_coordinator_lock(const struct bt_csip_set_coordinator_set_member **members,
+                                 uint8_t count,
+                                 const struct bt_csip_set_coordinator_set_info *set_info);
 
 /**
  * @brief Release an array of set members
@@ -592,9 +626,9 @@ int bt_csip_set_coordinator_lock_safe(const struct bt_csip_set_coordinator_set_m
  *
  * @return Return 0 on success, or an errno value on error.
  */
-int bt_csip_set_coordinator_release_safe(const struct bt_csip_set_coordinator_set_member **members,
-                                         uint8_t count,
-                                         const struct bt_csip_set_coordinator_set_info *set_info);
+int bt_csip_set_coordinator_release(const struct bt_csip_set_coordinator_set_member **members,
+                                    uint8_t count,
+                                    const struct bt_csip_set_coordinator_set_info *set_info);
 
 #ifdef __cplusplus
 }

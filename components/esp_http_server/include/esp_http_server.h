@@ -380,7 +380,7 @@ esp_err_t httpd_stop(httpd_handle_t handle);
  */
 typedef struct httpd_req {
     httpd_handle_t  handle;                     /*!< Handle to server instance */
-    int             method;                     /*!< The type of HTTP request, -1 if unsupported method, HTTP_ANY for wildcard method to support every method */
+    int             method;                     /*!< The type of HTTP request (enum http_method); a request with an unrecognized method is rejected with 501 before any URI handler runs */
     const char      uri[CONFIG_HTTPD_MAX_URI_LEN + 1]; /*!< The URI of this request (1 byte extra for null termination) */
     size_t          content_len;                /*!< Length of the request body */
     void           *aux;                        /*!< Internally used members */
@@ -430,6 +430,13 @@ typedef struct httpd_req {
      */
     bool ignore_sess_ctx_changes;
 } httpd_req_t;
+
+#if CONFIG_HTTPD_WS_SUPPORT
+/* Forward declaration of the WebSocket frame type. The full definition appears
+ * later in this header; only a pointer to it is needed here so that httpd_uri_t
+ * can carry an optional WebSocket control-frame handler. */
+typedef struct httpd_ws_frame httpd_ws_frame_t;
+#endif
 
 /**
  * @brief Structure for URI handler
@@ -481,6 +488,34 @@ typedef struct httpd_uri {
      */
     esp_err_t (*ws_post_handshake_cb)(httpd_req_t *req);
 #endif /* CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT */
+
+    /**
+     * Optional dedicated handler for WebSocket control frames (PING, PONG, CLOSE).
+     *
+     * Only takes effect when handle_ws_control_frames is true. When set, control
+     * frames are delivered to this handler instead of the data handler, so the data
+     * handler only ever sees data frames (CONTINUE, TEXT, BINARY).
+     *
+     * The server has already received the frame body for you - no allocation or
+     * httpd_ws_recv_frame() call is needed - but it does *not* reply. Consistent with
+     * handle_ws_control_frames being true, this handler owns the protocol reply:
+     * answer a PING with a PONG echoing the payload and a CLOSE with a CLOSE
+     * (RFC 6455 section 5.5); a PONG needs no reply. The frame may be reused for the
+     * reply by overwriting frame->type and passing it to httpd_ws_send_frame().
+     *
+     * The frame and its payload are owned by the server and are only valid for the
+     * duration of the call: the handler must not free or retain them, and must not
+     * grow frame->len beyond the received length, as the payload buffer is sized for
+     * a control frame only. Returning an error closes the connection.
+     *
+     * If left NULL, control frames continue to be delivered to the data handler,
+     * which remains responsible for receiving and replying to them (unchanged
+     * behavior).
+     *
+     * Placed at the end of the struct to keep positional initialization of existing
+     * fields backward compatible.
+     */
+    esp_err_t (*ws_control_handler)(httpd_req_t *req, httpd_ws_frame_t *frame);
 #endif /* CONFIG_HTTPD_WS_SUPPORT */
 } httpd_uri_t;
 
@@ -588,10 +623,11 @@ typedef enum {
      */
     HTTPD_500_INTERNAL_SERVER_ERROR = 0,
 
-    /* For methods not supported by http_parser. Presently
-     * http_parser halts parsing when such methods are
-     * encountered and so the server responds with 400 Bad
-     * Request error instead.
+    /* For request methods that http_parser does not recognize,
+     * and for requests carrying a Transfer-Encoding header (no
+     * transfer coding is implemented). Parsing aborted mid-request
+     * in both cases, so the server closes the session after the
+     * response regardless of what a custom error handler returns.
      */
     HTTPD_501_METHOD_NOT_IMPLEMENTED,
 
@@ -599,8 +635,8 @@ typedef enum {
     HTTPD_505_VERSION_NOT_SUPPORTED,
 
     /* Returned when http_parser halts parsing due to incorrect
-     * syntax of request, unsupported method in request URI or
-     * due to chunked encoding / upgrade field present in headers
+     * syntax of request or due to an upgrade field present in
+     * headers that the server does not handle
      */
     HTTPD_400_BAD_REQUEST,
 
@@ -665,8 +701,10 @@ typedef enum {
  *    guaranteed as the HTTP request may be partially received/parsed.
  *  - The function must return ESP_OK if underlying socket needs to
  *    be kept open. Any other value will ensure that the socket is
- *    closed. The return value is ignored when error is of type
- *    `HTTPD_500_INTERNAL_SERVER_ERROR` and the socket closed anyway.
+ *    closed. The return value is ignored, and the socket is closed
+ *    anyway, when the error is `HTTPD_500_INTERNAL_SERVER_ERROR` or
+ *    `HTTPD_501_METHOD_NOT_IMPLEMENTED` (for 501 the request is only
+ *    partially parsed, so the session cannot continue safely).
  *
  * @param[in] req    HTTP request for which the error needs to be handled
  * @param[in] error  Error type
@@ -1008,6 +1046,33 @@ size_t httpd_req_get_hdr_value_len(httpd_req_t *r, const char *field);
 esp_err_t httpd_req_get_hdr_value_str(httpd_req_t *r, const char *field, char *val, size_t val_size);
 
 /**
+ * @brief   Similar to httpd_req_get_hdr_value_str() but avoids the string copy
+ *
+ * @note
+ *  - This API is meant to be used with std::string_view or similar
+ *  - The returned pointer references the header value kept in the request's
+ *    internal scratch buffer. It is NULL-terminated; val_len is provided for
+ *    convenience (e.g. constructing a std::string_view without a strlen()).
+ *  - This API is supposed to be called only from the context of
+ *    a URI handler where httpd_req_t* request pointer is valid.
+ *  - The returned pointer must only be used within the URI handler and not
+ *    after, since it will lead to use after free errors. In particular, once
+ *    httpd_resp_send() is called all request headers are purged.
+ *
+ * @param[in]  r        The request being responded to
+ * @param[in]  field    The field to be searched in the header
+ * @param[out] val      Pointer to a pointer that will be updated to the value string
+ * @param[out] val_len  Pointer to a length that will be updated with the value length
+ *
+ * @return
+ *  - ESP_OK : Field found; *val points to the value string and *val_len holds its length
+ *  - ESP_ERR_NOT_FOUND          : Key not found
+ *  - ESP_ERR_INVALID_ARG        : Null arguments
+ *  - ESP_ERR_HTTPD_INVALID_REQ  : Invalid HTTP request pointer
+ */
+esp_err_t httpd_req_get_hdr_value_str_ptr(httpd_req_t *r, const char *field, const char **val, size_t *val_len);
+
+/**
  * @brief   Get Query string length from the request URL
  *
  * @note    This API is supposed to be called only from the context of
@@ -1052,6 +1117,36 @@ size_t httpd_req_get_url_query_len(httpd_req_t *r);
  *  - ESP_ERR_HTTPD_RESULT_TRUNC : Query string truncated
  */
 esp_err_t httpd_req_get_url_query_str(httpd_req_t *r, char *buf, size_t buf_len);
+
+/**
+ * @brief   Similar to httpd_req_get_url_query_str() but avoids the string copy
+ *
+ * @note
+ *  - This API is meant to be used with std::string_view or similar
+ *  - Presently, the user can fetch the full URL query string, but decoding
+ *    will have to be performed by the user. Request headers can be read using
+ *    httpd_req_get_hdr_value_str() to know the 'Content-Type' (eg. Content-Type:
+ *    application/x-www-form-urlencoded) and then the appropriate decoding
+ *    algorithm needs to be applied.
+ *  - This API is supposed to be called only from the context of
+ *    a URI handler where httpd_req_t* request pointer is valid
+ *  - The byte range between buf and buf_len should only be used within
+ *    the URI handler and not after since it will lead to use after free
+ *    errors
+ *
+ * @param[in]  r         The request being responded to
+ * @param[out] buf       Pointer to a pointer that should be updated to the beginning of
+ *                       the query string within the request URL
+ * @param[out] buf_len   Pointer to a length that will be updated with the query length
+ *
+ * @return
+ *  - ESP_OK : Query found; *buf points to the query string and *buf_len holds its length
+ *  - ESP_FAIL                   : uri is empty
+ *  - ESP_ERR_NOT_FOUND          : Query not found
+ *  - ESP_ERR_INVALID_ARG        : Null arguments
+ *  - ESP_ERR_HTTPD_INVALID_REQ  : Invalid HTTP request pointer
+ */
+esp_err_t httpd_req_get_url_query_str_ptr(httpd_req_t *r, const char **buf, size_t *buf_len);
 
 /**
  * @brief   Helper function to get a URL query tag from a query
@@ -1729,12 +1824,12 @@ esp_err_t httpd_queue_work(httpd_handle_t handle, httpd_work_fn_t work, void *ar
  * @note Please refer to RFC6455 Section 5.4 for more details
  */
 typedef enum {
-    HTTPD_WS_TYPE_CONTINUE   = 0x0,
-    HTTPD_WS_TYPE_TEXT       = 0x1,
-    HTTPD_WS_TYPE_BINARY     = 0x2,
-    HTTPD_WS_TYPE_CLOSE      = 0x8,
-    HTTPD_WS_TYPE_PING       = 0x9,
-    HTTPD_WS_TYPE_PONG       = 0xA
+    HTTPD_WS_TYPE_CONTINUE        = 0x0,
+    HTTPD_WS_TYPE_TEXT            = 0x1,
+    HTTPD_WS_TYPE_BINARY          = 0x2,
+    HTTPD_WS_TYPE_CLOSE           = 0x8,
+    HTTPD_WS_TYPE_PING            = 0x9,
+    HTTPD_WS_TYPE_PONG            = 0xA,
 } httpd_ws_type_t;
 
 /**
@@ -1776,6 +1871,13 @@ typedef void (*transfer_complete_cb)(esp_err_t err, int socket, void *arg);
  *
  * @note    Calling httpd_ws_recv_frame() with max_len as 0 will give actual frame size in pkt->len.
  *          The user can dynamically allocate space for pkt->payload as per this length and call httpd_ws_recv_frame() again to get the actual data.
+ *
+ * @note    Fragmented messages (RFC 6455 §5.4) are not supported. Each frame is
+ *          returned on its own; the library never joins the fragments of one
+ *          message, and it does not validate the fragment sequence. Read pkt->final
+ *          and pkt->type to detect a fragment, and join the payloads in the
+ *          application. UTF-8 validation of a TEXT message that arrives in
+ *          fragments is the caller's responsibility; see httpd_ws_validate_utf8().
  *          Please refer to the corresponding example for usage.
  *
  * @param[in]   req         Current request
@@ -1797,6 +1899,13 @@ esp_err_t httpd_ws_recv_frame(httpd_req_t *req, httpd_ws_frame_t *pkt, size_t ma
  *          The user can dynamically allocate space for pkt->payload or user defined chunk size and call httpd_ws_recv_frame_part() again to get the actual data.
  *          In contrast to httpd_ws_recv_frame, this method is able to read frame payload partially. The amount of data that is yet to be received is stored in pkt->left_len
  *
+ * @note    UTF-8 validation required by RFC 6455 §8.1 for TEXT frames is only
+ *          performed by the library when a whole frame is consumed in a single
+ *          call (which includes a httpd_ws_recv_frame_part() call whose max_len
+ *          covers the entire payload). Callers that assemble a TEXT payload
+ *          across multiple calls are responsible for validating the assembled
+ *          buffer themselves; see httpd_ws_validate_utf8().
+ *
  * @param[in]   req         Current request
  * @param[out]  pkt         WebSocket packet
  * @param[in]   max_len     Maximum length for receive
@@ -1807,6 +1916,22 @@ esp_err_t httpd_ws_recv_frame(httpd_req_t *req, httpd_ws_frame_t *pkt, size_t ma
  *  - ESP_ERR_INVALID_ARG       : Argument is invalid (null or non-WebSocket)
  */
 esp_err_t httpd_ws_recv_frame_part(httpd_req_t *req, httpd_ws_frame_t *pkt, size_t max_len);
+
+/**
+ * @brief Validate that a byte buffer is well-formed UTF-8 per RFC 3629.
+ *
+ * Intended for application code that assembles a WebSocket TEXT message
+ * across multiple httpd_ws_recv_frame_part() calls and needs to enforce
+ * RFC 6455 §8.1 on the assembled payload before processing it.
+ *
+ * @param[in] data Pointer to the buffer to validate. May be NULL only if len is 0.
+ * @param[in] len  Length of the buffer in bytes.
+ * @return
+ *  - ESP_OK                : Buffer is valid UTF-8 (an empty buffer is always valid).
+ *  - ESP_ERR_INVALID_ARG   : data is NULL with non-zero len, or the buffer is not
+ *                            well-formed UTF-8 (overlong, surrogate, or beyond U+10FFFF).
+ */
+esp_err_t httpd_ws_validate_utf8(const uint8_t *data, size_t len);
 
 /**
  * @brief Construct and send a WebSocket frame
@@ -1878,6 +2003,33 @@ esp_err_t httpd_ws_send_data(httpd_handle_t handle, int socket, httpd_ws_frame_t
  */
 esp_err_t httpd_ws_send_data_async(httpd_handle_t handle, int socket, httpd_ws_frame_t *frame,
                                    transfer_complete_cb callback, void *arg);
+
+/**
+ * @brief Initiate a graceful WebSocket close handshake on a session.
+ *
+ * Sends a CLOSE frame with the given status code and optional UTF-8 reason,
+ * marks the session as closing (which blocks any further outbound data
+ * frames per RFC 6455 §1.4), and lets the underlying TCP socket be torn
+ * down at the next dispatch boundary. The call is idempotent: if the
+ * session was already closing it returns ESP_OK without emitting a second
+ * CLOSE frame, and the code and reason arguments are not validated.
+ *
+ * @param[in] hd     Server handle.
+ * @param[in] fd     Socket descriptor of the session to close.
+ * @param[in] code   Status code per RFC 6455 §7.4 (e.g., 1000 for normal
+ *                   closure). Reserved codes (1005, 1006) and out-of-range
+ *                   values are rejected.
+ * @param[in] reason Optional NUL-terminated UTF-8 reason, or NULL. Must be
+ *                   at most 123 bytes so the total control frame payload
+ *                   (2-byte code + reason) fits in 125 bytes.
+ * @return
+ *  - ESP_OK                : CLOSE sent (or session was already closing).
+ *  - ESP_ERR_INVALID_ARG   : Invalid fd, invalid code, reason exceeds 123 bytes,
+ *                            or reason is not valid UTF-8.
+ *  - ESP_ERR_INVALID_STATE : Socket is not an established WebSocket session.
+ *  - ESP_FAIL              : Underlying transport send failed.
+ */
+esp_err_t httpd_ws_close_session(httpd_handle_t hd, int fd, uint16_t code, const char *reason);
 
 #endif /* CONFIG_HTTPD_WS_SUPPORT || __DOXYGEN__ */
 /** End of WebSocket related stuff

@@ -19,7 +19,7 @@
 
 以下这些第三方库包含在 ESP-IDF 生成的应用程序（固件）中。
 
-* 如 :component_file:`COPYING.NEWLIB <esp_libc/COPYING.NEWLIB>` 中所述， :component:`Newlib <esp_libc>` 经 BSD 许可证许可，版权归各方所有。如启用了 :ref:`CONFIG_LIBC_PICOLIBC<CONFIG_LIBC_PICOLIBC>`，请参阅 :component_file:`COPYING.picolibc <esp_libc/COPYING.picolibc>`。
+* 如 :component_file:`COPYING.NEWLIB <esp_libc/COPYING.NEWLIB>` 中所述， :component:`Newlib <esp_libc>` 经 BSD 许可证许可，版权归各方所有。如启用了 :menuitem:`CONFIG_LIBC_PICOLIBC`，请参阅 :component_file:`COPYING.picolibc <esp_libc/COPYING.picolibc>`。
 
 * 如 :component_file:`COPYING.picolibc <esp_libc/COPYING.NEWLIB>` 中所述， :component:`Picolibc <esp_libc>` 经 BSD 许可证许可，版权归各方所有。
 
@@ -56,6 +56,8 @@
 * :component:`BLE Mesh <bt/esp_ble_mesh>` 改编自 Zephyr 项目，版权归 2017-2018 英特尔公司所有，并根据 Apache License 2.0 进行许可。
 
 * :component:`BLE Audio <bt/esp_ble_audio>` 改编自 Zephyr 项目，版权归 2017-2018 英特尔公司所有，并根据 Apache License 2.0 进行许可。
+
+* :component:`BLE ISO <bt/esp_ble_iso>` 改编自 Zephyr 项目，版权归 2017-2018 英特尔公司所有，并根据 Apache License 2.0 进行许可。
 
 * `mynewt-nimble`_，版权归 2015-2018 Apache 软件基金会所有，根据 :component_file:`LICENSE 文件 <bt/host/nimble/nimble/LICENSE>` 中描述的 Apache License 2.0 进行许可。
 

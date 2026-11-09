@@ -14,6 +14,8 @@
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
+#include "esp_macros.h"
+#include "freertos/FreeRTOS.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
@@ -22,18 +24,17 @@
 #include "esp_private/spi_common_internal.h"
 #include "esp_private/spi_share_hw_ctrl.h"
 #include "esp_private/esp_cache_private.h"
+#include "esp_private/esp_mspi_align.h"
+#include "esp_private/esp_dma_utils.h"
+#include "esp_private/gdma_link.h"
 #include "esp_private/sleep_retention.h"
-#include "esp_dma_utils.h"
 #include "hal/spi_hal.h"
 #if SOC_GDMA_SUPPORTED
-#include "hal/gdma_ll.h"
+#include "hal/gdma_ll.h" // for GDMA_LL_AHB_BURST_SIZE_ADJUSTABLE
 #endif
-#include "freertos/FreeRTOS.h"
-#if CONFIG_IDF_TARGET_ESP32
-#include "soc/dport_reg.h"
-#endif
+
 #if CONFIG_SPIRAM
-#include "esp_private/esp_psram_mspi.h"
+#include "esp_private/mspi_mem_barrier.h"
 #endif
 
 #if CONFIG_SPI_MASTER_ISR_IN_IRAM || CONFIG_SPI_SLAVE_ISR_IN_IRAM
@@ -160,21 +161,21 @@ static inline void _spicommon_dma_rcc_clock_ctrl(spi_dma_chan_t dma_chan, bool e
     if (enable) {
         PERIPH_RCC_ACQUIRE_ATOMIC(dma_periph, ref_count) {
             if (ref_count == 0) {
-                spi_dma_ll_enable_bus_clock(dma_chan, true);
-                spi_dma_ll_reset_register(dma_chan);
+                spi_ll_dma_enable_bus_clock(dma_chan, true);
+                spi_ll_dma_reset_register(dma_chan);
             }
         }
     } else {
         PERIPH_RCC_RELEASE_ATOMIC(dma_periph, ref_count) {
             if (ref_count == 0) {
-                spi_dma_ll_enable_bus_clock(dma_chan, false);
+                spi_ll_dma_enable_bus_clock(dma_chan, false);
             }
         }
     }
 #else
     PERIPH_RCC_ATOMIC() {
-        spi_dma_ll_enable_bus_clock(dma_chan, enable);
-        spi_dma_ll_reset_register(dma_chan);
+        spi_ll_dma_enable_bus_clock(dma_chan, enable);
+        spi_ll_dma_reset_register(dma_chan);
     }
 #endif
 }
@@ -193,15 +194,6 @@ static bool claim_dma_chan(int dma_chan, uint32_t *out_actual_dma_chan)
     portEXIT_CRITICAL(&spi_dma_spinlock);
 
     return ret;
-}
-
-static void connect_spi_and_dma(spi_host_device_t host, int dma_chan)
-{
-#if CONFIG_IDF_TARGET_ESP32
-    DPORT_SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, dma_chan, (host * 2));
-#elif CONFIG_IDF_TARGET_ESP32S2
-    //On ESP32S2, each SPI controller has its own DMA channel. So there is no need to connect them.
-#endif
 }
 
 static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_chan, uint32_t dma_burst_size, spi_dma_ctx_t *dma_ctx)
@@ -245,7 +237,7 @@ static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_ch
     if (!success) {
         SPI_CHECK(false, "no available dma channel", ESP_ERR_NOT_FOUND);
     }
-    connect_spi_and_dma(host_id, actual_dma_chan);
+    spi_ll_dma_connect_host(host_id, actual_dma_chan);
 
     spi_dma_enable_burst(dma_ctx->tx_dma_chan, true, true);
     spi_dma_enable_burst(dma_ctx->rx_dma_chan, true, true);
@@ -264,7 +256,7 @@ static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_ch
 #define SPI_GDMA_NEW_CHANNEL    gdma_new_ahb_channel
 #endif
 
-static esp_err_t resolve_dma_burst_size(uint32_t requested, uint32_t *out_burst_size)
+static uint32_t resolve_dma_burst_size(uint32_t requested)
 {
     uint32_t burst_size = requested;
     if (burst_size == 0) {
@@ -277,8 +269,7 @@ static esp_err_t resolve_dma_burst_size(uint32_t requested, uint32_t *out_burst_
     }
     burst_size = SPI_DMA_DEFAULT_BURST_SIZE;
 #endif
-    *out_burst_size = burst_size;
-    return ESP_OK;
+    return burst_size;
 }
 
 static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_chan, uint32_t dma_burst_size, spi_dma_ctx_t *dma_ctx)
@@ -288,8 +279,7 @@ static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_ch
     esp_err_t ret = ESP_OK;
 
     if (dma_chan == SPI_DMA_CH_AUTO) {
-        uint32_t burst_size = SPI_DMA_DEFAULT_BURST_SIZE;
-        ESP_RETURN_ON_ERROR(resolve_dma_burst_size(dma_burst_size, &burst_size), SPI_TAG, "invalid dma_burst_size");
+        uint32_t burst_size = resolve_dma_burst_size(dma_burst_size);
 
         gdma_channel_alloc_config_t alloc_config = {
 #if CONFIG_SPI_MASTER_ISR_IN_IRAM
@@ -312,7 +302,7 @@ static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_ch
 #endif
         gdma_transfer_config_t trans_cfg = {
             .max_data_burst_size = burst_size,
-#if CONFIG_SPIRAM && SOC_PSRAM_DMA_CAPABLE
+#if SOC_PSRAM_DMA_CAPABLE || SOC_DMA_CAN_ACCESS_FLASH
             .access_ext_mem = true, // allow to transfer data from/to external memory directly by DMA
 #endif
         };
@@ -320,8 +310,14 @@ static esp_err_t alloc_dma_chan(spi_host_device_t host_id, spi_dma_chan_t dma_ch
         ESP_RETURN_ON_ERROR(gdma_config_transfer(dma_ctx->rx_dma_chan, &trans_cfg), SPI_TAG, "config gdma rx transfer failed");
 
         // Get DMA alignment constraints
-        gdma_get_alignment_constraints(dma_ctx->tx_dma_chan, &dma_ctx->dma_align_tx_int, &dma_ctx->dma_align_tx_ext);
-        gdma_get_alignment_constraints(dma_ctx->rx_dma_chan, &dma_ctx->dma_align_rx_int, &dma_ctx->dma_align_rx_ext);
+        gdma_channel_alignment_info_t tx_align_info;
+        gdma_get_channel_alignment_constraints(dma_ctx->tx_dma_chan, &tx_align_info);
+        dma_ctx->dma_align_tx_int = tx_align_info.int_mem_alignment;
+        dma_ctx->dma_align_tx_ext = tx_align_info.ext_enc_mem_alignment;
+        gdma_channel_alignment_info_t rx_align_info;
+        gdma_get_channel_alignment_constraints(dma_ctx->rx_dma_chan, &rx_align_info);
+        dma_ctx->dma_align_rx_int = rx_align_info.int_mem_alignment;
+        dma_ctx->dma_align_rx_ext = rx_align_info.ext_enc_mem_alignment;
     }
     return ret;
 }
@@ -355,61 +351,92 @@ cleanup:
     return ret;
 }
 
-esp_err_t spicommon_dma_desc_alloc(spi_host_device_t host_id, int cfg_max_sz, int *actual_max_sz)
+static void spicommon_dma_link_free(spi_host_device_t host_id)
 {
-    int dma_desc_ct = (cfg_max_sz + DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED - 1) / DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED;
-    if (dma_desc_ct == 0) {
-        dma_desc_ct = 1;    //default to 4k when max is not given
-    }
-
     spi_dma_ctx_t *dma_ctx = spi_bus_get_dma_ctx(host_id);
     if (!dma_ctx) {
-        return ESP_ERR_INVALID_STATE;
+        return;
     }
-    dma_ctx->dmadesc_tx = heap_caps_aligned_calloc(DMA_DESC_MEM_ALIGN_SIZE, 1, sizeof(spi_dma_desc_t) * dma_desc_ct, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-    dma_ctx->dmadesc_rx = heap_caps_aligned_calloc(DMA_DESC_MEM_ALIGN_SIZE, 1, sizeof(spi_dma_desc_t) * dma_desc_ct, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-    if (dma_ctx->dmadesc_tx == NULL || dma_ctx->dmadesc_rx == NULL) {
-        if (dma_ctx->dmadesc_tx) {
-            free(dma_ctx->dmadesc_tx);
-            dma_ctx->dmadesc_tx = NULL;
-        }
-        if (dma_ctx->dmadesc_rx) {
-            free(dma_ctx->dmadesc_rx);
-            dma_ctx->dmadesc_rx = NULL;
-        }
-        return ESP_ERR_NO_MEM;
+    if (dma_ctx->tx_link_handle) {
+        gdma_del_link_list(dma_ctx->tx_link_handle);
+        dma_ctx->tx_link_handle = NULL;
     }
-    dma_ctx->dma_desc_num = dma_desc_ct;
-    *actual_max_sz = dma_desc_ct * DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED;
-    return ESP_OK;
+    if (dma_ctx->rx_link_handle) {
+        gdma_del_link_list(dma_ctx->rx_link_handle);
+        dma_ctx->rx_link_handle = NULL;
+    }
 }
 
-void SPI_COMMON_ISR_ATTR spicommon_dma_desc_setup_link(spi_dma_desc_t *dmadesc, const void *data, int len, bool is_rx)
+esp_err_t spicommon_dma_desc_alloc(spi_host_device_t host_id, int cfg_max_sz, int *actual_max_sz)
 {
-    dmadesc = ADDR_DMA_2_CPU(dmadesc);
-    int n = 0;
-    while (len) {
-        int dmachunklen = len;
-        if (dmachunklen > DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED) {
-            dmachunklen = DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED;
-        }
-        if (is_rx) {
-            //Receive needs DMA length rounded to next 32-bit boundary
-            dmadesc[n].dw0.size = (dmachunklen + 3) & (~3);
-        } else {
-            dmadesc[n].dw0.size = dmachunklen;
-            dmadesc[n].dw0.length = dmachunklen;
-        }
-        dmadesc[n].buffer = (uint8_t *)data;
-        dmadesc[n].dw0.suc_eof = 0;
-        dmadesc[n].dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
-        dmadesc[n].next = ADDR_CPU_2_DMA(&dmadesc[n + 1]);
-        len -= dmachunklen;
-        data += dmachunklen;
-        n++;
+    esp_err_t ret = ESP_OK;
+    spi_dma_ctx_t *dma_ctx = spi_bus_get_dma_ctx(host_id);
+    ESP_RETURN_ON_FALSE(dma_ctx, ESP_ERR_INVALID_STATE, SPI_TAG, "dma context not initialized");
+    size_t tx_buffer_alignment = dma_ctx->dma_align_tx_int ? dma_ctx->dma_align_tx_int : 1;
+    size_t rx_buffer_alignment = dma_ctx->dma_align_rx_int ? dma_ctx->dma_align_rx_int : 1;
+    if (dma_ctx->dma_align_tx_ext < BIT(31)) {
+        tx_buffer_alignment = MAX(tx_buffer_alignment, dma_ctx->dma_align_tx_ext);
     }
-    dmadesc[n - 1].dw0.suc_eof = 1; //Mark last DMA desc as end of stream.
-    dmadesc[n - 1].next = NULL;
+    if (dma_ctx->dma_align_rx_ext < BIT(31)) {
+        rx_buffer_alignment = MAX(rx_buffer_alignment, dma_ctx->dma_align_rx_ext);
+    }
+
+    size_t tx_item_num = esp_dma_calculate_node_count(cfg_max_sz, tx_buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
+    size_t rx_item_num = esp_dma_calculate_node_count(cfg_max_sz, rx_buffer_alignment, DMA_DESCRIPTOR_BUFFER_MAX_SIZE);
+    gdma_link_list_config_t link_cfg = {
+        .num_items = MAX(MAX(tx_item_num, rx_item_num), 1), //default to 1 when 'cfg_max_sz' is not given
+        .item_alignment = DMA_DESC_MEM_ALIGN_SIZE,
+    };
+    ESP_RETURN_ON_ERROR(gdma_new_link_list(&link_cfg, &dma_ctx->tx_link_handle), SPI_TAG, "failed to allocate tx dma link");
+    ESP_GOTO_ON_ERROR(gdma_new_link_list(&link_cfg, &dma_ctx->rx_link_handle), cleanup, SPI_TAG, "failed to allocate rx dma link");
+
+    // save link info
+    dma_ctx->dma_desc_num = link_cfg.num_items;
+    dma_ctx->dmadesc_tx = (spi_dma_desc_t *)gdma_link_get_head_addr(dma_ctx->tx_link_handle);
+    dma_ctx->dmadesc_rx = (spi_dma_desc_t *)gdma_link_get_head_addr(dma_ctx->rx_link_handle);
+    *actual_max_sz = dma_ctx->dma_desc_num * ESP_ALIGN_DOWN(DMA_DESCRIPTOR_BUFFER_MAX_SIZE, rx_buffer_alignment);
+    return ESP_OK;
+
+cleanup:
+    spicommon_dma_link_free(host_id);
+    return ret;
+}
+
+void SPI_COMMON_ISR_ATTR spicommon_dma_desc_setup_link(const spi_dma_ctx_t *dma_ctx, int offset, const void *data, int len, bool is_rx)
+{
+    size_t buffer_alignment = 0;
+#if SOC_GDMA_SUPPORTED
+    gdma_channel_handle_t dma_chan = is_rx ? dma_ctx->rx_dma_chan : dma_ctx->tx_dma_chan;
+    buffer_alignment = gdma_get_buffer_alignment_constraint(dma_chan, data);
+#else
+    bool is_ptr_ext = esp_ptr_external_ram(data);
+    if (is_rx) {
+        buffer_alignment = is_ptr_ext ? dma_ctx->dma_align_rx_ext : dma_ctx->dma_align_rx_int;
+    } else {
+        buffer_alignment = is_ptr_ext ? dma_ctx->dma_align_tx_ext : dma_ctx->dma_align_tx_int;
+
+    }
+    if (is_ptr_ext || esp_ptr_in_drom(data)) {
+        size_t mspi_alignment = esp_mspi_get_alignment(data);
+        buffer_alignment = MAX(buffer_alignment, mspi_alignment);
+    }
+#endif
+
+    gdma_buffer_mount_config_t mount_config = {
+        .buffer = (void *)data,
+        .buffer_alignment = buffer_alignment,
+        .length = is_rx ? ESP_ALIGN_UP(len, 4) : len,   // dma rx hardware requires 4 bytes alignment
+        .flags = {
+            .mark_eof = true,
+            .mark_final = GDMA_FINAL_LINK_TO_NULL,
+            // 'setup_priv_buffer' already do the check
+            .bypass_buffer_addr_align_check = true,
+            .bypass_buffer_size_align_check = true,
+        }
+    };
+    esp_err_t ret = gdma_link_mount_buffers(is_rx ? dma_ctx->rx_link_handle : dma_ctx->tx_link_handle, offset, &mount_config, 1, NULL);
+    assert(ret == ESP_OK);
+    (void)ret;
 }
 
 esp_err_t SPI_COMMON_ISR_ATTR spicommon_dma_setup_priv_buffer(spi_host_device_t host_id, uint32_t *buffer, uint32_t len, bool is_tx, bool psram_prefer, bool auto_malloc, uint32_t **ret_buffer)
@@ -445,7 +472,9 @@ esp_err_t SPI_COMMON_ISR_ATTR spicommon_dma_setup_priv_buffer(spi_host_device_t 
     need_malloc |= (use_psram || bus_attr->cache_align_int > 1) ? (((uint32_t)buffer | len) & (alignment - 1)) : (((uint32_t)buffer) & (alignment - 1));
     uint32_t align_len = (len + alignment - 1) & (~(alignment - 1));   // up align alignment
     ESP_EARLY_LOGV(SPI_TAG, "SPI%d %s %p, len %d, is_ptr_ext %d, use_psram: %d, alignment: %d, need_malloc: %d from %s", host_id + 1, is_tx ? "TX" : "RX", buffer, len, is_ptr_ext, use_psram, alignment, need_malloc, (mem_cap & MALLOC_CAP_SPIRAM) ? "psram" : "internal");
-
+#if CONFIG_SECURE_FLASH_ENC_ENABLED || CONFIG_SPIRAM_ECC_ENABLE
+    ESP_RETURN_ON_FALSE_ISR(!(use_psram && (len & (alignment - 1))), ESP_ERR_INVALID_ARG, SPI_TAG, "len %d must align to alignment %d when using psram buffer with encryption or ECC", len, alignment);
+#endif
     if (need_malloc) {
         ESP_RETURN_ON_FALSE_ISR(auto_malloc, ESP_ERR_INVALID_STATE, SPI_TAG, "%s addr&len not align to %d, or not dma_capable, suggest use 'heap_caps_malloc' or enable auto_align", is_tx ? "TX" : "RX", alignment);
         uint32_t *temp = heap_caps_aligned_alloc(alignment, align_len, mem_cap);
@@ -486,6 +515,7 @@ esp_err_t spicommon_dma_chan_free(spi_host_device_t host_id)
     assert(spi_dma_chan_enabled & BIT(dma_chan));
 
     portENTER_CRITICAL(&spi_dma_spinlock);
+    spi_ll_dma_disconnect_host(host_id);
     spi_dma_chan_enabled &= ~BIT(dma_chan);
     _spicommon_dma_rcc_clock_ctrl(dma_chan, false);
     portEXIT_CRITICAL(&spi_dma_spinlock);
@@ -500,13 +530,7 @@ esp_err_t spicommon_dma_chan_free(spi_host_device_t host_id)
         gdma_del_channel(dma_ctx->tx_dma_chan);
     }
 #endif
-
-    if (dma_ctx->dmadesc_tx) {
-        free(dma_ctx->dmadesc_tx);
-    }
-    if (dma_ctx->dmadesc_rx) {
-        free(dma_ctx->dmadesc_rx);
-    }
+    spicommon_dma_link_free(host_id);
     free(dma_ctx);
     spi_dma_ctx[host_id] = NULL;
     return ESP_OK;
@@ -608,7 +632,7 @@ static void s_spi_common_gpio_check_reserve(gpio_num_t gpio_num)
     }
 }
 
-static void s_spi_common_bus_via_gpio(gpio_num_t gpio_num, int in_sig, int out_sig, uint64_t *io_mask)
+static void s_spi_common_bus_via_gpio(gpio_num_t gpio_num, int in_sig, int out_sig, bool out_inv, uint64_t *io_mask)
 {
     assert(GPIO_IS_VALID_GPIO(gpio_num));  //coverity check
     if (in_sig != -1) {
@@ -618,7 +642,7 @@ static void s_spi_common_bus_via_gpio(gpio_num_t gpio_num, int in_sig, int out_s
         // For gpio_matrix, reserve output pins, see 'esp_gpio_reserve.h'
         *io_mask |= BIT64(gpio_num);
         s_spi_common_gpio_check_reserve(gpio_num);
-        gpio_matrix_output(gpio_num, out_sig, false, false);
+        gpio_matrix_output(gpio_num, out_sig, out_inv, false);
     }
     gpio_func_sel(gpio_num, PIN_FUNC_GPIO);
 }
@@ -692,8 +716,11 @@ esp_err_t spicommon_bus_initialize_io(spi_host_device_t host, const spi_bus_conf
         temp_flag |= SPICOMMON_BUSFLAG_DUAL;
     }
 
+    bool data_out_inv = bus_config->flags & SPICOMMON_BUSFLAG_DATA_OUT_INV;
     //check if the selected pins correspond to the iomux pins of the peripheral
-    bool use_iomux = !(flags & SPICOMMON_BUSFLAG_GPIO_PINS) && bus_uses_iomux_pins(host, bus_config);
+    bool use_iomux = !data_out_inv &&
+                     !(flags & SPICOMMON_BUSFLAG_GPIO_PINS) &&
+                     bus_uses_iomux_pins(host, bus_config);
     if (use_iomux) {
         temp_flag |= SPICOMMON_BUSFLAG_IOMUX_PINS;
     } else {
@@ -703,6 +730,7 @@ esp_err_t spicommon_bus_initialize_io(spi_host_device_t host, const spi_bus_conf
     uint32_t missing_flag = flags & ~temp_flag;
     missing_flag &= ~SPICOMMON_BUSFLAG_MASTER;  //don't check this flag
     missing_flag &= ~SPICOMMON_BUSFLAG_SLP_ALLOW_PD;
+    missing_flag &= ~SPICOMMON_BUSFLAG_DATA_OUT_INV;
 
     if (missing_flag != 0) {
         //check pins existence
@@ -755,25 +783,27 @@ esp_err_t spicommon_bus_initialize_io(spi_host_device_t host, const spi_bus_conf
     } else {
         //Use GPIO matrix
         if (bus_config->mosi_io_num >= 0) {
-            int in_sig  = spi_periph_signal[host].spid_in; // always connect input in case sio mode device is used
-            int out_sig = ((flags & SPICOMMON_BUSFLAG_MASTER) || (temp_flag & SPICOMMON_BUSFLAG_DUAL)) ? spi_periph_signal[host].spid_out : -1;
-            s_spi_common_bus_via_gpio(bus_config->mosi_io_num, in_sig, out_sig, &gpio_reserv);
+            int in_sig  = spi_periph_signal[host].spid_in; // always connect input in case sio master is used
+            int out_sig = spi_periph_signal[host].spid_out;// always connect output in case sio slave is used, output capability is checked in slave hd driver
+            s_spi_common_bus_via_gpio(bus_config->mosi_io_num, in_sig, out_sig, data_out_inv, &gpio_reserv);
         }
         if (bus_config->miso_io_num >= 0) {
             int in_sig = ((flags & SPICOMMON_BUSFLAG_MASTER) || (temp_flag & SPICOMMON_BUSFLAG_DUAL)) ? spi_periph_signal[host].spiq_in : -1;
             int out_sig = (!(flags & SPICOMMON_BUSFLAG_MASTER) || (temp_flag & SPICOMMON_BUSFLAG_DUAL)) ? spi_periph_signal[host].spiq_out : -1;
-            s_spi_common_bus_via_gpio(bus_config->miso_io_num, in_sig, out_sig, &gpio_reserv);
+            s_spi_common_bus_via_gpio(bus_config->miso_io_num, in_sig, out_sig, data_out_inv, &gpio_reserv);
         }
         if (bus_config->sclk_io_num >= 0) {
             int in_sig = (flags & SPICOMMON_BUSFLAG_MASTER) ? -1 : spi_periph_signal[host].spiclk_in;
             int out_sig = (flags & SPICOMMON_BUSFLAG_MASTER) ? spi_periph_signal[host].spiclk_out : -1;
-            s_spi_common_bus_via_gpio(bus_config->sclk_io_num, in_sig, out_sig, &gpio_reserv);
+            s_spi_common_bus_via_gpio(bus_config->sclk_io_num, in_sig, out_sig, false, &gpio_reserv);
         }
         if (bus_config->quadwp_io_num >= 0) {
-            s_spi_common_bus_via_gpio(bus_config->quadwp_io_num, spi_periph_signal[host].spiwp_in, spi_periph_signal[host].spiwp_out, &gpio_reserv);
+            s_spi_common_bus_via_gpio(bus_config->quadwp_io_num, spi_periph_signal[host].spiwp_in,
+                                      spi_periph_signal[host].spiwp_out, data_out_inv, &gpio_reserv);
         }
         if (bus_config->quadhd_io_num >= 0) {
-            s_spi_common_bus_via_gpio(bus_config->quadhd_io_num, spi_periph_signal[host].spihd_in, spi_periph_signal[host].spihd_out, &gpio_reserv);
+            s_spi_common_bus_via_gpio(bus_config->quadhd_io_num, spi_periph_signal[host].spihd_in,
+                                      spi_periph_signal[host].spihd_out, data_out_inv, &gpio_reserv);
         }
 #if SOC_SPI_SUPPORT_OCT
         if (flags & SPICOMMON_BUSFLAG_OCTAL) {
@@ -786,7 +816,7 @@ esp_err_t spicommon_bus_initialize_io(spi_host_device_t host, const spi_bus_conf
             };
             for (size_t i = 0; i < sizeof(io_nums) / sizeof(io_nums[0]); i++) {
                 if (io_nums[i] >= 0) {
-                    s_spi_common_bus_via_gpio(io_nums[i], io_signals[i][1], io_signals[i][0], &gpio_reserv);
+                    s_spi_common_bus_via_gpio(io_nums[i], io_signals[i][1], io_signals[i][0], data_out_inv, &gpio_reserv);
                 }
             }
         }
@@ -946,14 +976,21 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
                 .arg = ctx,
             },
         },
+        .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
         .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
     };
 
     _lock_acquire(&ctx->mutex);
     if (sleep_retention_module_init(spi_reg_retention_info[host_id - 1].module_id, &init_param) == ESP_OK) {
-        if ((bus_config->flags & SPICOMMON_BUSFLAG_SLP_ALLOW_PD) && (sleep_retention_module_allocate(spi_reg_retention_info[host_id - 1].module_id) != ESP_OK)) {
-            // even though the sleep retention create failed, SPI driver should still work, so just warning here
-            ESP_LOGW(SPI_TAG, "alloc sleep recover failed, peripherals may hold power on");
+        if ((bus_config->flags & SPICOMMON_BUSFLAG_SLP_ALLOW_PD)) {
+            if (sleep_retention_module_allocate(spi_reg_retention_info[host_id - 1].module_id) != ESP_OK) {
+                // even though the sleep retention create failed, SPI driver should still work, so just warning here
+                ESP_LOGW(SPI_TAG, "alloc sleep recover failed, peripherals may hold power on");
+            } else {
+                if (sleep_retention_module_attach(spi_reg_retention_info[host_id - 1].module_id) != ESP_OK) {
+                    ESP_LOGW(SPI_TAG, "attach sleep recover failed, peripherals may hold power on");
+                }
+            }
         }
     } else {
         // even the sleep retention init failed, SPI driver should still work, so just warning here
@@ -1055,6 +1092,7 @@ esp_err_t spi_bus_free(spi_host_device_t host_id)
 #if SOC_SPI_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
     const periph_retention_module_t retention_id = spi_reg_retention_info[host_id - 1].module_id;
     _lock_acquire(&ctx->mutex);
+    sleep_retention_module_detach(retention_id);
     if (sleep_retention_is_module_created(retention_id)) {
         assert(sleep_retention_is_module_inited(retention_id));
         sleep_retention_module_free(retention_id);
@@ -1111,7 +1149,7 @@ bool SPI_COMMON_ISR_ATTR spicommon_dmaworkaround_req_reset(int dmachan, dmaworka
     } else {
         //Reset DMA
         PERIPH_RCC_ATOMIC() {
-            spi_dma_ll_reset_register(dmachan);
+            spi_ll_dma_reset_register(dmachan);
         }
         ret = true;
     }
@@ -1131,7 +1169,7 @@ void SPI_COMMON_ISR_ATTR spicommon_dmaworkaround_idle(int dmachan)
     if (dmaworkaround_waiting_for_chan == dmachan) {
         //Reset DMA
         PERIPH_RCC_ATOMIC() {
-            spi_dma_ll_reset_register(dmachan);
+            spi_ll_dma_reset_register(dmachan);
         }
         dmaworkaround_waiting_for_chan = 0;
         //Call callback

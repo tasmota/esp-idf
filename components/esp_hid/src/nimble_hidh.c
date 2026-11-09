@@ -70,14 +70,14 @@ static inline void SEND_CB(void)
 static inline void LOCK_OPS(void)
 {
     if (s_ble_hidh_op_mutex) {
-        xSemaphoreTake(s_ble_hidh_op_mutex, portMAX_DELAY);
+        xSemaphoreTakeRecursive(s_ble_hidh_op_mutex, portMAX_DELAY);
     }
 }
 
 static inline void UNLOCK_OPS(void)
 {
     if (s_ble_hidh_op_mutex) {
-        xSemaphoreGive(s_ble_hidh_op_mutex);
+        xSemaphoreGiveRecursive(s_ble_hidh_op_mutex);
     }
 }
 
@@ -428,6 +428,9 @@ static void read_device_services(esp_hidh_dev_t *dev)
             dev->config.report_maps = NULL;
             goto done;
         }
+        /* HOGP defaults to Report Protocol Mode; the Protocol Mode
+         * characteristic is often write-only, so it cannot be read back. */
+        memset(dev->protocol_mode, ESP_HID_PROTOCOL_MODE_REPORT, dev->config.report_maps_len);
     }
 
     for (uint16_t s = 0; s < svc_count; s++) {
@@ -467,6 +470,7 @@ static void read_device_services(esp_hidh_dev_t *dev)
             for (uint16_t c = 0; c < ccount; c++) {
                 cuuid = ble_uuid_u16(&char_result[c].uuid.u);
                 chandle = char_result[c].val_handle;
+                report = NULL;
                 ESP_LOGD(TAG, "  CHAR:(%d), handle: %d, perm: 0x%02x, uuid: 0x%04x",
                          c + 1, chandle, char_result[c].properties, cuuid);
                 if (suuid == BLE_SVC_GAP_UUID16) {
@@ -514,21 +518,22 @@ static void read_device_services(esp_hidh_dev_t *dev)
                                 }
                             }
                         }
-                        continue;
-                    } else {
-                        if (cuuid == BLE_SVC_HID_CHR_UUID16_PROTOCOL_MODE) {
-                            if (char_result[c].properties & BLE_GATT_CHR_PROP_READ) {
-                                if (read_char(dev->ble.conn_id, chandle, &rdata, &rlen) == 0 && rlen) {
-                                    dev->protocol_mode[hidindex] = *((uint8_t *)rdata);
-                                    free(rdata);
-                                    rdata = NULL;
-                                }
+                    }
+                    continue;
+                } else if (suuid == BLE_SVC_HID_UUID16) {
+                    if (cuuid == BLE_SVC_HID_CHR_UUID16_PROTOCOL_MODE) {
+                        if ((char_result[c].properties & BLE_GATT_CHR_PROP_READ) != 0
+                                && dev->protocol_mode != NULL && hidindex < dev->config.report_maps_len) {
+                            if (read_char(dev->ble.conn_id, chandle, &rdata, &rlen) == 0 && rlen) {
+                                dev->protocol_mode[hidindex] = *((uint8_t *)rdata);
                             }
+                            free(rdata);
+                            rdata = NULL;
                         }
                         continue;
-                    }
-                    if (cuuid == BLE_SVC_HID_CHR_UUID16_REPORT_MAP) {
-                        if (char_result[c].properties & BLE_GATT_CHR_PROP_READ) {
+                    } else if (cuuid == BLE_SVC_HID_CHR_UUID16_REPORT_MAP) {
+                        if ((char_result[c].properties & BLE_GATT_CHR_PROP_READ) != 0
+                                && dev->config.report_maps != NULL && hidindex < dev->config.report_maps_len) {
                             if (read_char(dev->ble.conn_id, chandle, &rdata, &rlen) == 0 && rlen) {
                                 uint8_t *copy = nimble_hidh_dup_bytes(rdata, rlen);
                                 if (copy) {
@@ -537,41 +542,38 @@ static void read_device_services(esp_hidh_dev_t *dev)
                                     dev->config.report_maps[hidindex].len = rlen;
                                 }
                             }
-                            continue;
-                        } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_INP || cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_OUT
-                                   || cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_MOUSE_INP || cuuid == BLE_SVC_HID_CHR_UUID16_RPT) {
-                            report = (esp_hidh_dev_report_t *)malloc(sizeof(esp_hidh_dev_report_t));
-                            if (report == NULL) {
-                                ESP_LOGE(TAG, "malloc esp_hidh_dev_report_t failed");
-                                goto done;
-                            }
-                            report->next = NULL;
-                            report->permissions = char_result[c].properties;
-                            report->handle = chandle;
-                            report->ccc_handle = 0;
-                            report->report_id = 0;
-                            report->map_index = hidindex;
-                            if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_INP) {
-                                report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
-                                report->report_type = ESP_HID_REPORT_TYPE_INPUT;
-                                report->usage = ESP_HID_USAGE_KEYBOARD;
-                                report->value_len = 8;
-                            } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_OUT) {
-                                report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
-                                report->report_type = ESP_HID_REPORT_TYPE_OUTPUT;
-                                report->usage = ESP_HID_USAGE_KEYBOARD;
-                                report->value_len = 8;
-                            } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_MOUSE_INP) {
-                                report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
-                                report->report_type = ESP_HID_REPORT_TYPE_INPUT;
-                                report->usage = ESP_HID_USAGE_MOUSE;
-                                report->value_len = 8;
-                            } else {
-                                report->protocol_mode = ESP_HID_PROTOCOL_MODE_REPORT;
-                                report->report_type = 0;
-                                report->usage = ESP_HID_USAGE_GENERIC;
-                                report->value_len = 0;
-                            }
+                            free(rdata);
+                            rdata = NULL;
+                        }
+                        continue;
+                    } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_INP || cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_OUT
+                               || cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_MOUSE_INP || cuuid == BLE_SVC_HID_CHR_UUID16_RPT) {
+                        report = (esp_hidh_dev_report_t *)malloc(sizeof(esp_hidh_dev_report_t));
+                        if (report == NULL) {
+                            ESP_LOGE(TAG, "malloc esp_hidh_dev_report_t failed");
+                            goto done;
+                        }
+                        report->next = NULL;
+                        report->permissions = char_result[c].properties;
+                        report->handle = chandle;
+                        report->ccc_handle = 0;
+                        report->report_id = 0;
+                        report->map_index = hidindex;
+                        if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_INP) {
+                            report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
+                            report->report_type = ESP_HID_REPORT_TYPE_INPUT;
+                            report->usage = ESP_HID_USAGE_KEYBOARD;
+                            report->value_len = 8;
+                        } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_KBD_OUT) {
+                            report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
+                            report->report_type = ESP_HID_REPORT_TYPE_OUTPUT;
+                            report->usage = ESP_HID_USAGE_KEYBOARD;
+                            report->value_len = 8;
+                        } else if (cuuid == BLE_SVC_HID_CHR_UUID16_BOOT_MOUSE_INP) {
+                            report->protocol_mode = ESP_HID_PROTOCOL_MODE_BOOT;
+                            report->report_type = ESP_HID_REPORT_TYPE_INPUT;
+                            report->usage = ESP_HID_USAGE_MOUSE;
+                            report->value_len = 8;
                         } else {
                             report->protocol_mode = ESP_HID_PROTOCOL_MODE_REPORT;
                             report->report_type = 0;
@@ -581,6 +583,8 @@ static void read_device_services(esp_hidh_dev_t *dev)
                     } else {
                         continue;
                     }
+                } else {
+                    continue;
                 }
                 struct ble_gatt_dsc descr_result[HIDH_MAX_DSCS];
                 uint16_t num_dsc = HIDH_MAX_DSCS;
@@ -789,6 +793,20 @@ static void attach_report_listeners(esp_hidh_dev_t *dev)
     report = dev->reports;
 
     if (dev->ble.battery_handle) {
+        uint8_t *rdata = NULL;
+        uint16_t rlen = 0;
+
+        if (event_loop_handle &&
+                read_char(dev->ble.conn_id, dev->ble.battery_handle, &rdata, &rlen) == 0 &&
+                rlen >= 1 && rdata != NULL) {
+            esp_hidh_event_data_t p = {0};
+            p.battery.dev = dev;
+            p.battery.level = rdata[0];
+            esp_event_post_to(event_loop_handle, ESP_HIDH_EVENTS, ESP_HIDH_BATTERY_EVENT,
+                              &p, sizeof(esp_hidh_event_data_t), portMAX_DELAY);
+        }
+        free(rdata);
+
         register_for_notify(dev->ble.conn_id, dev->ble.battery_handle);
         if (dev->ble.battery_ccc_handle && dev->ble.conn_id >= 0 && dev->connected) {
             write_char_descr(dev, dev->ble.battery_ccc_handle, 2, (uint8_t *)&ccc_data);
@@ -1174,7 +1192,7 @@ esp_err_t esp_ble_hidh_init(const esp_hidh_config_t *config)
     s_ble_hidh_cb_semaphore = xSemaphoreCreateBinary();
     ESP_RETURN_ON_FALSE(s_ble_hidh_cb_semaphore,
                         ESP_ERR_NO_MEM, TAG, "Allocation failed");
-    s_ble_hidh_op_mutex = xSemaphoreCreateMutex();
+    s_ble_hidh_op_mutex = xSemaphoreCreateRecursiveMutex();
     if (s_ble_hidh_op_mutex == NULL) {
         vSemaphoreDelete(s_ble_hidh_cb_semaphore);
         s_ble_hidh_cb_semaphore = NULL;

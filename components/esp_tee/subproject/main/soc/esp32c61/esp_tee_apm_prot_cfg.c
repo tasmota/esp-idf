@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -55,9 +55,9 @@ static const char *TAG = "esp_tee_apm_prot_cfg";
 
 /* NOTE: Super-Watchdog and Brownout Detector protection */
 #define LP_APM_SWD_REG_START      (LP_WDT_SWD_CONFIG_REG)
-#define LP_APM_SWD_REG_END        (LP_WDT_INT_CLR_REG)
+#define LP_APM_SWD_REG_END        (LP_WDT_INT_CLR_REG + 4U)
 #define LP_APM_BOD_REG_START      (LP_ANA_BOD_MODE0_CNTL_REG)
-#define LP_APM_BOD_REG_END        (LP_ANA_LP_INT_CLR_REG)
+#define LP_APM_BOD_REG_END        (LP_ANA_LP_INT_CLR_REG + 4U)
 
 /* NOTE: Following are the master IDs for setting the security mode and access through APM:
  * +---------+-------------+
@@ -119,10 +119,10 @@ static apm_hal_ctrl_region_cfg_t hp_apm_regn_cfg_ree0[] = {
     APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 4, HP_APM_SPI1_REG_END, DR_REG_INTMTX_BASE, APM_PERM_R | APM_PERM_W, true),
 
     /* Region 5/6/7/8: Peripherals [ETM - PMU] (RW) */
-    /* Protected: SHA, ECC, PCR (SHA, ECC), TEE, HP_APM, CPU_APM */
+    /* Protected: SHA, ECC, the whole crypto PCR block, TEE, HP_APM, CPU_APM */
     APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 5, DR_REG_SOC_ETM_BASE, DR_REG_SHA_BASE, APM_PERM_R | APM_PERM_W, true),
     APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 6, DR_REG_ECDSA_BASE, PCR_SHA_CONF_REG, APM_PERM_R | APM_PERM_W, true),
-    APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 7, PCR_ECDSA_CONF_REG, DR_REG_TEE_BASE, APM_PERM_R | APM_PERM_W, true),
+    APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 7, PCR_IOMUX_CONF_REG, DR_REG_TEE_BASE, APM_PERM_R | APM_PERM_W, true),
     APM_HAL_REGION_ENTRY(APM_CTRL_ACCESS_PATH_M2, 8, 0x6009B000, DR_REG_PMU_BASE, APM_PERM_R | APM_PERM_W, true),
 
     /* Region 9: EXT_MEM region (RW) */

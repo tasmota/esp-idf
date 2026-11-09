@@ -17,6 +17,7 @@ Application Examples
 --------------------
 
 - :example:`protocols/esp_http_client` demonstrates how to use the ESP HTTP Client to make HTTP/S requests.
+- :example:`protocols/esp_http_client_mutual_auth` demonstrates how to configure mutual TLS authentication with the ESP HTTP Client.
 
 
 Basic HTTP Request
@@ -35,13 +36,18 @@ To allow ESP HTTP client to take full advantage of persistent connections, one s
 Use Secure Element (ATECC608) for TLS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A secure element (ATECC608) can be also used for the underlying TLS connection in the HTTP client connection. Please refer to the **ATECC608A (Secure Element) with ESP-TLS** section in the :doc:`ESP-TLS documentation </api-reference/protocols/esp_tls>` for more details. The secure element support has to be first enabled in menuconfig through :ref:`CONFIG_ESP_TLS_USE_SECURE_ELEMENT`. Then the HTTP client can be configured to use secure element as follows:
+A secure element (ATECC608) can be used for the underlying TLS connection in the HTTP client connection via the PSA Crypto opaque driver interface. Please refer to the **ATECC608A (Secure Element) with ESP-TLS** section in the :doc:`ESP-TLS documentation </api-reference/protocols/esp_tls>` for details on setting up the PSA key. Then configure the HTTP client to use the secure element via the ``client_key`` field in :cpp:type:`esp_http_client_config_t`:
 
 .. code-block:: c
 
+    esp_key_config_t key_config = {
+        .source = ESP_KEY_SOURCE_PSA,
+        .psa.key_id = psa_key_id,  /* obtained via psa_import_key() */
+    };
+
     esp_http_client_config_t cfg = {
-        /* other configurations options */
-        .use_secure_element = true,
+        /* other configuration options */
+        .client_key = &key_config,
     };
 
 .. only:: SOC_ECDSA_SUPPORTED
@@ -65,7 +71,7 @@ A secure element (ATECC608) can be also used for the underlying TLS connection i
 HTTPS Request
 -------------
 
-ESP HTTP client supports SSL connections using **mbedTLS**, with the ``url`` configuration starting with ``https`` scheme or ``transport_type`` set to ``HTTP_TRANSPORT_OVER_SSL``. HTTPS support can be configured via :ref:`CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS` (enabled by default).
+ESP HTTP client supports SSL connections using **mbedTLS**, with the ``url`` configuration starting with ``https`` scheme or ``transport_type`` set to ``HTTP_TRANSPORT_OVER_SSL``. HTTPS support can be configured via :menuitem:`CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS` (enabled by default).
 
 .. note::
 
@@ -81,8 +87,10 @@ Some applications need to open the connection and control the exchange of data a
 
     * :cpp:func:`esp_http_client_init`: Create a HTTP client handle.
     * ``esp_http_client_set_*`` or ``esp_http_client_delete_*``: Modify the HTTP connection parameters (optional).
-    * :cpp:func:`esp_http_client_open`: Open the HTTP connection with ``write_len`` parameter (content length that needs to be written to server), set ``write_len=0`` for read-only connection.
+    * :cpp:func:`esp_http_client_open`: Open the HTTP connection with ``write_len`` parameter (content length that needs to be written to server), set ``write_len=0`` for read-only connection and set ``write_len=-1`` for chunked encoded data transfer.
     * :cpp:func:`esp_http_client_write`: Write data to server with a maximum length equal to ``write_len`` of :cpp:func:`esp_http_client_open` function; no need to call this function for ``write_len=0``.
+    * :cpp:func:`esp_http_client_chunk_write_begin`: Begin a chunk by sending the chunk header (size line) when using chunked transfer encoding (``write_len=-1``).
+    * :cpp:func:`esp_http_client_chunk_write_end`: End a chunk by sending the chunk trailer when using chunked transfer encoding.
     * :cpp:func:`esp_http_client_fetch_headers`: Read the HTTP Server response headers, after sending the request headers and server data (if any). Returns the ``content-length`` from the server and can be succeeded by :cpp:func:`esp_http_client_get_status_code` for getting the HTTP status of the connection.
     * :cpp:func:`esp_http_client_read`: Read the HTTP stream.
     * :cpp:func:`esp_http_client_close`: Close the connection.
@@ -139,9 +147,9 @@ Configuration
 
 To enable response header saving, the following Kconfig options must be configured:
 
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_SAVE_RESPONSE_HEADERS`: Enable saving of response headers (disabled by default to conserve memory).
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_MAX_SAVED_RESPONSE_HEADERS`: Maximum number of response headers to save (default: 10).
-    * :ref:`CONFIG_ESP_HTTP_CLIENT_MAX_RESPONSE_HEADER_SIZE`: Maximum size in bytes for both header key and value (default: 128 bytes each).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_SAVE_RESPONSE_HEADERS`: Enable saving of response headers (disabled by default to conserve memory).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_MAX_SAVED_RESPONSE_HEADERS`: Maximum number of response headers to save (default: 10).
+    * :menuitem:`CONFIG_ESP_HTTP_CLIENT_MAX_RESPONSE_HEADER_SIZE`: Maximum size in bytes for both header key and value (default: 128 bytes each).
 
 Usage
 ^^^^^
@@ -198,6 +206,8 @@ ESP HTTP Client supports event handling by triggering an event handler correspon
 
 To enable event handling, you just need to set a callback function using the :cpp:member:`esp_http_client_config_t::event_handler` member.
 
+Also you can set a callback function after the client is initialized using the :cpp:func:`esp_http_client_set_event_handler` function.
+
 ESP HTTP Client Diagnostic Information
 --------------------------------------
 
@@ -216,7 +226,9 @@ Expected data types for different HTTP Client events in the event loop are as fo
     - HTTP_EVENT_DISCONNECTED       : ``esp_http_client_handle_t``
     - HTTP_EVENT_REDIRECT           : ``esp_http_client_redirect_event_data_t``
 
-The :cpp:type:`esp_http_client_handle_t` received along with the event data will be valid until :cpp:enumerator:`HTTP_EVENT_DISCONNECTED <esp_http_client_event_id_t::HTTP_EVENT_DISCONNECTED>` is not received. This handle has been sent primarily to differentiate between different client connections and must not be used for any other purpose, as it may change based on client connection state.
+The :cpp:type:`esp_http_client_handle_t` received along with the event data will be valid until :cpp:enumerator:`HTTP_EVENT_DISCONNECTED <esp_http_client_event_id_t::HTTP_EVENT_DISCONNECTED>` is received. This handle has been sent primarily to differentiate between different client connections and must not be used for any other purpose, as it may change based on client connection state.
+
+For :cpp:enumerator:`HTTP_EVENT_ERROR <esp_http_client_event_id_t::HTTP_EVENT_ERROR>`, a callback handler finds the cause of the failure, the ``esp_err_t`` the failing call returns, in :cpp:member:`esp_http_client_event_t::error`, which always belongs to the event the handler receives. The event-loop payload stays the client handle. The transport's own record of the failure, with the TLS detail, is available through :cpp:func:`esp_http_client_get_and_clear_last_tls_error`.
 
 TLS Protocol Version
 --------------------
@@ -225,12 +237,31 @@ TLS protocol version to be used for the underlying TLS connection can be set in 
 
 The TLS protocol version for the HTTP client can be configured as follows:
 
-    .. code-block:: c
+.. code-block:: c
 
-        #include "esp_http_client.h"
-        esp_http_client_config_t config = {
-            .tls_version = ESP_HTTP_CLIENT_TLS_VER_TLS_1_2,
-        };
+    #include "esp_http_client.h"
+    esp_http_client_config_t config = {
+        .tls_version = ESP_HTTP_CLIENT_TLS_VER_TLS_1_2,
+    };
+
+TLS Ciphersuites and Supported Groups
+-------------------------------------
+
+The ciphersuites and the supported groups of the underlying TLS connection can be set in :cpp:type:`esp_http_client_config_t`. Both lists apply to this client only. Please refer to the **TLS Ciphersuites** section and to the **TLS Supported Groups** section in the :doc:`/api-reference/protocols/esp_tls` for more details.
+
+The client keeps a pointer to each array. It does not copy the arrays. Each array must end with 0 and must stay valid until :cpp:func:`esp_http_client_cleanup` is called.
+
+.. code-block:: c
+
+    #include "esp_http_client.h"
+    static const int ciphersuites_list[] = {MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0};
+    static const uint16_t groups_list[] = {MBEDTLS_SSL_IANA_TLS_GROUP_X25519, MBEDTLS_SSL_IANA_TLS_GROUP_SECP256R1, 0};
+    esp_http_client_config_t config = {
+        .ciphersuites_list = ciphersuites_list,
+        .groups_list = groups_list,
+    };
+
+Call :cpp:func:`esp_tls_get_ciphersuites_list` and :cpp:func:`esp_tls_get_supported_groups_list` to get the lists that the TLS stack supports, and cross-check them against the supplied lists.
 
 API Reference
 -------------

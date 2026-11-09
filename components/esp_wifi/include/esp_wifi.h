@@ -120,6 +120,9 @@ typedef struct {
     int                    espnow_max_encrypt_num; /**< Maximum encrypt number of peers supported by espnow */
     int                    tx_hetb_queue_num;      /**< WiFi TX HE TB QUEUE number for STA HE TB PPDU transmission */
     bool                   dump_hesigb_enable;     /**< enable dump sigb field */
+    bool                   privacy_enhancements;   /**< WiFi privacy enhancements (enables random mac, seq number, dialogue token number, vendor seq number cnt). Supported on station interface only; softAP may be added in future */
+    uint8_t                rmac_auto_reset_int;    /**< Random MAC auto-reset interval in hours (1-24) while not connected */
+    int                    wifi_task_stack_size;    /**< WIFI task stack size */
     int                    magic;                  /**< WiFi init magic number, it should be the last field */
 } wifi_init_config_t;
 
@@ -290,6 +293,30 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
 #define WIFI_ENABLE_PASSIVE_HIDDEN_AP 0
 #endif
 
+#if CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_SOFTAP
+#define WIFI_ENABLE_OWE_SOFTAP (1<<10)
+#else
+#define WIFI_ENABLE_OWE_SOFTAP 0
+#endif
+
+#if CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA
+#define WIFI_ENABLE_WPA3_OWE_STA (1<<11)
+#else
+#define WIFI_ENABLE_WPA3_OWE_STA 0
+#endif
+
+#if CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA || CONFIG_ESP_WIFI_ENABLE_WPA3_SAE
+#define WIFI_TASK_STACK_SIZE_BASE   6144
+#else
+#define WIFI_TASK_STACK_SIZE_BASE   3072
+#endif
+
+#if !WIFI_NANO_FORMAT_ENABLED
+#define WIFI_TASK_STACK_SIZE (WIFI_TASK_STACK_SIZE_BASE + 512)
+#else
+#define WIFI_TASK_STACK_SIZE WIFI_TASK_STACK_SIZE_BASE
+#endif
+
 #define CONFIG_FEATURE_WPA3_SAE_BIT     (1<<0)
 #define CONFIG_FEATURE_CACHE_TX_BUF_BIT (1<<1)
 #define CONFIG_FEATURE_FTM_INITIATOR_BIT (1<<2)
@@ -300,6 +327,8 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
 #define CONFIG_FEATURE_WIFI_ENT_BIT (1<<7)
 #define CONFIG_FEATURE_BSS_MAX_IDLE_BIT (1<<8)
 #define CONFIG_FEATURE_WIFI_PASSIVE_HIDDEN_AP_BIT (1<<9)
+#define CONFIG_FEATURE_OWE_SOFTAP_BIT (1<<10)
+#define CONFIG_FEATURE_WPA3_OWE_STA_BIT (1<<11)
 
 /* Set additional WiFi features and capabilities */
 #define WIFI_FEATURE_CAPS (WIFI_ENABLE_WPA3_SAE | \
@@ -311,7 +340,21 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
                            WIFI_ENABLE_11R  | \
                            WIFI_ENABLE_ENTERPRISE | \
                            WIFI_ENABLE_BSS_MAX_IDLE | \
-                           WIFI_ENABLE_PASSIVE_HIDDEN_AP)
+                           WIFI_ENABLE_PASSIVE_HIDDEN_AP | \
+                           WIFI_ENABLE_OWE_SOFTAP | \
+                           WIFI_ENABLE_WPA3_OWE_STA)
+
+#if CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED
+#define WIFI_PRIVACY_ENHANCEMENTS_ENABLED true
+#else
+#define WIFI_PRIVACY_ENHANCEMENTS_ENABLED false
+#endif
+
+#ifdef CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL
+#define WIFI_RMAC_AUTO_RESET_INTERVAL CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL
+#else
+#define WIFI_RMAC_AUTO_RESET_INTERVAL 0
+#endif
 
 #define WIFI_INIT_CONFIG_DEFAULT() { \
     .osi_funcs = &g_wifi_osi_funcs, \
@@ -339,6 +382,9 @@ extern wifi_osi_funcs_t g_wifi_osi_funcs;
     .espnow_max_encrypt_num = CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, \
     .tx_hetb_queue_num = WIFI_TX_HETB_QUEUE_NUM, \
     .dump_hesigb_enable = WIFI_DUMP_HESIGB_ENABLED, \
+    .privacy_enhancements = WIFI_PRIVACY_ENHANCEMENTS_ENABLED, \
+    .rmac_auto_reset_int = WIFI_RMAC_AUTO_RESET_INTERVAL, \
+    .wifi_task_stack_size = WIFI_TASK_STACK_SIZE, \
     .magic = WIFI_INIT_CONFIG_MAGIC\
 }
 
@@ -459,13 +505,14 @@ esp_err_t esp_wifi_restore(void);
   * @attention 4. This API attempts to connect to an Access Point (AP) only once. To enable reconnection in case of a connection failure, please use
   *               the 'failure_retry_cnt' feature in the 'wifi_sta_config_t'. Users are suggested to implement reconnection logic in their application
   *               for scenarios where the specified AP does not exist, or reconnection is desired after the device has received a disconnect event.
+  * @attention 5. This API will return ESP_ERR_WIFI_CONN if the station is already in CONNECTING state.
   *
   * @return
   *    - ESP_OK: succeed
   *    - ESP_ERR_WIFI_NOT_INIT: WiFi is not initialized by esp_wifi_init
   *    - ESP_ERR_WIFI_NOT_STARTED: WiFi is not started by esp_wifi_start
   *    - ESP_ERR_WIFI_MODE: WiFi mode error
-  *    - ESP_ERR_WIFI_CONN: WiFi internal error, station or soft-AP control block wrong
+  *    - ESP_ERR_WIFI_CONN: WiFi internal error, station or soft-AP control block wrong, or station is already in CONNECTING state
   *    - ESP_ERR_WIFI_SSID: SSID of AP which station connects is invalid
   */
 esp_err_t esp_wifi_connect(void);
@@ -513,6 +560,8 @@ esp_err_t esp_wifi_deauth_sta(uint16_t aid);
   *            so call any one to free the memory once the scan is done.
   * @attention The values of maximum active scan time and passive scan time per channel are limited to 1500 milliseconds.
   *            Values above 1500ms may cause station to disconnect from AP and are not recommended.
+  * @attention A scan in progress is cancelled when a CSA is received or initiated and when the
+  *            channel switch takes effect.
   *
   * @param     config  configuration settings for scanning, if set to NULL default settings will be used
   *                    of which default values are show_hidden:false, scan_type:active, scan_time.active.min:0,
@@ -779,8 +828,9 @@ esp_err_t esp_wifi_get_bandwidth(wifi_interface_t ifx, wifi_bandwidth_t *bw);
   *
   * @attention 1. This API should be called after esp_wifi_start() and before esp_wifi_stop()
   * @attention 2. When device is in STA mode, this API should not be called when STA is scanning or connecting to an external AP
-  * @attention 3. When device is in softAP mode, this API should not be called when softAP has connected to external STAs
-  * @attention 4. When device is in STA+softAP mode, this API should not be called when in the scenarios described above
+  * @attention 3. When device is in softAP mode and has connected to external STAs, it initiates the CSA process
+  * @attention 4. When device is in STA+softAP mode, this API should not be called when STA is scanning or connecting to an external AP
+  *               or softAP has connected to external STAs.
   * @attention 5. The channel info set by this API will not be stored in NVS. So If you want to remember the channel used before WiFi stop,
   *               you need to call this API again after WiFi start, or you can call `esp_wifi_set_config()` to store the channel info in NVS.
   * @attention 6. When operating in 5 GHz band, the second channel is automatically determined by the primary channel according to the 802.11 standard.
@@ -1583,6 +1633,8 @@ esp_err_t esp_wifi_config_80211_tx(wifi_interface_t ifx, wifi_tx_rate_config_t *
   * @brief      Disable PMF configuration for specified interface
   *
   * @attention  This API should be called after esp_wifi_set_config() and before esp_wifi_start().
+  * @attention  SoftAP: PMF cannot be disabled for `WIFI_AUTH_WPA3_PSK`, `WIFI_AUTH_WPA2_WPA3_PSK`, `WIFI_AUTH_OWE`, or when `wifi_ap_config_t.wpa3_compatible_mode` is enabled.
+  * @attention  Station: PMF cannot be disabled when `wifi_sta_config_t.threshold.authmode` is `WIFI_AUTH_WPA3_PSK`, `WIFI_AUTH_WPA2_WPA3_PSK`, or `WIFI_AUTH_OWE` (see `wifi_scan_threshold_t`), or when `disable_wpa3_compatible_mode` is false.
   *
   * @param      ifx  Interface to be configured.
   *
@@ -1802,28 +1854,48 @@ esp_err_t esp_wifi_get_bandwidths(wifi_interface_t ifx, wifi_bandwidths_t *bw);
 /**
   * @brief      Send action frame on target channel
   *
+  * @attention 1. This API will return ESP_FAIL when called for STA interface (req->ifx == WIFI_IF_STA)
+  *               while the station is in CONNECTING state.
+  * @attention 2. When PMF is enabled, broadcast action frames must be non-robust.
+  * @attention 3. wait_time_ms must be greater than 0. If wait_time_ms is 0, the API returns ESP_ERR_WIFI_ARG.
+  * @attention 4. The API returns ESP_FAIL while a CSA is pending. An ongoing operation is cancelled
+  *               when a CSA is received or initiated.
+  * @attention 5. For a connected STA the beacon timeout is suspended during the operation and
+  *               restarted when it ends, so a lost AP is detected only inactive_time (default 6 s)
+  *               after it completes.
+  *
   * @param    req   action tx request structure containing relevant fields
   *
   * @return
   *    - ESP_OK: succeed
   *    - ESP_ERR_NO_MEM: failed to allocate memory
-  *    - ESP_ERR_INVALID_ARG: the <channel, sec_channel> pair is invalid
-  *    - ESP_FAIL: failed to send frame
+  *    - ESP_ERR_WIFI_MODE: WiFi mode is wrong
+  *    - ESP_ERR_WIFI_ARG: the <channel, sec_channel> pair is invalid or destination MAC address is all zeros, or wait_time_ms is 0
+  *    - ESP_FAIL: failed to send frame, STA is in CONNECTING state, or a CSA is pending
   */
 esp_err_t esp_wifi_action_tx_req(wifi_action_tx_req_t *req);
 
 /**
   * @brief      Remain on the target channel for required duration
   *
-  * @attention 1. The API returns ESP_ERR_INVALID_ARG when `req->allow_broadcast` is true and the device operates in AP+STA mode.
+  * @attention 1. The API returns ESP_ERR_WIFI_ARG when `req->allow_broadcast` is true and the device operates in AP+STA mode.
+  * @attention 2. The API returns ESP_FAIL when called for STA interface (req->ifx == WIFI_IF_STA)
+  *               while the station is in CONNECTING state.
+  * @attention 3. wait_time_ms must be greater than 0 for WIFI_ROC_REQ only.
+  * @attention 4. The API returns ESP_FAIL while a CSA is pending. An ongoing operation is cancelled
+  *               when a CSA is received or initiated.
+  * @attention 5. For a connected STA the beacon timeout is suspended during the operation and
+  *               restarted when it ends, so a lost AP is detected only inactive_time (default 6 s)
+  *               after it completes.
   *
   * @param    req  roc request structure containing relevant fields
   *
   * @return
   *    - ESP_OK: succeed
   *    - ESP_ERR_NO_MEM: failed to allocate memory
-  *    - ESP_ERR_INVALID_ARG: the <channel, sec_channel> pair is invalid
-  *    - ESP_FAIL: failed to perform roc operation
+  *    - ESP_ERR_WIFI_MODE: WiFi mode is wrong
+  *    - ESP_ERR_WIFI_ARG: the <channel, sec_channel> pair is invalid, allow_broadcast is true in AP+STA mode, or wait_time_ms is 0 for WIFI_ROC_REQ
+  *    - ESP_FAIL: failed to perform roc operation, STA is in CONNECTING state, or a CSA is pending
   */
 esp_err_t esp_wifi_remain_on_channel(wifi_roc_req_t * req);
 

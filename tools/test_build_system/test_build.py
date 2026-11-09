@@ -48,6 +48,30 @@ def test_build_alternative_directories(idf_py: IdfPyFunc, func_work_dir: Path, t
 
 
 @pytest.mark.usefixtures('test_app_copy')
+def test_late_build_property_mutations(idf_py: IdfPyFunc) -> None:
+    compile_option = 'IDF_LATE_COMPILE_OPTION_DEMO=1'
+    c_compile_option = 'IDF_LATE_C_COMPILE_OPTION_DEMO=1'
+    link_option = '-Wl,--defsym=IDF_LATE_LINK_OPTION_DEMO=1'
+
+    append_to_file(
+        Path('main') / 'CMakeLists.txt',
+        '\n'
+        f'idf_build_set_property(COMPILE_OPTIONS "-D{compile_option}" APPEND)\n'
+        f'idf_build_set_property(C_COMPILE_OPTIONS "-D{c_compile_option}" APPEND)\n'
+        f'idf_build_set_property(LINK_OPTIONS "{link_option}" APPEND)\n',
+    )
+
+    idf_py('reconfigure')
+    ninja = Path('build') / 'build.ninja'
+    ninja_contents = ninja.read_text()
+
+    assert compile_option in ninja_contents
+    assert c_compile_option in ninja_contents
+
+    assert link_option in ninja_contents
+
+
+@pytest.mark.usefixtures('test_app_copy')
 def test_build_cmake_ninja() -> None:
     logging.info('Can build with Ninja (no idf.py)')
     run_cmake_and_build('-G', 'Ninja', '..')
@@ -175,11 +199,17 @@ def test_build_fail_on_build_time(idf_py: IdfPyFunc, test_app_copy: Path) -> Non
 
 @pytest.mark.usefixtures('test_app_copy')
 def test_build_dfu(idf_py: IdfPyFunc) -> None:
-    logging.info('DFU build works')
+    logging.info('DFU is rejected for targets without USB DFU support')
+    idf_py('set-target', 'esp32')
     ret = idf_py('dfu', check=False)
-    assert 'command "dfu" is not known to idf.py and is not a Ninja target' in ret.stderr, (
-        'DFU build should fail for default chip target'
+    assert ret.returncode != 0
+    assert 'DFU is not supported for this target: esp32' in ret.stderr
+    assert 'Action "dfu" cannot run in the current project configuration.' in ret.stderr
+    assert 'Adding "dfu"\'s dependency "all"' not in ret.stdout, (
+        'DFU check must fail before the "all" dependency is scheduled'
     )
+
+    logging.info('DFU build works for esp32s2')
     idf_py('set-target', 'esp32s2')
     ret = idf_py('dfu')
     assert 'build/dfu.bin" has been written. You may proceed with DFU flashing.' in ret.stdout, (

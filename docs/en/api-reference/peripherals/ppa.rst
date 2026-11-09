@@ -121,7 +121,7 @@ Similarly, some notes to avoid confusion in configuring :cpp:type:`ppa_blend_ope
 
     - :cpp:member:`ppa_out_pic_blk_config_t::buffer` can be the same pointer to one of the input's :cpp:member:`ppa_in_pic_blk_config_t::buffer` for a blend operation.
     - The blocks' width/height of FG and BG should be identical, and are the width/height values for the output block.
-    - If the color mode of the input picture is ``PPA_BLEND_COLOR_MODE_A4``, then its ``block_w`` and ``block_offset_x`` fields must be even.
+    - If the color mode of the input picture is ``PPA_BLEND_COLOR_MODE_A4`` or ``PPA_BLEND_COLOR_MODE_L4``, then its ``block_w`` and ``block_offset_x`` fields must be even.
 
 Fill
 ~~~~
@@ -129,6 +129,13 @@ Fill
 Call :cpp:func:`ppa_do_fill` to fill a target block inside a picture.
 
 :cpp:type:`ppa_trans_mode_t` is a field configurable to all the PPA operation APIs. It decides whether you want the call to the PPA operation API to block until the transaction finishes or to return immediately after the transaction is pushed to the internal queue.
+
+Color Look-Up Table (CLUT)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The PPA supports indexed (also known as palletized) pictures, whose pixels are indexes into a Color Look-Up Table (CLUT) instead of color values. Call :cpp:func:`ppa_set_color_lookup_table` to fill a CLUT, selecting which one with :cpp:type:`ppa_clut_id_t`.
+
+To use such a picture, select one of the indexed color modes of the operation, L8 for an 8-bit index per pixel or L4 for a 4-bit index per pixel. An indexed picture can only be an input picture.
 
 .. _ppa-buffer-alignment:
 
@@ -139,7 +146,7 @@ The PPA requires certain buffer alignment rules to ensure memory access correctn
 
 - Cache line alignment (output buffer only):
 
-    - The ``out.buffer`` address and ``out.buffer_size`` must be aligned to the cache line size (see Kconfig option :ref:`CONFIG_CACHE_L2_CACHE_LINE_SIZE`).
+    - The ``out.buffer`` address and ``out.buffer_size`` must be aligned to the cache line size, if the buffer is located in a memory region that is cacheable.
 
 - Flash encryption alignment (when flash encryption is enabled and the buffers are located in external memory):
 
@@ -175,7 +182,10 @@ The PPA operations are acted on the target block of an input picture. Therefore,
 Application Examples
 ^^^^^^^^^^^^^^^^^^^^
 
-* :example:`peripherals/ppa/ppa_dsi` - PPA with DSI display example. The image used in this example will be first scaled up, rotated at counter-clockwise direction and rotated back, mirrored and mirror back, and scaled down. Then the image will be blended with a whole red image with less transparency. Next the `ESP32` word will be color-keyed out. Lastly a frame will be filled around the `ESP32`.
+* :example:`peripherals/ppa/ppa_transform` - PPA transform image processing example. The embedded RGB565 image is transformed by SRM, framed with fill, and emitted as base64 for host-side PPM reconstruction and golden-image comparison.
+* :example:`peripherals/ppa/ppa_color_key` - PPA blend color-keying example. The example generates a centered RGB888 glow foreground in software, then demonstrates two blend effects on the embedded RGB565 image: replacing the keyed red `ESP32` text with the glow, and preserving the keyed text while blending the glow into the non-key area. Both results are emitted as base64 for host-side PPM reconstruction and golden-image comparison.
+* :example:`peripherals/ppa/ppa_palette` - PPA color look-up table example. The example draws a small dashboard interface into an L8 index picture whose pixels store interface roles instead of colors, then restyles the whole screen into a day, a night and a high contrast theme by only refilling the CLUT before each blend. The three results are emitted as base64 for host-side PPM reconstruction and golden-image comparison.
+* :example:`peripherals/ppa/ppa_freetype` - PPA FreeType icon compositing example. The example uses the `espressif/freetype` component to rasterize Font Awesome icon code points (two rows of three) into small per-glyph A8 alpha masks, then uses the PPA blend engine to composite each glyph over a software-generated gradient with a fixed icon color. The final composited RGB565 frame is emitted as base64 for host-side PPM reconstruction and golden-image comparison.
 
 API Reference
 -------------

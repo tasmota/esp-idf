@@ -264,6 +264,13 @@ SPI 总线传输事务由五个阶段构成，详见下表（任意阶段均可�
            SPI_TRANS_MULTILINE_CMD
          - SPICOMMON_BUSFLAG_OCTAL
 
+.. only:: SOC_SPI_SUPPORT_DDR_CLOCK
+
+    DDR 时钟
+    ^^^^^^^^
+
+    在 :cpp:member:`spi_transaction_t::flags` 中设置 :c:macro:`SPI_TRANS_DDRCLK`，可使当前传输事务使用时钟双边沿数据模式，该模式下， cmd/addr/data 段都将在时钟的上升沿和下降沿都进行传输，没有设置该标志时，传输将回到传统单边沿数据模式。DDRCLK 模式在 2/4/8 线模式下同样支持。
+
 命令阶段和地址阶段
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -358,9 +365,13 @@ SPI 主机驱动程序的示例代码存放在 ESP-IDF 示例项目的 :example:
     使用 PSRAM 的传输事务
     ^^^^^^^^^^^^^^^^^^^^^^
 
-    {IDF_TARGET_NAME} 支持 GPSPI Master 通过 DMA 直接传输 PSRAM 存储的数据而不用内部额外的零时拷贝，应此可以节省内存，在传输配置中添加 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志信号即可使用。
+    {IDF_TARGET_NAME} 支持 GPSPI Master 通过 DMA 直接传输 PSRAM 存储的数据而不用内部额外的零时拷贝，因此可以节省内存，在传输配置中添加 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志信号即可使用。
 
     请注意该功能共享 MSPI 总线带宽（总线频率 * 总线位宽），因此 GPSPI 传输带宽应小于 PSRAM 带宽，否则 **可能会丢失传输数据**。可通过在传输结束时检查返回值或 :c:macro:`SPI_TRANS_DMA_RX_FAIL` 和 :c:macro:`SPI_TRANS_DMA_TX_FAIL` 标志信号来判断传输是否发生了错误。若传输事务返回 :c:macro:`ESP_ERR_INVALID_STATE` 错误，则传输事务失败。
+
+    .. note::
+
+        当开启加密功能时，使用 PSRAM Buffer 的传输有更严格的对齐要求，通常为仅支持 16 字节对齐的传输。对于不对齐的传输，会返回 :c:macro:`ESP_ERR_INVALID_ARG` 错误。可改为使用内部内存，或取消 :c:macro:`SPI_TRANS_DMA_USE_PSRAM` 标志。
 
 传输数据小于 32 位的传输事务
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -464,6 +475,10 @@ ISR 会干扰飞行中的轮询传输事务，以适应中断传输事务。在�
 
 GPIO 矩阵与 IO_MUX 管脚
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    启用 :c:macro:`SPICOMMON_BUSFLAG_DATA_OUT_INV` 后，即使选择了专用 IO_MUX 管脚，驱动也会强制所有已配置的 SPI 总线信号通过 GPIO 矩阵。由于不同芯片的 GPIO 矩阵和 IO_MUX 存在不同的时序和频率限制，选择 SPI 时钟频率时应考虑下文所述限制。
 
 .. only:: esp32
 
@@ -580,7 +595,7 @@ GPIO 矩阵与 IO_MUX 管脚
 - 使用 DMA 的轮询传输事务：{IDF_TARGET_MAX_TRANS_TIME_POLL_DMA} µs。
 - 使用 CPU 的轮询传输事务：{IDF_TARGET_MAX_TRANS_TIME_POLL_CPU} µs。
 
-请注意，以上数据测试时，:ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM` 选项处于启用状态，SPI 传输事务相关的代码放置在 IRAM 中。若关闭此选项（例如为了节省 IRAM），可能影响传输事务持续时间。
+请注意，以上数据测试时，:menuitem:`CONFIG_SPI_MASTER_ISR_IN_IRAM` 选项处于启用状态，SPI 传输事务相关的代码放置在 IRAM 中。若关闭此选项（例如为了节省 IRAM），可能影响传输事务持续时间。
 
 SPI 时钟频率
 ^^^^^^^^^^^^^^^^^^^
@@ -636,11 +651,11 @@ GPSPI 外设的时钟源可以通过设置 :cpp:member:`spi_device_interface_con
 缓存缺失
 ^^^^^^^^^^
 
-默认配置只将 ISR 置于 IRAM 中。其他 SPI 相关功能，包括驱动本身和回调都可能发生缓存缺失，需等待代码从 flash 中读取。为避免缓存缺失，可参考 :ref:`CONFIG_SPI_MASTER_IN_IRAM`，将整个 SPI 驱动置入 IRAM，并将整个回调及其 callee 函数一起置入 IRAM。
+默认配置只将 ISR 置于 IRAM 中。其他 SPI 相关功能，包括驱动本身和回调都可能发生缓存缺失，需等待代码从 flash 中读取。为避免缓存缺失，可参考 :menuitem:`CONFIG_SPI_MASTER_IN_IRAM`，将整个 SPI 驱动置入 IRAM，并将整个回调及其 callee 函数一起置入 IRAM。
 
 .. note::
 
-    SPI 驱动是基于 FreeRTOS 的 API 实现的，在使用 :ref:`CONFIG_SPI_MASTER_IN_IRAM` 时，应启用 :ref:`CONFIG_FREERTOS_IN_IRAM`。
+    SPI 驱动是基于 FreeRTOS 的 API 实现的，在使用 :menuitem:`CONFIG_SPI_MASTER_IN_IRAM` 时，应启用 :menuitem:`CONFIG_FREERTOS_IN_IRAM`。
 
 单个中断传输事务传输 n 字节的总成本为 **20+8n/Fspi[MHz]** [µs]，故传输速度为 **n/(20+8n/Fspi)**。8 MHz 时钟速度的传输速度见下表。
 
@@ -681,7 +696,7 @@ GPSPI 外设的时钟源可以通过设置 :cpp:member:`spi_device_interface_con
 
 传输事务长度较短时将提高传输事务间隔成本，因此应尽可能将几个短传输事务压缩成一个传输事务，以提升传输速度。
 
-注意，ISR 在 flash 操作期间默认处于禁用状态。要在 flash 操作期间继续发送传输事务，请启用 :ref:`CONFIG_SPI_MASTER_ISR_IN_IRAM`，并在 :cpp:member:`spi_bus_config_t::intr_flags` 中设置 :c:macro:`ESP_INTR_FLAG_IRAM`。此时，flash 操作前列队的传输事务将由 ISR 并行处理。此外，每个设备的回调和它们的 ``callee`` 函数都应该在 IRAM 中，避免回调因缓存丢失而崩溃。详情请参阅 :ref:`iram-safe-interrupt-handlers`。
+注意，ISR 在 flash 操作期间默认处于禁用状态。要在 flash 操作期间继续发送传输事务，请启用 :menuitem:`CONFIG_SPI_MASTER_ISR_IN_IRAM`，并在 :cpp:member:`spi_bus_config_t::intr_flags` 中设置 :c:macro:`ESP_INTR_FLAG_IRAM`。此时，flash 操作前列队的传输事务将由 ISR 并行处理。此外，每个设备的回调和它们的 ``callee`` 函数都应该在 IRAM 中，避免回调因缓存丢失而崩溃。详情请参阅 :ref:`iram-safe-interrupt-handlers`。
 
 .. only:: esp32h2
 

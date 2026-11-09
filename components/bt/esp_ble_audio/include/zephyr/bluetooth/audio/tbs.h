@@ -201,7 +201,17 @@ extern "C" {
  */
 #define BT_TBS_GTBS_INDEX                               0xFF
 
-/** @brief Opaque Telephone Bearer Service instance. */
+/** Maximum size of bearer uniform caller identifier (UCI)
+ *
+ * Includes the NULL terminator.
+ * Allowed values are defined by Bluetooth Assigned Numbers.
+ */
+#define BT_TBS_MAX_UCI_SIZE 6
+
+/**
+ * @struct bt_tbs_instance
+ * @brief Opaque Telephone Bearer Service instance.
+ */
 struct bt_tbs_instance;
 
 /**
@@ -290,7 +300,7 @@ struct bt_tbs_cb {
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_accept_safe(uint8_t call_index);
+int bt_tbs_accept(uint8_t call_index);
 
 /**
  * @brief Hold a call.
@@ -300,7 +310,7 @@ int bt_tbs_accept_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_hold_safe(uint8_t call_index);
+int bt_tbs_hold(uint8_t call_index);
 
 /**
  * @brief Retrieve a call.
@@ -310,7 +320,7 @@ int bt_tbs_hold_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_retrieve_safe(uint8_t call_index);
+int bt_tbs_retrieve(uint8_t call_index);
 
 /**
  * @brief Terminate a call.
@@ -320,7 +330,7 @@ int bt_tbs_retrieve_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_terminate_safe(uint8_t call_index);
+int bt_tbs_terminate(uint8_t call_index);
 
 /**
  * @brief Originate a call
@@ -333,7 +343,7 @@ int bt_tbs_terminate_safe(uint8_t call_index);
  * @return int          A call index on success (positive value),
  *                      errno value on fail.
  */
-int bt_tbs_originate_safe(uint8_t bearer_index, char *uri, uint8_t *call_index);
+int bt_tbs_originate(uint8_t bearer_index, char *uri, uint8_t *call_index);
 
 /**
  * @brief Join calls
@@ -344,7 +354,7 @@ int bt_tbs_originate_safe(uint8_t bearer_index, char *uri, uint8_t *call_index);
  * @return int             BT_TBS_RESULT_CODE_* if positive or 0,
  *                         errno value if negative.
  */
-int bt_tbs_join_safe(uint8_t call_index_cnt, uint8_t *call_indexes);
+int bt_tbs_join(uint8_t call_index_cnt, uint8_t *call_indexes);
 
 /**
  * @brief Notify the server that the remote party answered the call.
@@ -354,7 +364,7 @@ int bt_tbs_join_safe(uint8_t call_index_cnt, uint8_t *call_indexes);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_remote_answer_safe(uint8_t call_index);
+int bt_tbs_remote_answer(uint8_t call_index);
 
 /**
  * @brief Notify the server that the remote party held the call.
@@ -364,7 +374,7 @@ int bt_tbs_remote_answer_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_remote_hold_safe(uint8_t call_index);
+int bt_tbs_remote_hold(uint8_t call_index);
 
 /**
  * @brief Notify the server that the remote party retrieved the call.
@@ -374,7 +384,7 @@ int bt_tbs_remote_hold_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_remote_retrieve_safe(uint8_t call_index);
+int bt_tbs_remote_retrieve(uint8_t call_index);
 
 /**
  * @brief Notify the server that the remote party terminated the call.
@@ -384,7 +394,7 @@ int bt_tbs_remote_retrieve_safe(uint8_t call_index);
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_remote_terminate_safe(uint8_t call_index);
+int bt_tbs_remote_terminate(uint8_t call_index);
 
 /**
  * @brief Notify the server of an incoming call.
@@ -397,8 +407,53 @@ int bt_tbs_remote_terminate_safe(uint8_t call_index);
  * @return int            New call index if positive or 0,
  *                        errno value if negative.
  */
-int bt_tbs_remote_incoming_safe(uint8_t bearer_index, const char *to,
-                                const char *from, const char *friendly_name);
+int bt_tbs_remote_incoming(uint8_t bearer_index, const char *to,
+                           const char *from, const char *friendly_name);
+
+/**
+ * @brief Create a call directly in a given state (test setup helper).
+ *
+ * Allocates a call on the bearer and sets it to @p state without running the
+ * call state machine, bypassing the single-outgoing-call restriction and the
+ * Dialing->Alerting auto-promotion. Intended for setting up the fixed call
+ * configurations required by the Join test procedures (e.g. a stable Dialing
+ * call coexisting with an Alerting one). The call is notified once.
+ *
+ * @param[in]  bearer_index  The index of the Telephone Bearer.
+ * @param[in]  state         The initial call state (BT_TBS_CALL_STATE_*).
+ * @param[in]  uri           The remote URI stored for the call.
+ * @param[out] call_index    Where the new call index is stored.
+ *
+ * @return int            New call index if positive or 0,
+ *                        errno value if negative.
+ */
+int bt_tbs_add_call(uint8_t bearer_index, uint8_t state, const char *uri,
+                    uint8_t *call_index);
+
+/**
+ * @brief Enable or disable automatic Dialing->Alerting promotion (test control).
+ *
+ * When disabled, an originated call on the bearer remains in the Dialing state
+ * until bt_tbs_set_call_alerting() is called. This lets a test harness control
+ * the transition timing and keep multiple outgoing calls in Dialing at once.
+ * Enabled by default.
+ *
+ * @param bearer_index  The index of the Telephone Bearer or BT_TBS_GTBS_INDEX.
+ * @param enable        true to auto-promote (default), false to keep Dialing.
+ *
+ * @return int          0 on success, errno value if negative.
+ */
+int bt_tbs_set_auto_alerting(uint8_t bearer_index, bool enable);
+
+/**
+ * @brief Move a Dialing call to the Alerting state (test setup helper).
+ *
+ * @param call_index  The call index to promote.
+ *
+ * @return int        BT_TBS_RESULT_CODE_* if positive or 0,
+ *                    errno value if negative.
+ */
+int bt_tbs_set_call_alerting(uint8_t call_index);
 
 /**
  * @brief Set a new bearer provider.
@@ -410,7 +465,7 @@ int bt_tbs_remote_incoming_safe(uint8_t bearer_index, const char *to,
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_set_bearer_provider_name_safe(uint8_t bearer_index, const char *name);
+int bt_tbs_set_bearer_provider_name(uint8_t bearer_index, const char *name);
 
 /**
  * @brief Set a new bearer technology.
@@ -422,7 +477,7 @@ int bt_tbs_set_bearer_provider_name_safe(uint8_t bearer_index, const char *name)
  * @return int           BT_TBS_RESULT_CODE_* if positive or 0,
  *                       errno value if negative.
  */
-int bt_tbs_set_bearer_technology_safe(uint8_t bearer_index, uint8_t new_technology);
+int bt_tbs_set_bearer_technology(uint8_t bearer_index, uint8_t new_technology);
 
 /**
  * @brief Update the signal strength reported by the server.
@@ -434,8 +489,8 @@ int bt_tbs_set_bearer_technology_safe(uint8_t bearer_index, uint8_t new_technolo
  * @return int                BT_TBS_RESULT_CODE_* if positive or 0,
  *                            errno value if negative.
  */
-int bt_tbs_set_signal_strength_safe(uint8_t bearer_index,
-                                    uint8_t new_signal_strength);
+int bt_tbs_set_signal_strength(uint8_t bearer_index,
+                               uint8_t new_signal_strength);
 
 /**
  * @brief Sets the feature and status value.
@@ -447,25 +502,23 @@ int bt_tbs_set_signal_strength_safe(uint8_t bearer_index,
  * @return int          BT_TBS_RESULT_CODE_* if positive or 0,
  *                      errno value if negative.
  */
-int bt_tbs_set_status_flags_safe(uint8_t bearer_index, uint16_t status_flags);
+int bt_tbs_set_status_flags(uint8_t bearer_index, uint16_t status_flags);
 
 /**
  * @brief Sets the URI scheme list of a bearer.
  *
  * @param bearer_index  The index of the Telephone Bearer.
- * @param uri_list      List of URI prefixes (e.g. {"skype", "tel"}).
- * @param uri_count     Number of URI prefixes in @p uri_list.
+ * @param uri_scheme_list Comma-separated list of URI prefixes (e.g. "skype,tel").
  *
  * @return BT_TBS_RESULT_CODE_* if positive or 0, errno value if negative.
  */
-int bt_tbs_set_uri_scheme_list_safe(uint8_t bearer_index, const char **uri_list,
-                                    uint8_t uri_count);
+int bt_tbs_set_uri_scheme_list(uint8_t bearer_index, const char *uri_scheme_list);
 /**
  * @brief Register the callbacks for TBS.
  *
  * @param cbs Pointer to the callback structure.
  */
-void bt_tbs_register_cb_safe(struct bt_tbs_cb *cbs);
+void bt_tbs_register_cb(struct bt_tbs_cb *cbs);
 
 /** Parameters for registering a Telephone Bearer Service */
 struct bt_tbs_register_param {
@@ -538,7 +591,7 @@ struct bt_tbs_register_param {
  *         @kconfig{CONFIG_BT_TBS_BEARER_COUNT})
  * @retval -ENOEXEC The service failed to be registered
  */
-int bt_tbs_register_bearer_safe(const struct bt_tbs_register_param *param);
+int bt_tbs_register_bearer(const struct bt_tbs_register_param *param);
 
 /**
  * @brief Unregister a Telephone Bearer
@@ -558,7 +611,7 @@ int bt_tbs_register_bearer_safe(const struct bt_tbs_register_param *param);
  *                 registered.
  * @retval -ENOEXEC The service failed to be unregistered
  */
-int bt_tbs_unregister_bearer_safe(uint8_t bearer_index);
+int bt_tbs_unregister_bearer(uint8_t bearer_index);
 
 /** @brief Prints all calls of all services to the debug log */
 void bt_tbs_dbg_print_calls(void);
@@ -757,7 +810,6 @@ struct bt_tbs_client_cb {
  * @return int          0 on success, GATT error value on fail.
  */
 int bt_tbs_client_discover(struct bt_conn *conn);
-int bt_tbs_client_discover_safe(struct bt_conn *conn);
 
 /**
  * @brief Set the outgoing URI for a TBS instance on the peer device.
@@ -768,8 +820,8 @@ int bt_tbs_client_discover_safe(struct bt_conn *conn);
  *
  * @return int          0 on success, errno value on fail.
  */
-int bt_tbs_client_set_outgoing_uri_safe(struct bt_conn *conn, uint8_t inst_index,
-                                        const char *uri);
+int bt_tbs_client_set_outgoing_uri(struct bt_conn *conn, uint8_t inst_index,
+                                   const char *uri);
 
 /**
  * @brief Set the signal strength reporting interval for a TBS instance.
@@ -786,9 +838,6 @@ int bt_tbs_client_set_outgoing_uri_safe(struct bt_conn *conn, uint8_t inst_index
 int bt_tbs_client_set_signal_strength_interval(struct bt_conn *conn,
                                                uint8_t inst_index,
                                                uint8_t interval);
-int bt_tbs_client_set_signal_strength_interval_safe(struct bt_conn *conn,
-                                                    uint8_t inst_index,
-                                                    uint8_t interval);
 
 /**
  * @brief Request to originate a call.
@@ -804,8 +853,6 @@ int bt_tbs_client_set_signal_strength_interval_safe(struct bt_conn *conn,
  */
 int bt_tbs_client_originate_call(struct bt_conn *conn, uint8_t inst_index,
                                  const char *uri);
-int bt_tbs_client_originate_call_safe(struct bt_conn *conn, uint8_t inst_index,
-                                      const char *uri);
 
 /**
  * @brief Request to terminate a call
@@ -821,8 +868,6 @@ int bt_tbs_client_originate_call_safe(struct bt_conn *conn, uint8_t inst_index,
  */
 int bt_tbs_client_terminate_call(struct bt_conn *conn, uint8_t inst_index,
                                  uint8_t call_index);
-int bt_tbs_client_terminate_call_safe(struct bt_conn *conn, uint8_t inst_index,
-                                      uint8_t call_index);
 
 /**
  * @brief Request to hold a call
@@ -838,8 +883,6 @@ int bt_tbs_client_terminate_call_safe(struct bt_conn *conn, uint8_t inst_index,
  */
 int bt_tbs_client_hold_call(struct bt_conn *conn, uint8_t inst_index,
                             uint8_t call_index);
-int bt_tbs_client_hold_call_safe(struct bt_conn *conn, uint8_t inst_index,
-                                 uint8_t call_index);
 
 /**
  * @brief Accept an incoming call
@@ -855,8 +898,6 @@ int bt_tbs_client_hold_call_safe(struct bt_conn *conn, uint8_t inst_index,
  */
 int bt_tbs_client_accept_call(struct bt_conn *conn, uint8_t inst_index,
                               uint8_t call_index);
-int bt_tbs_client_accept_call_safe(struct bt_conn *conn, uint8_t inst_index,
-                                   uint8_t call_index);
 
 /**
  * @brief Retrieve call from (local) hold.
@@ -872,8 +913,6 @@ int bt_tbs_client_accept_call_safe(struct bt_conn *conn, uint8_t inst_index,
  */
 int bt_tbs_client_retrieve_call(struct bt_conn *conn, uint8_t inst_index,
                                 uint8_t call_index);
-int bt_tbs_client_retrieve_call_safe(struct bt_conn *conn, uint8_t inst_index,
-                                     uint8_t call_index);
 
 /**
  * @brief Join multiple calls.
@@ -890,8 +929,6 @@ int bt_tbs_client_retrieve_call_safe(struct bt_conn *conn, uint8_t inst_index,
  */
 int bt_tbs_client_join_calls(struct bt_conn *conn, uint8_t inst_index,
                              const uint8_t *call_indexes, uint8_t count);
-int bt_tbs_client_join_calls_safe(struct bt_conn *conn, uint8_t inst_index,
-                                  const uint8_t *call_indexes, uint8_t count);
 
 /**
  * @brief Read the bearer provider name of a TBS instance.
@@ -905,8 +942,6 @@ int bt_tbs_client_join_calls_safe(struct bt_conn *conn, uint8_t inst_index,
  * for this function to be effective.
  */
 int bt_tbs_client_read_bearer_provider_name(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_bearer_provider_name_safe(struct bt_conn *conn,
-                                                 uint8_t inst_index);
 
 /**
  * @brief Read the UCI of a TBS instance.
@@ -920,7 +955,6 @@ int bt_tbs_client_read_bearer_provider_name_safe(struct bt_conn *conn,
  * for this function to be effective.
  */
 int bt_tbs_client_read_bearer_uci(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_bearer_uci_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the technology of a TBS instance.
@@ -934,7 +968,6 @@ int bt_tbs_client_read_bearer_uci_safe(struct bt_conn *conn, uint8_t inst_index)
  * for this function to be effective.
  */
 int bt_tbs_client_read_technology(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_technology_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the URI schemes list of a TBS instance.
@@ -948,7 +981,6 @@ int bt_tbs_client_read_technology_safe(struct bt_conn *conn, uint8_t inst_index)
  * for this function to be effective.
  */
 int bt_tbs_client_read_uri_list(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_uri_list_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the current signal strength of a TBS instance.
@@ -962,8 +994,6 @@ int bt_tbs_client_read_uri_list_safe(struct bt_conn *conn, uint8_t inst_index);
  * for this function to be effective.
  */
 int bt_tbs_client_read_signal_strength(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_signal_strength_safe(struct bt_conn *conn,
-                                            uint8_t inst_index);
 
 /**
  * @brief Read the signal strength reporting interval of a TBS instance.
@@ -977,8 +1007,6 @@ int bt_tbs_client_read_signal_strength_safe(struct bt_conn *conn,
  * for this function to be effective.
  */
 int bt_tbs_client_read_signal_interval(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_signal_interval_safe(struct bt_conn *conn,
-                                            uint8_t inst_index);
 
 /**
  * @brief Read the list of current calls of a TBS instance.
@@ -992,7 +1020,6 @@ int bt_tbs_client_read_signal_interval_safe(struct bt_conn *conn,
  * for this function to be effective.
  */
 int bt_tbs_client_read_current_calls(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_current_calls_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the content ID of a TBS instance.
@@ -1006,7 +1033,6 @@ int bt_tbs_client_read_current_calls_safe(struct bt_conn *conn, uint8_t inst_ind
  * for this function to be effective.
  */
 int bt_tbs_client_read_ccid(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_ccid_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the call target URI of a TBS instance.
@@ -1020,7 +1046,6 @@ int bt_tbs_client_read_ccid_safe(struct bt_conn *conn, uint8_t inst_index);
  * for this function to be effective.
  */
 int bt_tbs_client_read_call_uri(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_call_uri_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the feature and status value of a TBS instance.
@@ -1034,7 +1059,6 @@ int bt_tbs_client_read_call_uri_safe(struct bt_conn *conn, uint8_t inst_index);
  * for this function to be effective.
  */
 int bt_tbs_client_read_status_flags(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_status_flags_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the states of the current calls of a TBS instance.
@@ -1045,7 +1069,6 @@ int bt_tbs_client_read_status_flags_safe(struct bt_conn *conn, uint8_t inst_inde
  * @return              int 0 on success, errno value on fail.
  */
 int bt_tbs_client_read_call_state(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_call_state_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the remote URI of a TBS instance.
@@ -1059,7 +1082,6 @@ int bt_tbs_client_read_call_state_safe(struct bt_conn *conn, uint8_t inst_index)
  * for this function to be effective.
  */
 int bt_tbs_client_read_remote_uri(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_remote_uri_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the friendly name of a call for a TBS instance.
@@ -1073,7 +1095,6 @@ int bt_tbs_client_read_remote_uri_safe(struct bt_conn *conn, uint8_t inst_index)
  * for this function to be effective.
  */
 int bt_tbs_client_read_friendly_name(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_friendly_name_safe(struct bt_conn *conn, uint8_t inst_index);
 
 /**
  * @brief Read the supported opcode of a TBS instance.
@@ -1086,9 +1107,8 @@ int bt_tbs_client_read_friendly_name_safe(struct bt_conn *conn, uint8_t inst_ind
  * @note @kconfig{CONFIG_BT_TBS_CLIENT_OPTIONAL_OPCODES} must be set
  * for this function to be effective.
  */
-int bt_tbs_client_read_optional_opcodes(struct bt_conn *conn, uint8_t inst_index);
-int bt_tbs_client_read_optional_opcodes_safe(struct bt_conn *conn,
-                                             uint8_t inst_index);
+int bt_tbs_client_read_optional_opcodes(struct bt_conn *conn,
+                                        uint8_t inst_index);
 
 /**
  * @brief Register the callbacks for CCP.
@@ -1099,7 +1119,7 @@ int bt_tbs_client_read_optional_opcodes_safe(struct bt_conn *conn,
  * @retval -EINVAL @p cbs is NULL
  * @retval -EEXIST @p cbs is already registered
  */
-int bt_tbs_client_register_cb_safe(struct bt_tbs_client_cb *cbs);
+int bt_tbs_client_register_cb(struct bt_tbs_client_cb *cbs);
 
 /**
  * @brief Look up Telephone Bearer Service instance by CCID
@@ -1112,8 +1132,22 @@ int bt_tbs_client_register_cb_safe(struct bt_tbs_client_cb *cbs);
  * @note @kconfig{CONFIG_BT_TBS_CLIENT_CCID} must be set
  * for this function to be effective.
  */
-struct bt_tbs_instance *bt_tbs_client_get_by_ccid_safe(const struct bt_conn *conn,
-                                                       uint8_t ccid);
+#if 0
+struct bt_tbs_instance *bt_tbs_client_get_by_ccid(const struct bt_conn *conn,
+                                                  uint8_t ccid);
+#endif
+
+/**
+ * @brief Look up Telephone Bearer Service instance by index
+ *
+ * @param conn  The connection to the TBS server.
+ * @param index The index to lookup a service instance for.
+ *
+ * @return Pointer to a Telephone Bearer Service instance if found else NULL.
+ */
+#if 0
+struct bt_tbs_instance *bt_tbs_client_get_by_index(const struct bt_conn *conn, uint8_t index);
+#endif
 
 #ifdef __cplusplus
 }

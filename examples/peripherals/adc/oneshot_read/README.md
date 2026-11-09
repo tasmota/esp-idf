@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- | -------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- |
 
 # ADC Single Read Example
 
@@ -60,3 +60,5 @@ If following warning is printed out, it means the calibration required eFuse bit
 W (300) ADC_ONESHOT: eFuse not burnt, skip calibration
 I (1310) ADC_ONESHOT: ADC1 Channel[2] Raw Data: 0
 ```
+
+On ESP32-S31, missing calibration eFuse bits do not skip calibration: the scheme is still created with an identity transform. The printed raw data is a 17-bit comparator vector, not a millivolt reading and not a 0–4393 SAR code. Convert it with `adc_cali_chan_raw_to_voltage()`.

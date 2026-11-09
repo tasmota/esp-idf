@@ -17,7 +17,9 @@
 #include "soc/soc_caps.h"
 #include "hal/ledc_hal.h"
 #include "driver/ledc.h"
+#include "driver/rtc_io.h"
 #include "esp_private/esp_sleep_internal.h"
+#include "esp_sleep.h"
 #include "esp_private/periph_ctrl.h"
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
@@ -25,6 +27,7 @@
 #include "esp_private/esp_gpio_reserve.h"
 #include "esp_memory_utils.h"
 #include "esp_private/sleep_retention.h"
+#include "esp_private/ledc_priv.h"
 
 static __attribute__((unused)) const char *LEDC_TAG = "ledc";
 
@@ -183,6 +186,13 @@ static void _ledc_fade_hw_acquire(ledc_mode_t mode, ledc_channel_t channel)
         ledc_ll_enable_interrupt(p_ledc_obj[mode]->ledc_hal.dev, LEDC_LL_EVENT_CHANNEL_DUTY_CHANGE_END(mode, channel), false);
         portEXIT_CRITICAL(&ledc_spinlock);
     }
+#if !SOC_LEDC_SUPPORT_FADE_STOP
+    // On such target, re-configure fade parameters while last update is still in progress is not allowed
+    // And the wait should be out of any spinlock
+    while (!ledc_ll_is_duty_update_done(p_ledc_obj[mode]->ledc_hal.dev, mode, channel)) {
+        vTaskDelay(1);
+    }
+#endif
 }
 
 static void _ledc_fade_hw_release(ledc_mode_t mode, ledc_channel_t channel)
@@ -438,6 +448,7 @@ static bool ledc_speed_mode_ctx_create(ledc_mode_t speed_mode)
                             .arg = NULL,
                         },
                     },
+                    .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
                     .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
                 };
                 if (sleep_retention_module_init(module, &init_param) != ESP_OK) {
@@ -697,7 +708,7 @@ static esp_err_t ledc_set_timer_div(ledc_mode_t speed_mode, ledc_timer_t timer_n
         if (p_ledc_obj[speed_mode]->glb_clk != glb_clk) {
             // TODO: release old glb_clk (if not UNINIT), and acquire new glb_clk [clk_tree]
             p_ledc_obj[speed_mode]->glb_clk = glb_clk;
-            ESP_RETURN_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)glb_clk, true), LEDC_TAG, "clock source enable failed");
+            ESP_RETURN_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)glb_clk, NULL), LEDC_TAG, "clock source enable failed");
             PERIPH_RCC_ATOMIC() {
                 ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), glb_clk);
             }
@@ -877,6 +888,9 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     LEDC_ARG_CHECK(ledc_conf->sleep_mode < LEDC_SLEEP_MODE_INVALID, "sleep_mode");
 #if !SOC_LEDC_SUPPORT_SLEEP_RETENTION
     ESP_RETURN_ON_FALSE(ledc_conf->sleep_mode != LEDC_SLEEP_MODE_NO_ALIVE_ALLOW_PD, ESP_ERR_NOT_SUPPORTED, LEDC_TAG, "register back up is not supported");
+#if SOC_PM_SUPPORT_TOP_PD
+    esp_sleep_pd_config(ESP_PD_DOMAIN_TOP, ESP_PD_OPTION_ON); //IDF-15643
+#endif
 #endif
 
     esp_err_t ret = ESP_OK;
@@ -894,7 +908,7 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     else if (new_speed_mode_ctx_created) {
         portENTER_CRITICAL(&ledc_spinlock);
         if (p_ledc_obj[speed_mode]->glb_clk == LEDC_SLOW_CLK_UNINIT) {
-            esp_clk_tree_enable_src((soc_module_clk_t)LEDC_LL_GLOBAL_CLK_DEFAULT, true);
+            esp_clk_tree_acquire_src((soc_module_clk_t)LEDC_LL_GLOBAL_CLK_DEFAULT, NULL);
             ledc_hal_set_slow_clk_sel(&(p_ledc_obj[speed_mode]->ledc_hal), LEDC_LL_GLOBAL_CLK_DEFAULT);
         }
         portEXIT_CRITICAL(&ledc_spinlock);
@@ -967,9 +981,14 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
     if (slp_retention_alloc) {
         if (sleep_retention_module_allocate(ledc_reg_retention_info[0].module_id) != ESP_OK) {
             ESP_LOGW(LEDC_TAG, "create retention module failed, power domain can't turn off");
+        } else {
+            if (sleep_retention_module_attach(ledc_reg_retention_info[0].module_id) != ESP_OK) {
+                ESP_LOGW(LEDC_TAG, "attach retention module failed, power domain can't turn off");
+            }
         }
     }
     if (slp_retention_free) {
+        sleep_retention_module_detach(ledc_reg_retention_info[0].module_id);
         sleep_retention_module_free(ledc_reg_retention_info[0].module_id);
     }
 #endif
@@ -987,18 +1006,18 @@ esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf)
 
         // 2. keep IO output during sleep
         gpio_sleep_sel_dis(gpio_num);
-#if CONFIG_IDF_TARGET_ESP32P4
-        // To workaround DIG-399, all LP IOs are held when LP_PERIPH is powered off to ensure EXT wakeup functionality
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3 || CONFIG_IDF_TARGET_ESP32S31
+        // To workaround P4 (DIG-399) & S31 (DIG-814), all LP IOs are held when LP_PERIPH is powered off to ensure EXT wakeup functionality
         // But holding LP IOs will cause LEDC signal cannot output on the pad during sleep
         // Therefore, we will force LP periph xpd in such case
-        if (GPIO_IS_HP_PERIPH_PD_WAKEUP_VALID_IO(gpio_num)) {
+        if (rtc_gpio_is_valid_gpio(gpio_num)) {
             esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
         }
 #endif
 
         // 3. keep related module integrated clock gating on during sleep
 #if SOC_PM_SUPPORT_PMU_CLK_ICG
-        esp_sleep_clock_config(ESP_SLEEP_CLOCK_LEDC, ESP_SLEEP_CLOCK_OPTION_UNGATE);
+        esp_sleep_clock_config(ESP_SLEEP_CLOCK_LEDC0, ESP_SLEEP_CLOCK_OPTION_UNGATE);
         esp_sleep_clock_config(ESP_SLEEP_CLOCK_IOMUX, ESP_SLEEP_CLOCK_OPTION_UNGATE);
 #endif
     }

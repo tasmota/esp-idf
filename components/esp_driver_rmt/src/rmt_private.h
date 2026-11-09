@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -48,6 +48,7 @@
 #include "esp_private/esp_clk_tree_common.h"
 #include "esp_private/esp_dma_utils.h"
 #include "driver/rmt_types.h"
+#include "esp_macros.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,10 +90,20 @@ extern "C" {
 #define RMT_GET_NON_CACHE_ADDR(addr) (addr)
 #endif
 
-#define ALIGN_UP(num, align)    (((num) + ((align) - 1)) & ~((align) - 1))
-#define ALIGN_DOWN(num, align)  ((num) & ~((align) - 1))
-
 #define RMT_USE_RETENTION_LINK  (SOC_RMT_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
+
+#if SOC_RMT_SUPPORT_SLEEP_RETENTION
+typedef struct {
+    periph_retention_module_t module;
+    const regdma_entries_config_t *regdma_entry_array;
+    uint32_t array_size;
+} rmt_retention_desc_t;
+
+// TODO: implement the retention link on the channel level, this can:
+// - save memory when not all RMT channels are used
+// - specify different retention dependency, e.g. only RMT channel x is capable to use DMA, we only want to add the DMA dependency for that channel
+extern const rmt_retention_desc_t rmt_retention_infos[RMT_LL_GET(INST_NUM)];
+#endif // SOC_RMT_SUPPORT_SLEEP_RETENTION
 
 ///!< Logging settings
 #define TAG "rmt"
@@ -170,7 +181,7 @@ struct rmt_channel_t {
 typedef struct {
     rmt_encoder_handle_t encoder;  // encode user payload into RMT symbols
     const void *payload;           // encoder payload
-    size_t payload_bytes;          // payload size
+    size_t payload_size;           // payload size, in bytes (specially for bits encoder, it is in bits)
     int loop_count;                // transaction can be continued in a loop for specific times
     int remain_loop_count;         // user required loop count may exceed hardware limitation, the driver will transfer them in batches
     size_t transmitted_symbol_num; // track the number of transmitted symbols
@@ -219,8 +230,6 @@ struct rmt_rx_channel_t {
     void *user_data;                     // user context
     rmt_rx_trans_desc_t trans_desc;      // transaction description
     size_t num_dma_nodes;                // number of DMA nodes, determined by how big the memory block that user configures
-    size_t dma_int_mem_alignment;        // DMA buffer alignment (both in size and address) for internal RX memory
-    size_t dma_ext_mem_alignment;        // DMA buffer alignment (both in size and address) for external RX memory
     gdma_link_list_handle_t dma_link;    // DMA link list handle
 };
 

@@ -26,17 +26,18 @@
 #include "esp_gatt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
+#include "esp_bt_defs.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #define TAG "BLE_SUBRATING_CENTRAL"
-#define REMOTE_DEVICE_NAME "ESP_SUBRATE_PRH"
 #define PROFILE_NUM      1
 #define PROFILE_A_APP_ID 0
 
 static bool connect = false;
 static uint16_t g_conn_handle = 0xFFFF;
+static char remote_device_name[ESP_BLE_ADV_NAME_LEN_MAX] = "ESP_SUBRATE_PRH";
 
 static esp_ble_ext_scan_params_t ext_scan_params = {
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
@@ -96,6 +97,16 @@ static struct gattc_profile_inst gl_profile_tab[PROFILE_NUM] = {
     },
 };
 
+/** Clear connect-in-progress flag and restart indefinite extended scan (after failed open or disconnect). */
+static void central_resume_ext_scan(void)
+{
+    connect = false;
+    esp_err_t err = esp_ble_gap_start_ext_scan(0, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "start ext scan failed, error = 0x%x", err);
+    }
+}
+
 /**
  * @brief GATT client event handler
  */
@@ -112,6 +123,10 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
     case ESP_GATTC_REG_EVT:
         ESP_LOGI(TAG, "GATT client register, status %d, app_id %d, gattc_if %d",
                  p_data->reg.status, p_data->reg.app_id, gattc_if);
+        if (p_data->reg.status != ESP_GATT_OK) {
+            ESP_LOGE(TAG, "GATT client register failed, status %d", p_data->reg.status);
+            break;
+        }
         gl_profile_tab[PROFILE_A_APP_ID].gattc_if = gattc_if;
         // Set default subrate parameters
         esp_ble_default_subrate_param_t default_subrate_params = {
@@ -148,11 +163,19 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
             ESP_LOGI(TAG, "Subrate request sent successfully");
         }
         break;
+    case ESP_GATTC_OPEN_EVT:
+        if (p_data->open.status != ESP_GATT_OK) {
+            ESP_LOGE(TAG, "Open failed, status %d", p_data->open.status);
+            central_resume_ext_scan();
+            break;
+        }
+        ESP_LOGI(TAG, "GATT open OK, conn_id %d, MTU %u", p_data->open.conn_id, p_data->open.mtu);
+        break;
     case ESP_GATTC_DISCONNECT_EVT:
-        connect = false;
         g_conn_handle = 0xFFFF;
         ESP_LOGI(TAG, "Disconnected, remote "ESP_BD_ADDR_STR", reason 0x%02x",
                  ESP_BD_ADDR_HEX(p_data->disconnect.remote_bda), p_data->disconnect.reason);
+        central_resume_ext_scan();
         break;
     default:
         break;
@@ -193,8 +216,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
             ESP_LOGI(TAG, "Found device: "ESP_BD_ADDR_STR", name: %.*s",
                      ESP_BD_ADDR_HEX(param->ext_adv_report.params.addr), adv_name_len, adv_name);
 
-            if (!connect && adv_name_len == strlen(REMOTE_DEVICE_NAME) &&
-                strncmp((char *)adv_name, REMOTE_DEVICE_NAME, adv_name_len) == 0) {
+            if (!connect && adv_name_len == strlen(remote_device_name) &&
+                strncmp((char *)adv_name, remote_device_name, adv_name_len) == 0) {
                 ESP_LOGI(TAG, "Target device found, connecting...");
                 connect = true;
                 esp_ble_gap_stop_ext_scan();
@@ -208,10 +231,9 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                 creat_conn_params.phy_1m_conn_params = &phy_1m_conn_params;
                 creat_conn_params.phy_2m_conn_params = &phy_2m_conn_params;
                 creat_conn_params.phy_coded_conn_params = &phy_coded_conn_params;
-                if (esp_ble_gattc_enh_open(gl_profile_tab[PROFILE_A_APP_ID].gattc_if, &creat_conn_params) != ESP_OK)
-                {
-                    connect = false;
+                if (esp_ble_gattc_enh_open(gl_profile_tab[PROFILE_A_APP_ID].gattc_if, &creat_conn_params) != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to open connection");
+                    central_resume_ext_scan();
                 }
             }
         }
@@ -287,6 +309,13 @@ void app_main(void)
         ESP_LOGE(TAG, "Bluedroid enable failed, error = %x", ret);
         return;
     }
+
+#if CONFIG_EXAMPLE_CI_ID && CONFIG_EXAMPLE_CI_PIPELINE_ID
+    memcpy(remote_device_name, esp_bluedroid_get_example_name(), sizeof(remote_device_name));
+    ESP_LOGI(TAG, "DeviceName:%s, CIID:%02X, PipelineID:%05X, ChipID:%02X",
+             remote_device_name, CONFIG_EXAMPLE_CI_ID, CONFIG_EXAMPLE_CI_PIPELINE_ID, CONFIG_IDF_FIRMWARE_CHIP_ID);
+    ext_scan_params.scan_duplicate = BLE_SCAN_DUPLICATE_ENABLE;
+#endif
 
     // Register callbacks
     ret = esp_ble_gap_register_callback(gap_event_handler);

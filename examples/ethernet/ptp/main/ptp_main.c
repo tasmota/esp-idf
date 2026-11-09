@@ -59,8 +59,16 @@ void init_ethernet_and_netif(void)
         esp_netif_base_config.route_prio -= i*5;
         esp_netif_t *eth_netif = esp_netif_new(&esp_netif_config);
 
+#if CONFIG_ETH_SUBLAYER_SUPPORT
+        ESP_LOGI(TAG, "Using Ethernet sublayer");
+        esp_eth_sublayer_default_if_handle_t eth_default_if = NULL;
+        ESP_ERROR_CHECK(esp_eth_sublayer_default_if_new(eth_handles[i], &eth_default_if));
+        // attach Ethernet driver to TCP/IP stack
+        ESP_ERROR_CHECK(esp_netif_attach(eth_netif, eth_default_if));
+#else
         // attach Ethernet driver to TCP/IP stack
         ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handles[i])));
+#endif
     }
 
     for (int i = 0; i < eth_port_cnt; i++) {
@@ -127,7 +135,12 @@ void app_main(void)
 
     ptp_deamon_start();
 #if CONFIG_EXAMPLE_PTP_PULSE_EMAC_PPS
-    esp_eth_handle_t eth_handle = esp_netif_get_io_driver(esp_netif_get_handle_from_ifkey(ETH_IF_KEY));
+    esp_netif_iodriver_handle netif_iodriver = esp_netif_get_io_driver(esp_netif_get_handle_from_ifkey(ETH_IF_KEY));
+#if CONFIG_ETH_SUBLAYER_SUPPORT
+    esp_eth_handle_t eth_handle = esp_eth_sublayer_default_if_get_eth_handle(netif_iodriver);
+#else
+    esp_eth_handle_t eth_handle = (esp_eth_handle_t)netif_iodriver;
+#endif
     esp_eth_mac_t *mac;
     ESP_ERROR_CHECK(esp_eth_get_mac_instance(eth_handle, &mac));
     ESP_ERROR_CHECK(esp_eth_mac_set_pps_out_gpio(mac, CONFIG_EXAMPLE_PTP_PULSE_GPIO));

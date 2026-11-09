@@ -44,7 +44,7 @@
 #define SOC_I2C_SUPPORTED               1
 #define SOC_LEDC_SUPPORTED              1
 #define SOC_SYSTIMER_SUPPORTED          1
-//  \#define SOC_SUPPORT_COEXISTENCE         1
+#define SOC_SUPPORT_COEXISTENCE         1
 #define SOC_SHA_SUPPORTED               1
 #define SOC_ECC_SUPPORTED               1
 #define SOC_ECC_EXTENDED_MODES_SUPPORTED   1
@@ -52,6 +52,7 @@
 #define SOC_SECURE_BOOT_SUPPORTED       1
 #define SOC_BOD_SUPPORTED               1
 #define SOC_APM_SUPPORTED               1 /*!< Support for APM peripheral */
+#define SOC_RISCV_TRACE_SUPPORTED       1
 #define SOC_PMU_SUPPORTED               1
 #define SOC_PMU_PVT_SUPPORTED           1
 #define SOC_RTC_TIMER_SUPPORTED         1
@@ -81,30 +82,17 @@
 #define SOC_ADC_DIG_CTRL_SUPPORTED              1
 #define SOC_ADC_DIG_IIR_FILTER_SUPPORTED        1
 #define SOC_ADC_MONITOR_SUPPORTED               1
-#define SOC_ADC_DIG_SUPPORTED_UNIT(UNIT)        1    //Digital controller supported ADC unit
 #define SOC_ADC_DMA_SUPPORTED                   1
 #define SOC_ADC_PERIPH_NUM                      (1U)
-#define SOC_ADC_MAX_CHANNEL_NUM                 (4)
-#define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (4)
 #define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
-#define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
 #define SOC_ADC_PATT_LEN_MAX                    (8) /*!< Two pattern tables, each contains 4 items. Each item takes 1 byte */
-#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MIN_BITWIDTH               (12)
-#define SOC_ADC_DIGI_IIR_FILTER_NUM             (2)
+#define SOC_ADC_DIGI_MAX_BITWIDTH               (12)
 #define SOC_ADC_DIGI_MONITOR_NUM                (2)
 #define SOC_ADC_DIGI_RESULT_BYTES               (4)
 #define SOC_ADC_DIGI_DATA_BYTES_PER_CONV        (4)
-/*!< F_sample = F_digi_con / 2 / interval. F_digi_con = 5M for now. 30 <= interval <= 4095 */
-#define SOC_ADC_SAMPLE_FREQ_THRES_HIGH          83333
-#define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
-
-/*!< RTC */
-#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
-#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
-
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
 #define SOC_ADC_SELF_HW_CALI_SUPPORTED          (1) /*!< support HW offset self calibration */
@@ -129,6 +117,8 @@
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 #define SOC_CACHE_WRITEBACK_SUPPORTED           1
 #define SOC_CACHE_FREEZE_SUPPORTED              1
+#define SOC_CACHE_CNT_SUPPORTED                 1
+#define SOC_CACHE_CNT_UNITS_NUM                 2   //Number of cache profile counter units
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
 #define SOC_CPU_CORES_NUM               (1U)
@@ -150,6 +140,8 @@
 
 #define SOC_CPU_HAS_LOCKUP_RESET        1
 
+#define SOC_CPU_HAS_ZC_EXTENSIONS       1
+
 #define SOC_CPU_ZCMP_WORKAROUND         1
 #define SOC_CPU_ZCMP_PUSH_REVERSED      1
 #define SOC_CPU_ZCMP_POPRET_ISSUE       1
@@ -162,7 +154,6 @@
 #define SOC_GDMA_SUPPORT_ETM            1  // Support ETM submodule
 #define SOC_GDMA_SUPPORT_SLEEP_RETENTION    1
 #define SOC_GDMA_SUPPORT_WEIGHTED_ARBITRATION   1
-#define SOC_GDMA_EXT_MEM_ENC_ALIGNMENT   (16)
 
 /*-------------------------- ETM CAPS -----------------------------------*/
 #define SOC_ETM_SUPPORT_SLEEP_RETENTION 1
@@ -192,6 +183,7 @@
 #define SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP      (1)
 #define SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP               SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
 #define SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK      (0ULL | BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
+#define SOC_RTC_GPIO_EDGE_WAKEUP_SUPPORTED              (1)
 
 // digital I/O pad powered by VDD3P3_CPU or VDD_SPI(GPIO_NUM_7~GPIO_NUM_29)
 #define SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK 0x3FFFFF80ULL
@@ -217,6 +209,7 @@
 
 /*------------------------- Analog Comparator CAPS ---------------------------*/
 #define SOC_ANA_CMPR_SUPPORT_ETM               (1)
+#define SOC_ANA_CMPR_SUPPORT_AUTO_SCAN         (1)
 
 /*-------------------------- I2C CAPS ----------------------------------------*/
 #define SOC_I2C_NUM                             (1U)
@@ -353,6 +346,8 @@
 #define SOC_EFUSE_DIS_DIRECT_BOOT 1
 #define SOC_EFUSE_SOFT_DIS_JTAG 0
 #define SOC_EFUSE_DIS_ICACHE 1
+/* Capability to disable the MSPI access in download mode */
+#define SOC_EFUSE_DIS_DOWNLOAD_MSPI 1
 #define SOC_EFUSE_ECDSA_KEY 1
 #define SOC_EFUSE_XTS_AES_KEY_128 1
 
@@ -409,7 +404,6 @@
 
 /*-------------------------- EXTERNAL COEXISTENCE CAPS -------------------------------------*/
 #define SOC_EXTERNAL_COEX_ADVANCE              (1) /*!< HARDWARE ADVANCED EXTERNAL COEXISTENCE CAPS */
-#define SOC_EXTERNAL_COEX_LEADER_TX_LINE       (0) /*!< EXTERNAL COEXISTENCE TX LINE CAPS */
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
@@ -434,9 +428,11 @@
 #define SOC_PM_SUPPORT_MAC_BB_PD        (1)
 #define SOC_PM_SUPPORT_RTC_PERIPH_PD    (1)
 
+#define SOC_PM_SUPPORT_REGDMA_TRIGGERED_PHY (1)
 #define SOC_PM_SUPPORT_PMU_MODEM_STATE  (1)
 /* macro redefine for pass esp_wifi headers md5sum check */
 #define MAC_SUPPORT_PMU_MODEM_STATE     SOC_PM_SUPPORT_PMU_MODEM_STATE
+#define SOC_PM_REGDMA_MODEM_LINK_PROTECT    (1)
 
 #define SOC_PM_SUPPORT_PMU_CLK_ICG          (1)
 #define SOC_PM_SUPPORT_MODEM_CLOCK_DOMAIN_ICG      (1)
@@ -447,16 +443,17 @@
 
 #define SOC_PM_PAU_LINK_NUM                 (4)
 #define SOC_PM_PAU_REGDMA_LINK_MULTI_ADDR   (1)
-#define SOC_PM_PAU_REGDMA_LINK_WIFIMAC      (1)
+#define SOC_PM_PAU_REGDMA_LINK_MODEM      (1)
 
 #define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
 #define SOC_PM_PMU_MIN_SLP_SLOW_CLK_CYCLE_FIXED    (1)
 
-#define SOC_PM_RETENTION_MODULE_NUM         (32)
+#define SOC_PM_FLASH_KEEP_POWER_IN_LSLP     (1)  /*!<Keep flash on in light sleep to reduce wake latency and current leakage*/
 
 /*-------------------------- CLOCK SUBSYSTEM CAPS ----------------------------------------*/
 #define SOC_CLK_RC_FAST_SUPPORT_CALIBRATION       (1)
 #define SOC_MODEM_CLOCK_IS_INDEPENDENT            (1)
+#define SOC_RNG_CLOCK_IS_INDEPENDENT              (1)
 
 #define SOC_CLK_XTAL32K_SUPPORTED                 (1)     /*!< Support to connect an external low frequency crystal */
 #define SOC_CLK_OSC_SLOW_SUPPORTED                (1)     /*!< Support to connect an external oscillator, not a crystal */
@@ -501,6 +498,17 @@
 /*------------------------------------- PHY CAPS -------------------------------------*/
 #define SOC_PHY_COMBO_MODULE                  (1) /*!< Support Wi-Fi, BLE and 15.4*/
 #define SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT (1)
+
+/*------------------------------------- DEBUG CAPS -------------------------------------*/
+#define SOC_DEBUG_HAVE_OCD_STUB_BINS    (1)
+
+/*-------------------------- RISC-V TRACE CAPS ------------------------------*/
+#define SOC_RISCV_TRACE_PACKET_FORMAT_VER           (200) /*!< Efficient Trace v2.0 */
+#define SOC_RISCV_TRACE_HAS_CONFIG_REG              (1) /*!< Has the encoder config register */
+#define SOC_RISCV_TRACE_AHB_CONFIGURABLE            (1) /*!< AHB write master is configurable */
+#define SOC_RISCV_TRACE_FILTER_SUPPORTED            (1) /*!< Has the filter unit */
+#define SOC_RISCV_TRACE_PRIV_WIDTH                  (1U) /*!< Bits in the privilege field (privilege_width_p) */
+#define SOC_RISCV_TRACE_ECAUSE_WIDTH                (6) /*!< Bits in the exception cause field (ecause_width_p) */
 
 /*------------------------------------- No Reset CAPS -------------------------------------*/
 //  \#define SOC_CAPS_NO_RESET_BY_ANA_BOD           (1)   //TODO: [ESP32C61] IDF-9254

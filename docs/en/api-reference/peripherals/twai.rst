@@ -90,6 +90,7 @@ Below are additional configuration fields of the :cpp:type:`twai_onchip_node_con
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_loopback`: Enables loopback mode. The node will receive its own transmitted messages (subject to filter configuration), while also transmitting them to the bus.
     - :cpp:member:`twai_onchip_node_config_t::flags::enable_listen_only`: Configures the node in listen-only mode. In this mode, the node only receives and does not transmit any dominant bits, including ACK and error frames.
     - :cpp:member:`twai_onchip_node_config_t::flags::no_receive_rtr`: When using filters, determines whether remote frames matching the ID pattern should be filtered out.
+    - :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx`: Enables scheduled transmission. This option requires a non-zero :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz`.
 
 The :cpp:func:`twai_node_enable` function starts the TWAI controller. Once enabled, the controller is connected to the bus and can transmit messages. It also generates events upon receiving messages from other nodes on the bus or when bus errors are detected.
 
@@ -134,6 +135,7 @@ The :cpp:type:`twai_frame_t` message structure also includes other configuration
 - :cpp:member:`twai_frame_t::header::fdf`: Marks the frame as an FD format frame, supporting up to 64 bytes of data.
 - :cpp:member:`twai_frame_t::header::brs`: Enables use of a separate data-phase baud rate when transmitting.
 - :cpp:member:`twai_frame_t::header::esi`: For received frames, indicates the error state of the transmitting node.
+- :cpp:member:`twai_frame_t::tx_queue_priority`: Local transmit queue priority. See `Transmit Queue Priority`_ for details.
 
 Receiving Messages
 ------------------
@@ -175,10 +177,40 @@ The TWAI driver supports creating a 64-bit timestamp for each successfully recei
 
 The node time inherits from the system time, i.e. the time starts from the power-on of the chip, and is not affected by the stop/restart/BUS_OFF state during the node's lifetime.
 
+.. only:: SOC_TWAI_FD_SUPPORTED
+
+    Scheduled Transmission
+    ----------------------
+
+    The {IDF_TARGET_NAME} TWAI supports schedule a transmitted frame by trigger time. Enable :cpp:member:`twai_onchip_node_config_t::flags::enable_scheduled_tx` and set :cpp:member:`twai_onchip_node_config_t::timestamp_resolution_hz` when creating the node, then fill :cpp:member:`twai_frame_t::header::trigger_time` before calling :cpp:func:`twai_node_transmit`. The trigger time uses the same timebase as received frame timestamps.
+
+    .. code:: c
+
+        twai_onchip_node_config_t node_config = {
+            .io_cfg.tx = 4,
+            .io_cfg.rx = 5,
+            .bit_timing.bitrate = 500000,
+            .timestamp_resolution_hz = 1000,  // 1 tick = 1 ms
+            .tx_queue_depth = 4,
+            .flags.enable_scheduled_tx = true,
+        };
+
+        twai_frame_t tx_msg = {
+            .header.id = 0x10,
+            .header.trigger_time = 2000,  // transmit when node timestamp reaches 2000 ticks
+        };
+        ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &tx_msg, 0));
+
+    .. note::
+
+        If the frame's trigger time has already been reached when the frame is ready to transmit, the driver starts transmitting it immediately. When multiple scheduled frames are queued, the driver processes them in software submission order. Frames are not reordered by :cpp:member:`twai_frame_t::header::trigger_time`, so a later-submitted frame with an earlier trigger time cannot overtake frames submitted before it.
+
 Stopping and Deleting the Node
 ------------------------------
 
 When the TWAI node is no longer needed, you should call :cpp:func:`twai_node_delete` to release software and hardware resources. Make sure the TWAI controller is stopped before deleting the node.
+
+Note: Due to the design of the driver, please do not call the delete function in the FreeRTOS timer task.
 
 Advanced Features
 =================
@@ -213,6 +245,13 @@ The TWAI driver supports transmitting messages from an Interrupt Service Routine
 
 .. note::
     When calling :cpp:func:`twai_node_transmit` from an ISR, the ``timeout`` parameter is ignored, and the function will not block. If the transmit queue is full, the function will return immediately with an error. It is the application's responsibility to handle cases where the queue is full. Similarly, the ``twai_frame_t`` structure and the memory pointed to by ``buffer`` must remain valid until the transmission is complete. You can get the completed frame by the :cpp:member:`twai_tx_done_event_data_t::done_tx_frame` pointer.
+
+Transmit Queue Priority
+-----------------------
+
+The TWAI driver supports local transmit queue prioritization through :cpp:member:`twai_frame_t::tx_queue_priority`. When multiple frames are pending in the driver's transmit queue, frames with a higher ``tx_queue_priority`` value are dequeued and started transmitting first. Frames with the same priority keep their enqueue order.
+
+This priority only affects the driver's local transmit queue. It is not transmitted on the TWAI bus and does not replace TWAI bus arbitration. If the controller has multiple hardware transmit buffers (for example, 4 hardware transmit buffers for esp32c5), the already cached frames will not be preempted by newly queued higher-priority frames. Once a frame reaches the bus, arbitration is still determined by the frame ID, where lower IDs have higher bus priority.
 
 Bit Timing Customization
 ------------------------
@@ -332,7 +371,7 @@ When recovery completes, the :cpp:member:`twai_event_callbacks_t::on_state_chang
 Power Management
 ----------------
 
-When power management is enabled via :ref:`CONFIG_PM_ENABLE`, the system may adjust or disable clock sources before entering sleep mode, which could cause TWAI to malfunction. To prevent this, the driver manages a power management lock internally. This lock is acquired when calling :cpp:func:`twai_node_enable`, ensuring the system does not enter sleep mode and TWAI remains functional. To allow the system to enter a low-power state, call :cpp:func:`twai_node_disable` to release the lock. During sleep, the TWAI controller will also stop functioning.
+When power management is enabled via :menuitem:`CONFIG_PM_ENABLE`, the system may adjust or disable clock sources before entering sleep mode, which could cause TWAI to malfunction. To prevent this, the driver manages a power management lock internally. This lock is acquired when calling :cpp:func:`twai_node_enable`, ensuring the system does not enter sleep mode and TWAI remains functional. To allow the system to enter a low-power state, call :cpp:func:`twai_node_disable` to release the lock. During sleep, the TWAI controller will also stop functioning.
 
 .. only:: SOC_TWAI_SUPPORT_SLEEP_RETENTION
 
@@ -341,12 +380,12 @@ When power management is enabled via :ref:`CONFIG_PM_ENABLE`, the system may adj
 
     {IDF_TARGET_NAME} supports powering down the TWAI controller during **Light Sleep** to further reduce power consumption and automatically restore after waking up. This means the application does not need to reconfigure TWAI after **Light Sleep** wake up.
 
-    Enable the option :ref:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`, and set :cpp:member:`twai_onchip_node_config_t::flags::sleep_allow_pd` to ``true`` when initializing the TWAI node to enable this feature. Otherwise, the TWAI controller will remain powered during **Light Sleep**. This feature helps reduce power consumption during light sleep but requires additional storage to save register configurations.
+    Enable the option :menuitem:`CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP`, and set :cpp:member:`twai_onchip_node_config_t::flags::sleep_allow_pd` to ``true`` when initializing the TWAI node to enable this feature. Otherwise, the TWAI controller will remain powered during **Light Sleep**. This feature helps reduce power consumption during light sleep but requires additional storage to save register configurations.
 
 Cache Safety
 ------------
 
-During Flash write operations, the system temporarily disables cache to prevent instruction and data fetch errors from Flash. This can cause interrupt handlers stored in Flash to become unresponsive. If you want interrupt routines to remain operational during cache-disabled periods, enable the :ref:`CONFIG_TWAI_ISR_CACHE_SAFE` option.
+During Flash write operations, the system temporarily disables cache to prevent instruction and data fetch errors from Flash. This can cause interrupt handlers stored in Flash to become unresponsive. If you want interrupt routines to remain operational during cache-disabled periods, enable the :menuitem:`CONFIG_TWAI_ISR_CACHE_SAFE` option.
 
 .. note::
 
@@ -360,9 +399,9 @@ The driver guarantees thread safety for all public TWAI APIs. You can safely cal
 Performance
 -----------
 
-To improve the real-time performance of interrupt handling, the driver provides the :ref:`CONFIG_TWAI_ISR_IN_IRAM` option. When enabled, the TWAI ISR (Interrupt Service Routine) and receive operations are placed in internal RAM, reducing latency caused by instruction fetching from Flash.
+To improve the real-time performance of interrupt handling, the driver provides the :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` option. When enabled, the TWAI ISR (Interrupt Service Routine) and receive operations are placed in internal RAM, reducing latency caused by instruction fetching from Flash.
 
-For applications that require high-performance transmit operations, the driver provides the :ref:`CONFIG_TWAI_IO_FUNC_IN_IRAM` option to place transmit functions in IRAM. This is particularly beneficial for time-critical applications that frequently call :cpp:func:`twai_node_transmit` from user tasks.
+For applications that require high-performance transmit operations, the driver provides the :menuitem:`CONFIG_TWAI_IO_FUNC_IN_IRAM` option to place transmit functions in IRAM. This is particularly beneficial for time-critical applications that frequently call :cpp:func:`twai_node_transmit` from user tasks.
 
 .. note::
 
@@ -377,8 +416,8 @@ You can inspect the Flash and memory usage of the TWAI driver using the :doc:`/a
 - Default log level is set to ``ESP_LOG_INFO`` to balance debugging information and performance.
 - The following driver optimization options are disabled:
 
-    - :ref:`CONFIG_TWAI_ISR_IN_IRAM` – ISR is not placed in IRAM.
-    - :ref:`CONFIG_TWAI_ISR_CACHE_SAFE` – Cache safety option is disabled.
+    - :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` – ISR is not placed in IRAM.
+    - :menuitem:`CONFIG_TWAI_ISR_CACHE_SAFE` – Cache safety option is disabled.
 
 **The following resource usage data is for reference only. Actual values may vary across different target chips.**
 
@@ -392,7 +431,7 @@ You can inspect the Flash and memory usage of the TWAI driver using the :doc:`/a
 | soc             | 64         | 0     | 0    | 0     | 0     | 64    | 64      | 0     |
 +-----------------+------------+-------+------+-------+-------+-------+---------+-------+
 
-Resource Usage with :ref:`CONFIG_TWAI_ISR_IN_IRAM` Enabled:
+Resource Usage with :menuitem:`CONFIG_TWAI_ISR_IN_IRAM` Enabled:
 
 +-----------------+------------+-------+------+-------+-------+-------+---------+-------+
 | Component Layer | Total Size | DIRAM | .bss | .data | .text | Flash | .rodata | .text |
@@ -409,7 +448,7 @@ Additionally, each TWAI handle dynamically allocates approximately ``168`` + 4 *
 Other Kconfig Options
 ---------------------
 
-- :ref:`CONFIG_TWAI_ENABLE_DEBUG_LOG`: This option forces all debug logs of the TWAI driver to be enabled regardless of the global log level settings. Enabling this can help developers obtain more detailed log information during debugging, making it easier to locate and resolve issues.
+- :menuitem:`CONFIG_TWAI_ENABLE_DEBUG_LOG`: This option forces all debug logs of the TWAI driver to be enabled regardless of the global log level settings. Enabling this can help developers obtain more detailed log information during debugging, making it easier to locate and resolve issues.
 
 Application Examples
 ====================
@@ -420,6 +459,7 @@ Application Examples
     - :example:`peripherals/twai/twai_error_recovery` demonstrates how to recover nodes from the bus-off state and resume communication, as well as bus error reporting, node state changes, and other event information.
     - :example:`peripherals/twai/twai_network` using 2 nodes with different roles: transmitting and listening, demonstrates how to use the driver for single and bulk data transmission, as well as configure filters to receive these data.
     - :example:`peripherals/twai/cybergear` demonstrates how to control XiaoMi CyberGear motors via TWAI interface.
+    - :example:`peripherals/twai/usb_twai_adapter` demonstrates how to make an USB-CAN adapter and enumerate it to a socket can device.
 
 API Reference
 =============

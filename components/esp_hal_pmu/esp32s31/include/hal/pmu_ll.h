@@ -16,10 +16,46 @@
 #include "soc/pmu_struct.h"
 #include "hal/pmu_types.h"
 #include "hal/misc.h"
+#include "soc/efuse_struct.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_active_hp_dbias(void)
+{
+    return EFUSE.rd_mac_sys4.active_hp_dbias;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_active_lp_dbias(void)
+{
+    return EFUSE.rd_mac_sys4.active_lp_dbias;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_lslp_dbg(void)
+{
+    return EFUSE.rd_mac_sys4.lslp_hp_dbg;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_lslp_hp_dbias(void)
+{
+    return EFUSE.rd_mac_sys4.lslp_hp_dbias;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_dslp_dbg(void)
+{
+    return (EFUSE.rd_mac_sys5.dslp_lp_dbg_1 << 2) | EFUSE.rd_mac_sys4.dslp_lp_dbg;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_get_dslp_lp_dbias(void)
+{
+    return EFUSE.rd_mac_sys5.dslp_lp_dbias;
+}
+
+FORCE_INLINE_ATTR int32_t pmu_ll_get_dbias_vol_gap(void)
+{
+    return EFUSE.rd_mac_sys5.lp_hp_dbias_vol_gap;
+}
 
 FORCE_INLINE_ATTR uint32_t pmu_ll_lp_get_interrupt_raw(pmu_dev_t *hw)
 {
@@ -122,6 +158,24 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_clk_power(pmu_dev_t *hw, pmu_hp_mode_t mode
     hw->hp_sys[mode].clk_power.val = xpd_flag;
 }
 
+/**
+ * @brief Set the power and isolation of the analog i2c master shared by all the PLLs
+ *
+ * @param hw Beginning address of the peripheral registers.
+ * @param mode The pmu mode
+ * @param xpd_bb_i2c Power up the analog i2c master
+ * @param iso_en Isolate the analog i2c master interface
+ * @param retention Retain the analog i2c master registers
+ *
+ * @return None
+ */
+FORCE_INLINE_ATTR void pmu_ll_hp_set_ana_i2c_power(pmu_dev_t *hw, pmu_hp_mode_t mode, bool xpd_bb_i2c, bool iso_en, bool retention)
+{
+    hw->hp_sys[mode].clk_power.xpd_bb_i2c = xpd_bb_i2c;
+    hw->hp_sys[mode].clk_power.i2c_iso_en = iso_en;
+    hw->hp_sys[mode].clk_power.i2c_retention = retention;
+}
+
 FORCE_INLINE_ATTR void pmu_ll_hp_set_xtal_xpd(pmu_dev_t *hw, pmu_hp_mode_t mode, bool xpd_xtal)
 {
     hw->hp_sys[mode].xtal.xpd_xtal = xpd_xtal;
@@ -145,6 +199,19 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_current_power_off(pmu_dev_t *hw, pmu_hp_mod
 FORCE_INLINE_ATTR void pmu_ll_hp_set_bias_sleep_enable(pmu_dev_t *hw, pmu_hp_mode_t mode, bool en)
 {
     hw->hp_sys[mode].bias.bias_sleep = en;
+}
+
+/**
+ * Update pd_cur and bias_sleep in one register write.
+ * Hardware must not observe pd_cur=1 with bias_sleep=0.
+ */
+FORCE_INLINE_ATTR void pmu_ll_hp_set_pd_cur_bias_sleep(pmu_dev_t *hw, pmu_hp_mode_t mode, bool pd_cur, bool bias_sleep)
+{
+    HAL_ASSERT(!pd_cur || bias_sleep);
+    pmu_hp_bias_reg_t bias = {.val = hw->hp_sys[mode].bias.val};
+    bias.pd_cur = pd_cur;
+    bias.bias_sleep = bias_sleep;
+    hw->hp_sys[mode].bias.val = bias.val;
 }
 
 FORCE_INLINE_ATTR void pmu_ll_hp_set_retention_param(pmu_dev_t *hw, pmu_hp_mode_t mode, uint32_t param)
@@ -243,6 +310,12 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_regulator_hp_dbias_voltage(pmu_dev_t *hw, p
 {
     HAL_ASSERT(mode == PMU_MODE_HP_ACTIVE);
     hw->hp_sys[mode].regulator0.hp_dbias_vol = voltage;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_regulator_hp_dbias_voltage(pmu_dev_t *hw, pmu_hp_mode_t mode)
+{
+    HAL_ASSERT(mode == PMU_MODE_HP_ACTIVE);
+    return hw->hp_sys[mode].regulator0.hp_dbias_vol;
 }
 
 FORCE_INLINE_ATTR void pmu_ll_hp_set_regulator_dbias_select(pmu_dev_t *hw, pmu_hp_mode_t mode, bool sel)
@@ -365,6 +438,20 @@ FORCE_INLINE_ATTR void pmu_ll_lp_set_bias_sleep_enable(pmu_dev_t *hw, pmu_lp_mod
 {
     HAL_ASSERT(mode == PMU_MODE_LP_SLEEP);
     hw->lp_sys[mode].bias.bias_sleep = en;
+}
+
+/**
+ * Update pd_cur and bias_sleep in one register write.
+ * Hardware must not observe pd_cur=1 with bias_sleep=0.
+ */
+FORCE_INLINE_ATTR void pmu_ll_lp_set_pd_cur_bias_sleep(pmu_dev_t *hw, pmu_lp_mode_t mode, bool pd_cur, bool bias_sleep)
+{
+    HAL_ASSERT(mode == PMU_MODE_LP_SLEEP);
+    HAL_ASSERT(!pd_cur || bias_sleep);
+    pmu_lp_bias_reg_t bias = {.val = hw->lp_sys[mode].bias.val};
+    bias.pd_cur = pd_cur;
+    bias.bias_sleep = bias_sleep;
+    hw->lp_sys[mode].bias.val = bias.val;
 }
 
 FORCE_INLINE_ATTR void pmu_ll_imm_set_clk_power(pmu_dev_t *hw, uint32_t flag0, uint32_t flag1)
@@ -514,6 +601,25 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_memory_power_up(pmu_dev_t *hw, uint32_t fpu
     hw->power.mem_cntl.force_hp_mem_pu = fpu;
 }
 
+FORCE_INLINE_ATTR void pmu_ll_hp_set_memory_power_on_mask(pmu_dev_t *hw, uint32_t mem_mask)
+{
+    hw->power.mem_mask.mem0_mask = (mem_mask & BIT(0)) ? 0x1F : 0;
+    hw->power.mem_mask.mem1_mask = (mem_mask & BIT(1)) ? 0x1F : 0;
+    hw->power.mem_mask.mem2_mask = (mem_mask & BIT(2)) ? 0x1F : 0;
+    if (mem_mask & BIT(3)) {
+        hw->power.mem_cntl.force_hp_mem_pu |= (mem_mask & BIT(3));
+    } else {
+        hw->power.mem_cntl.force_hp_mem_pu &= ~(mem_mask & BIT(3));
+    }
+}
+
+FORCE_INLINE_ATTR void pmu_ll_hp_set_memory_power_off_mask(pmu_dev_t *hw, uint32_t mem0_pd_mask, uint32_t mem1_pd_mask, uint32_t mem2_pd_mask)
+{
+    hw->power.mem_mask.mem0_pd_mask = mem0_pd_mask;
+    hw->power.mem_mask.mem1_pd_mask = mem1_pd_mask;
+    hw->power.mem_mask.mem2_pd_mask = mem2_pd_mask;
+}
+
 FORCE_INLINE_ATTR void pmu_ll_hp_set_sleep_enable(pmu_dev_t *hw)
 {
     hw->wakeup.cntl0.sleep_req = 1;
@@ -603,6 +709,11 @@ FORCE_INLINE_ATTR void pmu_ll_hp_clear_lp_cpu_exc_intr_status(pmu_dev_t *hw)
 FORCE_INLINE_ATTR void pmu_ll_hp_enable_sw_intr(pmu_dev_t *hw, bool enable)
 {
     hw->hp_ext.int_ena.sw = enable;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_wakeup_enable(pmu_dev_t *hw)
+{
+    return hw->wakeup.cntl2;
 }
 
 FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_wakeup_cause(pmu_dev_t *hw)
@@ -755,12 +866,17 @@ FORCE_INLINE_ATTR uint32_t pmu_ll_get_sysclk_sleep_select_state(pmu_dev_t *hw)
     return hw->clk_state0.sysclk_slp_sel;
 }
 
+FORCE_INLINE_ATTR void pmu_ll_set_rf_power_control(pmu_dev_t *hw, uint16_t val)
+{
+    hw->hp_ext.rf_pwc.xpd_rf_circuit = val;
+}
+
 /**
  * @brief Get ext1 wakeup source status
  * @return  The lower 8 bits of the returned value are the bitmap of
  *          the wakeup source status, bit 0~7 corresponds to LP_IO 0~7
  */
-static inline  uint32_t pmu_ll_ext1_get_wakeup_status(void)
+FORCE_INLINE_ATTR uint32_t pmu_ll_ext1_get_wakeup_status(void)
 {
     return REG_GET_FIELD(PMU_EXT_WAKEUP_ST_REG, PMU_EXT_WAKEUP_STATUS);
 }
@@ -768,9 +884,10 @@ static inline  uint32_t pmu_ll_ext1_get_wakeup_status(void)
 /**
  * @brief Clear the ext1 wakeup source status
  */
-static inline void pmu_ll_ext1_clear_wakeup_status(void)
+FORCE_INLINE_ATTR void pmu_ll_ext1_clear_wakeup_status(void)
 {
     REG_SET_BIT(PMU_EXT_WAKEUP_CNTL_REG, PMU_EXT_WAKEUP_STATUS_CLR);
+    REG_CLR_BIT(PMU_EXT_WAKEUP_CNTL_REG, PMU_EXT_WAKEUP_STATUS_CLR);
 }
 
 /**
@@ -779,7 +896,7 @@ static inline void pmu_ll_ext1_clear_wakeup_status(void)
  * @param level_mask 0: Wake the chip when all selected GPIOs go low
  *                   1: Wake the chip when any of the selected GPIOs go high
  */
-static inline  void pmu_ll_ext1_set_wakeup_pins(uint32_t io_mask, int level_mask)
+FORCE_INLINE_ATTR void pmu_ll_ext1_set_wakeup_pins(uint32_t io_mask, int level_mask)
 {
     REG_SET_FIELD(PMU_EXT_WAKEUP_SEL_REG, PMU_EXT_WAKEUP_SEL, io_mask);
     REG_SET_FIELD(PMU_EXT_WAKEUP_LV_REG, PMU_EXT_WAKEUP_LV, level_mask);
@@ -788,7 +905,7 @@ static inline  void pmu_ll_ext1_set_wakeup_pins(uint32_t io_mask, int level_mask
 /**
  * @brief Clear all ext1 wakup-source setting
  */
-static inline  void pmu_ll_ext1_clear_wakeup_pins(void)
+FORCE_INLINE_ATTR void pmu_ll_ext1_clear_wakeup_pins(void)
 {
     REG_SET_FIELD(PMU_EXT_WAKEUP_SEL_REG, PMU_EXT_WAKEUP_SEL, 0);
 }
@@ -798,7 +915,7 @@ static inline  void pmu_ll_ext1_clear_wakeup_pins(void)
  * @return  The lower 8 bits of the returned value are the bitmap of
  *          the wakeup source status, bit 0~7 corresponds to LP_IO 0~7
  */
-static inline  uint32_t pmu_ll_ext1_get_wakeup_pins(void)
+FORCE_INLINE_ATTR uint32_t pmu_ll_ext1_get_wakeup_pins(void)
 {
     return REG_GET_FIELD(PMU_EXT_WAKEUP_SEL_REG, PMU_EXT_WAKEUP_SEL);
 }

@@ -16,11 +16,10 @@
 #include "sdkconfig.h"
 
 #include "esp_err.h"
+#include "esp_log.h"
 
-#include "zephyr/kernel.h"
-
-#include "host/ble_gap.h"
-#include "host/ble_hs_adv.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "esp_ble_audio_bap_api.h"
 
@@ -51,15 +50,74 @@
 #define EXAMPLE_BYTES_LIST_LE48             BT_BYTES_LIST_LE48
 #define EXAMPLE_BYTES_LIST_LE64             BT_BYTES_LIST_LE64
 
-int example_audio_gap_event_cb(struct ble_gap_event *event, void *arg);
+/* ISO/Audio events are LSB-first; Bluedroid APIs use MSB-first. */
+static inline void example_addr_le_to_host(uint8_t dst[6], const uint8_t src[6])
+{
+    for (size_t i = 0; i < 6; i++) {
+#if CONFIG_BT_BLUEDROID_ENABLED
+        dst[i] = src[5 - i];
+#else
+        dst[i] = src[i];
+#endif
+    }
+}
 
-void example_print_codec_cfg(const esp_ble_audio_codec_cfg_t *codec_cfg);
+#if CONFIG_BT_BLUEDROID_ENABLED
+/* Fire-and-wait helper for Bluedroid GAP APIs that pair an async call with
+ * a matching ESP_GAP_BLE_*_COMPLETE_EVT. The example's GAP event handler
+ * is expected to xSemaphoreGive(_sem) on that COMPLETE_EVT. `TAG` and the
+ * enclosing function's `esp_err_t` return are taken from the call site.
+ *
+ * !!! Demo-only — DO NOT copy into production code. !!!
+ * Risks (acceptable in linear init sequences, not in customer apps):
+ *   - Same-task deadlock: must NOT be called from the task that dispatches
+ *     the COMPLETE_EVT (BTC task by default; lib forwarding can route some
+ *     events through other tasks — verify the path for your event).
+ *   - portMAX_DELAY = no timeout: hangs forever on controller/firmware
+ *     misbehavior. Production must use a bounded timeout + recovery.
+ *   - Shared binary sem: concurrent callers race; first take consumes
+ *     whichever give arrived. Examples avoid this by serializing init.
+ *   - No abort hook: nothing can break a portMAX_DELAY wait at shutdown.
+ *   - Status not checked: see EXAMPLE_WAIT_API_CHECK below.
+ *
+ * Production should drive BLE init/teardown via an event-driven state
+ * machine (one task owns the BLE flow, callbacks advance state, no
+ * blocking from inside callbacks). NimBLE host returns ctrl errors
+ * synchronously and sidesteps most of this complexity. */
+#define EXAMPLE_WAIT_API(_call, _sem, _delay) do {                      \
+        esp_err_t _err = (_call);                                       \
+        if (_err != ESP_OK) {                                           \
+            ESP_LOGE(TAG, #_call " failed, err %d", _err);              \
+            return _err;                                                \
+        }                                                               \
+        xSemaphoreTake(_sem, _delay);                                   \
+    } while (0)
 
-void example_print_codec_cap(const esp_ble_audio_codec_cap_t *codec_cap);
+/* As EXAMPLE_WAIT_API but also checks the controller status latched by the
+ * gap_event_handler into `_op_status` after the sem is taken. Returns
+ * ESP_FAIL on async failure. Caller must provide a static esp_bt_status_t
+ * and write it from each COMPLETE_EVT param before xSemaphoreGive. */
+#define EXAMPLE_WAIT_API_CHECK(_call, _sem, _delay, _op_status) do {    \
+        EXAMPLE_WAIT_API(_call, _sem, _delay);                          \
+        if ((_op_status) != ESP_BT_STATUS_SUCCESS) {                    \
+            ESP_LOGE(TAG, #_call " ctrl status %d", (_op_status));      \
+            return ESP_FAIL;                                            \
+        }                                                               \
+    } while (0)
+#endif
 
-void example_print_qos(const esp_ble_audio_bap_qos_cfg_t *qos);
+#define EXAMPLE_BT_ADDR_PRINT_ARGS(_v) \
+    (_v)[5], (_v)[4], (_v)[3], (_v)[2], (_v)[1], (_v)[0]
 
-void example_print_qos_pref(const esp_ble_audio_bap_qos_cfg_pref_t *pref);
+void example_print_codec_cfg(const char *tag, const esp_ble_audio_codec_cfg_t *codec_cfg);
+
+void example_print_codec_cap(const char *tag, const esp_ble_audio_codec_cap_t *codec_cap);
+
+void example_print_meta(const char *tag, const uint8_t *meta, size_t meta_len);
+
+void example_print_qos(const char *tag, const esp_ble_audio_bap_qos_cfg_t *qos);
+
+void example_print_qos_pref(const char *tag, const esp_ble_audio_bap_qos_cfg_pref_t *pref);
 
 bool example_is_substring(const char *substr, const char *str);
 
@@ -74,8 +132,10 @@ typedef void (*example_audio_tx_send_cb_t)(void *ctx);
 
 typedef struct {
     struct k_work_delayable timer;
-    size_t drift;
-    uint32_t count;
+    int32_t drift;                  /* Frames to add (> 0) or skip (< 0) at the next tick */
+    uint32_t period_us;
+    int32_t lead_cnt;               /* SDUs in the lead window; < 0 while skipping one */
+    int32_t lead_max;               /* Best lead in the window */
     /* Called periodically in ISO task context to transmit data */
     example_audio_tx_send_cb_t cb;
     void *arg;
@@ -87,6 +147,7 @@ typedef struct {
     uint32_t error_count;
     uint32_t lost_count;
     uint32_t null_sdu_count;
+    const uint8_t *last_sdu;
     uint16_t last_sdu_len;
 } example_audio_rx_metrics_t;
 
@@ -101,18 +162,64 @@ int example_audio_tx_scheduler_start(example_audio_tx_scheduler_t *scheduler,
 
 int example_audio_tx_scheduler_stop(example_audio_tx_scheduler_t *scheduler);
 
+/* TX counts of one stream, as the scheduler may serve several. */
+typedef struct {
+    uint32_t sdus;
+    uint32_t late;      /* Late SDUs since the last TX log */
+} example_audio_tx_count_t;
+
 void example_audio_tx_scheduler_on_sent(example_audio_tx_scheduler_t *scheduler,
                                         const esp_ble_iso_tx_cb_info_t *info,
+                                        example_audio_tx_count_t *count,
                                         const char *tag,
-                                        const char *obj_name,
-                                        const void *obj);
+                                        const char *obj_name);
+
+#if CONFIG_EXAMPLE_AUDIO_TX_TIMESTAMP
+/* Send one SDU with the given seq, and with the timestamp if ts_valid. */
+typedef int (*example_audio_tx_sync_send_cb_t)(esp_ble_audio_bap_stream_t *stream,
+                                               uint16_t seq_num, uint32_t timestamp,
+                                               bool ts_valid);
+
+/* One stream of a timestamped group; each has its own seq numbers. */
+typedef struct {
+    esp_ble_audio_bap_stream_t *stream; /* NULL while stopped */
+    uint16_t seq_num;                   /* Next SDU */
+} example_audio_tx_sync_stream_t;
+
+/**
+ * @brief Timestamped TX state of one group (a BIG or CIG).
+ *
+ * Each call sends one frame: one SDU on each started stream, all with the
+ * same timestamp, so the SDUs of one frame (e.g. left and right audio) go in
+ * one event. Until LE Read ISO TX Sync shows an SDU at the start of an event,
+ * only the first stream started sends, without timestamps.
+ */
+typedef struct {
+    example_audio_tx_sync_send_cb_t send;
+    example_audio_tx_sync_stream_t streams[CONFIG_BT_ISO_MAX_CHAN];
+    example_audio_tx_sync_stream_t *lead;   /* Before sync, the stream sending */
+    uint32_t iso_interval_us;               /* Whole multiple of sdu_interval_us */
+    uint32_t sdu_interval_us;
+    uint32_t timestamp;                     /* Next frame; before sync, the last tx_time_stamp read */
+    uint16_t anchor_seq;                    /* Before sync, the first SDU seen at that tx_time_stamp */
+    bool synced;
+    bool framed;                            /* Not supported yet: TX stops */
+} example_audio_tx_sync_t;
+
+/* Add a started stream of the group; it sends from the next frame on, once synced. */
+int example_audio_tx_sync_start(example_audio_tx_sync_t *tx, esp_ble_audio_bap_stream_t *stream);
+
+void example_audio_tx_sync_stop(example_audio_tx_sync_t *tx, esp_ble_audio_bap_stream_t *stream);
+
+/* Call once per SDU interval. */
+void example_audio_tx_sync_send_next(example_audio_tx_sync_t *tx);
+#endif /* CONFIG_EXAMPLE_AUDIO_TX_TIMESTAMP */
 
 void example_audio_rx_metrics_reset(example_audio_rx_metrics_t *metrics);
 
 void example_audio_rx_metrics_on_recv(const esp_ble_iso_recv_info_t *info,
                                       example_audio_rx_metrics_t *metrics,
                                       const char *tag,
-                                      const char *obj_name,
-                                      const void *obj);
+                                      const char *obj_name);
 
 #endif /* BLE_AUDIO_EXAMPLE_UTILS_H_ */

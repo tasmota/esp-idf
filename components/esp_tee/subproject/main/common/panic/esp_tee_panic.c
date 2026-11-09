@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,6 +18,7 @@
 #include "hal/cache_ll.h"
 #include "hal/cache_hal.h"
 #include "hal/apm_hal.h"
+#include "soc/soc_caps.h"
 
 #if SOC_INT_PLIC_SUPPORTED
 #include "soc/plic_reg.h"
@@ -51,13 +52,7 @@ static void tee_panic_end(void)
     REG_WRITE(CLIC_INT_THRESH_REG, 0x00);
 #endif
 
-    // Make sure all the panic handler output is sent from UART FIFO
-    if (CONFIG_ESP_CONSOLE_UART_NUM >= 0) {
-        esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_UART_NUM);
-    }
-
-    // Generate system reset
-    esp_rom_software_reset_system();
+    esp_tee_system_reset();
 }
 
 void __assert_func(const char *file, int line, const char *func, const char *expr)

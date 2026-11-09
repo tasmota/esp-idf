@@ -15,7 +15,7 @@ Overview
 
 The original FreeRTOS (hereinafter referred to as **Vanilla FreeRTOS**) is a compact and efficient real-time operating system supported on numerous single-core MCUs and SoCs. However, to support dual-core ESP targets, such as ESP32, ESP32-S3, and ESP32-P4, ESP-IDF provides a unique implementation of FreeRTOS with dual-core symmetric multiprocessing (SMP) capabilities (hereinafter referred to as **IDF FreeRTOS**).
 
-IDF FreeRTOS source code is based on Vanilla FreeRTOS v10.5.1 but contains significant modifications to both kernel behavior and API in order to support dual-core SMP. However, IDF FreeRTOS can also be configured for single-core by enabling the :ref:`CONFIG_FREERTOS_UNICORE` option (see :ref:`freertos-idf-single-core` for more details).
+IDF FreeRTOS source code is based on Vanilla FreeRTOS v10.5.1 but contains significant modifications to both kernel behavior and API in order to support dual-core SMP. However, IDF FreeRTOS can also be configured for single-core by enabling the :menuitem:`CONFIG_FREERTOS_UNICORE` option (see :ref:`freertos-idf-single-core` for more details).
 
 .. note::
 
@@ -47,7 +47,7 @@ Although an SMP system allows threads to switch cores, there are scenarios where
 SMP on an ESP Target
 ^^^^^^^^^^^^^^^^^^^^
 
-ESP targets such as ESP32, ESP32-S3, ESP32-P4 and ESP32-H4 are dual-core SMP SoCs. These targets have the following hardware features that make them SMP-capable:
+ESP targets with dual HP cores have the following hardware features that make them SMP-capable:
 
 - Two identical cores are known as Core 0 and Core 1. This means that the execution of a piece of code is identical regardless of which core it runs on.
 - Symmetric memory (with some small exceptions).
@@ -382,6 +382,19 @@ In IDF FreeRTOS, the process of a particular core entering and exiting a critica
   #. The core releases the spinlock by clearing the spinlock's owner value.
   #. The core re-enables interrupts or interrupt nesting.
 
+Thread-Safe Port Critical Bypass
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``xPortThreadSafeClaim()`` and ``xPortThreadSafeDisclaim()`` (``portmacro.h``) skip port-layer critical enter/exit on the current core. **Thread safety between Claim and Disclaim must be guaranteed by the caller.**
+
+.. warning::
+
+    - Caller guarantees thread safety for the Claim–Disclaim window (all cores).
+    - Claim only with interrupts disabled on the current core; one active claim system-wide; pair with Disclaim on every path.
+    - ``pdPASS`` from ``xPortEnterCriticalTimeout()`` does not mean ``mux`` was taken.
+
+Not a substitute for ``taskENTER_CRITICAL(&spinlock)``.
+
 Restrictions and Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -425,7 +438,7 @@ Misc
 
         .. note::
 
-            Users that require the use of the ``float`` type in an ISR routine should refer to the :ref:`CONFIG_FREERTOS_FPU_IN_ISR` configuration option.
+            Users that require the use of the ``float`` type in an ISR routine should refer to the :menuitem:`CONFIG_FREERTOS_FPU_IN_ISR` configuration option.
 
     .. note::
 
@@ -434,8 +447,8 @@ Misc
 
 .. only:: SOC_CPU_HAS_PIE
 
-    PIE / AI Coprocessor Usage
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    PIE/AI Coprocessor Usage
+    ^^^^^^^^^^^^^^^^^^^^^^^^
 
     Like the Floating Point Unit (FPU), IDF FreeRTOS implements **Lazy Context Switching** for the PIE coprocessor. On a context switch, PIE registers remain untouched until a task executes a PIE instruction. Once a task uses the PIE coprocessor, it is **pinned to the current core**.
 
@@ -444,7 +457,16 @@ Misc
         .. note::
 
             On ESP32-S31, the PIE coprocessor is available **only on Core 1**. If a task executes a PIE instruction while running on Core 0, IDF FreeRTOS migrates the task to Core 1 and pins it there. This migration **overrides** any existing core affinity.
+
             Because of this migration, tasks must **not** use the PIE coprocessor within a critical section or ISR, as doing so will cause a runtime abort.
+
+    Accidental PIE use (for example from a deep call stack that pulls in a PIE helper) can pin a task that was not meant to run on the PIE core. Enable :menuitem:`CONFIG_FREERTOS_DEBUG_TASK_PIE_BLACKLIST` and call :cpp:func:`vTaskSetPieBlacklisted` on tasks that must not execute PIE. The flag is consulted only inside the coprocessor trap. PIE stays enabled while its owner keeps running, so instructions issued before that task is switched out do not trap. After the task is switched out, PIE is disabled and the next PIE instruction traps. A blacklisted task aborts on that trap even if it is still the coprocessor owner, instead of being silently pinned.
+
+    .. code-block:: c
+
+        #if CONFIG_FREERTOS_DEBUG_TASK_PIE_BLACKLIST
+            vTaskSetPieBlacklisted(my_task, pdTRUE);
+        #endif
 
 
 .. only:: SOC_CPU_HAS_HWLOOP
@@ -473,9 +495,9 @@ Misc
 Single-Core Mode
 ----------------
 
-Although IDF FreeRTOS is modified for dual-core SMP, IDF FreeRTOS can also be built for single-core by enabling the :ref:`CONFIG_FREERTOS_UNICORE` option.
+Although IDF FreeRTOS is modified for dual-core SMP, IDF FreeRTOS can also be built for single-core by enabling the :menuitem:`CONFIG_FREERTOS_UNICORE` option.
 
-For single-core targets (such as ESP32-S2 and ESP32-C3), the :ref:`CONFIG_FREERTOS_UNICORE` option is always enabled. For multi-core targets (such as ESP32 and ESP32-S3), :ref:`CONFIG_FREERTOS_UNICORE` can also be set, but will result in the application only running Core 0.
+For single-core targets (such as ESP32-S2 and ESP32-C3), the :menuitem:`CONFIG_FREERTOS_UNICORE` option is always enabled. For multi-core targets (such as ESP32 and ESP32-S3), :menuitem:`CONFIG_FREERTOS_UNICORE` can also be set, but will result in the application only running Core 0.
 
 When building in single-core mode, IDF FreeRTOS is designed to be identical to Vanilla FreeRTOS, thus all aforementioned SMP changes to kernel behavior are removed. As a result, building IDF FreeRTOS in single-core mode has the following characteristics:
 

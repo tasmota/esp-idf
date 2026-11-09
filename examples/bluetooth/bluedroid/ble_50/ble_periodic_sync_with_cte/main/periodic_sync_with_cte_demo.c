@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -37,15 +37,16 @@
 #include "esp_ble_cte_api.h"
 
 
+#define LOG_TAG "PERIODIC_SYNC"
+
 #define FUNC_SEND_WAIT_SEM(func, sem) do {\
         esp_err_t __err_rc = (func);\
         if (__err_rc != ESP_OK) { \
-            ESP_LOGE(LOG_TAG, "%s, message send fail, error = %d", __func__, __err_rc); \
+            ESP_LOGE(LOG_TAG, "%s failed: %s", #func, esp_err_to_name(__err_rc)); \
+            return; \
         } \
-        xSemaphoreTake(sem, portMAX_DELAY); \
+        xSemaphoreTake((sem), portMAX_DELAY); \
 } while(0);
-
-#define LOG_TAG "PERIODIC_SYNC"
 #define EXT_SCAN_DURATION     0
 #define EXT_SCAN_PERIOD       0
 
@@ -136,13 +137,16 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                                             param->ext_adv_report.params.adv_data_len,
                                             ESP_BLE_AD_TYPE_NAME_CMPL,
                                             &adv_name_len);
-	    if ((adv_name != NULL) && (memcmp(adv_name, remote_device_name, adv_name_len) == 0) && !periodic_sync) {
+        const size_t remote_cap = sizeof(remote_device_name);
+        size_t remote_len = strnlen(remote_device_name, remote_cap);
+	    if ((adv_name != NULL) && (adv_name_len > 0) &&
+	        (adv_name_len <= remote_cap) &&
+	        (adv_name_len == remote_len) &&
+	        (memcmp(adv_name, remote_device_name, adv_name_len) == 0) && !periodic_sync) {
             // Note: If there are multiple devices with the same device name, the device may sync to an unintended one.
             // It is recommended to change the default device name to ensure it is unique.
             periodic_sync = true;
-	        char adv_temp_name[30] = {'0'};
-	        memcpy(adv_temp_name, adv_name, adv_name_len);
-	        ESP_LOGI(LOG_TAG, "Create sync with the peer device %s", adv_temp_name);
+            ESP_LOGI(LOG_TAG, "Create sync with the peer device %.*s", (int)adv_name_len, (const char *)adv_name);
             periodic_adv_sync_params.sid = param->ext_adv_report.params.sid;
 	        periodic_adv_sync_params.addr_type = param->ext_adv_report.params.addr_type;
 	        memcpy(periodic_adv_sync_params.addr, param->ext_adv_report.params.addr, sizeof(esp_bd_addr_t));
@@ -208,10 +212,6 @@ void app_main(void)
     }
     ESP_ERROR_CHECK( ret );
 
-    #if CONFIG_EXAMPLE_CI_PIPELINE_ID
-    memcpy(remote_device_name, esp_bluedroid_get_example_name(), sizeof(remote_device_name));
-    #endif
-
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -238,6 +238,13 @@ void app_main(void)
         ESP_LOGE(LOG_TAG, "%s enable bluetooth failed: %s", __func__, esp_err_to_name(ret));
         return;
     }
+
+    #if CONFIG_EXAMPLE_CI_ID && CONFIG_EXAMPLE_CI_PIPELINE_ID
+    memcpy(remote_device_name, esp_bluedroid_get_example_name(), sizeof(remote_device_name));
+    ESP_LOGI(LOG_TAG, "DeviceName:%s, CIID:%02X, PipelineID:%05X, ChipID:%02X",
+             remote_device_name, CONFIG_EXAMPLE_CI_ID, CONFIG_EXAMPLE_CI_PIPELINE_ID, CONFIG_IDF_FIRMWARE_CHIP_ID);
+#endif
+
     ret = esp_ble_gap_register_callback(gap_event_handler);
     if (ret){
         ESP_LOGE(LOG_TAG, "gap register error, error code = %x", ret);

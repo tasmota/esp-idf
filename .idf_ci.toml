@@ -10,6 +10,8 @@ exclude_dirs = [
     'tools/ci/test_autocomplete',
     'tools/test_build_system',
     'tools/bt/ble_log_console',
+    'components/ulp/test_apps/lp_core/host_tests/lp_core_custom_linker',
+    'components/ulp/test_apps/lp_core/host_tests/lp_core_custom_linker_v2',
 ]
 
 [local_runtime_envs]
@@ -22,8 +24,7 @@ IDF_CI_BUILD = "1"
 
 [gitlab.build_pipeline]
 workflow_name = "build_child_pipeline"
-presigned_json_job_name = 'generate_pytest_build_report'
-runs_per_job=30
+runs_per_job = 30
 
 job_tags = ['build', 'shiny']
 job_template_name = '.dynamic_build_template'
@@ -91,6 +92,15 @@ patterns = [
 ]
 if_clause = 'CI_JOB_GROUP_NAME != "build_non_test_related_apps"'
 
+[gitlab.artifacts.s3.configs.app_extra]
+bucket = "idf-artifacts"
+# App-dir files needed at target-test time but outside build_* (uploaded without --build-dir).
+# Add patterns here as needed, e.g. coverage info produced during build.
+patterns = [
+    '**/managed_components/**/*.py',
+]
+if_clause = 'CI_JOB_GROUP_NAME != "build_non_test_related_apps"'
+
 [gitlab.artifacts.s3.configs.log]
 bucket = "idf-artifacts"
 patterns = [
@@ -113,7 +123,7 @@ patterns = [
 
 [gitlab.artifacts.s3.configs.longterm]
 bucket = "longterm"
-if_clause = 'CI_COMMIT_REF_NAME == "master"'
+if_clause = 'CI_COMMIT_REF_PROTECTED == "true"'
 patterns = [
     '**/build*/size*.json',
 ]

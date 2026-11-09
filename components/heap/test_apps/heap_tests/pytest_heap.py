@@ -34,7 +34,7 @@ def test_heap_poisoning_qemu(dut: Dut) -> None:
 
 
 @pytest.mark.generic
-@pytest.mark.parametrize('config', ['in_flash'])
+@pytest.mark.parametrize('config', ['in_flash', 'in_rom'])
 @idf_parametrize('target', ['supported_targets'], indirect=['target'])
 def test_heap_in_flash(dut: Dut) -> None:
     dut.run_all_single_board_cases()
@@ -48,6 +48,7 @@ def test_heap_in_flash(dut: Dut) -> None:
 @pytest.mark.parametrize('config', ['psram', 'psram_all_ext'])
 def test_heap(dut: Dut) -> None:
     dut.run_all_single_board_cases(group='psram')
+    dut.run_all_single_board_cases(group='hw-align')
 
 
 @pytest.mark.generic

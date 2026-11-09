@@ -5,15 +5,15 @@ API Guides
 .. toctree::
    :maxdepth: 1
 
-   app_trace
    startup
    :SOC_BT_SUPPORTED: bt-architecture/index
    :SOC_BT_CLASSIC_SUPPORTED: classic-bt/index
    :SOC_BLE_SUPPORTED: ble/index
    :SOC_BLE_MESH_SUPPORTED: esp-ble-mesh/ble-mesh-index
+   :SOC_BLE_AUDIO_SUPPORTED: esp-ble-audio/ble-audio-index
    bootloader
    build-system
-   build-system-v2
+   build-system-v2/index
    :SOC_SUPPORT_COEXISTENCE: coexist
    c
    cplusplus
@@ -21,7 +21,7 @@ API Guides
    core_dump
    current-consumption-measurement-modules
    :ESP_ROM_SUPPORT_DEEP_SLEEP_WAKEUP_STUB: deep-sleep-stub
-   :SOC_USB_OTG_SUPPORTED and not esp32h4 and not esp32s31: dfu
+   :SOC_USB_DFU_SUPPORTED: dfu
    error-handling
    :SOC_WIFI_MESH_SUPPORT: esp-wifi-mesh
    :SOC_SPIRAM_SUPPORTED: external-ram
@@ -36,7 +36,7 @@ API Guides
    low-power-mode/index
    lwip
    memory-types
-   openthread
+   openthread/index
    partition-tables
    performance/index
    reproducible-builds
@@ -44,9 +44,10 @@ API Guides
    stdio
    thread-local-storage
    tools/index
+   tracing/index
    unit-tests
    host-apps
-   :SOC_USB_OTG_SUPPORTED and not esp32p4 and not esp32h4 and not esp32s31: usb-otg-console
+   :SOC_USB_OTG_CONSOLE_SUPPORTED: usb-otg-console
    :SOC_USB_SERIAL_JTAG_SUPPORTED: usb-serial-jtag-console
    :SOC_WIFI_SUPPORTED: wifi-driver/index
    :SOC_WIFI_SUPPORTED: wifi-security

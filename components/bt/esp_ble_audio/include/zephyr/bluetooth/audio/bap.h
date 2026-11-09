@@ -619,16 +619,28 @@ struct bt_bap_ascs_rsp {
  */
 #define BT_BAP_ASCS_RSP(c, r) (struct bt_bap_ascs_rsp) { .code = c, .reason = r }
 
-/** @brief Abstract Audio Broadcast Source structure. */
+/**
+ * @struct bt_bap_broadcast_source
+ * @brief Abstract Audio Broadcast Source structure.
+ */
 struct bt_bap_broadcast_source;
 
-/** @brief Abstract Audio Broadcast Sink structure. */
+/**
+ * @struct bt_bap_broadcast_sink
+ * @brief Abstract Audio Broadcast Sink structure.
+ */
 struct bt_bap_broadcast_sink;
 
-/** @brief Abstract Audio Unicast Group structure. */
+/**
+ * @struct bt_bap_unicast_group
+ * @brief Abstract Audio Unicast Group structure.
+ */
 struct bt_bap_unicast_group;
 
-/** @brief Abstract Audio Endpoint structure. */
+/**
+ * @struct bt_bap_ep
+ * @brief Abstract Audio Endpoint structure.
+ */
 struct bt_bap_ep;
 
 /** Struct to hold subgroup specific information for the receive state */
@@ -869,7 +881,23 @@ struct bt_bap_ep_info {
  * @retval 0 in case of success
  * @retval -EINVAL if @p ep or @p info are NULL
  */
-int bt_bap_ep_get_info_safe(const struct bt_bap_ep *ep, struct bt_bap_ep_info *info);
+int bt_bap_ep_get_info(const struct bt_bap_ep *ep, struct bt_bap_ep_info *info);
+
+/**
+ * @brief Get the pointer to the ACL connection of an endpoint
+ *
+ * The caller gets a new reference to the connection object, if not NULL, which must be
+ * released with bt_conn_unref() once done using the object.
+ *
+ * @param ep The endpoint to get the ACL connection of
+ *
+ * @return The ACL connection pointer, or NULL if:
+ *         - @p ep is NULL
+ *         - @p ep is a broadcast endpoint
+ *         - @p ep is a Unicast Server endpoint not yet configured by a remote client
+ *         - @p ep is a Unicast Client endpoint not yet discovered on a remote server
+ */
+struct bt_conn *bt_bap_ep_get_conn(const struct bt_bap_ep *ep);
 
 /**
  * @brief Basic Audio Profile stream structure.
@@ -1078,7 +1106,7 @@ struct bt_bap_unicast_server_register_param {
  * @param stream Stream object.
  * @param ops    Stream operations structure.
  */
-void bt_bap_stream_cb_register_safe(struct bt_bap_stream *stream, struct bt_bap_stream_ops *ops);
+void bt_bap_stream_cb_register(struct bt_bap_stream *stream, struct bt_bap_stream_ops *ops);
 
 /**
  * @brief Configure Audio Stream
@@ -1095,8 +1123,6 @@ void bt_bap_stream_cb_register_safe(struct bt_bap_stream *stream, struct bt_bap_
  */
 int bt_bap_stream_config(struct bt_conn *conn, struct bt_bap_stream *stream, struct bt_bap_ep *ep,
                          struct bt_audio_codec_cfg *codec_cfg);
-int bt_bap_stream_config_safe(struct bt_conn *conn, struct bt_bap_stream *stream, struct bt_bap_ep *ep,
-                              struct bt_audio_codec_cfg *codec_cfg);
 
 /**
  * @brief Reconfigure Audio Stream
@@ -1111,7 +1137,7 @@ int bt_bap_stream_config_safe(struct bt_conn *conn, struct bt_bap_stream *stream
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_reconfig_safe(struct bt_bap_stream *stream, struct bt_audio_codec_cfg *codec_cfg);
+int bt_bap_stream_reconfig(struct bt_bap_stream *stream, struct bt_audio_codec_cfg *codec_cfg);
 
 /**
  * @brief Configure Audio Stream QoS
@@ -1126,7 +1152,6 @@ int bt_bap_stream_reconfig_safe(struct bt_bap_stream *stream, struct bt_audio_co
  * @return 0 in case of success or negative value in case of error.
  */
 int bt_bap_stream_qos(struct bt_conn *conn, struct bt_bap_unicast_group *group);
-int bt_bap_stream_qos_safe(struct bt_conn *conn, struct bt_bap_unicast_group *group);
 
 /**
  * @brief Enable Audio Stream
@@ -1142,7 +1167,7 @@ int bt_bap_stream_qos_safe(struct bt_conn *conn, struct bt_bap_unicast_group *gr
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_enable_safe(struct bt_bap_stream *stream, const uint8_t meta[], size_t meta_len);
+int bt_bap_stream_enable(struct bt_bap_stream *stream, const uint8_t meta[], size_t meta_len);
 
 /**
  * @brief Change Audio Stream Metadata
@@ -1155,7 +1180,7 @@ int bt_bap_stream_enable_safe(struct bt_bap_stream *stream, const uint8_t meta[]
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_metadata_safe(struct bt_bap_stream *stream, const uint8_t meta[], size_t meta_len);
+int bt_bap_stream_metadata(struct bt_bap_stream *stream, const uint8_t meta[], size_t meta_len);
 
 /**
  * @brief Disable Audio Stream
@@ -1169,7 +1194,7 @@ int bt_bap_stream_metadata_safe(struct bt_bap_stream *stream, const uint8_t meta
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_disable_safe(struct bt_bap_stream *stream);
+int bt_bap_stream_disable(struct bt_bap_stream *stream);
 
 /**
  * @brief Connect unicast audio stream
@@ -1189,12 +1214,12 @@ int bt_bap_stream_disable_safe(struct bt_bap_stream *stream);
  * @retval 0 in case of success
  * @retval -EINVAL if the stream, endpoint, ISO channel or connection is NULL
  * @retval -EBADMSG if the stream or ISO channel is in an invalid state for connection
- * @retval -EOPNOTSUPP if the role of the stream is not @ref BT_HCI_ROLE_CENTRAL
+ * @retval -EOPNOTSUPP if the role of the stream is not @ref BT_CONN_ROLE_CENTRAL
  * @retval -EALREADY if the ISO channel is already connecting or connected
  * @retval -EBUSY if another ISO channel is connecting
  * @retval -ENOEXEC if otherwise rejected by the ISO layer
  */
-int bt_bap_stream_connect_safe(struct bt_bap_stream *stream);
+int bt_bap_stream_connect(struct bt_bap_stream *stream);
 
 /**
  * @brief Start Audio Stream
@@ -1218,7 +1243,7 @@ int bt_bap_stream_connect_safe(struct bt_bap_stream *stream);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_start_safe(struct bt_bap_stream *stream);
+int bt_bap_stream_start(struct bt_bap_stream *stream);
 
 /**
  * @brief Stop Audio Stream
@@ -1233,7 +1258,7 @@ int bt_bap_stream_start_safe(struct bt_bap_stream *stream);
  *
  * @retval 0 Success
  * @retval -EINVAL The @p stream does not have an endpoint or a connection, of the stream's
- *                 connection's role is not @p BT_HCI_ROLE_CENTRAL
+ *                 connection's role is not @p BT_CONN_ROLE_CENTRAL
  * @retval -EBADMSG The state of the @p stream endpoint is not @ref BT_BAP_EP_STATE_DISABLING
  * @retval -EALREADY The CIS state of the @p is not in a connected state, and thus is already
  *                   stopping
@@ -1243,7 +1268,7 @@ int bt_bap_stream_start_safe(struct bt_bap_stream *stream);
  * @retval -ENOEXEC The request was rejected by GATT
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_stop_safe(struct bt_bap_stream *stream);
+int bt_bap_stream_stop(struct bt_bap_stream *stream);
 
 /**
  * @brief Release Audio Stream
@@ -1258,7 +1283,7 @@ int bt_bap_stream_stop_safe(struct bt_bap_stream *stream);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_release_safe(struct bt_bap_stream *stream);
+int bt_bap_stream_release(struct bt_bap_stream *stream);
 
 /**
  * @brief Send data to Audio stream without timestamp
@@ -1272,9 +1297,9 @@ int bt_bap_stream_release_safe(struct bt_bap_stream *stream);
  * @param seq_num  Packet Sequence number. This value shall be incremented for each call to this
  *                 function and at least once per SDU interval for a specific channel.
  *
- * @return Bytes sent in case of success or negative value in case of error.
+ * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_send_safe(struct bt_bap_stream *stream, struct net_buf *buf, uint16_t seq_num);
+int bt_bap_stream_send(struct bt_bap_stream *stream, struct net_buf *buf, uint16_t seq_num);
 
 /**
  * @brief Send data to Audio stream with timestamp
@@ -1290,10 +1315,10 @@ int bt_bap_stream_send_safe(struct bt_bap_stream *stream, struct net_buf *buf, u
  * @param ts       Timestamp of the SDU in microseconds (us). This value can be used to transmit
  *                 multiple SDUs in the same SDU interval in a CIG or BIG.
  *
- * @return Bytes sent in case of success or negative value in case of error.
+ * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_stream_send_ts_safe(struct bt_bap_stream *stream, struct net_buf *buf, uint16_t seq_num,
-                               uint32_t ts);
+int bt_bap_stream_send_ts(struct bt_bap_stream *stream, struct net_buf *buf, uint16_t seq_num,
+                          uint32_t ts);
 
 /**
  * @brief Get ISO transmission timing info for a Basic Audio Profile stream
@@ -1311,9 +1336,9 @@ int bt_bap_stream_send_ts_safe(struct bt_bap_stream *stream, struct net_buf *buf
  * @retval 0 on success
  * @retval -EINVAL if the stream is invalid, if the stream is not configured for sending or if it is
  *         not connected with a isochronous stream
- * @retval Any return value from bt_iso_chan_get_tx_sync()
+ * @retval 0 on success, or any negative value from bt_iso_chan_get_tx_sync()
  */
-int bt_bap_stream_get_tx_sync_safe(struct bt_bap_stream *stream, struct bt_iso_tx_info *info);
+int bt_bap_stream_get_tx_sync(struct bt_bap_stream *stream, struct bt_iso_tx_info *info);
 
 /**
  * @defgroup bt_bap_unicast_server BAP Unicast Server APIs
@@ -1477,7 +1502,7 @@ struct bt_bap_unicast_server_cb {
  *
  * @return 0 in case of success, negative error code otherwise.
  */
-int bt_bap_unicast_server_register_safe(const struct bt_bap_unicast_server_register_param *param);
+int bt_bap_unicast_server_register(const struct bt_bap_unicast_server_register_param *param);
 
 /**
  * @brief Unregister the Unicast Server.
@@ -1493,7 +1518,7 @@ int bt_bap_unicast_server_register_safe(const struct bt_bap_unicast_server_regis
  *
  * @return 0 in case of success, negative error code otherwise.
  */
-int bt_bap_unicast_server_unregister_safe(void);
+int bt_bap_unicast_server_unregister(void);
 
 /**
  * @brief Register unicast server callbacks.
@@ -1507,7 +1532,7 @@ int bt_bap_unicast_server_unregister_safe(void);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_unicast_server_register_cb_safe(const struct bt_bap_unicast_server_cb *cb);
+int bt_bap_unicast_server_register_cb(const struct bt_bap_unicast_server_cb *cb);
 
 /**
  * @brief Unregister unicast server callbacks.
@@ -1522,7 +1547,7 @@ int bt_bap_unicast_server_register_cb_safe(const struct bt_bap_unicast_server_cb
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_unicast_server_unregister_cb_safe(const struct bt_bap_unicast_server_cb *cb);
+int bt_bap_unicast_server_unregister_cb(const struct bt_bap_unicast_server_cb *cb);
 
 /**
  * @typedef bt_bap_ep_func_t
@@ -1530,8 +1555,11 @@ int bt_bap_unicast_server_unregister_cb_safe(const struct bt_bap_unicast_server_
  *
  * @param ep The structure object with endpoint info.
  * @param user_data Data to pass to the function.
+ *
+ * @retval true Continue iterating.
+ * @retval false Stop iterating.
  */
-typedef void (*bt_bap_ep_func_t)(struct bt_bap_ep *ep, void *user_data);
+typedef bool (*bt_bap_ep_func_t)(struct bt_bap_ep *ep, void *user_data);
 
 /**
  * @brief Iterate through all endpoints of the given connection.
@@ -1539,8 +1567,12 @@ typedef void (*bt_bap_ep_func_t)(struct bt_bap_ep *ep, void *user_data);
  * @param conn Connection object
  * @param func Function to call for each endpoint.
  * @param user_data Data to pass to the callback function.
+ *
+ * @retval 0 Success
+ * @retval -ECANCELED Iteration was stopped by the callback function before complete.
+ * @retval -EINVAL @p conn or @p func were NULL.
  */
-void bt_bap_unicast_server_foreach_ep(struct bt_conn *conn, bt_bap_ep_func_t func, void *user_data);
+int bt_bap_unicast_server_foreach_ep(struct bt_conn *conn, bt_bap_ep_func_t func, void *user_data);
 
 /**
  * @brief Initialize and configure a new ASE.
@@ -1555,9 +1587,25 @@ void bt_bap_unicast_server_foreach_ep(struct bt_conn *conn, bt_bap_ep_func_t fun
 int bt_bap_unicast_server_config_ase(struct bt_conn *conn, struct bt_bap_stream *stream,
                                      struct bt_audio_codec_cfg *codec_cfg,
                                      const struct bt_bap_qos_cfg_pref *qos_pref);
-int bt_bap_unicast_server_config_ase_safe(struct bt_conn *conn, struct bt_bap_stream *stream,
-                                          struct bt_audio_codec_cfg *codec_cfg,
-                                          const struct bt_bap_qos_cfg_pref *qos_pref);
+
+/**
+ * @brief Initialize and configure a new ASE of a specific direction.
+ *
+ * Like bt_bap_unicast_server_config_ase(), but configures the first free ASE of
+ * the requested direction so a server can initiate a config on a source ASE.
+ *
+ * @param conn Connection object
+ * @param stream Configured stream object to be attached to the ASE
+ * @param codec_cfg Codec configuration
+ * @param qos_pref Audio Stream Quality of Service Preference
+ * @param dir ASE direction to configure (sink or source)
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int bt_bap_unicast_server_config_ase_with_dir(struct bt_conn *conn, struct bt_bap_stream *stream,
+                                              struct bt_audio_codec_cfg *codec_cfg,
+                                              const struct bt_bap_qos_cfg_pref *qos_pref,
+                                              enum bt_audio_dir dir);
 
 /** @} */ /* End of group bt_bap_unicast_server */
 
@@ -1650,8 +1698,8 @@ struct bt_bap_unicast_group_param {
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_unicast_group_create_safe(struct bt_bap_unicast_group_param *param,
-                                     struct bt_bap_unicast_group **unicast_group);
+int bt_bap_unicast_group_create(struct bt_bap_unicast_group_param *param,
+                                struct bt_bap_unicast_group **unicast_group);
 
 /**
  * @brief Reconfigure unicast group.
@@ -1668,8 +1716,8 @@ int bt_bap_unicast_group_create_safe(struct bt_bap_unicast_group_param *param,
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_unicast_group_reconfig_safe(struct bt_bap_unicast_group *unicast_group,
-                                       const struct bt_bap_unicast_group_param *param);
+int bt_bap_unicast_group_reconfig(struct bt_bap_unicast_group *unicast_group,
+                                  const struct bt_bap_unicast_group_param *param);
 
 /**
  * @brief Add streams to a unicast group as a unicast client
@@ -1690,9 +1738,9 @@ int bt_bap_unicast_group_reconfig_safe(struct bt_bap_unicast_group *unicast_grou
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_unicast_group_add_streams_safe(struct bt_bap_unicast_group *unicast_group,
-                                          struct bt_bap_unicast_group_stream_pair_param params[],
-                                          size_t num_param);
+int bt_bap_unicast_group_add_streams(struct bt_bap_unicast_group *unicast_group,
+                                     struct bt_bap_unicast_group_stream_pair_param params[],
+                                     size_t num_param);
 
 /**
  * @brief Delete audio unicast group.
@@ -1704,15 +1752,15 @@ int bt_bap_unicast_group_add_streams_safe(struct bt_bap_unicast_group *unicast_g
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_unicast_group_delete_safe(struct bt_bap_unicast_group *unicast_group);
+int bt_bap_unicast_group_delete(struct bt_bap_unicast_group *unicast_group);
 
 /** Callback function for bt_bap_unicast_group_foreach_stream()
  *
  * @param stream     The audio stream
  * @param user_data  User data
  *
- * @retval true Stop iterating.
- * @retval false Continue iterating.
+ * @retval true Continue iterating.
+ * @retval false Stop iterating.
  */
 typedef bool (*bt_bap_unicast_group_foreach_stream_func_t)(struct bt_bap_stream *stream,
                                                            void *user_data);
@@ -1728,9 +1776,9 @@ typedef bool (*bt_bap_unicast_group_foreach_stream_func_t)(struct bt_bap_stream 
  * @retval -ECANCELED Iteration was stopped by the callback function before complete.
  * @retval -EINVAL @p unicast_group or @p func were NULL.
  */
-int bt_bap_unicast_group_foreach_stream_safe(struct bt_bap_unicast_group *unicast_group,
-                                             bt_bap_unicast_group_foreach_stream_func_t func,
-                                             void *user_data);
+int bt_bap_unicast_group_foreach_stream(struct bt_bap_unicast_group *unicast_group,
+                                        bt_bap_unicast_group_foreach_stream_func_t func,
+                                        void *user_data);
 
 /** Structure holding information of audio stream endpoint */
 struct bt_bap_unicast_group_info {
@@ -1756,8 +1804,8 @@ struct bt_bap_unicast_group_info {
  * @retval 0 Success
  * @retval -EINVAL  @p unicast_group or @p info are NULL
  */
-int bt_bap_unicast_group_get_info_safe(const struct bt_bap_unicast_group *unicast_group,
-                                       struct bt_bap_unicast_group_info *info);
+int bt_bap_unicast_group_get_info(const struct bt_bap_unicast_group *unicast_group,
+                                  struct bt_bap_unicast_group_info *info);
 
 /** Unicast Client callback structure */
 struct bt_bap_unicast_client_cb {
@@ -1770,10 +1818,21 @@ struct bt_bap_unicast_client_cb {
      * @param conn  Connection to the remote unicast server.
      * @param dir   Direction of the location.
      * @param loc   The location bitfield value.
-     *
-     * @return 0 in case of success or negative value in case of error.
      */
     void (*location)(struct bt_conn *conn, enum bt_audio_dir dir, enum bt_audio_location loc);
+
+    /**
+     * @brief Remote Unicast Server Supported Contexts
+     *
+     * This callback is called whenever the supported contexts are read
+     * from the server or otherwise notified to the client.
+     *
+     * @param conn     Connection to the remote unicast server.
+     * @param snk_ctx  The sink context bitfield value.
+     * @param src_ctx  The source context bitfield value.
+     */
+    void (*supported_contexts)(struct bt_conn *conn, enum bt_audio_context snk_ctx,
+                               enum bt_audio_context src_ctx);
 
     /**
      * @brief Remote Unicast Server Available Contexts
@@ -1784,8 +1843,6 @@ struct bt_bap_unicast_client_cb {
      * @param conn     Connection to the remote unicast server.
      * @param snk_ctx  The sink context bitfield value.
      * @param src_ctx  The source context bitfield value.
-     *
-     * @return 0 in case of success or negative value in case of error.
      */
     void (*available_contexts)(struct bt_conn *conn, enum bt_audio_context snk_ctx,
                                enum bt_audio_context src_ctx);
@@ -1911,7 +1968,8 @@ struct bt_bap_unicast_client_cb {
      * @param dir       The type of remote endpoints and capabilities discovered.
      * @param codec_cap Remote capabilities.
      *
-     * If discovery procedure has complete both @p codec and @p ep are set to NULL.
+     * Called once per record; the end of the procedure is reported by the
+     * discover callback below, not by a NULL @p codec_cap.
      */
     void (*pac_record)(struct bt_conn *conn, enum bt_audio_dir dir,
                        const struct bt_audio_codec_cap *codec_cap);
@@ -1925,21 +1983,21 @@ struct bt_bap_unicast_client_cb {
      * @param dir      The type of remote endpoints and capabilities discovered.
      * @param ep       Remote endpoint.
      *
-     * If discovery procedure has complete both @p codec and @p ep are set to NULL.
+     * Called once per endpoint; the end of the procedure is reported by the
+     * discover callback below, not by a NULL @p ep.
      */
     void (*endpoint)(struct bt_conn *conn, enum bt_audio_dir dir, struct bt_bap_ep *ep);
 
     /**
      * @brief BAP discovery callback function.
      *
-     * If discovery procedure has completed @p ep is set to NULL and @p err is 0.
+     * Called once the discovery procedure has completed, for the direction it
+     * covered.
      *
      * @param conn     Connection to the remote unicast server.
      * @param err      Error value. 0 on success, GATT error on positive value or errno on
      *                 negative value.
      * @param dir      The type of remote endpoints and capabilities discovered.
-     *
-     * If discovery procedure has complete both @p codec and @p ep are set to NULL.
      */
     void (*discover)(struct bt_conn *conn, int err, enum bt_audio_dir dir);
 
@@ -1958,7 +2016,9 @@ struct bt_bap_unicast_client_cb {
  * @retval -EINVAL @p cb is NULL.
  * @retval -EEXIST @p cb is already registered.
  */
-int bt_bap_unicast_client_register_cb_safe(struct bt_bap_unicast_client_cb *cb);
+#if 0
+int bt_bap_unicast_client_register_cb(struct bt_bap_unicast_client_cb *cb);
+#endif
 
 /**
  * @brief Unregister unicast client callbacks.
@@ -1968,7 +2028,7 @@ int bt_bap_unicast_client_register_cb_safe(struct bt_bap_unicast_client_cb *cb);
  * @retval 0 Success
  * @retval -EINVAL @p cb is NULL or @p cb was not registered
  */
-int bt_bap_unicast_client_unregister_cb_safe(struct bt_bap_unicast_client_cb *cb);
+int bt_bap_unicast_client_unregister_cb(struct bt_bap_unicast_client_cb *cb);
 
 /**
  * @brief Discover remote capabilities and endpoints
@@ -1980,7 +2040,6 @@ int bt_bap_unicast_client_unregister_cb_safe(struct bt_bap_unicast_client_cb *cb
  * @param dir    The type of remote endpoints and capabilities to discover.
  */
 int bt_bap_unicast_client_discover(struct bt_conn *conn, enum bt_audio_dir dir);
-int bt_bap_unicast_client_discover_safe(struct bt_conn *conn, enum bt_audio_dir dir);
 
 /** @} */ /* End of group bt_bap_unicast_client */
 /**
@@ -2230,7 +2289,7 @@ struct bt_bap_broadcast_source_cb {
  * @retval -EINVAL if @p cb is NULL
  * @retval -EEXIST if @p cb is already registered
  */
-int bt_bap_broadcast_source_register_cb_safe(struct bt_bap_broadcast_source_cb *cb);
+int bt_bap_broadcast_source_register_cb(struct bt_bap_broadcast_source_cb *cb);
 
 /**
  * @brief Unregisters callbacks for Broadcast Sources
@@ -2241,7 +2300,7 @@ int bt_bap_broadcast_source_register_cb_safe(struct bt_bap_broadcast_source_cb *
  * @retval -EINVAL if @p cb is NULL
  * @retval -ENOENT if @p cb is not registered
  */
-int bt_bap_broadcast_source_unregister_cb_safe(struct bt_bap_broadcast_source_cb *cb);
+int bt_bap_broadcast_source_unregister_cb(struct bt_bap_broadcast_source_cb *cb);
 
 /** Broadcast Source stream parameters */
 struct bt_bap_broadcast_source_stream_param {
@@ -2350,8 +2409,8 @@ struct bt_bap_broadcast_source_param {
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_create_safe(struct bt_bap_broadcast_source_param *param,
-                                        struct bt_bap_broadcast_source **source);
+int bt_bap_broadcast_source_create(struct bt_bap_broadcast_source_param *param,
+                                   struct bt_bap_broadcast_source **source);
 
 /**
  * @brief Reconfigure audio broadcast source.
@@ -2372,8 +2431,8 @@ int bt_bap_broadcast_source_create_safe(struct bt_bap_broadcast_source_param *pa
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_reconfig_safe(struct bt_bap_broadcast_source *source,
-                                          struct bt_bap_broadcast_source_param *param);
+int bt_bap_broadcast_source_reconfig(struct bt_bap_broadcast_source *source,
+                                     struct bt_bap_broadcast_source_param *param);
 
 /**
  * @brief Modify the metadata of an audio broadcast source.
@@ -2387,8 +2446,8 @@ int bt_bap_broadcast_source_reconfig_safe(struct bt_bap_broadcast_source *source
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_update_metadata_safe(struct bt_bap_broadcast_source *source,
-                                                 const uint8_t meta[], size_t meta_len);
+int bt_bap_broadcast_source_update_metadata(struct bt_bap_broadcast_source *source,
+                                            const uint8_t meta[], size_t meta_len);
 
 /**
  * @brief Start audio broadcast source.
@@ -2403,8 +2462,6 @@ int bt_bap_broadcast_source_update_metadata_safe(struct bt_bap_broadcast_source 
  */
 int bt_bap_broadcast_source_start(struct bt_bap_broadcast_source *source,
                                   struct bt_le_ext_adv *adv);
-int bt_bap_broadcast_source_start_safe(struct bt_bap_broadcast_source *source,
-                                       struct bt_le_ext_adv *adv);
 
 /**
  * @brief Stop audio broadcast source.
@@ -2416,7 +2473,7 @@ int bt_bap_broadcast_source_start_safe(struct bt_bap_broadcast_source *source,
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_stop_safe(struct bt_bap_broadcast_source *source);
+int bt_bap_broadcast_source_stop(struct bt_bap_broadcast_source *source);
 
 /**
  * @brief Delete audio broadcast source.
@@ -2428,7 +2485,7 @@ int bt_bap_broadcast_source_stop_safe(struct bt_bap_broadcast_source *source);
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_delete_safe(struct bt_bap_broadcast_source *source);
+int bt_bap_broadcast_source_delete(struct bt_bap_broadcast_source *source);
 
 /**
  * @brief Get the Broadcast Audio Stream Endpoint of a broadcast source
@@ -2444,8 +2501,8 @@ int bt_bap_broadcast_source_delete_safe(struct bt_bap_broadcast_source *source);
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_source_get_base_safe(struct bt_bap_broadcast_source *source,
-                                          struct net_buf_simple *base_buf);
+int bt_bap_broadcast_source_get_base(struct bt_bap_broadcast_source *source,
+                                     struct net_buf_simple *base_buf);
 
 /**
  * @brief Callback function for bt_bap_broadcast_source_foreach_stream()
@@ -2453,8 +2510,8 @@ int bt_bap_broadcast_source_get_base_safe(struct bt_bap_broadcast_source *source
  * @param stream     The audio stream
  * @param user_data  User data
  *
- * @retval true  Stop iterating.
- * @retval false Continue iterating.
+ * @retval true  Continue iterating.
+ * @retval false Stop iterating.
  */
 typedef bool (*bt_bap_broadcast_source_foreach_stream_func_t)(struct bt_bap_stream *stream,
                                                               void *user_data);
@@ -2467,12 +2524,12 @@ typedef bool (*bt_bap_broadcast_source_foreach_stream_func_t)(struct bt_bap_stre
  * @param user_data      User specified data that is sent to the callback function
  *
  * @retval 0          Success (even if no streams exists in the broadcast source).
- * @retval -ECANCELED The @p func returned true.
+ * @retval -ECANCELED The @p func returned false and stopped the iteration.
  * @retval -EINVAL    @p source or @p func were NULL.
  */
-int bt_bap_broadcast_source_foreach_stream_safe(struct bt_bap_broadcast_source *source,
-                                                bt_bap_broadcast_source_foreach_stream_func_t func,
-                                                void *user_data);
+int bt_bap_broadcast_source_foreach_stream(struct bt_bap_broadcast_source *source,
+                                           bt_bap_broadcast_source_foreach_stream_func_t func,
+                                           void *user_data);
 /** @} */ /* End of bt_bap_broadcast_source */
 
 /**
@@ -2539,14 +2596,14 @@ struct bt_bap_broadcast_sink_cb {
  * It is possible to register multiple struct of callbacks, but a single struct can only be
  * registered once.
  * Registering the same callback multiple times is undefined behavior and may break the stack.
- *
+
  * @param cb  Broadcast sink callback structure.
  *
  * @retval 0 on success
  * @retval -EINVAL if @p cb is NULL
  * @retval -EALREADY if @p cb was already registered
  */
-int bt_bap_broadcast_sink_register_cb_safe(struct bt_bap_broadcast_sink_cb *cb);
+int bt_bap_broadcast_sink_register_cb(struct bt_bap_broadcast_sink_cb *cb);
 
 /**
  * @brief Create a Broadcast Sink from a periodic advertising sync
@@ -2566,8 +2623,8 @@ int bt_bap_broadcast_sink_register_cb_safe(struct bt_bap_broadcast_sink_cb *cb);
  *
  * @return 0 in case of success or errno value in case of error.
  */
-int bt_bap_broadcast_sink_create_safe(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_id,
-                                      struct bt_bap_broadcast_sink **sink);
+int bt_bap_broadcast_sink_create(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_id,
+                                 struct bt_bap_broadcast_sink **sink);
 
 /**
  * @brief Sync to a broadcaster's audio
@@ -2588,9 +2645,9 @@ int bt_bap_broadcast_sink_create_safe(struct bt_le_per_adv_sync *pa_sync, uint32
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_broadcast_sink_sync_safe(struct bt_bap_broadcast_sink *sink, uint32_t indexes_bitfield,
-                                    struct bt_bap_stream *streams[],
-                                    const uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE]);
+int bt_bap_broadcast_sink_sync(struct bt_bap_broadcast_sink *sink, uint32_t indexes_bitfield,
+                               struct bt_bap_stream *streams[],
+                               const uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE]);
 
 /**
  * @brief Stop audio broadcast sink.
@@ -2602,7 +2659,7 @@ int bt_bap_broadcast_sink_sync_safe(struct bt_bap_broadcast_sink *sink, uint32_t
  *
  * @return Zero on success or (negative) error code otherwise.
  */
-int bt_bap_broadcast_sink_stop_safe(struct bt_bap_broadcast_sink *sink);
+int bt_bap_broadcast_sink_stop(struct bt_bap_broadcast_sink *sink);
 
 /**
  * @brief Release a broadcast sink
@@ -2615,7 +2672,7 @@ int bt_bap_broadcast_sink_stop_safe(struct bt_bap_broadcast_sink *sink);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_broadcast_sink_delete_safe(struct bt_bap_broadcast_sink *sink);
+int bt_bap_broadcast_sink_delete(struct bt_bap_broadcast_sink *sink);
 
 /** @} */ /* End of group bt_bap_broadcast_sink */
 
@@ -2632,7 +2689,7 @@ int bt_bap_broadcast_sink_delete_safe(struct bt_bap_broadcast_sink *sink);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_scan_delegator_register_safe(struct bt_bap_scan_delegator_cb *cb);
+int bt_bap_scan_delegator_register(struct bt_bap_scan_delegator_cb *cb);
 
 /**
  * @brief unregister the Basic Audio Profile Scan Delegator and BASS.
@@ -2642,7 +2699,7 @@ int bt_bap_scan_delegator_register_safe(struct bt_bap_scan_delegator_cb *cb);
  *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_bap_scan_delegator_unregister_safe(void);
+int bt_bap_scan_delegator_unregister(void);
 
 /**
  * @brief Set the periodic advertising sync state to syncing
@@ -2655,8 +2712,8 @@ int bt_bap_scan_delegator_unregister_safe(void);
  *
  * @return int    Error value. 0 on success, errno on fail.
  */
-int bt_bap_scan_delegator_set_pa_state_safe(uint8_t src_id,
-                                            enum bt_bap_pa_state pa_state);
+int bt_bap_scan_delegator_set_pa_state(uint8_t src_id,
+                                       enum bt_bap_pa_state pa_state);
 
 /**
  * @brief Set the sync state of a receive state in the server
@@ -2666,8 +2723,8 @@ int bt_bap_scan_delegator_set_pa_state_safe(uint8_t src_id,
  *                       subgroup.
  * @return int           Error value. 0 on success, ERRNO on fail.
  */
-int bt_bap_scan_delegator_set_bis_sync_state_safe(uint8_t src_id,
-                                                  uint32_t bis_synced[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS]);
+int bt_bap_scan_delegator_set_bis_sync_state(uint8_t src_id,
+                                             uint32_t bis_synced[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS]);
 
 /** Parameters for bt_bap_scan_delegator_add_src() */
 struct bt_bap_scan_delegator_add_src_param {
@@ -2711,7 +2768,7 @@ struct bt_bap_scan_delegator_add_src_param {
  *
  * @return int  errno on failure, or source ID on success.
  */
-int bt_bap_scan_delegator_add_src_safe(const struct bt_bap_scan_delegator_add_src_param *param);
+int bt_bap_scan_delegator_add_src(const struct bt_bap_scan_delegator_add_src_param *param);
 
 /** Parameters for bt_bap_scan_delegator_mod_src() */
 struct bt_bap_scan_delegator_mod_src_param {
@@ -2749,7 +2806,7 @@ struct bt_bap_scan_delegator_mod_src_param {
  *
  * @return int  errno on failure, or source ID on success.
  */
-int bt_bap_scan_delegator_mod_src_safe(const struct bt_bap_scan_delegator_mod_src_param *param);
+int bt_bap_scan_delegator_mod_src(const struct bt_bap_scan_delegator_mod_src_param *param);
 
 /**
  * @brief Remove a receive state source
@@ -2764,7 +2821,7 @@ int bt_bap_scan_delegator_mod_src_safe(const struct bt_bap_scan_delegator_mod_sr
  *
  * @return int   Error value. 0 on success, errno on fail.
  */
-int bt_bap_scan_delegator_rem_src_safe(uint8_t src_id);
+int bt_bap_scan_delegator_rem_src(uint8_t src_id);
 
 /** Callback function for Scan Delegator receive state search functions
  *
@@ -2785,8 +2842,8 @@ typedef bool (*bt_bap_scan_delegator_state_func_t)(
  * @param func      The callback function
  * @param user_data User specified data that sent to the callback function
  */
-void bt_bap_scan_delegator_foreach_state_safe(bt_bap_scan_delegator_state_func_t func,
-                                              void *user_data);
+void bt_bap_scan_delegator_foreach_state(bt_bap_scan_delegator_state_func_t func,
+                                         void *user_data);
 
 /**
  * @brief Find and return a receive state based on a compare function
@@ -2796,7 +2853,7 @@ void bt_bap_scan_delegator_foreach_state_safe(bt_bap_scan_delegator_state_func_t
  *
  * @return The first receive state where the @p func returned true, or NULL
  */
-const struct bt_bap_scan_delegator_recv_state *bt_bap_scan_delegator_find_state_safe(
+const struct bt_bap_scan_delegator_recv_state *bt_bap_scan_delegator_find_state(
     bt_bap_scan_delegator_state_func_t func, void *user_data);
 
 /******************************** CLIENT API ********************************/
@@ -2833,6 +2890,13 @@ struct bt_bap_broadcast_assistant_cb {
      *
      * Called when the scanner finds an advertiser that advertises the
      * BT_UUID_BROADCAST_AUDIO UUID.
+     *
+     * Delivered only while bt_bap_broadcast_assistant_scan_start() has been
+     * called with start_scan set to true, and only for what the application's
+     * own scanner reports — this port never starts a scanner of its own. Leave
+     * the member NULL if the application already parses its own scan results.
+     * Note it carries no advertising data either, so filtering on anything
+     * besides the Broadcast ID has to happen in that scanner.
      *
      * @param info          Advertiser information.
      * @param broadcast_id  24-bit broadcast ID.
@@ -2930,23 +2994,31 @@ struct bt_bap_broadcast_assistant_cb {
  * @retval -ENOEXEC Unexpected GATT error
  */
 int bt_bap_broadcast_assistant_discover(struct bt_conn *conn);
-int bt_bap_broadcast_assistant_discover_safe(struct bt_conn *conn);
 
 /**
  * @brief Scan start for BISes for a remote server.
  *
  * This will let the Broadcast Audio Scan Service server know that this device
  * is actively scanning for broadcast sources.
- * The function can optionally also start scanning, if the caller does not want
- * to start scanning itself.
  *
- * Scan results, if @p start_scan is true, is sent to the
- * bt_bap_broadcast_assistant_scan_cb callback.
+ * Unlike upstream Zephyr, this port never touches the scanner: the application
+ * starts it first, through whichever GAP API its host provides, and then calls
+ * this. @p start_scan therefore no longer means "start scanning" — it only says
+ * whether the Broadcast Audio Announcements the application's scanner picks up
+ * should also be parsed and delivered to the `scan` member of
+ * @ref bt_bap_broadcast_assistant_cb. The Remote Scan Started operation is
+ * written to the server either way.
+ *
+ * That makes @p start_scan redundant with the `scan` member being set: true
+ * without a `scan` callback only costs the parsing, false with one means it
+ * never fires. It stays for API compatibility - upstream plans to drop it - and
+ * bt_bap_broadcast_assistant_scan_stop() has no counterpart to it, always
+ * taking delivery back down.
  *
  * @param conn          Connection to the Broadcast Audio Scan Service server.
  *                      Used to let the server know that we are scanning.
- * @param start_scan    Start scanning if true. If false, the application should
- *                      enable scan itself.
+ * @param start_scan    Deliver scan results to the `scan` callback if true.
+ *                      Either way the application owns the scanner itself.
 
  * @retval 0 Success
  * @retval -EINVAL @p conn is NULL of if @p conn has not done discovery
@@ -2956,12 +3028,16 @@ int bt_bap_broadcast_assistant_discover_safe(struct bt_conn *conn);
  * @retval -ENOMEM Could not allocated memory for the request
  * @retval -ENOEXEC Unexpected scan or GATT error
  */
-int bt_bap_broadcast_assistant_scan_start(struct bt_conn *conn, bool start_scan);
-int bt_bap_broadcast_assistant_scan_start_safe(struct bt_conn *conn,
-                                               bool start_scan);
+int bt_bap_broadcast_assistant_scan_start(struct bt_conn *conn,
+                                          bool start_scan);
 
 /**
  * @brief Stop remote scanning for BISes for a server.
+ *
+ * Writes the Remote Scan Stopped operation and, if this @p conn had asked for
+ * scan results, stops delivering them to the `scan` callback. The application's
+ * own scanner is left running — it started it, and this port never drives the
+ * scanner from here (see bt_bap_broadcast_assistant_scan_start()).
  *
  * @param conn   Connection to the server.
 
@@ -2974,7 +3050,6 @@ int bt_bap_broadcast_assistant_scan_start_safe(struct bt_conn *conn,
  * @retval -ENOEXEC Unexpected scan or GATT error
  */
 int bt_bap_broadcast_assistant_scan_stop(struct bt_conn *conn);
-int bt_bap_broadcast_assistant_scan_stop_safe(struct bt_conn *conn);
 
 /**
  * @brief Registers the callbacks used by Broadcast Audio Scan Service client.
@@ -2985,7 +3060,7 @@ int bt_bap_broadcast_assistant_scan_stop_safe(struct bt_conn *conn);
  * @retval -EINVAL if @p cb is NULL
  * @retval -EALREADY if @p cb was already registered
  */
-int bt_bap_broadcast_assistant_register_cb_safe(struct bt_bap_broadcast_assistant_cb *cb);
+int bt_bap_broadcast_assistant_register_cb(struct bt_bap_broadcast_assistant_cb *cb);
 
 /**
  * @brief Unregisters the callbacks used by the Broadcast Audio Scan Service client.
@@ -2996,7 +3071,7 @@ int bt_bap_broadcast_assistant_register_cb_safe(struct bt_bap_broadcast_assistan
  * @retval -EINVAL if @p cb is NULL
  * @retval -EALREADY if @p cb was not registered
  */
-int bt_bap_broadcast_assistant_unregister_cb_safe(struct bt_bap_broadcast_assistant_cb *cb);
+int bt_bap_broadcast_assistant_unregister_cb(struct bt_bap_broadcast_assistant_cb *cb);
 
 /** Parameters for adding a source to a Broadcast Audio Scan Service server */
 struct bt_bap_broadcast_assistant_add_src_param {
@@ -3045,8 +3120,6 @@ struct bt_bap_broadcast_assistant_add_src_param {
  */
 int bt_bap_broadcast_assistant_add_src(
     struct bt_conn *conn, const struct bt_bap_broadcast_assistant_add_src_param *param);
-int bt_bap_broadcast_assistant_add_src_safe(
-    struct bt_conn *conn, const struct bt_bap_broadcast_assistant_add_src_param *param);
 
 /** Parameters for modifying a source */
 struct bt_bap_broadcast_assistant_mod_src_param {
@@ -3085,8 +3158,6 @@ struct bt_bap_broadcast_assistant_mod_src_param {
  */
 int bt_bap_broadcast_assistant_mod_src(
     struct bt_conn *conn, const struct bt_bap_broadcast_assistant_mod_src_param *param);
-int bt_bap_broadcast_assistant_mod_src_safe(
-    struct bt_conn *conn, const struct bt_bap_broadcast_assistant_mod_src_param *param);
 
 /**
  * @brief Set a broadcast code to the specified receive state.
@@ -3105,9 +3176,6 @@ int bt_bap_broadcast_assistant_mod_src_safe(
 int bt_bap_broadcast_assistant_set_broadcast_code(
     struct bt_conn *conn, uint8_t src_id,
     const uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE]);
-int bt_bap_broadcast_assistant_set_broadcast_code_safe(
-    struct bt_conn *conn, uint8_t src_id,
-    const uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE]);
 
 /**
  * @brief Remove a source from the server.
@@ -3123,7 +3191,6 @@ int bt_bap_broadcast_assistant_set_broadcast_code_safe(
  * @retval -ENOEXEC Unexpected scan or GATT error
  */
 int bt_bap_broadcast_assistant_rem_src(struct bt_conn *conn, uint8_t src_id);
-int bt_bap_broadcast_assistant_rem_src_safe(struct bt_conn *conn, uint8_t src_id);
 
 /**
  * @brief Read the specified receive state from the server.
@@ -3140,7 +3207,6 @@ int bt_bap_broadcast_assistant_rem_src_safe(struct bt_conn *conn, uint8_t src_id
  * @retval -ENOEXEC Unexpected scan or GATT error
  */
 int bt_bap_broadcast_assistant_read_recv_state(struct bt_conn *conn, uint8_t idx);
-int bt_bap_broadcast_assistant_read_recv_state_safe(struct bt_conn *conn, uint8_t idx);
 
 /** @} */ /* end of bt_bap */
 

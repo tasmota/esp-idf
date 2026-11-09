@@ -34,6 +34,10 @@ static avrc_metadata_srv_cb_t s_avrc_metadata_srv_cb;
 
 static void avrc_metadata_srv_copy_metadata(avrc_metadata_srv_param_t *p_dest, avrc_metadata_srv_param_t *p_src)
 {
+    if (p_src->attr_length < 0) {
+        ESP_LOGE(RC_MD_SRV_TAG, "Invalid attribute length: %d", p_src->attr_length);
+        return;
+    }
     p_dest->attr_id = p_src->attr_id;
     p_dest->attr_length = p_src->attr_length;
 
@@ -85,7 +89,7 @@ void avrc_metadata_srv_md_req(void)
                         ESP_AVRC_MD_ATTR_GENRE;
 
     /* send metadata request */
-    esp_avrc_ct_send_metadata_cmd(bt_avrc_common_alloc_tl(), attr_mask);
+    esp_avrc_ct_send_metadata_cmd_by_handle(bt_avrc_common_ct_get_conn_hdl(), bt_avrc_common_alloc_tl(), attr_mask);
 }
 
 void avrc_metadata_srv_md_save(avrc_metadata_srv_param_t *param)

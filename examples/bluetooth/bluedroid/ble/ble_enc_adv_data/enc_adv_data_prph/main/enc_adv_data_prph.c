@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -30,7 +30,7 @@
 #include "esp_bt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
-#include "ble_ead.h"
+#include "esp_ble_ead.h"
 
 #define TAG "ENC_ADV_PRPH"
 
@@ -48,7 +48,7 @@ static uint8_t unencrypted_adv_pattern[] = {
 };
 
 /* Session key and IV for encryption - in real application, generate securely! */
-static ble_ead_key_material_t key_material = {
+static esp_ble_ead_key_material_t key_material = {
     .session_key = {
         0x19, 0x6a, 0x0a, 0xd1, 0x2a, 0x61, 0x20, 0x1e,
         0x13, 0x6e, 0x2e, 0xd1, 0x12, 0xda, 0xa9, 0x57
@@ -59,7 +59,6 @@ static ble_ead_key_material_t key_material = {
 /* GATT state */
 static esp_gatt_if_t gatts_if_stored = ESP_GATT_IF_NONE;
 static uint16_t conn_id_stored = 0;
-static bool is_connected = false;
 
 /* Advertising parameters */
 static esp_ble_adv_params_t adv_params = {
@@ -72,7 +71,7 @@ static esp_ble_adv_params_t adv_params = {
 };
 
 /* Calculate encrypted payload size */
-#define ENCRYPTED_ADV_DATA_LEN  BLE_EAD_ENCRYPTED_PAYLOAD_SIZE(sizeof(unencrypted_adv_pattern))
+#define ENCRYPTED_ADV_DATA_LEN  ESP_BLE_EAD_ENCRYPTED_PAYLOAD_SIZE(sizeof(unencrypted_adv_pattern))
 
 /**
  * @brief Encrypt advertising data and set raw advertising data
@@ -81,16 +80,16 @@ static void set_encrypted_adv_data(void)
 {
     esp_err_t ret;
     uint8_t encrypted_adv_data[ENCRYPTED_ADV_DATA_LEN];
-    int rc;
+    esp_err_t rc;
 
     ESP_LOGI(TAG, "Data before encryption:");
     ESP_LOG_BUFFER_HEX(TAG, unencrypted_adv_pattern, sizeof(unencrypted_adv_pattern));
 
     /* Encrypt the advertising data */
-    rc = ble_ead_encrypt(key_material.session_key, key_material.iv,
-                          unencrypted_adv_pattern, sizeof(unencrypted_adv_pattern),
-                          encrypted_adv_data);
-    if (rc != 0) {
+    rc = esp_ble_ead_encrypt(key_material.session_key, key_material.iv,
+                             unencrypted_adv_pattern, sizeof(unencrypted_adv_pattern),
+                             encrypted_adv_data);
+    if (rc != ESP_OK) {
         ESP_LOGE(TAG, "Encryption of adv data failed: %d", rc);
         return;
     }
@@ -158,8 +157,13 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
 {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
-        ESP_LOGI(TAG, "Raw advertising data set complete");
-        start_advertising();
+        if (param->adv_data_raw_cmpl.status != ESP_BT_STATUS_SUCCESS) {
+            ESP_LOGE(TAG, "Raw advertising data set failed: %d",
+                     param->adv_data_raw_cmpl.status);
+        } else {
+            ESP_LOGI(TAG, "Raw advertising data set complete");
+            start_advertising();
+        }
         break;
 
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
@@ -236,7 +240,6 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         ESP_LOGI(TAG, "Connected, conn_id %d, remote "ESP_BD_ADDR_STR"",
                  param->connect.conn_id, ESP_BD_ADDR_HEX(param->connect.remote_bda));
         conn_id_stored = param->connect.conn_id;
-        is_connected = true;
 
         /* Update connection parameters */
         esp_ble_conn_update_params_t conn_params = {0};
@@ -251,7 +254,6 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     case ESP_GATTS_DISCONNECT_EVT:
         ESP_LOGI(TAG, "Disconnected, remote "ESP_BD_ADDR_STR", reason 0x%02x",
                  ESP_BD_ADDR_HEX(param->disconnect.remote_bda), param->disconnect.reason);
-        is_connected = false;
 
         /* Re-encrypt and restart advertising with new randomizer */
         set_encrypted_adv_data();

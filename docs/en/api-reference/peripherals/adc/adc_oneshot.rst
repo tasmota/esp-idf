@@ -94,14 +94,27 @@ To make these settings take effect, call :cpp:func:`adc_oneshot_config_channel` 
 Configure Two ADC Channels
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: c
+.. only:: not esp32s31
 
-    adc_oneshot_chan_cfg_t config = {
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = ADC_ATTEN_DB_12,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
+    .. code:: c
+
+        adc_oneshot_chan_cfg_t config = {
+            .bitwidth = ADC_BITWIDTH_DEFAULT,
+            .atten = ADC_ATTEN_DB_12,
+        };
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
+
+.. only:: esp32s31
+
+    .. code:: c
+
+        adc_oneshot_chan_cfg_t config = {
+            .bitwidth = ADC_BITWIDTH_DEFAULT,
+            .atten = ADC_ATTEN_DB_0,
+        };
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
 
 
 .. _adc-oneshot-read-conversion-result:
@@ -115,29 +128,15 @@ After above configurations, the ADC is ready to measure the analog signal(s) fro
 
 This function will fail due to invalid arguments.
 
-The ADC conversion results read from this function are raw data. To calculate the voltage based on the ADC raw results, this formula can be used:
+The conversion results from this function are raw data. Convert them to voltage in mV with the calibration APIs. See :doc:`adc_calibration`.
 
-.. parsed-literal::
+.. only:: esp32s31
 
-    Vout = Dout * Vmax / Dmax       (1)
+    On {IDF_TARGET_NAME}, :cpp:func:`adc_oneshot_read` returns a 17-bit comparator vector. Call :cpp:func:`adc_cali_chan_raw_to_voltage`. Even-numbered channels are N-side and odd-numbered channels are P-side.
 
-where:
+.. only:: not esp32s31
 
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-    :align: center
-
-    * - Vout
-      - Digital output result, standing for the voltage.
-    * - Dout
-      - ADC raw digital reading result.
-    * - Vmax
-      - Maximum measurable input analog voltage, this is related to the ADC attenuation, please refer to `TRM <{IDF_TARGET_TRM_EN_URL}>`__ > ``On-Chip Sensor and Analog Signal Processing``.
-    * - Dmax
-      -  Maximum of the output ADC raw digital reading result, which is 2^bitwidth, where bitwidth is the :cpp:member:`adc_oneshot_chan_cfg_t::bitwidth` configured before.
-
-To do further calibration to convert the ADC raw result to voltage in mV, please refer to calibration doc :doc:`adc_calibration`.
+    Call :cpp:func:`adc_cali_raw_to_voltage`. If a scheme needs the ADC channel, use :cpp:func:`adc_cali_chan_raw_to_voltage`.
 
 
 Read Raw Result
@@ -159,10 +158,10 @@ Hardware Limitations
 
 .. list::
 
-    - Random Number Generator (RNG) uses ADC as an input source. When ADC :cpp:func:`adc_oneshot_read` works, the random number generated from RNG will be less random.
+    :not esp32s31: - Random Number Generator (RNG) uses ADC as an input source. When ADC :cpp:func:`adc_oneshot_read` works, the random number generated from RNG will be less random.
     :SOC_ADC_DMA_SUPPORTED: - A specific ADC unit can only work under one operating mode at any one time, either continuous mode or oneshot mode. :cpp:func:`adc_oneshot_read` has provided the protection.
     :esp32 or esp32s2 or esp32s3: - ADC2 is also used by Wi-Fi. :cpp:func:`adc_oneshot_read` has provided protection between the Wi-Fi driver and ADC oneshot mode driver.
-    :esp32c3: - ADC2 oneshot mode is no longer supported, due to hardware limitations. The results are not stable. This issue can be found in `ESP32-C3 Series SoC Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3` to force use ADC2.
+    :esp32c3: - ADC2 oneshot mode is no longer supported, due to hardware limitations. The results are not stable. This issue can be found in `ESP32-C3 Series SoC Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :menuitem:`CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3` to force use ADC2.
     :esp32: - ESP32-DevKitC: GPIO0 cannot be used in oneshot mode, because the DevKit has used it for auto-flash.
     :esp32: - ESP-WROVER-KIT: GPIO 0, 2, 4, and 15 cannot be used due to external connections for different purposes.
 
@@ -171,7 +170,7 @@ Hardware Limitations
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When power management is enabled, i.e., :ref:`CONFIG_PM_ENABLE` is on, the system clock frequency may be adjusted when the system is in an idle state. However, the ADC oneshot mode driver works in a polling routine, the :cpp:func:`adc_oneshot_read` will poll the CPU until the function returns. During this period of time, the task in which ADC oneshot mode driver resides will not be blocked. Therefore the clock frequency is stable when reading.
+When power management is enabled, i.e., :menuitem:`CONFIG_PM_ENABLE` is on, the system clock frequency may be adjusted when the system is in an idle state. However, the ADC oneshot mode driver works in a polling routine, the :cpp:func:`adc_oneshot_read` will poll the CPU until the function returns. During this period of time, the task in which ADC oneshot mode driver resides will not be blocked. Therefore the clock frequency is stable when reading.
 
 
 .. _adc-oneshot-iram-safe:
@@ -200,7 +199,7 @@ Above functions are guaranteed to be thread-safe. Therefore, you can call them f
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_ADC_ONESHOT_CTRL_FUNC_IN_IRAM` controls where to place the ADC fast read function (IRAM or Flash), see :ref:`adc-oneshot-iram-safe` for more details.
+- :menuitem:`CONFIG_ADC_ONESHOT_CTRL_FUNC_IN_IRAM` controls where to place the ADC fast read function (IRAM or Flash), see :ref:`adc-oneshot-iram-safe` for more details.
 
 
 Application Examples

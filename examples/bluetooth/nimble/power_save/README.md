@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | --------- |
 
 Bluetooth Power Save Example
 =================================
@@ -26,6 +26,56 @@ This example contains some build configurations. For each configuration, a few c
 - `sdkconfig.48m.esp32c5`: ESP32C5 uses main XTAL as low power clock in light sleep enabled.
 - `sdkconfig.defaults.esp32c61`: ESP32C61 uses 32kHz XTAL as low power clock in light sleep enabled.
 - `sdkconfig.40m.esp32c61`: ESP32C61 uses main XTAL as low power clock in light sleep enabled.
+- `sdkconfig.defaults.esp32s31`: ESP32S31 uses 32kHz XTAL as low power clock in light sleep enabled.
+- `sdkconfig.40m.esp32s31`: ESP32S31 uses main XTAL as low power clock in light sleep enabled.
+- `sdkconfig.defaults.esp32h4`: ESP32H4 uses 32kHz XTAL as low power clock in light sleep enabled.
+- `sdkconfig.32m.esp32h4`: ESP32H4 uses main XTAL as low power clock in light sleep enabled.
+- `sdkconfig.defaults.esp32h21`: ESP32H21 uses 32kHz XTAL as low power clock in light sleep enabled.
+- `sdkconfig.32m.esp32h21`: ESP32H21 uses main XTAL as low power clock in light sleep enabled.
+
+## Menuconfig Options for Power Optimization
+
+Some configurations can reduce system power consumption at the cost of minor RAM overhead and limited auxiliary functions.
+
+### 1. Placing Core Functions in IRAM
+
+Moving frequently executed core code from flash to IRAM improves running efficiency and reduces system power consumption with the trade-off of higher static RAM occupation.
+
+#### Bluetooth Functions in IRAM
+
+**Supported chips: ESP32H4, ESP32S31**
+
+- `CONFIG_BT_CTRL_SLEEP_RELATED_CODE_IN_IRAM`
+- `CONFIG_BT_CTRL_LE_ADV_SLEEP_CODE_IN_IRAM`
+- `CONFIG_BT_CTRL_LE_CONN_SLEEP_CODE_IN_IRAM`
+
+#### Sleep Related Functions in IRAM
+
+- `CONFIG_PM_SLP_IRAM_OPT`
+- `CONFIG_PM_RTOS_IDLE_OPT`
+
+#### FreeRTOS Kernel Functions in IRAM
+
+- `CONFIG_FREERTOS_IN_IRAM`
+
+#### Phy Related Functions in IRAM
+
+**Supported chips: ESP32H4, ESP32H2, ESP32H21**
+
+- `CONFIG_ESP_PHY_INIT_IRAM`
+
+### 2. Unused Peripheral Module Disable Configurations
+
+Turning off unused peripheral modules achieves further power optimization.
+
+#### Disable USB Serial JTAG
+
+- `CONFIG_ESP_CONSOLE_SECONDARY_NONE`
+- `CONFIG_USJ_ENABLE_USB_SERIAL_JTAG`
+
+#### Disable Hardware PC Recording Debug Module
+
+- `CONFIG_ESP_SYSTEM_HW_PC_RECORD`
 
 ## How to use example
 

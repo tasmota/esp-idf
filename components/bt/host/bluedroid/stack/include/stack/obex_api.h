@@ -200,6 +200,7 @@ typedef union {
         UINT16 svr_handle;
         UINT16 peer_mtu;
         UINT16 our_mtu;
+        BD_ADDR addr;               /* peer bluetooth device address */
     } conn_income;
 
     struct {
@@ -266,6 +267,6 @@ extern BOOLEAN OBEX_CheckContinueResponse(BT_HDR *pkt);
 
 extern UINT8 *OBEX_GetNextHeader(BT_HDR *pkt, tOBEX_PARSE_INFO *info);
 
-extern UINT16 OBEX_GetHeaderLength(UINT8 *header);
+extern UINT16 OBEX_GetHeaderLength(UINT8 *header, UINT8 *pkt_end);
 
 #endif /* #if (OBEX_INCLUDED == TRUE) */

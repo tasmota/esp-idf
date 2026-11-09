@@ -24,12 +24,9 @@
 #include "hal/i2s_periph.h"
 #include "soc/soc_caps.h"
 #include "hal/i2s_hal.h"
+#include "hal/i2s_types.h"
 #include "hal/hal_utils.h"
 #include "hal/dma_types.h"
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-#include "hal/cache_hal.h"
-#include "hal/cache_ll.h"
-#endif
 
 #if I2S_LL_GET(ADC_DAC_CAPABLE)
 #include "hal/adc_ll.h"
@@ -43,11 +40,15 @@
 #if SOC_HAS(PAU)
 #include "esp_private/sleep_retention.h"
 #endif
+#if SOC_GDMA_SUPPORTED
+#include "hal/gdma_ll.h"
+#endif
 
 #include "driver/gpio.h"
 #include "esp_private/gpio.h"
-#include "esp_private/i2s_sync.h"
 #include "driver/i2s_common.h"
+#include "driver/i2s_std.h"
+#include "driver/i2s_tdm.h"
 #include "i2s_private.h"
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -59,27 +60,184 @@
 #include "esp_intr_alloc.h"
 #include "esp_check.h"
 #include "esp_attr.h"
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
 #include "esp_cache.h"
-#endif
+#include "esp_private/esp_cache_private.h"
+#include "esp_private/mspi_mem_barrier.h"
 
 #include "esp_rom_gpio.h"
 #include "esp_memory_utils.h"
 
-/* The actual max size of DMA buffer is 4095
- * Reserve several bytes for alignment, so that the position of the slot data in the buffer will be relatively fixed */
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-#define I2S_DMA_BUFFER_MAX_SIZE     DMA_DESCRIPTOR_BUFFER_MAX_SIZE_64B_ALIGNED
-#else
-#define I2S_DMA_BUFFER_MAX_SIZE     DMA_DESCRIPTOR_BUFFER_MAX_SIZE_4B_ALIGNED
-#endif  // SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+#define I2S_DMA_BUFFER_MAX_SIZE     DMA_DESCRIPTOR_BUFFER_MAX_SIZE
+#define I2S_DMA_DEFAULT_BURST_SIZE  32
 
 static const char *TAG = "i2s_common";
 
-__attribute__((always_inline))
-inline void *i2s_dma_calloc(i2s_chan_handle_t handle, size_t num, size_t size)
+static uint32_t i2s_resolve_dma_burst_size(size_t requested)
 {
-    return heap_caps_aligned_calloc(4, num, size, I2S_DMA_ALLOC_CAPS);
+    uint32_t burst_size = (uint32_t)requested;
+    if (burst_size == 0) {
+        burst_size = I2S_DMA_DEFAULT_BURST_SIZE;
+        ESP_LOGD(TAG, "dma_burst_size is 0, using default %d", I2S_DMA_DEFAULT_BURST_SIZE);
+    }
+
+#if SOC_GDMA_SUPPORTED && !GDMA_LL_AHB_BURST_SIZE_ADJUSTABLE
+    if (requested != 0) {
+        ESP_LOGW(TAG, "chip does not support configurable DMA burst size, using default burst size instead");
+    }
+    burst_size = I2S_DMA_DEFAULT_BURST_SIZE;
+#endif
+
+    return burst_size;
+}
+
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+static void s_i2s_channel_update_tx_sync_callback(i2s_chan_handle_t tx_handle,
+                                                  i2s_tx_fifo_sync_callback_t cb,
+                                                  void *user_data);
+#endif
+
+FORCE_INLINE_ATTR void *i2s_dma_calloc(i2s_chan_handle_t handle, size_t num, size_t size)
+{
+    uint32_t caps = handle->dma.buffer_in_psram ?
+                    (MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_8BIT) : I2S_DMA_ALLOC_CAPS;
+    return heap_caps_aligned_calloc(handle->dma.buf_alignment, num, size, caps);
+}
+
+FORCE_INLINE_ATTR void IRAM_ATTR i2s_dma_buf_sync(i2s_chan_handle_t handle, void *buf, size_t size, int flags)
+{
+#if CONFIG_SPIRAM
+    if ((flags & ESP_CACHE_MSYNC_FLAG_DIR_M2C) && handle->dma.buffer_in_psram) {
+        esp_psram_mspi_mb();
+    }
+#endif
+    if (esp_cache_get_line_size_by_addr(buf) > 0) {
+        esp_cache_msync(buf, size, flags);
+    }
+}
+
+static void i2s_dma_bufs_sync_for_start(i2s_chan_handle_t handle)
+{
+    if (!handle->dma.bufs) {
+        return;
+    }
+    for (int i = 0; i < handle->dma.desc_num; i++) {
+        i2s_dma_buf_sync(handle, handle->dma.bufs[i], handle->dma.buf_size,
+                         ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE);
+    }
+}
+
+/*---------------------------------------------------------------------------
+                         Duplex Constitution Helpers
+ ----------------------------------------------------------------------------
+    Scope: This file only
+ ----------------------------------------------------------------------------*/
+
+/* Extract the duplex candidate from a fully-initialized channel's stored configuration.
+ * @note Only valid for a channel that has reached the READY state, because the slot/clock/gpio
+ *       information is read back from `handle->mode_info`. */
+static esp_err_t s_i2s_extract_duplex_candidate(i2s_chan_handle_t handle, i2s_duplex_candidate_t *out)
+{
+    /* Only STD and TDM modes can constitute duplex, reject the others (e.g. PDM) up front */
+#if SOC_I2S_SUPPORTS_TDM
+    if (handle->mode != I2S_COMM_MODE_STD && handle->mode != I2S_COMM_MODE_TDM) {
+#else
+    if (handle->mode != I2S_COMM_MODE_STD) {
+#endif
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    memset(out, 0, sizeof(*out));
+
+    /* The clk_cfg and gpio_cfg sub-structures share the same layout between STD and TDM modes
+     * (only the slot_cfg differs), so resolve the mode-specific pointers here and fill the
+     * candidate with the shared logic below. */
+    i2s_std_clk_config_t *clk_cfg = NULL;
+    i2s_std_gpio_config_t *gpio_cfg = NULL;
+    uint32_t slot_bits = 0;
+    if (handle->mode == I2S_COMM_MODE_STD) {
+        i2s_std_config_t *cfg = (i2s_std_config_t *)handle->mode_info;
+        clk_cfg = &cfg->clk_cfg;
+        gpio_cfg = &cfg->gpio_cfg;
+        slot_bits = cfg->slot_cfg.slot_bit_width;
+    }
+#if SOC_I2S_SUPPORTS_TDM
+    else {
+        i2s_tdm_config_t *cfg = (i2s_tdm_config_t *)handle->mode_info;
+        clk_cfg = (i2s_std_clk_config_t *)&cfg->clk_cfg;
+        gpio_cfg = (i2s_std_gpio_config_t *)&cfg->gpio_cfg;
+        slot_bits = cfg->slot_cfg.slot_bit_width;
+    }
+#endif
+
+    out->ws_pin = gpio_cfg->ws;
+    out->bclk_pin = gpio_cfg->bclk;
+    out->total_frame_bits = handle->total_slot * slot_bits;
+    out->sample_rate_hz = clk_cfg->sample_rate_hz;
+    out->clk_src = clk_cfg->clk_src;
+    out->bclk_inv = gpio_cfg->invert_flags.bclk_inv;
+    out->ws_inv = gpio_cfg->invert_flags.ws_inv;
+    return ESP_OK;
+}
+
+/* Whether the shared BCLK/WS configurations of the two candidates are identical.
+ * The slot layout and clock source are intentionally NOT compared here, only the
+ * resulting frame timing (sample rate + total frame bits) and the shared BCLK/WS
+ * settings are. */
+static bool s_i2s_duplex_candidate_match(const i2s_duplex_candidate_t *a, const i2s_duplex_candidate_t *b)
+{
+    return a->ws_pin == b->ws_pin &&
+           a->bclk_pin == b->bclk_pin &&
+           a->sample_rate_hz == b->sample_rate_hz &&
+           a->total_frame_bits == b->total_frame_bits &&
+           a->bclk_inv == b->bclk_inv &&
+           a->ws_inv == b->ws_inv;
+}
+
+void i2s_channel_try_to_constitute_duplex(i2s_chan_handle_t handle, const i2s_duplex_candidate_t *candidate)
+{
+    i2s_chan_handle_t another_handle = handle->dir == I2S_DIR_RX ? handle->controller->tx_chan : handle->controller->rx_chan;
+
+    /* The other direction channel must be registered and fully initialized to be compared with */
+    if (!another_handle || another_handle->state < I2S_CHAN_STATE_READY) {
+        return;
+    }
+
+    if (!handle->controller->full_duplex) {
+        /* Sharing BCLK/WS requires valid (used) WS and BCK pins on the current channel */
+        if (candidate->ws_pin < 0 || candidate->bclk_pin < 0) {
+            ESP_LOGD(TAG, "%s channel on I2S%d: WS/BCK pins unused, cannot constitute duplex",
+                     handle->dir == I2S_DIR_TX ? "tx" : "rx", handle->controller->id);
+            return;
+        }
+
+        i2s_duplex_candidate_t another_candidate;
+        if (s_i2s_extract_duplex_candidate(another_handle, &another_candidate) != ESP_OK) {
+            return;
+        }
+
+        /* Constitute duplex only when the shared BCLK/WS configurations are identical and the frame
+         * timing (sample rate + total frame bits) matches. The slot layout and clock config may differ. */
+        if (!s_i2s_duplex_candidate_match(candidate, &another_candidate)) {
+            ESP_LOGD(TAG, "%s channel on I2S%d: BCLK/WS/frame configurations don't match, cannot constitute duplex",
+                     handle->dir == I2S_DIR_TX ? "tx" : "rx", handle->controller->id);
+            return;
+        }
+
+        /* All conditions met, constitute duplex */
+        handle->controller->full_duplex = true;
+        ESP_LOGD(TAG, "Constitute full-duplex on port %d", handle->controller->id);
+    }
+
+    /* Handle slave role fallback when both channels are master.
+     * The later initialized channel must be slave for full duplex */
+    if (handle->controller->full_duplex &&
+            handle->role == I2S_ROLE_MASTER &&
+            another_handle->role == I2S_ROLE_MASTER) {
+        handle->role = I2S_ROLE_SLAVE;
+        handle->full_duplex_slave = true;
+        ESP_LOGW(TAG, "the %s channel on I2S%d is switched from master to slave for full-duplex mode",
+                 handle->dir == I2S_DIR_TX ? "tx" : "rx", handle->controller->id);
+    }
 }
 
 /*---------------------------------------------------------------------------
@@ -110,6 +268,9 @@ static void s_i2s_create_retention_module(i2s_controller_t *i2s_obj)
             ESP_LOGW(TAG, "create retention module failed, power domain can't turn off");
         } else {
             i2s_obj->retention_link_created = true;
+            if (sleep_retention_module_attach(module) != ESP_OK) {
+                ESP_LOGW(TAG, "attach retention module failed, power domain can't turn off");
+            }
         }
     }
     _lock_release(&i2s_obj->mutex);
@@ -120,18 +281,25 @@ static void i2s_tx_channel_start(i2s_chan_handle_t handle)
 {
     i2s_hal_tx_reset(&(handle->controller->hal));
 #if SOC_GDMA_SUPPORTED
-    gdma_reset((handle->dma.dma_chan));
+    if (handle->dma.dma_chan) {
+        gdma_reset((handle->dma.dma_chan));
+    }
 #else
     i2s_hal_tx_reset_dma(&(handle->controller->hal));
 #endif
     i2s_hal_tx_reset_fifo(&(handle->controller->hal));
+    handle->dma.link_index = 0;
+    /* Write back CPU updates (e.g. preload) then drop cache lines before DMA owns the buffers. */
+    i2s_dma_bufs_sync_for_start(handle);
 #if SOC_GDMA_SUPPORTED
-    gdma_start((handle->dma.dma_chan), (uint32_t) handle->dma.desc[0]);
+    if (handle->dma.dma_chan) {
+        gdma_start((handle->dma.dma_chan), gdma_link_get_head_addr(handle->dma.dma_link));
+    }
 #else
     esp_intr_enable(handle->dma.dma_chan);
     i2s_hal_tx_enable_intr(&(handle->controller->hal));
     i2s_hal_tx_enable_dma(&(handle->controller->hal));
-    i2s_hal_tx_start_link(&(handle->controller->hal), (uint32_t) handle->dma.desc[0]);
+    i2s_hal_tx_start_link(&(handle->controller->hal), gdma_link_get_head_addr(handle->dma.dma_link));
 #endif
     if (!handle->is_etm_start) {
         i2s_hal_tx_start(&(handle->controller->hal));
@@ -142,18 +310,26 @@ static void i2s_rx_channel_start(i2s_chan_handle_t handle)
 {
     i2s_hal_rx_reset(&(handle->controller->hal));
 #if SOC_GDMA_SUPPORTED
-    gdma_reset(handle->dma.dma_chan);
+    if (handle->dma.dma_chan) {
+        gdma_reset(handle->dma.dma_chan);
+        handle->dma.link_index = 0;
+    }
 #else
     i2s_hal_rx_reset_dma(&(handle->controller->hal));
 #endif
     i2s_hal_rx_reset_fifo(&(handle->controller->hal));
+    handle->dma.link_index = 0;
+    /* Flush dirty CPU lines then invalidate so DMA writes cannot be overwritten by later evictions. */
+    i2s_dma_bufs_sync_for_start(handle);
 #if SOC_GDMA_SUPPORTED
-    gdma_start(handle->dma.dma_chan, (uint32_t) handle->dma.desc[0]);
+    if (handle->dma.dma_chan) {
+        gdma_start(handle->dma.dma_chan, gdma_link_get_head_addr(handle->dma.dma_link));
+    }
 #else
     esp_intr_enable(handle->dma.dma_chan);
     i2s_hal_rx_enable_intr(&(handle->controller->hal));
     i2s_hal_rx_enable_dma(&(handle->controller->hal));
-    i2s_hal_rx_start_link(&(handle->controller->hal), (uint32_t) handle->dma.desc[0]);
+    i2s_hal_rx_start_link(&(handle->controller->hal), gdma_link_get_head_addr(handle->dma.dma_link));
 #endif
     if (!handle->is_etm_start) {
         i2s_hal_rx_start(&(handle->controller->hal));
@@ -166,7 +342,9 @@ static void i2s_tx_channel_stop(i2s_chan_handle_t handle)
         i2s_hal_tx_stop(&(handle->controller->hal));
     }
 #if SOC_GDMA_SUPPORTED
-    gdma_stop(handle->dma.dma_chan);
+    if (handle->dma.dma_chan) {
+        gdma_stop(handle->dma.dma_chan);
+    }
 #else
     i2s_hal_tx_stop_link(&(handle->controller->hal));
     i2s_hal_tx_disable_intr(&(handle->controller->hal));
@@ -181,7 +359,9 @@ static void i2s_rx_channel_stop(i2s_chan_handle_t handle)
         i2s_hal_rx_stop(&(handle->controller->hal));
     }
 #if SOC_GDMA_SUPPORTED
-    gdma_stop(handle->dma.dma_chan);
+    if (handle->dma.dma_chan) {
+        gdma_stop(handle->dma.dma_chan);
+    }
 #else
     i2s_hal_rx_stop_link(&(handle->controller->hal));
     i2s_hal_rx_disable_intr(&(handle->controller->hal));
@@ -209,6 +389,7 @@ static esp_err_t i2s_destroy_controller_obj(i2s_controller_t **i2s_obj)
 #if I2S_USE_RETENTION_LINK
     if ((*i2s_obj)->slp_retention_mod) {
         if ((*i2s_obj)->retention_link_created) {
+            sleep_retention_module_detach((*i2s_obj)->slp_retention_mod);
             sleep_retention_module_free((*i2s_obj)->slp_retention_mod);
         }
         sleep_retention_module_deinit((*i2s_obj)->slp_retention_mod);
@@ -268,6 +449,7 @@ static i2s_controller_t *i2s_acquire_controller_obj(int id)
                     .arg = i2s_obj,
                 },
             },
+            .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
             .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)
         };
         if (sleep_retention_module_init(module, &init_param) == ESP_OK) {
@@ -305,7 +487,7 @@ static inline bool i2s_take_available_channel(i2s_controller_t *i2s_obj, uint8_t
     return is_available;
 }
 
-static esp_err_t i2s_register_channel(i2s_controller_t *i2s_obj, i2s_dir_t dir, uint32_t desc_num)
+static esp_err_t i2s_register_channel(i2s_controller_t *i2s_obj, i2s_dir_t dir, uint32_t desc_num, bool use_dma)
 {
     I2S_NULL_POINTER_CHECK(TAG, i2s_obj);
 
@@ -322,17 +504,23 @@ static esp_err_t i2s_register_channel(i2s_controller_t *i2s_obj, i2s_dir_t dir, 
 #if CONFIG_PM_ENABLE
     new_chan->pm_lock = NULL; // Init in i2s_set_clock according to clock source
 #endif
-    new_chan->msg_queue = xQueueCreateWithCaps(desc_num - 1, sizeof(uint8_t *), I2S_MEM_ALLOC_CAPS);
-    ESP_GOTO_ON_FALSE(new_chan->msg_queue, ESP_ERR_NO_MEM, err, TAG, "No memory for message queue");
+    /* The message queue is only used to hand DMA buffer descriptors between the DMA ISR and
+     * read/write/preload tasks. The binary semaphore is only used to block read/write while the
+     * channel is disabled. Both are omitted when the data path does not use memory DMA, to save heap. */
+    if (use_dma) {
+        new_chan->msg_queue = xQueueCreateWithCaps(desc_num - 1, sizeof(uint8_t *), I2S_MEM_ALLOC_CAPS);
+        ESP_GOTO_ON_FALSE(new_chan->msg_queue, ESP_ERR_NO_MEM, err, TAG, "No memory for message queue");
+        new_chan->binary = xSemaphoreCreateBinaryWithCaps(I2S_MEM_ALLOC_CAPS);
+        ESP_GOTO_ON_FALSE(new_chan->binary, ESP_ERR_NO_MEM, err, TAG, "No memory for binary semaphore");
+    }
     new_chan->mutex = xSemaphoreCreateMutexWithCaps(I2S_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(new_chan->mutex, ESP_ERR_NO_MEM, err, TAG, "No memory for mutex semaphore");
-    new_chan->binary = xSemaphoreCreateBinaryWithCaps(I2S_MEM_ALLOC_CAPS);
-    ESP_GOTO_ON_FALSE(new_chan->binary, ESP_ERR_NO_MEM, err, TAG, "No memory for binary semaphore");
 
     new_chan->callbacks.on_recv = NULL;
     new_chan->callbacks.on_recv_q_ovf = NULL;
     new_chan->callbacks.on_sent = NULL;
     new_chan->callbacks.on_send_q_ovf = NULL;
+    new_chan->dma.buf_alignment = 4;
     new_chan->dma.rw_pos = 0;
     new_chan->dma.curr_ptr = NULL;
     new_chan->start = NULL;
@@ -410,7 +598,26 @@ esp_err_t i2s_channel_register_event_callback(i2s_chan_handle_t handle, const i2
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);
     I2S_NULL_POINTER_CHECK(TAG, callbacks);
-    esp_err_t ret = ESP_OK;
+
+    /* DMA event callbacks are dispatched from the DMA ISR, only available on the DMA memory data path */
+    bool dma_cb_supported = I2S_CHANNEL_USES_DMA(handle);
+    bool has_dma_event_cb = callbacks->on_recv || callbacks->on_recv_q_ovf ||
+                            callbacks->on_sent || callbacks->on_send_q_ovf;
+    ESP_RETURN_ON_FALSE(!has_dma_event_cb || dma_cb_supported, ESP_ERR_NOT_SUPPORTED, TAG,
+                        "DMA event callbacks require the DMA memory data path on this channel");
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+    /* TX FIFO sync callback is dispatched from the I2S peripheral ISR, available on any TX channel regardless of the data path */
+    bool sync_cb_supported = (handle->dir == I2S_DIR_TX);
+    ESP_RETURN_ON_FALSE(!callbacks->on_tx_sync_evt || sync_cb_supported, ESP_ERR_NOT_SUPPORTED, TAG,
+                        "TX FIFO sync callback requires a TX channel");
+    bool sync_only_update = sync_cb_supported && !has_dma_event_cb;
+    bool cb_supported = dma_cb_supported || sync_cb_supported;
+#else
+    bool sync_only_update = false;
+    bool cb_supported = dma_cb_supported;
+#endif
+    ESP_RETURN_ON_FALSE(cb_supported, ESP_ERR_NOT_SUPPORTED, TAG,
+                        "event callbacks are not supported on this channel");
 #if CONFIG_I2S_ISR_IRAM_SAFE
     if (callbacks->on_recv) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(callbacks->on_recv), ESP_ERR_INVALID_ARG, TAG, "on_recv callback not in IRAM");
@@ -424,15 +631,40 @@ esp_err_t i2s_channel_register_event_callback(i2s_chan_handle_t handle, const i2
     if (callbacks->on_send_q_ovf) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(callbacks->on_send_q_ovf), ESP_ERR_INVALID_ARG, TAG, "on_send_q_ovf callback not in IRAM");
     }
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+    if (callbacks->on_tx_sync_evt) {
+        ESP_RETURN_ON_FALSE(esp_ptr_in_iram(callbacks->on_tx_sync_evt), ESP_ERR_INVALID_ARG, TAG, "sync callback not in IRAM");
+    }
+#endif
     if (user_data) {
         ESP_RETURN_ON_FALSE(esp_ptr_internal(user_data), ESP_ERR_INVALID_ARG, TAG, "user context not in internal RAM");
     }
+
 #endif
 
+    esp_err_t ret = ESP_OK;
+#if CONFIG_I2S_ISR_IRAM_SAFE
+    if (handle->dma.buffer_in_psram && (callbacks->on_recv || callbacks->on_sent)) {
+        ESP_LOGW(TAG, "DMA buffers are in PSRAM; callbacks must not access them while the cache is disabled");
+    }
+#endif
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
-    ESP_GOTO_ON_FALSE(handle->state < I2S_CHAN_STATE_RUNNING, ESP_ERR_INVALID_STATE, err, TAG, "invalid state, I2S has enabled");
-    memcpy(&(handle->callbacks), callbacks, sizeof(i2s_event_callbacks_t));
-    handle->user_data = user_data;
+    bool update_dma_cbs = dma_cb_supported && !(sync_only_update && handle->state == I2S_CHAN_STATE_RUNNING);
+    ESP_GOTO_ON_FALSE(!update_dma_cbs || handle->state < I2S_CHAN_STATE_RUNNING,
+                      ESP_ERR_INVALID_STATE, err, TAG,
+                      "DMA event callbacks can't be changed while the channel is running");
+    if (update_dma_cbs) {
+        handle->callbacks.on_recv = callbacks->on_recv;
+        handle->callbacks.on_recv_q_ovf = callbacks->on_recv_q_ovf;
+        handle->callbacks.on_sent = callbacks->on_sent;
+        handle->callbacks.on_send_q_ovf = callbacks->on_send_q_ovf;
+        handle->user_data = user_data;
+    }
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+    if (sync_cb_supported) {
+        s_i2s_channel_update_tx_sync_callback(handle, callbacks->on_tx_sync_evt, user_data);
+    }
+#endif
 err:
     xSemaphoreGive(handle->mutex);
     return ret;
@@ -450,52 +682,33 @@ uint32_t i2s_get_buf_size(i2s_chan_handle_t handle, uint32_t data_bit_width, uin
     if (bytes_per_frame == 0) {
         return 0;
     }
-    uint32_t bufsize = dma_frame_num * bytes_per_frame;
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-    /* bufsize need to align with cache line size */
-    uint32_t alignment = cache_hal_get_cache_line_size(CACHE_LL_LEVEL_INT_MEM, CACHE_TYPE_DATA);
+    size_t alignment = handle->dma.buf_alignment;
+    uint32_t max_buf_size = I2S_DMA_BUFFER_MAX_SIZE & ~(alignment - 1);
     uint32_t aligned_frame_num = dma_frame_num;
-    /* To make the buffer aligned with the cache line size, search for the ceil aligned size first,
-       If the buffer size exceed the max DMA buffer size, toggle the sign to search for the floor aligned size */
-    for (int sign = 1; bufsize % alignment != 0; aligned_frame_num += sign) {
+    uint32_t bufsize = aligned_frame_num * bytes_per_frame;
+    /* Prefer rounding the frame count up. If that would exceed one descriptor, round it down instead. */
+    while (bufsize <= max_buf_size && bufsize % alignment != 0) {
+        aligned_frame_num++;
         bufsize = aligned_frame_num * bytes_per_frame;
-        /* If the buffer size exceed the max dma size */
-        if (bufsize > I2S_DMA_BUFFER_MAX_SIZE && sign == 1) {
-            sign = -1; // toggle the search sign
-            aligned_frame_num = dma_frame_num;              // Reset the frame num
-            bufsize = aligned_frame_num * bytes_per_frame;  // Reset the bufsize
+    }
+    if (bufsize > max_buf_size) {
+        aligned_frame_num = dma_frame_num < max_buf_size / bytes_per_frame ?
+                            dma_frame_num : max_buf_size / bytes_per_frame;
+        bufsize = aligned_frame_num * bytes_per_frame;
+        while (aligned_frame_num > 0 && bufsize % alignment != 0) {
+            aligned_frame_num--;
+            bufsize = aligned_frame_num * bytes_per_frame;
         }
     }
     if (bufsize / bytes_per_frame != dma_frame_num) {
-        ESP_LOGW(TAG, "dma frame num is adjusted to %"PRIu32" to align the dma buffer with %"PRIu32
+        ESP_LOGW(TAG, "dma frame num is adjusted to %"PRIu32" to align the dma buffer with %zu"
                  ", bufsize = %"PRIu32, bufsize / bytes_per_frame, alignment, bufsize);
-    }
-#endif
-    /* Limit DMA buffer size if it is out of range */
-    if (bufsize > I2S_DMA_BUFFER_MAX_SIZE) {
-        uint32_t frame_num = I2S_DMA_BUFFER_MAX_SIZE / bytes_per_frame;
-        bufsize = frame_num * bytes_per_frame;
-        ESP_LOGW(TAG, "dma frame num is out of dma buffer size, limited to %"PRIu32, frame_num);
     }
     return bufsize;
 }
 
-esp_err_t i2s_free_dma_desc(i2s_chan_handle_t handle)
+static void i2s_free_dma_buffers(i2s_chan_handle_t handle)
 {
-    I2S_NULL_POINTER_CHECK(TAG, handle);
-    handle->dma.buf_size = 0;
-
-    if (handle->dma.desc) {
-        for (int i = 0; i < handle->dma.desc_num; i++) {
-            if (handle->dma.desc[i]) {
-                free(handle->dma.desc[i]);
-                handle->dma.desc[i] = NULL;
-            }
-        }
-        free(handle->dma.desc);
-        handle->dma.desc = NULL;
-    }
-
     if (handle->dma.bufs) {
         for (int i = 0; i < handle->dma.desc_num; i++) {
             if (handle->dma.bufs[i]) {
@@ -506,104 +719,203 @@ esp_err_t i2s_free_dma_desc(i2s_chan_handle_t handle)
         free(handle->dma.bufs);
         handle->dma.bufs = NULL;
     }
+}
 
+static esp_err_t i2s_alloc_dma_buffers(i2s_chan_handle_t handle, uint32_t bufsize)
+{
+    uint32_t num = handle->dma.desc_num;
+    handle->dma.bufs = (uint8_t **)heap_caps_calloc(num, sizeof(uint8_t *), I2S_MEM_ALLOC_CAPS);
+    ESP_RETURN_ON_FALSE(handle->dma.bufs, ESP_ERR_NO_MEM, TAG, "create I2S DMA buffer array failed");
+    for (int i = 0; i < num; i++) {
+        handle->dma.bufs[i] = (uint8_t *)i2s_dma_calloc(handle, 1, bufsize * sizeof(uint8_t));
+        if (!handle->dma.bufs[i]) {
+            i2s_free_dma_buffers(handle);
+            ESP_LOGE(TAG, "allocate DMA buffer failed");
+            return ESP_ERR_NO_MEM;
+        }
+    }
     return ESP_OK;
 }
 
-esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t bufsize)
+static esp_err_t i2s_mount_dma_link(i2s_chan_handle_t handle, uint32_t bufsize)
+{
+    esp_err_t ret = ESP_OK;
+    uint32_t num = handle->dma.desc_num;
+    gdma_link_list_config_t link_config = {
+        .num_items = num,
+        .item_alignment = 4,
+    };
+    ESP_RETURN_ON_ERROR(gdma_new_link_list(&link_config, &handle->dma.dma_link), TAG, "create I2S DMA link failed");
+
+    for (int i = 0; i < num; i++) {
+        size_t buffer_alignment = 4;
+#if SOC_GDMA_SUPPORTED
+        buffer_alignment = gdma_get_buffer_alignment_constraint(handle->dma.dma_chan, handle->dma.bufs[i]);
+#endif
+        gdma_buffer_mount_config_t mount_config = {
+            .buffer = handle->dma.bufs[i],
+            .buffer_alignment = buffer_alignment,
+            .length = bufsize,
+            .flags = {
+                .mark_eof = true,
+                .mark_final = (i == num - 1) ? GDMA_FINAL_LINK_TO_HEAD : GDMA_FINAL_LINK_TO_DEFAULT,
+            },
+        };
+        ESP_GOTO_ON_ERROR(gdma_link_mount_buffers(handle->dma.dma_link, i, &mount_config, 1, NULL),
+                          err, TAG, "mount I2S DMA buffer failed");
+        ESP_LOGV(TAG, "link item addr: %8p\tbuffer addr:%8p",
+                 (void *)gdma_link_get_item_addr(handle->dma.dma_link, i), handle->dma.bufs[i]);
+    }
+    handle->dma.link_index = 0;
+    return ESP_OK;
+
+err:
+    if (handle->dma.dma_link) {
+        gdma_del_link_list(handle->dma.dma_link);
+        handle->dma.dma_link = NULL;
+    }
+    return ret;
+}
+
+esp_err_t i2s_free_dma_resources(i2s_chan_handle_t handle)
+{
+    I2S_NULL_POINTER_CHECK(TAG, handle);
+    if (handle->dma.dma_link) {
+        gdma_del_link_list(handle->dma.dma_link);
+        handle->dma.dma_link = NULL;
+        handle->dma.link_index = 0;
+    }
+    i2s_free_dma_buffers(handle);
+    handle->dma.buf_size = 0;
+    return ESP_OK;
+}
+
+esp_err_t i2s_alloc_dma_resources(i2s_chan_handle_t handle, uint32_t bufsize)
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);
     esp_err_t ret = ESP_OK;
-    ESP_RETURN_ON_FALSE(bufsize <= I2S_DMA_BUFFER_MAX_SIZE, ESP_ERR_INVALID_ARG, TAG, "dma buffer can't be bigger than %d", I2S_DMA_BUFFER_MAX_SIZE);
+    size_t alignment = handle->dma.buf_alignment;
+    uint32_t max_buf_size = I2S_DMA_BUFFER_MAX_SIZE & ~(alignment - 1);
+    ESP_RETURN_ON_FALSE(bufsize <= max_buf_size && bufsize % alignment == 0, ESP_ERR_INVALID_ARG, TAG,
+                        "dma buffer must be aligned to %zu and no bigger than %"PRIu32, alignment, max_buf_size);
     uint32_t num = handle->dma.desc_num;
     handle->dma.buf_size = bufsize;
 
-    /* Descriptors must be in the internal RAM */
-    handle->dma.desc = (lldesc_t **)heap_caps_calloc(num, sizeof(lldesc_t *), I2S_MEM_ALLOC_CAPS);
-    ESP_GOTO_ON_FALSE(handle->dma.desc, ESP_ERR_NO_MEM, err, TAG, "create I2S DMA descriptor array failed");
-    handle->dma.bufs = (uint8_t **)heap_caps_calloc(num, sizeof(uint8_t *), I2S_MEM_ALLOC_CAPS);
-    ESP_GOTO_ON_FALSE(handle->dma.bufs, ESP_ERR_NO_MEM, err, TAG, "create I2S DMA buffer array failed");
-    for (int i = 0; i < num; i++) {
-        /* Allocate DMA descriptor */
-        handle->dma.desc[i] = (lldesc_t *) i2s_dma_calloc(handle, 1, sizeof(lldesc_t));
-        ESP_GOTO_ON_FALSE(handle->dma.desc[i], ESP_ERR_NO_MEM, err, TAG,  "allocate DMA description failed");
-        handle->dma.desc[i]->owner = 1;
-        handle->dma.desc[i]->eof = 1;
-        handle->dma.desc[i]->sosf = 0;
-        handle->dma.desc[i]->length = bufsize;
-        handle->dma.desc[i]->size = bufsize;
-        handle->dma.desc[i]->offset = 0;
-        handle->dma.bufs[i] = (uint8_t *) i2s_dma_calloc(handle, 1, bufsize * sizeof(uint8_t));
-        ESP_GOTO_ON_FALSE(handle->dma.bufs[i], ESP_ERR_NO_MEM, err, TAG,  "allocate DMA buffer failed");
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(handle->dma.bufs[i], bufsize * sizeof(uint8_t), ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-#endif
-        handle->dma.desc[i]->buf = handle->dma.bufs[i];
-        ESP_LOGV(TAG, "desc addr: %8p\tbuffer addr:%8p", handle->dma.desc[i], handle->dma.bufs[i]);
+    ESP_GOTO_ON_ERROR(i2s_alloc_dma_buffers(handle, bufsize), err, TAG, "allocate I2S DMA buffers failed");
+#if SOC_GDMA_SUPPORTED
+    /* The initial link mount is deferred until the DMA channel has been configured. */
+    if (handle->dma.dma_chan) {
+        ESP_GOTO_ON_ERROR(i2s_mount_dma_link(handle, bufsize), err, TAG, "mount I2S DMA link failed");
     }
-    /* Connect DMA descriptor as a circle */
-    for (int i = 0; i < num; i++) {
-        /* Link to the next descriptor */
-        STAILQ_NEXT(handle->dma.desc[i], qe) = (i < (num - 1)) ? (handle->dma.desc[i + 1]) : handle->dma.desc[0];
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(handle->dma.desc[i], sizeof(lldesc_t), ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+#else
+    ESP_GOTO_ON_ERROR(i2s_mount_dma_link(handle, bufsize), err, TAG, "mount I2S DMA link failed");
 #endif
-    }
     if (handle->dir == I2S_DIR_RX) {
         i2s_ll_rx_set_eof_num(handle->controller->hal.dev, bufsize);
     }
     ESP_LOGD(TAG, "DMA malloc info: dma_desc_num = %"PRIu32", dma_desc_buf_size = dma_frame_num * slot_num * data_bit_width = %"PRIu32, num, bufsize);
     return ESP_OK;
 err:
-    i2s_free_dma_desc(handle);
+    i2s_free_dma_resources(handle);
     return ret;
 }
 
 #if SOC_I2S_SUPPORTS_APLL
-static uint32_t i2s_set_get_apll_freq(uint32_t mclk_freq_hz)
+/**
+ * @brief Resolve the usable APLL frequency, configuring it when the acquired access mode permits
+ */
+static esp_err_t i2s_resolve_apll_freq(i2s_chan_handle_t handle, uint32_t mclk_freq_hz,
+                                       bool clk_src_adjustable, i2s_apll_operation_t *operation,
+                                       uint32_t *real_freq_hz)
 {
-    /* Calculate the expected APLL  */
-    int mclk_div = (int)((CLK_LL_APLL_MIN_HZ / mclk_freq_hz) + 1);
+    ESP_RETURN_ON_FALSE(mclk_freq_hz, ESP_ERR_INVALID_ARG, TAG, "invalid MCLK frequency");
+
+    uint32_t mclk_div = CLK_LL_APLL_MIN_HZ / mclk_freq_hz + 1;
     /* apll_freq = mclk * div
         * when div = 1, hardware will still divide 2
         * when div = 0, the final mclk will be unpredictable
         * So the div here should be at least 2 */
     mclk_div = mclk_div < 2 ? 2 : mclk_div;
-    uint32_t expt_freq = mclk_freq_hz * mclk_div;
-    if (expt_freq > CLK_LL_APLL_MAX_HZ) {
-        ESP_LOGE(TAG, "The required APLL frequency exceed its maximum value");
-        return 0;
+    uint64_t expected_freq_hz = (uint64_t)mclk_freq_hz * mclk_div;
+    ESP_RETURN_ON_FALSE(expected_freq_hz <= CLK_LL_APLL_MAX_HZ, ESP_ERR_INVALID_ARG, TAG,
+                        "required APLL frequency exceeds its maximum value");
+    operation->active = true;
+    operation->adjustable = clk_src_adjustable;
+
+    bool apll_in_use = handle->state != I2S_CHAN_STATE_REGISTER &&
+                       handle->clk_src == I2S_CLK_SRC_APLL;
+    if (apll_in_use) {
+        ESP_RETURN_ON_FALSE(handle->apll_adjustable == clk_src_adjustable,
+                            ESP_ERR_INVALID_STATE, TAG, "can't change active APLL access mode");
+        if (!handle->apll_adjustable) {
+            *real_freq_hz = handle->sclk_hz;
+            operation->frequency_hz = *real_freq_hz;
+            return ESP_OK;
+        }
+    } else {
+        esp_clk_tree_apll_info_t apll_info = {};
+        ESP_RETURN_ON_ERROR(esp_clk_tree_apll_get_info(&apll_info), TAG, "failed to get APLL information");
+        if (apll_info.config_valid) {
+            *real_freq_hz = apll_info.frequency_hz;
+            operation->frequency_hz = *real_freq_hz;
+            return ESP_OK;
+        }
     }
-    uint32_t real_freq = 0;
-    esp_err_t ret = esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_APLL, expt_freq, &real_freq);
-    if (ret == ESP_ERR_INVALID_ARG) {
-        ESP_LOGE(TAG, "set APLL freq failed due to invalid argument");
-        return 0;
+
+    esp_err_t ret = esp_clk_tree_src_set_freq_hz(SOC_MOD_CLK_APLL, expected_freq_hz, real_freq_hz);
+    if (ret == ESP_OK && apll_in_use && *real_freq_hz != handle->sclk_hz) {
+        operation->frequency_changed = true;
     }
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "APLL is occupied already, it is working at %"PRIu32" Hz while the expected frequency is %"PRIu32" Hz", real_freq, expt_freq);
-        ESP_LOGW(TAG, "Trying to work at %"PRIu32" Hz...", real_freq);
+    if (ret == ESP_OK) {
+        operation->frequency_hz = *real_freq_hz;
     }
-    ESP_LOGD(TAG, "APLL expected frequency is %"PRIu32" Hz, real frequency is %"PRIu32" Hz", expt_freq, real_freq);
-    return real_freq;
+    ESP_LOGD(TAG, "APLL expected frequency is %"PRIu64" Hz, real frequency is %"PRIu32" Hz",
+             expected_freq_hz, *real_freq_hz);
+    return ret;
 }
 #endif
 
-uint32_t i2s_get_source_clk_freq(i2s_clock_src_t clk_src, uint32_t mclk_freq_hz)
+esp_err_t i2s_resolve_source_clk_freq(i2s_chan_handle_t handle, i2s_clock_src_t clk_src,
+                                      bool clk_src_adjustable, uint32_t mclk_freq_hz,
+                                      i2s_apll_operation_t *operation, uint32_t *clk_freq_hz)
 {
-    uint32_t clk_freq = 0;
+    ESP_RETURN_ON_FALSE(handle && operation && clk_freq_hz,
+                        ESP_ERR_INVALID_ARG, TAG, "invalid argument");
 #if SOC_I2S_SUPPORTS_APLL
     if (clk_src == I2S_CLK_SRC_APLL) {
-        return i2s_set_get_apll_freq(mclk_freq_hz);
+        return i2s_resolve_apll_freq(handle, mclk_freq_hz, clk_src_adjustable, operation, clk_freq_hz);
     }
 #endif
+    if (clk_src_adjustable) {
+        ESP_LOGW(TAG, "adjustable clock source is only supported for APLL; ignoring");
+    }
 #ifdef I2S_LL_DEFAULT_CLK_SRC
     if (clk_src == I2S_CLK_SRC_DEFAULT) {
         clk_src = I2S_LL_DEFAULT_CLK_SRC;
     }
 #endif
-    esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clk_freq);
-    return clk_freq;
+    esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_CACHED, clk_freq_hz);
+    ESP_RETURN_ON_FALSE(*clk_freq_hz, ESP_ERR_INVALID_STATE, TAG, "clock source has no configured frequency");
+    return ESP_OK;
+}
+
+void i2s_apll_operation_finish(i2s_chan_handle_t handle, i2s_apll_operation_t *operation, bool success)
+{
+#if SOC_I2S_SUPPORTS_APLL
+    if (operation->active && (success || operation->frequency_changed)) {
+        handle->apll_adjustable = operation->adjustable;
+        handle->sclk_hz = operation->frequency_hz;
+        if (!success) {
+            ESP_LOGW(TAG, "APLL frequency changed to %"PRIu32" Hz, but I2S clock configuration failed; "
+                     "reconfigure the I2S clock",
+                     operation->frequency_hz);
+        }
+    }
+#else
+    (void)handle;
+    (void)success;
+#endif
+    *operation = (i2s_apll_operation_t) {};
 }
 
 #if SOC_GDMA_SUPPORTED
@@ -613,15 +925,16 @@ static bool i2s_dma_rx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_
     BaseType_t need_yield1 = 0;
     BaseType_t need_yield2 = 0;
     BaseType_t user_need_yield = 0;
-    lldesc_t *finish_desc;
     uint32_t dummy;
+    uint32_t finish_index = handle->dma.link_index;
+    void *finish_buf = gdma_link_get_buffer(handle->dma.dma_link, finish_index);
 
-    finish_desc = (lldesc_t *)event_data->rx_eof_desc_addr;
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-    esp_cache_msync((void *)finish_desc->buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_INVALIDATE);
-#endif
+    (void)dma_chan;
+    (void)event_data;
+    handle->dma.link_index = (finish_index + 1) % handle->dma.desc_num;
+    i2s_dma_buf_sync(handle, finish_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
     i2s_event_data_t evt = {
-        .dma_buf = (void *)finish_desc->buf,
+        .dma_buf = finish_buf,
         .size = handle->dma.buf_size,
     };
     if (handle->callbacks.on_recv) {
@@ -633,7 +946,7 @@ static bool i2s_dma_rx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_
             user_need_yield |= handle->callbacks.on_recv_q_ovf(handle, &evt, handle->user_data);
         }
     }
-    xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
+    xQueueSendFromISR(handle->msg_queue, &finish_buf, &need_yield2);
 
     return need_yield1 | need_yield2 | user_need_yield;
 }
@@ -644,11 +957,13 @@ static bool i2s_dma_tx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_
     BaseType_t need_yield1 = 0;
     BaseType_t need_yield2 = 0;
     BaseType_t user_need_yield = 0;
-    lldesc_t *finish_desc;
     uint32_t dummy;
+    uint32_t finish_index = handle->dma.link_index;
+    void *curr_buf = gdma_link_get_buffer(handle->dma.dma_link, finish_index);
 
-    finish_desc = (lldesc_t *)event_data->tx_eof_desc_addr;
-    void *curr_buf = (void *)finish_desc->buf;
+    (void)dma_chan;
+    (void)event_data;
+    handle->dma.link_index = (finish_index + 1) % handle->dma.desc_num;
     i2s_event_data_t evt = {
         .dma_buf = curr_buf,
         .size = handle->dma.buf_size,
@@ -659,12 +974,10 @@ static bool i2s_dma_tx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_
     if (handle->callbacks.on_sent) {
         user_need_yield |= handle->callbacks.on_sent(handle, &evt, handle->user_data);
     }
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
     /* Sync buffer after the callback in case users update the buffer in the callback */
     if (handle->dma.auto_clear_before_cb || handle->callbacks.on_sent) {
-        esp_cache_msync(curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        i2s_dma_buf_sync(handle, curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
-#endif
     if (xQueueIsQueueFullFromISR(handle->msg_queue)) {
         xQueueReceiveFromISR(handle->msg_queue, &dummy, &need_yield1);
         if (handle->callbacks.on_send_q_ovf) {
@@ -674,11 +987,9 @@ static bool i2s_dma_tx_callback(gdma_channel_handle_t dma_chan, gdma_event_data_
     }
     if (handle->dma.auto_clear_after_cb) {
         memset(curr_buf, 0, handle->dma.buf_size);
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-#endif
+        i2s_dma_buf_sync(handle, curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
-    xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
+    xQueueSendFromISR(handle->msg_queue, &curr_buf, &need_yield2);
 
     return need_yield1 | need_yield2 | user_need_yield;
 }
@@ -690,7 +1001,6 @@ static void i2s_dma_rx_callback(void *arg)
     BaseType_t need_yield1 = 0;
     BaseType_t need_yield2 = 0;
     BaseType_t user_need_yield = 0;
-    lldesc_t *finish_desc = NULL;
     i2s_event_data_t evt;
     i2s_chan_handle_t handle = (i2s_chan_handle_t)arg;
     uint32_t dummy;
@@ -702,8 +1012,11 @@ static void i2s_dma_rx_callback(void *arg)
     }
 
     if (handle && (status & I2S_LL_EVENT_RX_EOF)) {
-        i2s_hal_get_in_eof_des_addr(&(handle->controller->hal), (uint32_t *)&finish_desc);
-        evt.dma_buf = (void *)finish_desc->buf;
+        uint32_t finish_index = handle->dma.link_index;
+        void *finish_buf = gdma_link_get_buffer(handle->dma.dma_link, finish_index);
+        handle->dma.link_index = (finish_index + 1) % handle->dma.desc_num;
+        i2s_dma_buf_sync(handle, finish_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+        evt.dma_buf = finish_buf;
         evt.size = handle->dma.buf_size;
         if (handle->callbacks.on_recv) {
             user_need_yield |= handle->callbacks.on_recv(handle, &evt, handle->user_data);
@@ -715,7 +1028,7 @@ static void i2s_dma_rx_callback(void *arg)
                 user_need_yield |= handle->callbacks.on_recv_q_ovf(handle, &evt, handle->user_data);
             }
         }
-        xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
+        xQueueSendFromISR(handle->msg_queue, &finish_buf, &need_yield2);
     }
 
     if (need_yield1 || need_yield2 || user_need_yield) {
@@ -728,7 +1041,6 @@ static void i2s_dma_tx_callback(void *arg)
     BaseType_t need_yield1 = 0;
     BaseType_t need_yield2 = 0;
     BaseType_t user_need_yield = 0;
-    lldesc_t *finish_desc = NULL;
     i2s_event_data_t evt;
     i2s_chan_handle_t handle = (i2s_chan_handle_t)arg;
     uint32_t dummy;
@@ -740,8 +1052,9 @@ static void i2s_dma_tx_callback(void *arg)
     }
 
     if (handle && (status & I2S_LL_EVENT_TX_EOF)) {
-        i2s_hal_get_out_eof_des_addr(&(handle->controller->hal), (uint32_t *)&finish_desc);
-        void *curr_buf = (void *)finish_desc->buf;
+        uint32_t finish_index = handle->dma.link_index;
+        void *curr_buf = gdma_link_get_buffer(handle->dma.dma_link, finish_index);
+        handle->dma.link_index = (finish_index + 1) % handle->dma.desc_num;
         evt.dma_buf = curr_buf;
         evt.size = handle->dma.buf_size;
         // Auto clear the dma buffer before data sent
@@ -750,6 +1063,10 @@ static void i2s_dma_tx_callback(void *arg)
         }
         if (handle->callbacks.on_sent) {
             user_need_yield |= handle->callbacks.on_sent(handle, &evt, handle->user_data);
+        }
+        /* Sync buffer after the callback in case users update the buffer in the callback */
+        if (handle->dma.auto_clear_before_cb || handle->callbacks.on_sent) {
+            i2s_dma_buf_sync(handle, curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         }
         if (xQueueIsQueueFullFromISR(handle->msg_queue)) {
             xQueueReceiveFromISR(handle->msg_queue, &dummy, &need_yield1);
@@ -760,8 +1077,9 @@ static void i2s_dma_tx_callback(void *arg)
         // Auto clear the dma buffer after data sent
         if (handle->dma.auto_clear_after_cb) {
             memset(curr_buf, 0, handle->dma.buf_size);
+            i2s_dma_buf_sync(handle, curr_buf, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         }
-        xQueueSendFromISR(handle->msg_queue, &(finish_desc->buf), &need_yield2);
+        xQueueSendFromISR(handle->msg_queue, &curr_buf, &need_yield2);
     }
 
     if (need_yield1 || need_yield2 || user_need_yield) {
@@ -769,6 +1087,69 @@ static void i2s_dma_tx_callback(void *arg)
     }
 }
 #endif
+
+esp_err_t i2s_prepare_dma(i2s_chan_handle_t handle)
+{
+    I2S_NULL_POINTER_CHECK(TAG, handle);
+    if (handle->dma.dma_chan) {
+        return ESP_OK;
+    }
+
+    handle->dma.buf_alignment = 4;
+#if SOC_GDMA_SUPPORTED
+    esp_err_t ret = ESP_OK;
+    gdma_channel_alloc_config_t dma_cfg = {
+#if CONFIG_I2S_ISR_IRAM_SAFE
+        .flags.isr_cache_safe = true,
+#endif  // CONFIG_I2S_ISR_IRAM_SAFE
+    };
+    if (handle->dir == I2S_DIR_TX) {
+        ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_cfg, &handle->dma.dma_chan, NULL),
+                            TAG, "register tx dma channel error");
+    } else {
+        ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_cfg, NULL, &handle->dma.dma_chan),
+                            TAG, "register rx dma channel error");
+    }
+
+    gdma_transfer_config_t transfer_cfg = {
+        .max_data_burst_size = handle->dma.burst_size,
+        .access_ext_mem = handle->dma.buffer_in_psram,
+    };
+    ESP_GOTO_ON_ERROR(gdma_config_transfer(handle->dma.dma_chan, &transfer_cfg),
+                      err, TAG, "config dma transfer error");
+    gdma_channel_alignment_info_t alignment_info = {};
+    ESP_GOTO_ON_ERROR(gdma_get_channel_alignment_constraints(handle->dma.dma_chan, &alignment_info),
+                      err, TAG, "get DMA alignment constraints failed");
+    handle->dma.buf_alignment = handle->dma.buffer_in_psram ?
+                                alignment_info.ext_enc_mem_alignment : alignment_info.int_mem_alignment;
+#else  // I2S dedicated DMA (ESP32 / ESP32-S2)
+    if (handle->dma.buffer_in_psram) {
+#if I2S_LL_SUPPORT(DMA_EXT_MEM)
+        i2s_ll_dma_set_ext_mem_block_size(handle->controller->hal.dev, I2S_LL_DMA_EXT_MEM_ALIGNMENT);
+        if (handle->dir == I2S_DIR_TX) {
+            i2s_ll_dma_tx_enable_burst(handle->controller->hal.dev, true);
+        } else {
+            i2s_ll_dma_rx_enable_burst(handle->controller->hal.dev, true);
+        }
+        handle->dma.buf_alignment = I2S_LL_DMA_EXT_MEM_ALIGNMENT;
+#else  // ESP32 cannot use external memory for DMA
+        return ESP_ERR_NOT_SUPPORTED;
+#endif  // I2S_LL_SUPPORT(DMA_EXT_MEM)
+    }
+#endif  // SOC_GDMA_SUPPORTED
+
+    size_t cache_line_size = 0;
+    esp_cache_get_alignment(handle->dma.buffer_in_psram ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL, &cache_line_size);
+    handle->dma.buf_alignment = MAX(handle->dma.buf_alignment, cache_line_size);
+    return ESP_OK;
+
+#if SOC_GDMA_SUPPORTED
+err:
+    gdma_del_channel(handle->dma.dma_chan);
+    handle->dma.dma_chan = NULL;
+    return ret;
+#endif  // SOC_GDMA_SUPPORTED
+}
 
 #if SOC_GDMA_SUPPORTED
 /**
@@ -822,33 +1203,24 @@ esp_err_t i2s_init_dma_intr(i2s_chan_handle_t handle, int intr_flag)
         return ESP_ERR_NOT_SUPPORTED;
     }
 
-    /* Set GDMA config */
-    gdma_channel_alloc_config_t dma_cfg = {
-#if CONFIG_I2S_ISR_IRAM_SAFE
-        .flags.isr_cache_safe = true,
-#endif
-    };
+    ESP_RETURN_ON_ERROR(gdma_connect(handle->dma.dma_chan, trig), TAG, "connect dma channel error");
+
     if (handle->dir == I2S_DIR_TX) {
-        /* Register a new GDMA tx channel */
-        ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_cfg, &handle->dma.dma_chan, NULL), TAG, "Register tx dma channel error");
-        ESP_GOTO_ON_ERROR(gdma_connect(handle->dma.dma_chan, trig), err1, TAG, "Connect tx dma channel error");
         gdma_tx_event_callbacks_t cb = {.on_trans_eof = i2s_dma_tx_callback};
         /* Set callback function for GDMA, the interrupt is triggered by GDMA, then the GDMA ISR will call the  callback function */
-        ESP_GOTO_ON_ERROR(gdma_register_tx_event_callbacks(handle->dma.dma_chan, &cb, handle), err2, TAG, "Register tx callback failed");
+        ESP_GOTO_ON_ERROR(gdma_register_tx_event_callbacks(handle->dma.dma_chan, &cb, handle),
+                          err, TAG, "Register tx callback failed");
     } else {
-        /* Register a new GDMA rx channel */
-        ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_cfg, NULL, &handle->dma.dma_chan), TAG, "Register rx dma channel error");
-        ESP_GOTO_ON_ERROR(gdma_connect(handle->dma.dma_chan, trig), err1, TAG, "Connect rx dma channel error");
         gdma_rx_event_callbacks_t cb = {.on_recv_eof = i2s_dma_rx_callback};
         /* Set callback function for GDMA, the interrupt is triggered by GDMA, then the GDMA ISR will call the  callback function */
-        ESP_GOTO_ON_ERROR(gdma_register_rx_event_callbacks(handle->dma.dma_chan, &cb, handle), err2, TAG, "Register rx callback failed");
+        ESP_GOTO_ON_ERROR(gdma_register_rx_event_callbacks(handle->dma.dma_chan, &cb, handle),
+                          err, TAG, "Register rx callback failed");
     }
+    handle->dma.connected = true;
     return ret;
-err2:
+
+err:
     gdma_disconnect(handle->dma.dma_chan);
-err1:
-    gdma_del_channel(handle->dma.dma_chan);
-    handle->dma.dma_chan = NULL;
     return ret;
 }
 #else
@@ -984,7 +1356,7 @@ esp_err_t i2s_check_set_mclk(i2s_chan_handle_t handle, int id, int gpio_num, i2s
     if (g_i2s.controller[id]->mclk_out_hdl == NULL) {
         i2s_output_gpio_reserve(handle, gpio_num);
         soc_clkout_sig_id_t clkout_sig = is_apll ? CLKOUT_SIG_APLL : (is_i2s0 ? CLKOUT_SIG_I2S0 : CLKOUT_SIG_I2S1);
-        ESP_RETURN_ON_ERROR(esp_clock_output_start(clkout_sig, gpio_num, &(g_i2s.controller[id]->mclk_out_hdl)), TAG, "mclk configure failed");
+        ESP_RETURN_ON_ERROR(esp_clock_output_start(clkout_sig, gpio_num, &(g_i2s.controller[id]->mclk_out_hdl)), TAG, "mclk configure failed, note: only gpio 0/1/3 are supported on esp32");
     }
 #else
     ESP_RETURN_ON_FALSE(GPIO_IS_VALID_GPIO(gpio_num), ESP_ERR_INVALID_ARG, TAG, "mck_io_num invalid");
@@ -998,6 +1370,37 @@ esp_err_t i2s_check_set_mclk(i2s_chan_handle_t handle, int id, int gpio_num, i2s
     }
 #endif  // CONFIG_IDF_TARGET_ESP32
     ESP_LOGD(TAG, "MCLK is pinned to GPIO%d on I2S%d", gpio_num, id);
+    return ESP_OK;
+}
+
+static esp_err_t i2s_setup_channel(i2s_controller_t *i2s_obj, i2s_dir_t dir,
+                                   const i2s_chan_config_t *chan_cfg, uint32_t dma_burst_size,
+                                   i2s_chan_handle_t *ret_handle)
+{
+    i2s_destination_t dest = (dir == I2S_DIR_TX) ? chan_cfg->tx_destination : chan_cfg->rx_destination;
+    ESP_RETURN_ON_ERROR(i2s_register_channel(i2s_obj, dir, chan_cfg->dma_desc_num, dest == I2S_DESTINATION_DMA),
+                        TAG, "register I2S %s channel failed", dir == I2S_DIR_TX ? "tx" : "rx");
+
+    i2s_chan_handle_t chan = (dir == I2S_DIR_TX) ? i2s_obj->tx_chan : i2s_obj->rx_chan;
+    chan->role = chan_cfg->role;
+    chan->is_port_auto = chan_cfg->id == I2S_NUM_AUTO;
+    chan->intr_prio_flags = chan_cfg->intr_priority ? BIT(chan_cfg->intr_priority) : ESP_INTR_FLAG_LOWMED;
+    chan->dma.buffer_in_psram = chan_cfg->dma_buffer_in_psram;
+    chan->dma.desc_num = chan_cfg->dma_desc_num;
+    chan->dma.frame_num = chan_cfg->dma_frame_num;
+    chan->dma.burst_size = dma_burst_size;
+    chan->destination = dest;
+    if (dir == I2S_DIR_TX) {
+        chan->dma.auto_clear_after_cb = chan_cfg->auto_clear_after_cb;
+        chan->dma.auto_clear_before_cb = chan_cfg->auto_clear_before_cb;
+        chan->start = i2s_tx_channel_start;
+        chan->stop = i2s_tx_channel_stop;
+    } else {
+        chan->start = i2s_rx_channel_start;
+        chan->stop = i2s_rx_channel_stop;
+    }
+    *ret_handle = chan;
+    ESP_LOGD(TAG, "%s channel is registered on I2S%d successfully", dir == I2S_DIR_TX ? "tx" : "rx", i2s_obj->id);
     return ESP_OK;
 }
 
@@ -1017,13 +1420,39 @@ esp_err_t i2s_new_channel(const i2s_chan_config_t *chan_cfg, i2s_chan_handle_t *
     ESP_RETURN_ON_FALSE((chan_cfg->id >= 0 && chan_cfg->id < I2S_LL_GET(INST_NUM)) || chan_cfg->id == I2S_NUM_AUTO, ESP_ERR_INVALID_ARG, TAG, "invalid I2S port id");
     ESP_RETURN_ON_FALSE(chan_cfg->dma_desc_num >= 2, ESP_ERR_INVALID_ARG, TAG, "there should be at least 2 DMA buffers");
     ESP_RETURN_ON_FALSE(chan_cfg->intr_priority >= 0 && chan_cfg->intr_priority <= 7, ESP_ERR_INVALID_ARG, TAG, "intr_priority should be within 0~7");
+#if !(SOC_PSRAM_DMA_CAPABLE && CONFIG_SPIRAM)
+    // Reject PSRAM DMA buffers when the I2S DMA cannot access PSRAM or PSRAM is not enabled.
+    ESP_RETURN_ON_FALSE(!chan_cfg->dma_buffer_in_psram, ESP_ERR_NOT_SUPPORTED, TAG, "PSRAM DMA buffer is not supported");
+#endif
+#if CONFIG_I2S_ISR_IRAM_SAFE
+    // Reject auto clear for PSRAM DMA buffers with IRAM-safe ISR
+    ESP_RETURN_ON_FALSE(!(chan_cfg->dma_buffer_in_psram &&
+                          (chan_cfg->auto_clear_before_cb || chan_cfg->auto_clear_after_cb)),
+                        ESP_ERR_NOT_SUPPORTED, TAG, "auto clear is not supported for PSRAM DMA buffers with IRAM-safe ISR");
+#endif
+    uint32_t dma_burst_size = i2s_resolve_dma_burst_size(chan_cfg->dma_burst_size);
 #if !SOC_HAS(PAU)
     ESP_RETURN_ON_FALSE(!chan_cfg->allow_pd, ESP_ERR_NOT_SUPPORTED, TAG, "register back up is not supported");
 #endif
 
+    int id = chan_cfg->id;
+    if (tx_handle) {
+        ESP_RETURN_ON_FALSE(chan_cfg->tx_destination == I2S_DESTINATION_DMA || chan_cfg->tx_destination == I2S_DESTINATION_BT,
+                            ESP_ERR_INVALID_ARG, TAG, "invalid tx destination");
+    }
+    if (rx_handle) {
+        ESP_RETURN_ON_FALSE(chan_cfg->rx_destination == I2S_DESTINATION_DMA || chan_cfg->rx_destination == I2S_DESTINATION_BT,
+                            ESP_ERR_INVALID_ARG, TAG, "invalid rx destination");
+    }
+    if (id != I2S_NUM_AUTO) {
+        ESP_RETURN_ON_FALSE(!tx_handle || i2s_ll_is_destination_supported(id, chan_cfg->tx_destination),
+                            ESP_ERR_NOT_SUPPORTED, TAG, "tx destination is not supported on selected port");
+        ESP_RETURN_ON_FALSE(!rx_handle || i2s_ll_is_destination_supported(id, chan_cfg->rx_destination),
+                            ESP_ERR_NOT_SUPPORTED, TAG, "rx destination is not supported on selected port");
+    }
+
     esp_err_t ret = ESP_OK;
     i2s_controller_t *i2s_obj = NULL;
-    int id = chan_cfg->id;
     bool channel_found = false;
     uint8_t chan_search_mask = 0;
     chan_search_mask |= tx_handle ? I2S_DIR_TX : 0;
@@ -1032,13 +1461,21 @@ esp_err_t i2s_new_channel(const i2s_chan_config_t *chan_cfg, i2s_chan_handle_t *
     /* Channel will be registered to one i2s port automatically if id is I2S_NUM_AUTO
      * Otherwise, the channel will be registered to the specific port. */
     if (id == I2S_NUM_AUTO) {
+        bool has_supported_port = false;
         for (int i = 0; i < I2S_LL_GET(INST_NUM) && !channel_found; i++) {
+            bool tx_dest_supported = !tx_handle || i2s_ll_is_destination_supported(i, chan_cfg->tx_destination);
+            bool rx_dest_supported = !rx_handle || i2s_ll_is_destination_supported(i, chan_cfg->rx_destination);
+            if (!tx_dest_supported || !rx_dest_supported) {
+                continue;
+            }
+            has_supported_port = true;
             i2s_obj = i2s_acquire_controller_obj(i);
             if (!i2s_obj) {
                 continue;
             }
             channel_found = i2s_take_available_channel(i2s_obj, chan_search_mask);
         }
+        ESP_RETURN_ON_FALSE(has_supported_port, ESP_ERR_NOT_SUPPORTED, TAG, "requested destination is not supported");
         ESP_RETURN_ON_FALSE(i2s_obj, ESP_ERR_NOT_FOUND, TAG, "get i2s object failed");
     } else {
         i2s_obj = i2s_acquire_controller_obj(id);
@@ -1046,35 +1483,13 @@ esp_err_t i2s_new_channel(const i2s_chan_config_t *chan_cfg, i2s_chan_handle_t *
         channel_found = i2s_take_available_channel(i2s_obj, chan_search_mask);
     }
     ESP_GOTO_ON_FALSE(channel_found, ESP_ERR_NOT_FOUND, err, TAG, "no available channel found");
-    /* Register and specify the tx handle */
     if (tx_handle) {
-        ESP_GOTO_ON_ERROR(i2s_register_channel(i2s_obj, I2S_DIR_TX, chan_cfg->dma_desc_num),
+        ESP_GOTO_ON_ERROR(i2s_setup_channel(i2s_obj, I2S_DIR_TX, chan_cfg, dma_burst_size, tx_handle),
                           err, TAG, "register I2S tx channel failed");
-        i2s_obj->tx_chan->role = chan_cfg->role;
-        i2s_obj->tx_chan->is_port_auto = id == I2S_NUM_AUTO;
-        i2s_obj->tx_chan->intr_prio_flags = chan_cfg->intr_priority ? BIT(chan_cfg->intr_priority) : ESP_INTR_FLAG_LOWMED;
-        i2s_obj->tx_chan->dma.auto_clear_after_cb = chan_cfg->auto_clear_after_cb;
-        i2s_obj->tx_chan->dma.auto_clear_before_cb = chan_cfg->auto_clear_before_cb;
-        i2s_obj->tx_chan->dma.desc_num = chan_cfg->dma_desc_num;
-        i2s_obj->tx_chan->dma.frame_num = chan_cfg->dma_frame_num;
-        i2s_obj->tx_chan->start = i2s_tx_channel_start;
-        i2s_obj->tx_chan->stop = i2s_tx_channel_stop;
-        *tx_handle = i2s_obj->tx_chan;
-        ESP_LOGD(TAG, "tx channel is registered on I2S%d successfully", i2s_obj->id);
     }
-    /* Register and specify the rx handle */
     if (rx_handle) {
-        ESP_GOTO_ON_ERROR(i2s_register_channel(i2s_obj, I2S_DIR_RX, chan_cfg->dma_desc_num),
+        ESP_GOTO_ON_ERROR(i2s_setup_channel(i2s_obj, I2S_DIR_RX, chan_cfg, dma_burst_size, rx_handle),
                           err, TAG, "register I2S rx channel failed");
-        i2s_obj->rx_chan->role = chan_cfg->role;
-        i2s_obj->rx_chan->is_port_auto = id == I2S_NUM_AUTO;
-        i2s_obj->rx_chan->intr_prio_flags = chan_cfg->intr_priority ? BIT(chan_cfg->intr_priority) : ESP_INTR_FLAG_LOWMED;
-        i2s_obj->rx_chan->dma.desc_num = chan_cfg->dma_desc_num;
-        i2s_obj->rx_chan->dma.frame_num = chan_cfg->dma_frame_num;
-        i2s_obj->rx_chan->start = i2s_rx_channel_start;
-        i2s_obj->rx_chan->stop = i2s_rx_channel_stop;
-        *rx_handle = i2s_obj->rx_chan;
-        ESP_LOGD(TAG, "rx channel is registered on I2S%d successfully", i2s_obj->id);
     }
 
     if ((tx_handle != NULL) && (rx_handle != NULL)) {
@@ -1110,6 +1525,20 @@ esp_err_t i2s_del_channel(i2s_chan_handle_t handle)
     i2s_dir_t __attribute__((unused)) dir = handle->dir;
     bool is_bound = true;
 
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+    if (handle->i2s_intr) {
+        portENTER_CRITICAL(&g_i2s.spinlock);
+        i2s_ll_tx_enable_hw_fifo_sync(handle->controller->hal.dev, false);
+        i2s_ll_enable_interrupt(handle->controller->hal.dev, I2S_LL_TX_SYNC_INT_EVENT, false);
+        i2s_ll_tx_update(handle->controller->hal.dev);
+        handle->tx_fifo_sync_enabled = false;
+        portEXIT_CRITICAL(&g_i2s.spinlock);
+        esp_intr_disable(handle->i2s_intr);
+        esp_intr_free(handle->i2s_intr);
+        handle->i2s_intr = NULL;
+    }
+#endif
+
 #if SOC_I2S_SUPPORTS_APLL
     /* Must switch back to D2CLK on ESP32-S2,
     * because the clock of some registers are bound to APLL,
@@ -1143,7 +1572,7 @@ esp_err_t i2s_del_channel(i2s_chan_handle_t handle)
 #endif
     // since the enum value of default clock on some chips may be 0, we use mode to check if the clock is enabled
     if (handle->mode != I2S_COMM_MODE_NONE) {
-        esp_clk_tree_enable_src((soc_module_clk_t)clk_src, false);
+        esp_clk_tree_release_src((soc_module_clk_t)clk_src);
     }
 
 #if CONFIG_PM_ENABLE
@@ -1157,8 +1586,8 @@ esp_err_t i2s_del_channel(i2s_chan_handle_t handle)
     if (handle->mode_info) {
         free(handle->mode_info);
     }
-    if (handle->dma.desc) {
-        i2s_free_dma_desc(handle);
+    if (handle->dma.bufs) {
+        i2s_free_dma_resources(handle);
     }
     if (handle->msg_queue) {
         vQueueDeleteWithCaps(handle->msg_queue);
@@ -1176,7 +1605,10 @@ esp_err_t i2s_del_channel(i2s_chan_handle_t handle)
 #endif
     if (handle->dma.dma_chan) {
 #if SOC_GDMA_SUPPORTED
-        gdma_disconnect(handle->dma.dma_chan);
+        if (handle->dma.connected) {
+            gdma_disconnect(handle->dma.dma_chan);
+            handle->dma.connected = false;
+        }
         gdma_del_channel(handle->dma.dma_chan);
 #else
         esp_intr_free(handle->dma.dma_chan);
@@ -1264,14 +1696,16 @@ esp_err_t i2s_channel_enable(i2s_chan_handle_t handle)
 #endif
     handle->start(handle);
     handle->state = I2S_CHAN_STATE_RUNNING;
-    if (handle->dir == I2S_DIR_RX) {
+    if (handle->dir == I2S_DIR_RX && handle->msg_queue) {
         /* RX queue is reset when the channel is enabled
            In case legacy data received during disable process */
         xQueueReset(handle->msg_queue);
     }
     xSemaphoreGive(handle->mutex);
     /* Give the binary semaphore to enable reading / writing task */
-    xSemaphoreGive(handle->binary);
+    if (handle->binary) {
+        xSemaphoreGive(handle->binary);
+    }
 
     ESP_LOGD(TAG, "i2s %s channel enabled", handle->dir == I2S_DIR_TX ? "tx" : "rx");
     return ret;
@@ -1293,12 +1727,14 @@ esp_err_t i2s_channel_disable(i2s_chan_handle_t handle)
     /* Waiting for reading/wrinting operation quit
      * It should be acquired before assigning the pointer to NULL,
      * otherwise may cause NULL pointer panic while reading/writing threads haven't release the lock */
-    xSemaphoreTake(handle->binary, portMAX_DELAY);
+    if (handle->binary) {
+        xSemaphoreTake(handle->binary, portMAX_DELAY);
+    }
     /* Reset the descriptor pointer */
     handle->dma.curr_ptr = NULL;
     handle->dma.rw_pos = 0;
     handle->stop(handle);
-    if (handle->dir == I2S_DIR_TX) {
+    if (handle->dir == I2S_DIR_TX && handle->msg_queue) {
         /* TX queue is reset when the channel is disabled
            In case the queue is wrongly reset after preload the data */
         xQueueReset(handle->msg_queue);
@@ -1319,6 +1755,8 @@ esp_err_t i2s_channel_preload_data(i2s_chan_handle_t tx_handle, const void *src,
 {
     I2S_NULL_POINTER_CHECK(TAG, tx_handle);
     ESP_RETURN_ON_FALSE(tx_handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "this channel is not tx channel");
+    ESP_RETURN_ON_FALSE(I2S_CHANNEL_USES_DMA(tx_handle), ESP_ERR_NOT_SUPPORTED, TAG,
+                        "preload requires the DMA memory data path on this channel");
     ESP_RETURN_ON_FALSE(tx_handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, TAG, "data can only be preloaded when the channel is READY");
 
     uint8_t *data_ptr = (uint8_t *)src;
@@ -1333,10 +1771,10 @@ esp_err_t i2s_channel_preload_data(i2s_chan_handle_t tx_handle, const void *src,
         xQueueReset(tx_handle->msg_queue);
         /* Push the rest of descriptors to the queue */
         for (int i = 1; i < tx_handle->dma.desc_num; i++) {
-            ESP_GOTO_ON_FALSE(xQueueSend(tx_handle->msg_queue, &(tx_handle->dma.desc[i]->buf), 0) == pdTRUE,
+            ESP_GOTO_ON_FALSE(xQueueSend(tx_handle->msg_queue, &tx_handle->dma.bufs[i], 0) == pdTRUE,
                               ESP_FAIL, err, TAG, "Failed to push the descriptor to the queue");
         }
-        tx_handle->dma.curr_ptr = (void *)tx_handle->dma.desc[0]->buf;
+        tx_handle->dma.curr_ptr = tx_handle->dma.bufs[0];
         tx_handle->dma.rw_pos = 0;
     }
 
@@ -1356,9 +1794,7 @@ esp_err_t i2s_channel_preload_data(i2s_chan_handle_t tx_handle, const void *src,
         }
         /* Load the data from the last loaded position */
         memcpy((uint8_t *)(tx_handle->dma.curr_ptr + tx_handle->dma.rw_pos), data_ptr, bytes_can_load);
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(tx_handle->dma.curr_ptr, tx_handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-#endif
+        i2s_dma_buf_sync(tx_handle, tx_handle->dma.curr_ptr, tx_handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         data_ptr += bytes_can_load;             // Move forward the data pointer
         total_loaded_bytes += bytes_can_load;   // Add to the total loaded bytes
         remain_bytes -= bytes_can_load;         // Update the remaining bytes to be loaded
@@ -1376,6 +1812,8 @@ esp_err_t i2s_channel_write(i2s_chan_handle_t handle, const void *src, size_t si
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);
     ESP_RETURN_ON_FALSE(handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "this channel is not tx channel");
+    ESP_RETURN_ON_FALSE(I2S_CHANNEL_USES_DMA(handle), ESP_ERR_NOT_SUPPORTED, TAG,
+                        "i2s_channel_write is unavailable when the DMA memory path is not selected");
 
     esp_err_t ret = ESP_OK;
     char *data_ptr;
@@ -1408,9 +1846,7 @@ esp_err_t i2s_channel_write(i2s_chan_handle_t handle, const void *src, size_t si
             bytes_can_write = size;
         }
         memcpy(data_ptr, src_byte, bytes_can_write);
-#if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
-        esp_cache_msync(handle->dma.curr_ptr, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-#endif
+        i2s_dma_buf_sync(handle, handle->dma.curr_ptr, handle->dma.buf_size, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         size -= bytes_can_write;
         src_byte += bytes_can_write;
         handle->dma.rw_pos += bytes_can_write;
@@ -1427,6 +1863,8 @@ esp_err_t i2s_channel_read(i2s_chan_handle_t handle, void *dest, size_t size, si
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);
     ESP_RETURN_ON_FALSE(handle->dir == I2S_DIR_RX, ESP_ERR_INVALID_ARG, TAG, "this channel is not rx channel");
+    ESP_RETURN_ON_FALSE(I2S_CHANNEL_USES_DMA(handle), ESP_ERR_NOT_SUPPORTED, TAG,
+                        "i2s_channel_read is unavailable when the DMA memory path is not selected");
 
     esp_err_t ret = ESP_OK;
     uint8_t *data_ptr;
@@ -1440,7 +1878,7 @@ esp_err_t i2s_channel_read(i2s_chan_handle_t handle, void *dest, size_t size, si
     ESP_RETURN_ON_FALSE(xSemaphoreTake(handle->binary, pdMS_TO_TICKS(timeout_ms)) == pdTRUE, ESP_ERR_INVALID_STATE, TAG, "The channel is not enabled");
     while (size > 0 && handle->state == I2S_CHAN_STATE_RUNNING) {
         /* Acquire the new DMA buffer while:
-         * 1. The current buffer is fully filled
+         * 1. The current buffer is fully read
          * 2. The current buffer is not set
          * 3. The queue is almost full, i.e., the curr_ptr is nearly to be invalid
          */
@@ -1487,6 +1925,8 @@ esp_err_t i2s_channel_tune_rate(i2s_chan_handle_t handle, const i2s_tuning_confi
         xSemaphoreTake(handle->mutex, portMAX_DELAY);
         goto result;
     }
+    ESP_RETURN_ON_FALSE(handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, TAG,
+                        "I2S channel must be disabled before tuning the rate");
     ESP_RETURN_ON_FALSE(tune_cfg->max_delta_mclk >= tune_cfg->min_delta_mclk, ESP_ERR_INVALID_ARG, TAG, "invalid range");
 
     uint32_t new_mclk = 0;
@@ -1512,16 +1952,18 @@ esp_err_t i2s_channel_tune_rate(i2s_chan_handle_t handle, const i2s_tuning_confi
         new_mclk = handle->origin_mclk_hz + tune_cfg->min_delta_mclk;
     }
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    uint32_t new_sclk_hz = handle->sclk_hz;
+    i2s_apll_operation_t apll_operation = {};
 #if SOC_I2S_SUPPORTS_APLL
     if (handle->clk_src == I2S_CLK_SRC_APLL) {
-        ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, false), err, TAG, "APLL disable failed");
-        handle->sclk_hz = i2s_set_get_apll_freq(new_mclk);
-        ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src(SOC_MOD_CLK_APLL, true), err, TAG, "APLL enable failed");
+        ESP_GOTO_ON_ERROR(i2s_resolve_source_clk_freq(handle, I2S_CLK_SRC_APLL, handle->apll_adjustable, new_mclk,
+                                                      &apll_operation, &new_sclk_hz),
+                          err, TAG, "APLL frequency update failed");
     }
 #endif
     /* Calculate the new divider */
     hal_utils_clk_div_t mclk_div = {};
-    i2s_hal_calc_mclk_precise_division(handle->sclk_hz, new_mclk, &mclk_div);
+    i2s_hal_calc_mclk_precise_division(new_sclk_hz, new_mclk, &mclk_div);
     /* mclk_div = sclk / mclk >= 2 */
     if (mclk_div.integer < 2) {
         ret = ESP_ERR_INVALID_ARG;
@@ -1542,91 +1984,207 @@ esp_err_t i2s_channel_tune_rate(i2s_chan_handle_t handle, const i2s_tuning_confi
         }
     }
     /* Save the current mclk frequency */
-    handle->curr_mclk_hz = (uint32_t)(((uint64_t)handle->sclk_hz * mclk_div.denominator) /
+    handle->sclk_hz = new_sclk_hz;
+#if SOC_I2S_SUPPORTS_APLL
+    if (handle->clk_src == I2S_CLK_SRC_APLL) {
+        i2s_apll_operation_finish(handle, &apll_operation, true);
+    }
+#endif
+    handle->curr_mclk_hz = (uint32_t)(((uint64_t)new_sclk_hz * mclk_div.denominator) /
                                       (mclk_div.integer * mclk_div.denominator + mclk_div.numerator));
 result:
     /* Assign the information if needed */
     if (tune_info) {
         tune_info->curr_mclk_hz = handle->curr_mclk_hz;
         tune_info->delta_mclk_hz = (int32_t)handle->curr_mclk_hz - (int32_t)handle->origin_mclk_hz;
-        uint32_t tot_size = handle->dma.buf_size * handle->dma.desc_num;
-        uint32_t used_size = 0;
-        if (handle->dir == I2S_DIR_TX) {
-            used_size = uxQueueSpacesAvailable(handle->msg_queue) * handle->dma.buf_size + handle->dma.rw_pos;
+        /* water_mark reflects DMA buffer occupancy. When this channel does not use the DMA memory path (e.g. Bluetooth), skip. */
+        if (I2S_CHANNEL_USES_DMA(handle)) {
+            uint32_t tot_size = handle->dma.buf_size * handle->dma.desc_num;
+            uint32_t used_size = 0;
+            if (handle->dir == I2S_DIR_TX) {
+                used_size = uxQueueSpacesAvailable(handle->msg_queue) * handle->dma.buf_size + handle->dma.rw_pos;
+            } else {
+                used_size = uxQueueMessagesWaiting(handle->msg_queue) * handle->dma.buf_size + handle->dma.buf_size - handle->dma.rw_pos;
+            }
+            tune_info->water_mark = used_size * 100 / tot_size;
         } else {
-            used_size = uxQueueMessagesWaiting(handle->msg_queue) * handle->dma.buf_size + handle->dma.buf_size - handle->dma.rw_pos;
+            tune_info->water_mark = 0;
         }
-        tune_info->water_mark = used_size * 100 / tot_size;
     }
     xSemaphoreGive(handle->mutex);
     return ret;
 
 err:
+    i2s_apll_operation_finish(handle, &apll_operation, false);
     xSemaphoreGive(handle->mutex);
     return ret;
 }
 
 #if SOC_I2S_SUPPORTS_TX_SYNC_CNT
-uint32_t i2s_sync_get_bclk_count(i2s_chan_handle_t tx_handle)
+__attribute__((always_inline))
+static inline esp_err_t i2s_check_tx_handle(i2s_chan_handle_t tx_handle)
 {
-    return i2s_ll_tx_get_bclk_sync_count(tx_handle->controller->hal.dev);
+    I2S_NULL_POINTER_CHECK(TAG, tx_handle);
+    ESP_RETURN_ON_FALSE(tx_handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "channel is not TX");
+    return ESP_OK;
 }
-
-uint32_t i2s_sync_get_fifo_count(i2s_chan_handle_t tx_handle)
-{
-    return i2s_ll_tx_get_fifo_sync_count(tx_handle->controller->hal.dev);
-}
-
-void i2s_sync_reset_bclk_count(i2s_chan_handle_t tx_handle)
-{
-    i2s_ll_tx_reset_bclk_sync_counter(tx_handle->controller->hal.dev);
-}
-
-void i2s_sync_reset_fifo_count(i2s_chan_handle_t tx_handle)
-{
-    i2s_ll_tx_reset_fifo_sync_counter(tx_handle->controller->hal.dev);
-}
-#endif  // SOC_I2S_SUPPORTS_TX_SYNC_CNT
 
 #if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
-uint32_t i2s_sync_get_fifo_sync_diff_count(i2s_chan_handle_t tx_handle)
+__attribute__((always_inline))
+static inline int32_t i2s_sign_extend_sync_diff(uint32_t diff)
 {
-    return i2s_ll_tx_get_fifo_sync_diff_count(tx_handle->controller->hal.dev);
-}
-
-void i2s_sync_reset_fifo_sync_diff_count(i2s_chan_handle_t tx_handle)
-{
-    i2s_ll_tx_reset_fifo_sync_diff_counter(tx_handle->controller->hal.dev);
-}
-
-esp_err_t i2s_sync_enable_hw_fifo_sync(i2s_chan_handle_t tx_handle, bool enable)
-{
-    if (tx_handle->dir == I2S_DIR_RX) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-    i2s_ll_tx_enable_hw_fifo_sync(tx_handle->controller->hal.dev, enable);
-    return ESP_OK;
-}
-
-esp_err_t i2s_sync_config_hw_fifo_sync(i2s_chan_handle_t tx_handle, const i2s_sync_fifo_sync_config_t *config)
-{
-    if (!(tx_handle && config)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (tx_handle->dir == I2S_DIR_RX) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-    if (config->sw_high_thresh < config->hw_low_thresh) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    i2s_ll_tx_set_etm_sync_ideal_cnt(tx_handle->controller->hal.dev, config->ideal_cnt);
-    i2s_ll_tx_set_fifo_sync_diff_conter_sw_threshold(tx_handle->controller->hal.dev, config->sw_high_thresh);
-    i2s_ll_tx_set_fifo_sync_diff_conter_hw_threshold(tx_handle->controller->hal.dev, config->hw_low_thresh);
-    i2s_ll_tx_set_hw_fifo_sync_suppl_mode(tx_handle->controller->hal.dev, (uint32_t)config->suppl_mode);
-    if (config->suppl_mode == I2S_SYNC_SUPPL_MODE_STATIC_DATA) {
-        i2s_ll_tx_set_hw_fifo_sync_static_suppl_data(tx_handle->controller->hal.dev, config->suppl_data);
-    }
-    return ESP_OK;
+    return (diff & BIT(30)) ? (int32_t)(diff | BIT(31)) : (int32_t)diff;
 }
 #endif
+
+esp_err_t i2s_channel_get_sync_count(i2s_chan_handle_t tx_handle, i2s_sync_count_t *count, bool reset)
+{
+    ESP_RETURN_ON_ERROR(i2s_check_tx_handle(tx_handle), TAG, "invalid TX handle");
+    I2S_NULL_POINTER_CHECK(TAG, count);
+    i2s_dev_t *hw = tx_handle->controller->hal.dev;
+    count->bclk_count = i2s_ll_tx_get_bclk_sync_count(hw);
+    count->fifo_count = i2s_ll_tx_get_fifo_sync_count(hw);
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+    count->diff_count = i2s_sign_extend_sync_diff(i2s_ll_tx_get_fifo_sync_diff_count(hw));
+#endif
+    if (reset) {
+        i2s_ll_tx_reset_bclk_sync_counter(hw);
+        i2s_ll_tx_reset_fifo_sync_counter(hw);
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+        i2s_ll_tx_reset_fifo_sync_diff_counter(hw);
+#endif
+    }
+    return ESP_OK;
+}
+
+#if SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+#if CONFIG_I2S_ISR_IRAM_SAFE
+#define I2S_ISR_HANDLER_ATTR    IRAM_ATTR
+#else
+#define I2S_ISR_HANDLER_ATTR
+#endif
+
+static I2S_ISR_HANDLER_ATTR void i2s_isr_handler(void *args)
+{
+    i2s_chan_handle_t handle = (i2s_chan_handle_t)args;
+    i2s_dev_t *hw = handle->controller->hal.dev;
+
+    if (i2s_ll_get_interrupt_status(hw, I2S_LL_TX_SYNC_INT_EVENT)) {
+        i2s_sync_event_data_t evt = {
+            .diff_count = i2s_sign_extend_sync_diff(i2s_ll_tx_get_fifo_sync_diff_count(hw)),
+        };
+        i2s_ll_tx_reset_fifo_sync_diff_counter(hw);
+        i2s_ll_clear_interrupt_status(hw, I2S_LL_TX_SYNC_INT_EVENT);
+
+        if (handle->on_tx_sync && handle->on_tx_sync(handle, &evt, handle->sync_user_data)) {
+            portYIELD_FROM_ISR();
+        }
+    }
+}
+
+static void s_i2s_channel_update_tx_sync_callback(i2s_chan_handle_t tx_handle,
+                                                  i2s_tx_fifo_sync_callback_t cb,
+                                                  void *user_data)
+{
+    portENTER_CRITICAL(&g_i2s.spinlock);
+    if (cb) {
+        tx_handle->on_tx_sync = cb;
+        tx_handle->sync_user_data = user_data;
+    } else {
+        tx_handle->on_tx_sync = NULL;
+        tx_handle->sync_user_data = NULL;
+    }
+    portEXIT_CRITICAL(&g_i2s.spinlock);
+}
+
+esp_err_t i2s_init_i2s_intr(i2s_chan_handle_t handle)
+{
+    esp_err_t ret = ESP_OK;
+    ESP_RETURN_ON_ERROR(i2s_check_tx_handle(handle), TAG, "invalid TX handle");
+    if (handle->i2s_intr) {
+        return ESP_OK;
+    }
+
+    i2s_dev_t *hw = handle->controller->hal.dev;
+    int port_id = handle->controller->id;
+    int intr_flag = handle->intr_prio_flags;
+#if CONFIG_I2S_ISR_IRAM_SAFE
+    intr_flag |= ESP_INTR_FLAG_IRAM;
+#endif
+
+    i2s_ll_enable_interrupt(hw, I2S_LL_TX_SYNC_INT_EVENT, false);
+    i2s_ll_clear_interrupt_status(hw, I2S_LL_TX_SYNC_INT_EVENT);
+    ret = esp_intr_alloc_intrstatus(i2s_periph_signal[port_id].irq, intr_flag,
+                                    (uint32_t)i2s_ll_get_interrupt_status_reg(hw),
+                                    I2S_LL_TX_SYNC_INT_EVENT, i2s_isr_handler, handle,
+                                    &handle->i2s_intr);
+    ESP_RETURN_ON_ERROR(ret, TAG, "allocate I2S interrupt failed");
+    ret = esp_intr_enable(handle->i2s_intr);
+    if (ret != ESP_OK) {
+        esp_intr_free(handle->i2s_intr);
+        handle->i2s_intr = NULL;
+        return ret;
+    }
+    return ESP_OK;
+}
+
+esp_err_t i2s_channel_config_tx_fifo_sync(i2s_chan_handle_t tx_handle, const i2s_tx_fifo_sync_config_t *config)
+{
+    esp_err_t ret = ESP_OK;
+    ESP_RETURN_ON_ERROR(i2s_check_tx_handle(tx_handle), TAG, "invalid TX handle");
+    I2S_NULL_POINTER_CHECK(TAG, config);
+    ESP_RETURN_ON_FALSE(config->auto_suppl_thresh < config->manual_suppl_thresh,
+                        ESP_ERR_INVALID_ARG, TAG,
+                        "auto_suppl_thresh must be smaller than manual_suppl_thresh");
+
+    i2s_dev_t *hw = tx_handle->controller->hal.dev;
+    xSemaphoreTake(tx_handle->mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&g_i2s.spinlock);
+    if (tx_handle->tx_fifo_sync_enabled) {
+        portEXIT_CRITICAL(&g_i2s.spinlock);
+        ESP_LOGE(TAG, "TX FIFO sync is enabled");
+        ret = ESP_ERR_INVALID_STATE;
+        goto err;
+    }
+    i2s_ll_tx_set_etm_sync_ideal_cnt(hw, config->ideal_cnt);
+    i2s_ll_tx_set_fifo_sync_diff_counter_manual_threshold(hw, config->manual_suppl_thresh);
+    i2s_ll_tx_set_fifo_sync_diff_counter_auto_threshold(hw, config->auto_suppl_thresh);
+    i2s_ll_tx_set_hw_fifo_sync_suppl_mode(hw, config->suppl_mode);
+    if (config->suppl_mode == I2S_TX_FIFO_SYNC_SUPPL_MODE_STATIC_DATA) {
+        i2s_ll_tx_set_hw_fifo_sync_static_suppl_data(hw, config->suppl_data);
+    }
+    i2s_ll_tx_enable_hw_fifo_sync(hw, false);
+    i2s_ll_tx_update(hw);
+    tx_handle->tx_fifo_sync_configured = true;
+    portEXIT_CRITICAL(&g_i2s.spinlock);
+err:
+    xSemaphoreGive(tx_handle->mutex);
+    return ret;
+}
+
+esp_err_t i2s_channel_enable_tx_fifo_sync(i2s_chan_handle_t tx_handle, bool enable)
+{
+    ESP_RETURN_ON_ERROR(i2s_check_tx_handle(tx_handle), TAG, "invalid TX handle");
+    ESP_RETURN_ON_FALSE(tx_handle->tx_fifo_sync_configured, ESP_ERR_INVALID_STATE, TAG, "TX FIFO sync not configured");
+    ESP_RETURN_ON_FALSE(tx_handle->i2s_intr, ESP_ERR_INVALID_STATE, TAG, "TX FIFO sync interrupt not initialized");
+
+    i2s_dev_t *hw = tx_handle->controller->hal.dev;
+    portENTER_CRITICAL(&g_i2s.spinlock);
+    i2s_ll_tx_enable_hw_fifo_sync(hw, enable);
+    if (enable) {
+        i2s_ll_tx_reset_fifo_sync_counter(hw);
+        i2s_ll_tx_reset_bclk_sync_counter(hw);
+        i2s_ll_tx_reset_fifo_sync_diff_counter(hw);
+        i2s_ll_clear_interrupt_status(hw, I2S_LL_TX_SYNC_INT_EVENT);
+        i2s_ll_enable_interrupt(hw, I2S_LL_TX_SYNC_INT_EVENT, true);
+    } else {
+        i2s_ll_enable_interrupt(hw, I2S_LL_TX_SYNC_INT_EVENT, false);
+    }
+    i2s_ll_tx_update(hw);
+    tx_handle->tx_fifo_sync_enabled = enable;
+    portEXIT_CRITICAL(&g_i2s.spinlock);
+    return ESP_OK;
+}
+
+#endif // SOC_I2S_SUPPORTS_TX_FIFO_SYNC
+#endif // SOC_I2S_SUPPORTS_TX_SYNC_CNT

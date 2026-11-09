@@ -40,6 +40,7 @@ extern "C" {
 #define TEMPERATURE_SENSOR_LL_ADC_FACTOR_INT     (4386)
 #define TEMPERATURE_SENSOR_LL_DAC_FACTOR_INT     (278800)
 #define TEMPERATURE_SENSOR_LL_OFFSET_FACTOR_INT  (205200)
+#define TEMPERATURE_SENSOR_LL_OFFSET_SCALE        (10)
 #define TEMPERATURE_SENSOR_LL_DENOMINATOR    (10000)
 #define TEMPERATURE_SENSOR_LL_MEASURE_MAX    (125)
 #define TEMPERATURE_SENSOR_LL_MEASURE_MIN    (-40)
@@ -117,6 +118,7 @@ static inline void temperature_sensor_ll_clk_sel(temperature_sensor_clk_src_t cl
  *
  * @param tsens_dac ``reg_val`` in table ``temperature_sensor_attributes``
  */
+__attribute__((always_inline))
 static inline void temperature_sensor_ll_set_range(uint32_t range)
 {
     REGI2C_WRITE_MASK(I2C_SAR_ADC, I2C_SARADC_TSENS_DAC, range);
@@ -140,6 +142,7 @@ static inline uint32_t temperature_sensor_ll_get_raw_value(void)
  *
  * @return uint32_t offset value
  */
+__attribute__((always_inline))
 static inline uint32_t temperature_sensor_ll_get_offset(void)
 {
     return REGI2C_READ_MASK(I2C_SAR_ADC, I2C_SARADC_TSENS_DAC);
@@ -277,7 +280,8 @@ static inline void temperature_sensor_ll_set_sample_rate(uint16_t rate)
  */
 static inline int temperature_sensor_ll_load_calib_param(void)
 {
-    return 0; // IDF-15117
+    uint32_t cal_temp = EFUSE.rd_mac_sys5.temp_calib;
+    return (cal_temp & BIT(9)) ? -(int)(cal_temp & ~BIT(9)) : (int)cal_temp;
 }
 
 /**

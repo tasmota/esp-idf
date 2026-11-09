@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -47,6 +47,7 @@ static void bt_app_dev_cb(esp_bt_dev_cb_event_t event, esp_bt_dev_cb_param_t *pa
 static void bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
 
 /* callback function for A2DP sink */
+static void bt_app_a2d_evt_hdl(uint16_t event, void *param);
 static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param);
 
 #if CONFIG_EXAMPLE_A2DP_SINK_STREAM_ENABLE
@@ -82,14 +83,63 @@ static void bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *pa
     bredr_app_gap_evt_def_hdl(event, param);
 }
 
+static void bt_app_a2d_evt_hdl(uint16_t event, void *param)
+{
+    esp_a2d_cb_param_t *a2d = (esp_a2d_cb_param_t *)(param);
+
+    switch (event) {
+    /* when a2dp init or deinit completed, this event comes */
+    case ESP_A2D_PROF_STATE_EVT: {
+        if (ESP_A2D_INIT_SUCCESS == a2d->a2d_prof_stat.init_state) {
+            ESP_LOGI(BT_AV_TAG, "A2DP PROF STATE: Init Complete");
+#if CONFIG_EXAMPLE_A2DP_SINK_STREAM_ENABLE
+#if CONFIG_EXAMPLE_A2DP_SINK_USE_EXTERNAL_CODEC == TRUE
+            esp_a2d_mcc_t mcc = {0};
+            mcc.type = ESP_A2D_MCT_SBC;
+            mcc.cie.sbc_info.samp_freq = ESP_A2D_SBC_CIE_SF_16K |
+                                         ESP_A2D_SBC_CIE_SF_32K |
+                                         ESP_A2D_SBC_CIE_SF_44K |
+                                         ESP_A2D_SBC_CIE_SF_48K;
+            mcc.cie.sbc_info.ch_mode = ESP_A2D_SBC_CIE_CH_MODE_MONO |
+                                       ESP_A2D_SBC_CIE_CH_MODE_DUAL_CHANNEL |
+                                       ESP_A2D_SBC_CIE_CH_MODE_STEREO |
+                                       ESP_A2D_SBC_CIE_CH_MODE_JOINT_STEREO;
+            mcc.cie.sbc_info.block_len = ESP_A2D_SBC_CIE_BLOCK_LEN_4 |
+                                         ESP_A2D_SBC_CIE_BLOCK_LEN_8 |
+                                         ESP_A2D_SBC_CIE_BLOCK_LEN_12 |
+                                         ESP_A2D_SBC_CIE_BLOCK_LEN_16;
+            mcc.cie.sbc_info.num_subbands = ESP_A2D_SBC_CIE_NUM_SUBBANDS_4 | ESP_A2D_SBC_CIE_NUM_SUBBANDS_8;
+            mcc.cie.sbc_info.alloc_mthd = ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR | ESP_A2D_SBC_CIE_ALLOC_MTHD_LOUDNESS;
+            mcc.cie.sbc_info.max_bitpool = 250;
+            mcc.cie.sbc_info.min_bitpool = 2;
+            ESP_ERROR_CHECK(esp_a2d_sink_register_stream_endpoint(0, &mcc));
+#endif
+#endif
+            /* Get the default value of the delay value */
+            esp_a2d_sink_get_delay_value();
+        } else {
+            ESP_LOGI(BT_AV_TAG, "A2DP PROF STATE: Deinit Complete");
+        }
+        break;
+    }
+    /* others */
+    default:
+        ESP_LOGE(BT_AV_TAG, "%s unhandled event: %d", __func__, event);
+        break;
+    }
+}
+
 static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
 {
     switch (event) {
-    case ESP_A2D_PROF_STATE_EVT:
+    case ESP_A2D_PROF_STATE_EVT: {
+        bt_app_work_dispatch(bt_app_a2d_evt_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL, NULL);
+        break;
+    }
     case ESP_A2D_SNK_PSC_CFG_EVT:
     case ESP_A2D_SNK_SET_DELAY_VALUE_EVT:
     case ESP_A2D_SNK_GET_DELAY_VALUE_EVT: {
-        bt_app_work_dispatch(bt_a2d_evt_def_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_a2d_evt_def_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL, NULL);
         break;
     }
     case ESP_A2D_CONNECTION_STATE_EVT:
@@ -98,12 +148,12 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
     case ESP_A2D_SEP_REG_STATE_EVT: {
 #if CONFIG_EXAMPLE_A2DP_SINK_STREAM_ENABLE
 #if CONFIG_EXAMPLE_A2DP_SINK_USE_EXTERNAL_CODEC == FALSE
-        bt_app_work_dispatch(bt_a2d_evt_int_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_a2d_evt_int_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL, NULL);
 #else
-        bt_app_work_dispatch(bt_a2d_evt_ext_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_a2d_evt_ext_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL, NULL);
 #endif
 #else
-        bt_app_work_dispatch(bt_a2d_evt_def_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_a2d_evt_def_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL, NULL);
 #endif
         break;
     }
@@ -130,16 +180,13 @@ static void bt_app_a2d_audio_data_cb(esp_a2d_conn_hdl_t conn_hdl, esp_a2d_audio_
 static void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
 {
     switch (event) {
-    case ESP_AVRC_CT_METADATA_RSP_EVT:
     case ESP_AVRC_CT_CONNECTION_STATE_EVT:
     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT:
     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
     case ESP_AVRC_CT_REMOTE_FEATURES_EVT:
     case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT:
-    case ESP_AVRC_CT_COVER_ART_STATE_EVT:
-    case ESP_AVRC_CT_COVER_ART_DATA_EVT:
     case ESP_AVRC_CT_PROF_STATE_EVT: {
-        bt_app_work_dispatch(bt_avrc_common_ct_evt_def_hdl, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_avrc_common_ct_evt_def_hdl, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL, NULL);
         break;
     }
     default:
@@ -155,13 +202,13 @@ static void bt_app_rc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t
     case ESP_AVRC_TG_PASSTHROUGH_CMD_EVT:
     case ESP_AVRC_TG_SET_PLAYER_APP_VALUE_EVT:
     case ESP_AVRC_TG_PROF_STATE_EVT: {
-        bt_app_work_dispatch(bt_avrc_common_tg_evt_def_hdl, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_avrc_common_tg_evt_def_hdl, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL, NULL);
         break;
     }
     case ESP_AVRC_TG_CONNECTION_STATE_EVT:
     case ESP_AVRC_TG_SET_ABSOLUTE_VOLUME_CMD_EVT:
     case ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT: {
-        bt_app_work_dispatch(bt_avrc_avc_tg_evt_hdl, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL);
+        bt_app_work_dispatch(bt_avrc_avc_tg_evt_hdl, event, param, sizeof(esp_avrc_tg_cb_param_t), NULL, NULL);
         break;
     }
     default:
@@ -197,32 +244,10 @@ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
 #if CONFIG_EXAMPLE_A2DP_SINK_USE_EXTERNAL_CODEC == FALSE
         esp_a2d_sink_register_data_callback(bt_app_a2d_data_cb);
 #else
-        esp_a2d_mcc_t mcc = {0};
-        mcc.type = ESP_A2D_MCT_SBC;
-        mcc.cie.sbc_info.samp_freq = ESP_A2D_SBC_CIE_SF_16K |
-                                     ESP_A2D_SBC_CIE_SF_32K |
-                                     ESP_A2D_SBC_CIE_SF_44K |
-                                     ESP_A2D_SBC_CIE_SF_48K;
-        mcc.cie.sbc_info.ch_mode = ESP_A2D_SBC_CIE_CH_MODE_MONO |
-                                   ESP_A2D_SBC_CIE_CH_MODE_DUAL_CHANNEL |
-                                   ESP_A2D_SBC_CIE_CH_MODE_STEREO |
-                                   ESP_A2D_SBC_CIE_CH_MODE_JOINT_STEREO;
-        mcc.cie.sbc_info.block_len = ESP_A2D_SBC_CIE_BLOCK_LEN_4 |
-                                     ESP_A2D_SBC_CIE_BLOCK_LEN_8 |
-                                     ESP_A2D_SBC_CIE_BLOCK_LEN_12 |
-                                     ESP_A2D_SBC_CIE_BLOCK_LEN_16;
-        mcc.cie.sbc_info.num_subbands = ESP_A2D_SBC_CIE_NUM_SUBBANDS_4 | ESP_A2D_SBC_CIE_NUM_SUBBANDS_8;
-        mcc.cie.sbc_info.alloc_mthd = ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR | ESP_A2D_SBC_CIE_ALLOC_MTHD_LOUDNESS;
-        mcc.cie.sbc_info.max_bitpool = 250;
-        mcc.cie.sbc_info.min_bitpool = 2;
-        /* register stream end point, only support SBC currently */
-        esp_a2d_sink_register_stream_endpoint(0, &mcc);
         esp_a2d_sink_register_audio_data_callback(bt_app_a2d_audio_data_cb);
 #endif
 #endif
 
-        /* Get the default value of the delay value */
-        esp_a2d_sink_get_delay_value();
         /* Get local device name */
         esp_bt_gap_get_device_name();
 
@@ -247,5 +272,5 @@ void app_main(void)
 
     bt_app_task_start_up();
     /* bluetooth device name, connection mode and profile set up */
-    bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
+    bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL, NULL);
 }

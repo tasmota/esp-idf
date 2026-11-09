@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  *  SPDX-License-Identifier: Apache-2.0 OR MIT
  */
@@ -581,7 +581,11 @@ typedef union {
          *  clear eof cnt
          */
         uint32_t dma_eof_num_clr:1;
-        uint32_t reserved_17:14;
+        uint32_t reserved_17:13;
+        /** apb_adc_reset_fsm : R/W; bitpos: [30]; default: 0;
+         *  reset_apb_adc_state
+         */
+        uint32_t apb_adc_reset_fsm:1;
         /** apb_adc_trans : R/W; bitpos: [31]; default: 0;
          *  enable apb_adc use spi_dma
          */
@@ -711,6 +715,7 @@ typedef struct {
     volatile adc_ctrl_date_reg_t ctrl_date;
 } adc_dev_t;
 
+extern adc_dev_t ADC;
 
 #ifndef __cplusplus
 _Static_assert(sizeof(adc_dev_t) == 0x400, "Invalid size of adc_dev_t structure");

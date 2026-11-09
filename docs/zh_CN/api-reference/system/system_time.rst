@@ -19,7 +19,7 @@
 - 高分辨率定时器
 - 无
 
-默认时钟源的时间精度最高，建议使用该配置。此外，你可以通过配置选项 :ref:`CONFIG_LIBC_TIME_SYSCALL` 来选择其他时钟源。
+默认时钟源的时间精度最高，建议使用该配置。此外，你可以通过配置选项 :menuitem:`CONFIG_LIBC_TIME_SYSCALL` 来选择其他时钟源。
 
 
 .. _rtc-clock-source-choice:
@@ -35,11 +35,11 @@ RTC 定时器有以下时钟源：
 
     :not esp32c2: - ``外部 32 kHz 无源晶振``：需要将一个 32 kHz 晶振连接到外部晶振管脚。频率稳定性更高，但在 Deep-sleep 模式下电流消耗略高（比默认模式高 1 μA）。管脚连接的相关信息请参考 `技术规格书 <{IDF_TARGET_DATASHEET_CN_URL}>`__。
 
-    - ``外部 32 kHz 有源晶振``：允许使用由外部电路产生的 32 kHz 时钟。外部时钟信号必须连接到外部振荡器管脚。输入振幅必须保证数字电路能够正确识别电平高低。测试结果表明，1.7 V 为高低电平的分界点，因此需确保输入波形的峰值大于 1.7 V，谷值小于 1.7 V。管脚连接的相关信息请参考 `技术规格书 <{IDF_TARGET_DATASHEET_CN_URL}>`__。
+    :not esp32p4 and not esp32s31: - ``外部 32 kHz 有源晶振``：允许使用由外部电路产生的 32 kHz 时钟。外部时钟信号必须连接到外部振荡器管脚。输入振幅必须保证数字电路能够正确识别电平高低。测试结果表明，1.7 V 为高低电平的分界点，因此需确保输入波形的峰值大于 1.7 V，谷值小于 1.7 V。管脚连接的相关信息请参考 `技术规格书 <{IDF_TARGET_DATASHEET_CN_URL}>`__。
 
     :esp32 or esp32s2 or esp32s3 or esp32c2 or esp32c3: - ``内置 8.5～17.5 MHz 振荡器（频率取决于芯片型号）的 256 分频时钟``：频率稳定性优于 ``内置 90～150 kHz RC 振荡器``，同样无需外部元件，但 Deep-sleep 模式下电流消耗更高（比默认模式高 5 μA）。
 
-时钟源的选择取决于系统时间精度要求和睡眠模式下的功耗要求。要修改 RTC 时钟源，请在项目配置中设置 :ref:`CONFIG_RTC_CLK_SRC`。
+时钟源的选择取决于系统时间精度要求和睡眠模式下的功耗要求。要修改 RTC 时钟源，请在项目配置中设置 :menuitem:`CONFIG_RTC_CLK_SRC`。
 
 想要了解外部无源晶振和有源晶振的更多布线要求，请参考 `硬件设计指南 <https://docs.espressif.com/projects/esp-hardware-design-guidelines/zh_CN/latest/{IDF_TARGET_PATH_NAME}>`_。
 
@@ -49,7 +49,7 @@ RTC 定时器有以下时钟源：
 在以下情况下使用默认的 **内部 RC 振荡器**：
 
 - 对于电池供电设备或能量受限的设备，最小化睡眠电流消耗。
-- 睡眠模式下不需要高时间精度，并且可以接受每天几秒的时间漂移。
+- 睡眠模式下不需要高时间精度，并且可以接受每小时几秒的时间漂移。
 - 优先考虑最小化外部元件和硬件复杂度。
 - 工作温度相对稳定（减少频率变化）。
 - 未使用低功耗蓝牙的节能模式，或仅用于传统广播/扫描而不建立连接。
@@ -154,7 +154,7 @@ lwIP SNTP 库可在下列任一同步模式下工作：
 
 设置时间同步时的回调函数，请使用配置结构体中的 :cpp:member:`esp_sntp_config::sync_cb` 字段。
 
-添加此初始化代码后，应用程序将定期同步时间。时间同步周期由 :ref:`CONFIG_LWIP_SNTP_UPDATE_DELAY` 设置（默认为一小时）。如需修改，请在项目配置中设置 :ref:`CONFIG_LWIP_SNTP_UPDATE_DELAY`。
+添加此初始化代码后，应用程序将定期同步时间。时间同步周期由 :menuitem:`CONFIG_LWIP_SNTP_UPDATE_DELAY` 设置（默认为一小时）。如需修改，请在项目配置中设置 :menuitem:`CONFIG_LWIP_SNTP_UPDATE_DELAY`。
 
 如需查看示例代码，请前往 :example:`protocols/sntp` 目录。该目录下的示例展示了如何基于 lwIP SNTP 库实现时间同步。
 

@@ -18,13 +18,16 @@
 #include "host/ble_gatt.h"
 
 #include "common/host.h"
+#include "common/audio_attr.h"
 
 #include "../../../lib/include/audio.h"
+
+LOG_MODULE_REGISTER(LEA_CAS, CONFIG_BT_ISO_LOG_LEVEL);
 
 #if CONFIG_BT_CAP_ACCEPTOR_SET_MEMBER
 extern struct ble_gatt_svc_def *cas_get_included_csis(void *csis_svc_p);
 
-static struct bt_gatt_service *inc_csis_svc;
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct bt_gatt_service *inc_csis_svc;
 
 static struct ble_gatt_svc_def *cas_inc_svcs[] = {
     NULL,
@@ -48,13 +51,8 @@ static struct ble_gatt_svc_def gatt_svc_cas[] = {
 int bt_le_nimble_cas_attr_handle_set(void)
 {
     struct bt_gatt_service *cas_svc;
-    uint16_t handle;
+    uint16_t handle = 0;
     int rc;
-
-    cas_svc = lib_cas_svc_get();
-    assert(cas_svc);
-
-    LOG_DBG("[N]CasAttrHdlSet[%u]", cas_svc->attr_count);
 
     rc = ble_gatts_find_svc(BLE_UUID16_DECLARE(BT_UUID_CAS_VAL), &handle);
     if (rc) {
@@ -62,7 +60,13 @@ int bt_le_nimble_cas_attr_handle_set(void)
         return rc;
     }
 
-    LOG_DBG("[N]Hdl[%u]", handle);
+    cas_svc = lib_cas_svc_get();
+    if (!cas_svc) {
+        LOG_ERR("[N]CasSvcGetFail");
+        return -ENODEV;
+    }
+
+    LOG_DBG("[N]CasAttrHdlSet[%u][%u]", handle, cas_svc->attr_count);
 
     for (size_t i = 0; i < cas_svc->attr_count; i++) {
         (cas_svc->attrs + i)->handle = handle + i;
@@ -113,10 +117,13 @@ int bt_le_nimble_cas_init(void *csis_svc_p)
     struct bt_gatt_service *cas_svc;
 
     cas_svc = lib_cas_svc_get();
-    assert(cas_svc);
+    if (!cas_svc) {
+        LOG_ERR("[N]CasSvcGetFail");
+        return -ENODEV;
+    }
 
     /* Insert CAS to the GATT db list */
-    rc = bt_gatt_service_register_safe(cas_svc);
+    rc = bt_gatt_service_register(cas_svc);
     if (rc) {
         LOG_ERR("[N]CasSvcRegFail[%d]", rc);
     }

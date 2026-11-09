@@ -25,8 +25,14 @@ menu "Example Configuration"
         config ESP_MAX_STA_CONN_AP
             int "Maximal STA connections"
             default 4
+            range 1 4 if IDF_TARGET_ESP32C2
+            range 1 15
             help
-                Max number of the STA connects to AP.
+                Maximum number of STAs allowed to connect to the soft-AP (wifi_config_t.ap.max_connection).
+                Upper bound matches ESP_WIFI_MAX_CONN_NUM in esp_wifi_types_native.h:
+                1-4 on ESP32-C2, 1-15 on other Wi-Fi chips.
+                Soft-AP and ESP-NOW share encryption keys; see Wi-Fi driver documentation
+                if ESP-NOW is enabled.
     endmenu
 
     menu "STA Configuration"
@@ -78,5 +84,29 @@ menu "Example Configuration"
                 bool "WAPI PSK"
         endchoice
 
+    endmenu
+
+    menu "DFS Channel Configuration"
+        depends on SOC_WIFI_SUPPORT_5G
+        comment "DFS Channel Configuration (5 GHz capable chips only)"
+
+        config ESP_WIFI_COUNTRY_CODE
+            string "Country code"
+            default "01"
+            help
+                Country code used to configure the regulatory domain (e.g. "US" for FCC, "DE" for CE,
+                "01" for world safe mode). The set of DFS channels depends on this regulatory domain.
+
+        config ESP_WIFI_DISABLE_DFS_CHANNELS
+            bool "Disable DFS channels"
+            default n
+            help
+                If enabled, the device (both STA and SoftAP) will not use any DFS channel of the
+                configured regulatory domain. As a result, STA cannot connect to an AP that operates
+                on a DFS channel. The non-DFS channels are derived by looking up the country in the
+                esp_wifi regulatory table, and the 5 GHz channel bitmask
+                (wifi_country_t.wifi_5g_channel_mask) is restricted to them with the country policy
+                switched to manual. This can be useful for certification setups (e.g. FCC, CE)
+                where DFS channels must be avoided.
     endmenu
 endmenu

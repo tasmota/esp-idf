@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -112,6 +112,81 @@ TEST_CASE("rmt bytes encoder", "[rmt]")
     printf("remove tx channel and encoder\r\n");
     TEST_ESP_OK(rmt_del_channel(tx_channel));
     TEST_ESP_OK(rmt_del_encoder(bytes_encoder));
+}
+
+TEST_CASE("rmt bits encoder", "[rmt]")
+{
+    rmt_tx_channel_config_t tx_channel_cfg = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = 1000000, // 1MHz resolution
+        .mem_block_symbols = SOC_RMT_MEM_WORDS_PER_CHANNEL,
+        .trans_queue_depth = 4,
+        .gpio_num = TEST_RMT_GPIO_NUM_B,
+    };
+    rmt_channel_handle_t tx_channel = NULL;
+    TEST_ESP_OK(rmt_new_tx_channel(&tx_channel_cfg, &tx_channel));
+    TEST_ESP_OK(rmt_enable(tx_channel));
+
+    printf("install bits encoder\r\n");
+    rmt_encoder_handle_t bits_encoder = NULL;
+    rmt_bits_encoder_config_t bits_enc_config = {
+        .bit0 = {
+            .level0 = 1,
+            .duration0 = 3, // T0H=3us
+            .level1 = 0,
+            .duration1 = 9, // T0L=9us
+        },
+        .bit1 = {
+            .level0 = 1,
+            .duration0 = 9, // T1H=9us
+            .level1 = 0,
+            .duration1 = 3, // T1L=3us
+        },
+        .flags.msb_first = 1,
+    };
+    TEST_ESP_OK(rmt_new_bits_encoder(&bits_enc_config, &bits_encoder));
+
+    uint8_t test_data[] = {0xAB, 0xDA}; // 10101011, 11011010
+    size_t num_bits1 = 8;
+    size_t num_bits2 = 5;
+    size_t num_bits3 = 13;
+
+    rmt_transmit_config_t transmit_config = {
+        .loop_count = 0, // no loop
+    };
+
+    printf("transmit bits pattern with MSB first(%zu bits)\r\n", num_bits1);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits1, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    printf("transmit bits pattern with MSB first(%zu bits)\r\n", num_bits2);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits2, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    printf("transmit bits pattern with MSB first(%zu bits)\r\n", num_bits3);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits3, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    // change to LSB first
+    printf("update bits encoder configuration to LSB first\r\n");
+    bits_enc_config.flags.msb_first = 0;
+    TEST_ESP_OK(rmt_bits_encoder_update_config(bits_encoder, &bits_enc_config));
+
+    printf("transmit bits pattern with LSB first(%zu bits)\r\n", num_bits1);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits1, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    printf("transmit bits pattern with LSB first(%zu bits)\r\n", num_bits2);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits2, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    printf("transmit bits pattern with LSB first(%zu bits)\r\n", num_bits3);
+    TEST_ESP_OK(rmt_transmit(tx_channel, bits_encoder, test_data, num_bits3, &transmit_config));
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+
+    TEST_ESP_OK(rmt_del_encoder(bits_encoder));
+    TEST_ESP_OK(rmt_disable(tx_channel));
+    TEST_ESP_OK(rmt_del_channel(tx_channel));
 }
 
 static void test_rmt_channel_single_trans(size_t mem_block_symbols, bool with_dma)
@@ -387,6 +462,96 @@ TEST_CASE("rmt finite loop transaction", "[rmt]")
 #if SOC_RMT_SUPPORT_DMA
     test_rmt_loop_trans(128, true);
 #endif
+}
+
+typedef struct {
+    uint32_t expected_symbols[3];
+    uint32_t done_count;
+} test_rmt_sequential_loop_context_t;
+
+TEST_RMT_CALLBACK_ATTR
+static bool test_rmt_sequential_loop_done_cb(rmt_channel_handle_t channel, const rmt_tx_done_event_data_t *edata, void *user_data)
+{
+    test_rmt_sequential_loop_context_t *ctx = (test_rmt_sequential_loop_context_t *)user_data;
+    TEST_ASSERT_LESS_THAN(3, ctx->done_count);
+    esp_rom_printf("test_rmt_sequential_loop_done_cb: done_count = %d, expected_symbols = %d, num_symbols = %d\r\n", ctx->done_count, ctx->expected_symbols[ctx->done_count], edata->num_symbols);
+    TEST_ASSERT_EQUAL(ctx->expected_symbols[ctx->done_count], edata->num_symbols);
+    ctx->done_count++;
+    return false;
+}
+
+TEST_CASE("rmt loop transaction followed by ping-pong transaction", "[rmt]")
+{
+    rmt_tx_channel_config_t tx_channel_cfg = {
+        .mem_block_symbols = SOC_RMT_MEM_WORDS_PER_CHANNEL * 2,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = 1000000, // 1MHz, 1 tick = 1us
+        .trans_queue_depth = 4,
+        .gpio_num = TEST_RMT_GPIO_NUM_A,
+        .intr_priority = 2,
+    };
+    printf("install tx channel\r\n");
+    rmt_channel_handle_t tx_channel = NULL;
+    TEST_ESP_OK(rmt_new_tx_channel(&tx_channel_cfg, &tx_channel));
+
+    printf("install copy encoder\r\n");
+    rmt_encoder_handle_t copy_encoder = NULL;
+    rmt_copy_encoder_config_t copy_encoder_config = {};
+    TEST_ESP_OK(rmt_new_copy_encoder(&copy_encoder_config, &copy_encoder));
+
+    uint32_t ping_pong_symbol_num = SOC_RMT_MEM_WORDS_PER_CHANNEL * 3 + 5;
+    test_rmt_sequential_loop_context_t cb_ctx = {
+        // +1 for the eof marker
+        .expected_symbols = {
+            ping_pong_symbol_num + 1,
+            2,
+            ping_pong_symbol_num + 1,
+        },
+    };
+    rmt_tx_event_callbacks_t cbs = {
+        .on_trans_done = test_rmt_sequential_loop_done_cb,
+    };
+    TEST_ESP_OK(rmt_tx_register_event_callbacks(tx_channel, &cbs, &cb_ctx));
+
+    printf("enable tx channel\r\n");
+    TEST_ESP_OK(rmt_enable(tx_channel));
+
+    rmt_symbol_word_t ping_pong_symbols[ping_pong_symbol_num];
+    memset(ping_pong_symbols, 0, sizeof(ping_pong_symbols));
+    for (int i = 0; i < ping_pong_symbol_num; i++) {
+        ping_pong_symbols[i] = (rmt_symbol_word_t) {
+            .level0 = 0,
+            .duration0 = 5,
+            .level1 = 1,
+            .duration1 = 5,
+        };
+    }
+    rmt_symbol_word_t loop_symbol = {
+        .level0 = 0,
+        .duration0 = 5,
+        .level1 = 1,
+        .duration1 = 5,
+    };
+
+    printf("queue ping-pong, loop, ping-pong transactions\r\n");
+    rmt_transmit_config_t transmit_config = {
+        .loop_count = 0,
+    };
+    TEST_ESP_OK(rmt_transmit(tx_channel, copy_encoder, ping_pong_symbols, sizeof(ping_pong_symbols), &transmit_config));
+    transmit_config.loop_count = 50;
+    TEST_ESP_OK(rmt_transmit(tx_channel, copy_encoder, &loop_symbol, sizeof(loop_symbol), &transmit_config));
+    transmit_config.loop_count = 0;
+    TEST_ESP_OK(rmt_transmit(tx_channel, copy_encoder, ping_pong_symbols, sizeof(ping_pong_symbols), &transmit_config));
+
+    printf("wait for queued transactions done\r\n");
+    TEST_ESP_OK(rmt_tx_wait_all_done(tx_channel, -1));
+    TEST_ASSERT_EQUAL(3, cb_ctx.done_count);
+
+    printf("disable tx channel\r\n");
+    TEST_ESP_OK(rmt_disable(tx_channel));
+    printf("remove tx channel and copy encoder\r\n");
+    TEST_ESP_OK(rmt_del_channel(tx_channel));
+    TEST_ESP_OK(rmt_del_encoder(copy_encoder));
 }
 
 #endif // SOC_RMT_SUPPORT_TX_LOOP_COUNT

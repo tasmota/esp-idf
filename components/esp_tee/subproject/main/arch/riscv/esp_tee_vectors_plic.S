@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,15 +16,10 @@
 #include "esp_tee_intr_defs.h"
 #include "sdkconfig.h"
 
-#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
-#include "esp_private/hw_stack_guard.h"
-#endif
+#include "esp_tee_asm_utils.inc"
 
-    .equ SAVE_REGS, 32
-    .equ CONTEXT_SIZE, (SAVE_REGS * 4)
     .equ panic_from_exception, tee_panic_from_exc
     .equ panic_from_isr, tee_panic_from_isr
-    .equ MAGIC, 0x1f
     .equ RTNVAL, 0xc0de
     .equ ECALL_U_MODE, 0x8
     .equ ECALL_M_MODE, 0xb
@@ -65,204 +60,13 @@ _ns_sp_min:
 _ns_sp_max:
     .word 0
 
-/**
- * STACK_GUARD_PRE_SWITCH
- * Stops HW stack-guard monitoring and optionally saves current bounds.
- *
- * Args:
- *   op_reg  – output register for “monitoring enabled” state (must be reused)
- *   to_save – 1=save bounds to memory, 0=skip saving
- *   sp_min  – symbol to store lower bound (if to_save=1)
- *   sp_max  – symbol to store upper bound (if to_save=1)
- *
- * Clobbers: t0, t1, t2, op_reg
- */
-.macro STACK_GUARD_PRE_SWITCH op_reg, to_save, sp_min, sp_max
-#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
-    /* Query if monitoring is enabled: result goes into \op_reg */
-    ESP_HW_STACK_GUARD_MONITOR_QUERY_CUR_CORE t2 \op_reg
-    beqz    \op_reg, 1f
+    .global _ns_int_rtn
+_ns_int_rtn:
+    .word 0
 
-    .if \to_save
-        /* Save current REE/U-mode stack bounds */
-        ESP_HW_STACK_GUARD_GET_BOUNDS_CUR_CORE t2 t0 t1
-        la t2, \sp_min
-        sw t0, 0(t2)
-        la t2, \sp_max
-        sw t1, 0(t2)
-    .endif
-
-    /* Stop monitoring */
-    ESP_HW_STACK_GUARD_MONITOR_STOP_CUR_CORE t0 t1
-    fence
-1:
-#endif
-.endm
-
-/**
- * STACK_GUARD_POST_SWITCH
- * Restores or applies new bounds after switching stacks, then restarts monitoring.
- *
- * Args:
- *   op_reg     – saved monitoring state from PRE_SWITCH
- *   to_restore – 1=restore from memory, 0=set static bounds
- *   sp_min     – saved bound (restore) or static lower bound (S-mode)
- *   sp_max     – saved bound (restore) or static upper bound (S-mode)
- *
- * Clobbers: t0, t1, t2
- */
-.macro STACK_GUARD_POST_SWITCH op_reg, to_restore, sp_min, sp_max
-#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
-    /* Check if monitoring was enabled (using saved state from op_reg) */
-    beqz    \op_reg, 1f
-
-    .if \to_restore
-        /* Restore saved REE/U-mode bounds from memory */
-        la  t2, \sp_min
-        lw  t0, 0(t2)
-        la  t2, \sp_max
-        lw  t1, 0(t2)
-    .else
-        /* Use new TEE/S-mode stack bounds (static symbols) */
-        la  t0, \sp_min
-        la  t1, \sp_max
-    .endif
-
-    /* Apply bounds to hardware stack guard */
-    ESP_HW_STACK_GUARD_SET_BOUNDS_CUR_CORE t2 t0 t1
-    /* Restart monitoring */
-    ESP_HW_STACK_GUARD_MONITOR_START_CUR_CORE t0 t1
-1:
-#endif
-.endm
-
-/* Macro which first allocates space on the stack to save general
- * purpose registers, and then save them. GP register is excluded.
- * The default size allocated on the stack is CONTEXT_SIZE, but it
- * can be overridden. */
-.macro save_general_regs cxt_size=CONTEXT_SIZE
-    addi sp, sp, -\cxt_size
-    sw   ra, RV_STK_RA(sp)
-    sw   tp, RV_STK_TP(sp)
-    sw   t0, RV_STK_T0(sp)
-    sw   t1, RV_STK_T1(sp)
-    sw   t2, RV_STK_T2(sp)
-    sw   s0, RV_STK_S0(sp)
-    sw   s1, RV_STK_S1(sp)
-    sw   a0, RV_STK_A0(sp)
-    sw   a1, RV_STK_A1(sp)
-    sw   a2, RV_STK_A2(sp)
-    sw   a3, RV_STK_A3(sp)
-    sw   a4, RV_STK_A4(sp)
-    sw   a5, RV_STK_A5(sp)
-    sw   a6, RV_STK_A6(sp)
-    sw   a7, RV_STK_A7(sp)
-    sw   s2, RV_STK_S2(sp)
-    sw   s3, RV_STK_S3(sp)
-    sw   s4, RV_STK_S4(sp)
-    sw   s5, RV_STK_S5(sp)
-    sw   s6, RV_STK_S6(sp)
-    sw   s7, RV_STK_S7(sp)
-    sw   s8, RV_STK_S8(sp)
-    sw   s9, RV_STK_S9(sp)
-    sw   s10, RV_STK_S10(sp)
-    sw   s11, RV_STK_S11(sp)
-    sw   t3, RV_STK_T3(sp)
-    sw   t4, RV_STK_T4(sp)
-    sw   t5, RV_STK_T5(sp)
-    sw   t6, RV_STK_T6(sp)
-.endm
-
-.macro save_mepc
-    csrr    t0, mepc
-    sw      t0, RV_STK_MEPC(sp)
-.endm
-
-.macro save_mcsr
-    csrr  t0, mstatus
-    sw    t0, RV_STK_MSTATUS(sp)
-    csrr  t0, mtvec
-    sw    t0, RV_STK_MTVEC(sp)
-    csrr  t0, mtval
-    sw    t0, RV_STK_MTVAL(sp)
-    csrr  t0, mhartid
-    sw    t0, RV_STK_MHARTID(sp)
-    csrr  t0, mcause
-    sw    t0, RV_STK_MCAUSE(sp)
-.endm
-
-/* Restore the general purpose registers (excluding gp) from the context on
- * the stack. The context is then deallocated. The default size is CONTEXT_SIZE
- * but it can be overridden. */
-.macro restore_general_regs cxt_size=CONTEXT_SIZE
-    lw   ra, RV_STK_RA(sp)
-    lw   tp, RV_STK_TP(sp)
-    lw   t0, RV_STK_T0(sp)
-    lw   t1, RV_STK_T1(sp)
-    lw   t2, RV_STK_T2(sp)
-    lw   s0, RV_STK_S0(sp)
-    lw   s1, RV_STK_S1(sp)
-    lw   a0, RV_STK_A0(sp)
-    lw   a1, RV_STK_A1(sp)
-    lw   a2, RV_STK_A2(sp)
-    lw   a3, RV_STK_A3(sp)
-    lw   a4, RV_STK_A4(sp)
-    lw   a5, RV_STK_A5(sp)
-    lw   a6, RV_STK_A6(sp)
-    lw   a7, RV_STK_A7(sp)
-    lw   s2, RV_STK_S2(sp)
-    lw   s3, RV_STK_S3(sp)
-    lw   s4, RV_STK_S4(sp)
-    lw   s5, RV_STK_S5(sp)
-    lw   s6, RV_STK_S6(sp)
-    lw   s7, RV_STK_S7(sp)
-    lw   s8, RV_STK_S8(sp)
-    lw   s9, RV_STK_S9(sp)
-    lw   s10, RV_STK_S10(sp)
-    lw   s11, RV_STK_S11(sp)
-    lw   t3, RV_STK_T3(sp)
-    lw   t4, RV_STK_T4(sp)
-    lw   t5, RV_STK_T5(sp)
-    lw   t6, RV_STK_T6(sp)
-    addi sp,sp, \cxt_size
-.endm
-
-.macro restore_mepc
-    lw      t0, RV_STK_MEPC(sp)
-    csrw    mepc, t0
-.endm
-
-.macro store_magic_general_regs
-    lui     ra, MAGIC
-    lui     tp, MAGIC
-    lui     t0, MAGIC
-    lui     t1, MAGIC
-    lui     t2, MAGIC
-    lui     s0, MAGIC
-    lui     s1, MAGIC
-    lui     a0, MAGIC
-    lui     a1, MAGIC
-    lui     a2, MAGIC
-    lui     a3, MAGIC
-    lui     a4, MAGIC
-    lui     a5, MAGIC
-    lui     a6, MAGIC
-    lui     a7, MAGIC
-    lui     s2, MAGIC
-    lui     s3, MAGIC
-    lui     s4, MAGIC
-    lui     s5, MAGIC
-    lui     s6, MAGIC
-    lui     s7, MAGIC
-    lui     s8, MAGIC
-    lui     s9, MAGIC
-    lui     s10, MAGIC
-    lui     s11, MAGIC
-    lui     t3, MAGIC
-    lui     t4, MAGIC
-    lui     t5, MAGIC
-    lui     t6, MAGIC
-.endm
+    .global _s_svc_lock
+_s_svc_lock:
+    .word 0
 
     .section .exception_vectors.text, "ax"
 
@@ -271,28 +75,22 @@ _ns_sp_max:
     .global _tee_panic_handler
     .type _tee_exception_handler, @function
 _tee_exception_handler:
-    /* Backup t0, t1 on the stack before using it */
-    addi    sp, sp, -16
-    sw      t0, 0(sp)
-    sw      t1, 4(sp)
+    /* Backup t0 before using it */
+    csrw    mscratch, t0
 
-    /* Read mcause */
+    /* Check whether the exception is an M-mode/U-mode ecall */
     csrr    t0, mcause
-    li      t1, VECTORS_MCAUSE_REASON_MASK
-    and     t0, t0, t1
+    andi    t0, t0, VECTORS_MCAUSE_REASON_MASK
+    addi    t0, t0, -ECALL_M_MODE
+    beqz    t0, _machine_ecall              /* M-mode ecall */
+    addi    t0, t0, (ECALL_M_MODE - ECALL_U_MODE)
+    beqz    t0, _user_ecall                 /* U-mode ecall */
 
-    /* Check whether the exception is an M-mode ecall */
-    li      t1, ECALL_M_MODE
-    beq     t0, t1, _machine_ecall
+    /* Validate a U-mode-origin sp before the handler stores/dumps through it */
+    VALIDATE_REE_SP RV_STK_FRMSZ, t0
 
-    /* Check whether the exception is an U-mode ecall */
-    li      t1, ECALL_U_MODE
-    beq     t0, t1, _user_ecall
-
-    /* Restore t0, t1 from the stack */
-    lw      t0, 0(sp)
-    lw      t1, 4(sp)
-    addi    sp, sp, 16
+    /* Restore t0 */
+    csrr    t0, mscratch
 
 _tee_panic_handler:
     /* Not an ecall, proceed to the panic handler */
@@ -347,6 +145,12 @@ _return_from_exception:
     restore_general_regs RV_STK_FRMSZ
     mret
 
+    /* Fault if the sp given by the REE is found to be out-of-bounds */
+_tee_sp_reject:
+    csrr    t0, mscratch
+    la      sp, _tee_stack
+    j       _tee_panic_handler
+
     .size  _tee_exception_handler, .-_tee_exception_handler
 
     /* ECALL handler. */
@@ -365,6 +169,9 @@ _machine_ecall:
     /* Check whether this is the first M-mode ecall (see esp_tee_init) and skip context restoration */
     lui     t0, ESP_TEE_M2U_SWITCH_MAGIC
     beq     a1, t0, _skip_ctx_restore
+
+    /* The secure service has returned - the REE may issue the next one */
+    SVC_LOCK_RELEASE t0
 
     /* Check if we need to restore the MXINT threshold register */
     la      t0, _s_intr_thresh
@@ -386,13 +193,14 @@ _skip_thresh_restore:
     STACK_GUARD_POST_SWITCH t3 1 _ns_sp_min _ns_sp_max
     fence
 
-    call syscall_exit_tee
-
     /* Backup the A0 register
      * This point is reached after an ecall is triggered after executing the secure service.
      * The A0 register contains the return value of the corresponding service.
      * After restoring the entire register context, we assign A0 the value back to the return value. */
     csrw    mscratch, a0
+
+    call syscall_exit_tee
+
     restore_general_regs
     csrrw   a0, mscratch, zero
 
@@ -406,19 +214,26 @@ _skip_ctx_restore:
     /* U-mode ecall handler */
 _user_ecall:
     /* Check whether we are returning after servicing an U-mode interrupt */
-    lui     t0, RTNVAL
-    csrrw   t1, mscratch, zero
-    beq     t0, t1, _rtn_from_ns_int
+    li      t0, NS_INT_RTN_MAGIC
+    bne     a0, t0, _svc_call_enter
+    la      t0, _ns_int_rtn
+    lw      t0, 0(t0)
+    bnez    t0, _rtn_from_ns_int
 
-    /* Restore t0, t1 from the stack */
-    lw      t0, 0(sp)
-    lw      t1, 4(sp)
-    addi    sp, sp, 16
+_svc_call_enter:
+    /* Reject an sp whose frame would be out-of-bounds */
+    VALIDATE_REE_SP CONTEXT_SIZE, t0, 0
+
+    /* Restore t0 */
+    csrr    t0, mscratch
 
     /* This point is reached when a secure service call is issued from the REE */
     /* Save register context and mepc */
     save_general_regs
     save_mepc
+
+    /* Claim the TEE before touching any of its state */
+    SVC_LOCK_ACQUIRE t0, _svc_call_reject
 
     # Check if REE is in a critical section
     li      t0, PLIC_UXINT_THRESH_REG
@@ -463,6 +278,10 @@ _process_ecall:
     /* This point is reached after servicing a U-mode interrupt occurred
      * while executing a secure service */
 _rtn_from_ns_int:
+    /* Consume the U-mode-interrupt-return sentinel (checked in _user_ecall). */
+    la      t0, _ns_int_rtn
+    sw      zero, 0(t0)
+
     /* Disable the U-mode interrupt delegation */
     csrwi    mideleg, 0
 
@@ -484,6 +303,16 @@ _rtn_from_ns_int:
     restore_mepc
     restore_general_regs
 
+    mret
+
+    /* Discard a service call that arrived while another one was active */
+_svc_call_reject:
+    addi    sp, sp, CONTEXT_SIZE    /* t0 is the only register clobbered past the context save */
+    csrr    t0, mepc
+    addi    t0, t0, 4               /* resume the REE after its ecall */
+    csrw    mepc, t0
+    csrr    t0, mscratch
+    li      a0, -1
     mret
 
     .size  _ecall_handler, .-_ecall_handler
@@ -544,8 +373,9 @@ _tee_ns_intr_handler:
     fence
 
     /* Set a flag to identify the next U2M switch would be after handling a U-mode interrupt */
-    lui     t0, RTNVAL
-    csrw    mscratch, t0
+    la      t0, _ns_int_rtn
+    li      t1, RTNVAL
+    sw      t1, 0(t0)
 
     /* Enable the U-mode interrupt delegation (except for the TEE secure interrupt) */
     li      t0, TEE_INTR_DELEG_MASK
@@ -568,6 +398,11 @@ _tee_ns_intr_handler:
     .global _tee_s_intr_handler
     .type _tee_s_intr_handler, @function
 _tee_s_intr_handler:
+    /* Check sp if trapped from U-mode */
+    csrw    mscratch, t0
+    VALIDATE_REE_SP RV_STK_FRMSZ, t0
+    csrr    t0, mscratch                                 /* restore the preempted t0 */
+
     /* Start by saving the general purpose registers and the PC value before
      * the interrupt happened. */
     save_general_regs RV_STK_FRMSZ

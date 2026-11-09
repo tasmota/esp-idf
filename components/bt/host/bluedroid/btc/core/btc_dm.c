@@ -168,6 +168,8 @@ void btc_dm_get_ble_local_keys(tBTA_DM_BLE_LOCAL_KEY_MASK *p_key_mask, BT_OCTET1
 }
 
 
+#if (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL == TRUE) || \
+    (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL == TRUE)
 static void btc_dm_remove_ble_bonding_keys(void)
 {
     bt_bdaddr_t bd_addr;
@@ -182,6 +184,16 @@ static void btc_dm_remove_ble_bonding_keys(void)
     btc_storage_remove_ble_dev_type(&bd_addr, false);
     btc_storage_remove_ble_bonding_keys(&bd_addr);
 }
+
+/* Role-specific erase policy. keep_bond (hardened re-pairing refusal) always wins. */
+static BOOLEAN btc_dm_ble_should_remove_bond_on_fail(BOOLEAN is_central)
+{
+    if (is_central) {
+        return (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL == TRUE);
+    }
+    return (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL == TRUE);
+}
+#endif
 
 #if BLE_SMP_BOND_NVS_FLASH
 static void btc_dm_save_ble_bonding_keys(void)
@@ -269,7 +281,7 @@ static void btc_dm_ble_auth_cmpl_evt (tBTA_DM_AUTH_CMPL *p_auth_cmpl)
         }
 
 #if BLE_SMP_BOND_NVS_FLASH
-        int addr_type;
+        int addr_type = BLE_ADDR_PUBLIC;
 
         if (btc_dm_cb.pairing_cb.ble.is_pid_key_rcvd) {
             // delete unused section in NVS
@@ -284,22 +296,49 @@ static void btc_dm_ble_auth_cmpl_evt (tBTA_DM_AUTH_CMPL *p_auth_cmpl)
 #endif
     } else {
         /*Map the HCI fail reason  to  bt status  */
+        BOOLEAN remove_bond = FALSE;
+
         switch (p_auth_cmpl->fail_reason) {
         case BTA_DM_AUTH_SMP_PAIR_AUTH_FAIL:
         case BTA_DM_AUTH_SMP_CONFIRM_VALUE_FAIL:
-            btc_dm_remove_ble_bonding_keys();
             status = BT_STATUS_AUTH_FAILURE;
+            remove_bond = TRUE;
             break;
         case BTA_DM_AUTH_SMP_PAIR_NOT_SUPPORT:
             status = BT_STATUS_AUTH_REJECTED;
             break;
         default:
-            BTC_TRACE_WARNING ("%s, remove bond in flash bd_addr: %08x%04x", __func__,
+            BTC_TRACE_WARNING ("%s, pairing failed for bd_addr: %08x%04x", __func__,
                                 (p_auth_cmpl->bd_addr[0] << 24) + (p_auth_cmpl->bd_addr[1] << 16) + (p_auth_cmpl->bd_addr[2] << 8) + p_auth_cmpl->bd_addr[3],
                                 (p_auth_cmpl->bd_addr[4] << 8) + p_auth_cmpl->bd_addr[5]);
-            btc_dm_remove_ble_bonding_keys();
             status =  BT_STATUS_FAIL;
+            remove_bond = TRUE;
             break;
+        }
+
+        if (p_auth_cmpl->keep_bond) {
+            /* Hardened re-pairing refused this procedure; never erase the baseline. */
+            BTC_TRACE_WARNING("%s, keeping bond after local refusal, fail_reason=%d, role=%s, bd_addr: %08x%04x",
+                              __func__, p_auth_cmpl->fail_reason,
+                              p_auth_cmpl->is_central ? "central" : "peripheral",
+                              (p_auth_cmpl->bd_addr[0] << 24) + (p_auth_cmpl->bd_addr[1] << 16) + (p_auth_cmpl->bd_addr[2] << 8) + p_auth_cmpl->bd_addr[3],
+                              (p_auth_cmpl->bd_addr[4] << 8) + p_auth_cmpl->bd_addr[5]);
+#if (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL == TRUE) || \
+    (BLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_PERIPHERAL == TRUE)
+        } else if (remove_bond && btc_dm_ble_should_remove_bond_on_fail(p_auth_cmpl->is_central)) {
+            BTC_TRACE_WARNING("remove NVS bond, rsn %d, role=%s, bd_addr: %08x%04x",
+                              p_auth_cmpl->fail_reason,
+                              p_auth_cmpl->is_central ? "central" : "peripheral",
+                              (p_auth_cmpl->bd_addr[0] << 24) + (p_auth_cmpl->bd_addr[1] << 16) + (p_auth_cmpl->bd_addr[2] << 8) + p_auth_cmpl->bd_addr[3],
+                              (p_auth_cmpl->bd_addr[4] << 8) + p_auth_cmpl->bd_addr[5]);
+            btc_dm_remove_ble_bonding_keys();
+#endif
+        } else if (remove_bond) {
+            BTC_TRACE_WARNING("%s, keeping bond after pairing fail, role=%s, unbond with esp_ble_remove_bond_device(), bd_addr: %08x%04x",
+                              __func__,
+                              p_auth_cmpl->is_central ? "central" : "peripheral",
+                              (p_auth_cmpl->bd_addr[0] << 24) + (p_auth_cmpl->bd_addr[1] << 16) + (p_auth_cmpl->bd_addr[2] << 8) + p_auth_cmpl->bd_addr[3],
+                              (p_auth_cmpl->bd_addr[4] << 8) + p_auth_cmpl->bd_addr[5]);
         }
 
     }
@@ -637,6 +676,37 @@ static void btc_dm_pm_mode_chg_evt(tBTA_DM_MODE_CHG *p_mode_chg)
     memcpy(param.mode_chg.bda, p_mode_chg->bd_addr, ESP_BD_ADDR_LEN);
     param.mode_chg.mode = p_mode_chg->mode;
     param.mode_chg.interval= p_mode_chg->interval;
+    memcpy(msg->arg, &param, sizeof(esp_bt_gap_cb_param_t));
+
+    ret = btc_inter_profile_call(msg);
+    osi_free(msg);
+
+    if (ret != BT_STATUS_SUCCESS) {
+        BTC_TRACE_ERROR("%s btc_inter_profile_call failed\n", __func__);
+    }
+}
+
+static void btc_dm_pm_ssr_evt(tBTA_DM_SSR *p_ssr)
+{
+    esp_bt_gap_cb_param_t param;
+    bt_status_t ret;
+    btc_msg_t *msg;
+
+    msg = (btc_msg_t *)osi_malloc(sizeof(btc_msg_t) + sizeof(esp_bt_gap_cb_param_t));
+    if (msg == NULL) {
+        BTC_TRACE_ERROR("%s malloc fail", __func__);
+        return;
+    }
+    msg->sig = BTC_SIG_API_CB;
+    msg->pid = BTC_PID_GAP_BT;
+    msg->act = BTC_GAP_BT_SSR_EVT;
+    memset(&param, 0, sizeof(param));
+    memcpy(param.sniff_subrating.bda, p_ssr->bd_addr, ESP_BD_ADDR_LEN);
+    param.sniff_subrating.stat = btc_hci_to_esp_status(p_ssr->hci_status);
+    param.sniff_subrating.max_tx_latency = p_ssr->max_tx_lat;
+    param.sniff_subrating.max_rx_latency = p_ssr->max_rx_lat;
+    param.sniff_subrating.min_remote_timeout = p_ssr->min_remote_to;
+    param.sniff_subrating.min_local_timeout = p_ssr->min_local_to;
     memcpy(msg->arg, &param, sizeof(esp_bt_gap_cb_param_t));
 
     ret = btc_inter_profile_call(msg);
@@ -1071,6 +1141,10 @@ void btc_dm_sec_cb_handler(btc_msg_t *msg)
     case BTA_DM_PM_MODE_CHG_EVT:
         BTC_TRACE_DEBUG("BTA_DM_PM_MODE_CHG_EVT mode:%d", p_data->mode_chg.mode);
         btc_dm_pm_mode_chg_evt(&p_data->mode_chg);
+        break;
+    case BTA_DM_PM_SSR_EVT:
+        BTC_TRACE_DEBUG("BTA_DM_PM_SSR_EVT");
+        btc_dm_pm_ssr_evt(&p_data->ssr);
         break;
 #endif /// BTA_DM_PM_INCLUDED == TRUE
 

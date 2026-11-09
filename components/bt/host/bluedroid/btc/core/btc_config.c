@@ -92,7 +92,7 @@ bool btc_config_init(void)
 
     config = config_new(CONFIG_FILE_PATH);
     if (!config) {
-        BTC_TRACE_WARNING("%s unable to load config file; starting unconfigured.\n", __func__);
+        BTC_TRACE_WARNING("%s unable to load/parse config; starting unconfigured without overwriting NVS.\n", __func__);
         config = config_new_empty();
         if (!config) {
             BTC_TRACE_ERROR("%s unable to allocate a config object.\n", __func__);
@@ -186,7 +186,7 @@ bool btc_config_get_str(const char *section, const char *key, char *value, int *
         return false;
     }
 
-    strlcpy(value, stored_value, *size_bytes);
+    BCM_STRLCPY_S(value, stored_value, *size_bytes);
     *size_bytes = strlen(value) + 1;
 
     return true;
@@ -277,6 +277,7 @@ bool btc_config_set_bin(const char *section, const char *key, const uint8_t *val
 
     config_set_string(config, section, key, str, false);
 
+    memset(str, 0, length * 2 + 1);
     osi_free(str);
     return true;
 }
@@ -345,14 +346,17 @@ int btc_config_clear(void)
 {
     assert(config != NULL);
 
-    config_free(config);
+    btc_config_lock();
 
+    config_free(config);
     config = config_new_empty();
     if (config == NULL) {
-        return false;
+        btc_config_unlock();
+        return -1;
     }
-    int ret = config_save(config, CONFIG_FILE_PATH);
-    return ret;
+    bool ret = config_save(config, CONFIG_FILE_PATH);
+    btc_config_unlock();
+    return ret ? 0 : -1;
 }
 
 void btc_config_lock(void)

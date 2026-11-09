@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -307,6 +307,7 @@ void print_uuid(esp_bt_uuid_t *uuid)
                        uuid->uuid.uuid128[13], uuid->uuid.uuid128[14], uuid->uuid.uuid128[15]);
     }
 }
+#endif /* !CONFIG_BT_NIMBLE_ENABLED */
 
 #if CONFIG_BT_HID_HOST_ENABLED
 static void handle_bt_device_result(struct disc_res_param *disc_res)
@@ -495,6 +496,13 @@ static void bt_gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_para
     case ESP_BT_GAP_MODE_CHG_EVT:
         ESP_LOGI(TAG, "BT GAP MODE_CHG_EVT mode:%d", param->mode_chg.mode);
         break;
+    case ESP_BT_GAP_SNIFF_SUBRATING_EVT:
+        ESP_LOGI(TAG, "BT GAP SNIFF_SUBRATING_EVT stat:%d tx:%"PRIu16" rx:%"PRIu16
+                 " rmt_to:%"PRIu16" loc_to:%"PRIu16,
+                 param->sniff_subrating.stat,
+                 param->sniff_subrating.max_tx_latency, param->sniff_subrating.max_rx_latency,
+                 param->sniff_subrating.min_remote_timeout, param->sniff_subrating.min_local_timeout);
+        break;
     case ESP_BT_GAP_PIN_REQ_EVT: {
         ESP_LOGI(TAG, "BT GAP PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
         if (param->pin_req.min_16_digit) {
@@ -654,7 +662,6 @@ static void ble_gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_p
         break;
     }
 }
-#endif
 
 static esp_err_t init_ble_gap(void)
 {

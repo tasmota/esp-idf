@@ -88,6 +88,10 @@ As not every transaction requires both writing and reading data, you can choose 
 
     Note that this feature shares the MSPI bus bandwidth (bus frequency * bus width), so the transmission bandwidth of the host to this device should be less than the PSRAM bandwidth, otherwise **data may be lost**, and the ``spi_slave_transmit`` function will return the :c:macro:`ESP_ERR_INVALID_STATE` error.
 
+    .. note::
+
+        When encryption is enabled, there are stricter alignment requirements for PSRAM buffer transfers, usually only supporting 16-byte alignment. For unaligned transfers, :c:macro:`ESP_ERR_INVALID_ARG` error will be returned.
+
 Driver Usage
 ------------
 
@@ -101,7 +105,7 @@ Driver Usage
 
     If transactions will be longer than 32 bytes, allow a DMA channel by setting the parameter ``dma_chan`` to the host device. Otherwise, set ``dma_chan`` to ``0``.
 
-- Before initiating transactions, fill one or more :cpp:type:`spi_slave_transaction_t` structs with the transaction parameters required. Either queue all transactions by calling the function :cpp:func:`spi_slave_queue_trans` and, at a later time, query the result by using the function :cpp:func:`spi_slave_get_trans_result`, or handle all requests individually by feeding them into :cpp:func:`spi_slave_transmit`. The latter two functions will be blocked until the Host has initiated and finished a transaction, causing the queued data to be sent and received.
+- Before initiating transactions, fill one or more :cpp:type:`spi_slave_transaction_t` structs with the transaction parameters required. Either queue all transactions by calling the function :cpp:func:`spi_slave_queue_trans` and, at a later time, query the result by using the function :cpp:func:`spi_slave_get_trans_result`, or handle all requests individually by feeding them into :cpp:func:`spi_slave_transmit`. The latter two functions will be blocked until the Host has initiated and finished a transaction, causing the queued data to be sent and received, or until ``ticks_to_wait`` expires.
 
 - (Optional) Enable/Disable driver functions: Slave driver supports disabling / enabling driver after it is initialized by calling to :cpp:func:`spi_slave_disable` / :cpp:func:`spi_slave_enable`, to be able to change clock or power config or sleep to save power. By default, the driver state is `enabled` after initialized.
 
@@ -116,6 +120,8 @@ Normally, the data that needs to be transferred to or from a Device is read or w
 The amount of data that the driver can read or write to the buffers is limited by :cpp:member:`spi_slave_transaction_t::length`. However, this member does not define the actual length of an SPI transaction. A transaction's length is determined by the clock and CS lines driven by the Host. The actual length of the transmission can be read only after a transaction is finished from the member :cpp:member:`spi_slave_transaction_t::trans_len`.
 
 If the length of the transmission is greater than the buffer length, only the initial number of bits specified in the :cpp:member:`spi_slave_transaction_t::length` member will be sent and received. In this case, :cpp:member:`spi_slave_transaction_t::trans_len` is set to :cpp:member:`spi_slave_transaction_t::length` instead of the actual transaction length. To meet the actual transaction length requirements, set :cpp:member:`spi_slave_transaction_t::length` to a value greater than the maximum :cpp:member:`spi_slave_transaction_t::trans_len` expected. If the transmission length is shorter than the buffer length, only the data equal to the length of the buffer will be transmitted.
+
+When you need to specify different TX/RX lengths in a single transaction, you can use the :cpp:member:`spi_slave_transaction_t::tx_length` and :cpp:member:`spi_slave_transaction_t::rx_length` members to specify the lengths of TX and RX respectively. This configuration is mutually exclusive with :cpp:member:`spi_slave_transaction_t::length`, and cannot be used simultaneously.
 
 GPIO Matrix and IO_MUX
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -171,7 +177,7 @@ GPIO Matrix and IO_MUX
 
     Most of chip's peripheral signals have direct connection to their dedicated IO_MUX pins. However, the signals can also be routed to any other available pins using the less direct GPIO matrix. If at least one signal is routed through the GPIO matrix, then all signals will be routed through it.
 
-    When an SPI Host is set to 80 MHz or lower frequencies, routing SPI pins via GPIO matrix will behave the same compared to routing them via IO_MUX.
+    When transferring data with the SPI slave on a clock frequency 40 MHz or lower, routing SPI pins via GPIO matrix will behave the same compared to routing them via IO_MUX.
 
     The IO_MUX pins for SPI buses are given below.
 
@@ -213,7 +219,7 @@ You can also configure a GPIO pin through which the Device will signal to the Ho
 SCLK Frequency Requirements
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40", esp32c6="40", esp32h2="32"}
+{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40", esp32c6="40", esp32h2="32", esp32c5="40", esp32c61="40", esp32h21="32"}
 
 The SPI slaves are designed to operate at up to {IDF_TARGET_MAX_FREQ} MHz. The data cannot be recognized or received correctly if the clock is too fast or does not have a 50% duty cycle.
 

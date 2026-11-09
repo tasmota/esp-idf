@@ -113,7 +113,7 @@ PPA 操作包括：
 
 注意，此公式对 FG 和 BG 的处理是不对称的。当 :math:`A_f = 1` 时， :math:`C_{out} = C_f`，:math:`A_{out} = 1`，这意味着如果 FG 图片的色彩模式为 ``PPA_BLEND_COLOR_MODE_RGB565`` 或 ``PPA_BLEND_COLOR_MODE_RGB888``，PPA 硬件会填充 Alpha 值为 255（即 :math:`A_f = 1`），叠加结果将与 FG 块相同。
 
-如果将 :cpp:member:`ppa_blend_oper_config_t::bg_ck_en` 或 :cpp:member:`ppa_blend_oper_config_t::fg_ck_en` 设置为 ``true``，则色键（color-key，也叫 Chroma-key）范围内的像素不会按照正常 Alpha Blending 流程输出。请查看 **{IDF_TARGET_NAME} 技术参考手册** > **像素处理加速器 (PPA)** > **功能描述** > **图层叠加 (BLEND)** [`PDF <{IDF_TARGET_TRM_EN_URL}#ppa>`__] 了解详细规则。
+如果将 :cpp:member:`ppa_blend_oper_config_t::bg_ck_en` 或 :cpp:member:`ppa_blend_oper_config_t::fg_ck_en` 设置为 ``true``，则色键（color-key，也叫 Chroma-key）范围内的像素不会按照正常 Alpha Blending 流程输出。请查看 **{IDF_TARGET_NAME} 技术参考手册** > **像素处理加速器 (PPA)** > **功能描述** > **图层叠加 (BLEND)** [`PDF <{IDF_TARGET_TRM_CN_URL}#ppa>`__] 了解详细规则。
 
 注意以下几点事项，避免在配置 :cpp:type:`ppa_blend_oper_config_t` 时产生混淆：
 
@@ -121,7 +121,7 @@ PPA 操作包括：
 
     - 执行叠加操作时，:cpp:member:`ppa_out_pic_blk_config_t::buffer` 与输入的 :cpp:member:`ppa_in_pic_blk_config_t::buffer` 之一可以是指向相同图片 buffer 的指针。
     - FG 和 BG 的块宽度/高度应相同，输出块的宽度/高度值应与之一致。
-    - 如果输入图片的色彩模式为 ``PPA_BLEND_COLOR_MODE_A4``，那么其 ``block_w`` 和 ``block_offset_x`` 字段必须为偶数。
+    - 如果输入图片的色彩模式为 ``PPA_BLEND_COLOR_MODE_A4`` 或 ``PPA_BLEND_COLOR_MODE_L4``，那么其 ``block_w`` 和 ``block_offset_x`` 字段必须为偶数。
 
 填充
 ~~~~
@@ -129,6 +129,13 @@ PPA 操作包括：
 调用 :cpp:func:`ppa_do_fill` 填充图片内部的目标块。
 
 :cpp:type:`ppa_trans_mode_t` 为可配置字段，适用于所有 PPA 操作 API。可以配置该字段，在调用 PPA 操作 API 时等待操作完成后再返回，或者在事务推送到内部队列后立即返回。
+
+颜色查找表 (CLUT)
+~~~~~~~~~~~~~~~~~
+
+PPA 支持索引图片（也叫调色板图片），即其像素存储的是颜色查找表 (CLUT) 的索引，而非颜色值。调用 :cpp:func:`ppa_set_color_lookup_table` 填充 CLUT，并通过 :cpp:type:`ppa_clut_id_t` 选择目标 CLUT。
+
+使用索引图片时，需在该操作的配置中选择索引色彩模式：L8 表示每个像素为一个 8 位索引，L4 表示每个像素为一个 4 位索引。索引图片只能作为输入图片。
 
 .. _ppa-buffer-alignment:
 
@@ -139,7 +146,7 @@ PPA 缓存区需要满足以下对齐要求，以确保存储器访问的正确�
 
 - 缓冲行对齐（仅针对输出缓存区）：
 
-    - ``out.buffer`` 地址和 ``out.buffer_size`` 大小必须与缓冲行大小对齐（请参阅 Kconfig 选项 :ref:`CONFIG_CACHE_L2_CACHE_LINE_SIZE`）。
+    - 如果输出缓冲区位于一个可缓存的内存区域，则 ``out.buffer`` 地址和 ``out.buffer_size`` 大小必须与缓冲行大小对齐。
 
 - 存储加密对齐（当存储加密启用且缓冲区位于外部存储空间时）：
 
@@ -175,7 +182,10 @@ PPA 操作作用于输入图片的目标块。因此，完成一次 PPA 事务�
 应用示例
 ^^^^^^^^^
 
-* :example:`peripherals/ppa/ppa_dsi` - 使用 DSI 显示屏的 PPA 示例。首先，该示例所使用的图像会被放大、逆时针旋转后复原、镜像后复原、缩小。其次，该图像将与一个透明度较低的全红图像叠加，`ESP32` 字样将被色键移除。最后，会在 `ESP32` 周围填充一个框。
+* :example:`peripherals/ppa/ppa_transform` - PPA transform 图像处理示例。嵌入的 RGB565 图像会经过 SRM 变换和 fill 边框处理，然后以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
+* :example:`peripherals/ppa/ppa_color_key` - PPA blend color key 示例。示例先在软件中生成居中的 RGB888 glow 前景，然后在嵌入式 RGB565 图片上演示两种 blend 效果：一种是通过 blend color key 将命中的红色 `ESP32` 文本像素替换为 glow，另一种是在保留命中文本的同时，将 glow 混合到非 key 区域。两种结果都会以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
+* :example:`peripherals/ppa/ppa_palette` - PPA 颜色查找表示例。示例将一个仪表盘界面绘制为 L8 索引图片，其像素存储的是界面元素的角色而非颜色，随后仅在每次 blend 前重新填充 CLUT，即可将整个界面切换为白天、夜间和高对比度三种主题。三张结果都会以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
+* :example:`peripherals/ppa/ppa_freetype` - PPA FreeType 图标合成示例。示例使用 `espressif/freetype` 组件将 Font Awesome 图标的 Unicode 码点（两行，每行三个）栅格化为小的逐字形 A8 透明度掩码，然后通过 PPA blend 引擎以固定图标颜色将每个字形合成到软件生成的渐变背景上。最终合成后的 RGB565 帧会以 base64 输出，供主机端重建为 PPM 并与 golden 图像比对。
 
 API 参考
 --------

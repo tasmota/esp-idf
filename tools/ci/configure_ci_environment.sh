@@ -17,8 +17,13 @@ DEBUG_SHELL=${DEBUG_SHELL:-"0"}
 # (Depends on default options '-Wno-error=XXX' used in the IDF build system)
 
 if [ "$IDF_TOOLCHAIN" != "clang" ]; then
-    PEDANTIC_FLAGS="-Werror -Werror=deprecated-declarations -Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function"
-    export PEDANTIC_CFLAGS="${PEDANTIC_FLAGS} -Wstrict-prototypes"
+    PEDANTIC_FLAGS="-Werror \
+                    -Werror=deprecated-declarations \
+                    -Werror=unused-variable \
+                    -Werror=unused-function \
+                    -Werror=unused-but-set-variable"
+    export PEDANTIC_CFLAGS="${PEDANTIC_FLAGS} \
+                            -Wstrict-prototypes"
 else
     export PEDANTIC_CFLAGS="-Werror"
 fi

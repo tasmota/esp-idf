@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define ESP_WIFI_OS_ADAPTER_VERSION  0x00000008
+#define ESP_WIFI_OS_ADAPTER_VERSION  0x00000009
 #define ESP_WIFI_OS_ADAPTER_MAGIC    0xDEADBEAF
 
 #define OSI_FUNCS_TIME_BLOCKING      0xffffffff
@@ -77,8 +77,8 @@ typedef struct wifi_osi_funcs_t {
     uint32_t (* _rand)(void);
     void (* _dport_access_stall_other_cpu_start_wrap)(void);
     void (* _dport_access_stall_other_cpu_end_wrap)(void);
-    void (* _wifi_apb80m_request)(void);
-    void (* _wifi_apb80m_release)(void);
+    void (* _wifi_pm_sleep_lock_acquire)(void);
+    void (* _wifi_pm_sleep_lock_release)(void);
     void (* _phy_disable)(void);
     void (* _phy_enable)(void);
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_ESP_WIFI_TARGET_ESP32
@@ -158,6 +158,15 @@ typedef struct wifi_osi_funcs_t {
     void * (*_coex_schm_get_phase_by_idx)(int);
 #if CONFIG_IDF_TARGET_ESP32S31
     int (* _coex_configure_preemption_end_cb)(bool is_register, int(*cb)(uint32_t));
+#endif
+#if CONFIG_SOC_WIFI_HE_SUPPORT
+    bool (*_wifi_disable_ac_ax)(void);
+#endif
+#if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C61 || CONFIG_IDF_TARGET_ESP32S31
+    int32_t (* _wifi_bb_sleep_retention_attach)(void);
+    int32_t (* _wifi_bb_sleep_retention_detach)(void);
+    int32_t (* _wifi_mac_sleep_retention_attach)(void);
+    int32_t (* _wifi_mac_sleep_retention_detach)(void);
 #endif
     int32_t _magic;
 } wifi_osi_funcs_t;

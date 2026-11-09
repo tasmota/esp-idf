@@ -5,6 +5,7 @@
 import ipaddress
 import logging
 import os
+import random
 import re
 import socket
 import struct
@@ -183,7 +184,7 @@ def changeDeviceRole(dut: IdfDut, role: str) -> None:
 
 def getDataset(dut: IdfDut) -> str:
     execute_command(dut, 'dataset active -x')
-    dut_data = dut.expect(r'\n(\w+)\r', timeout=5)[1].decode()
+    dut_data = dut.expect(r'\n([0-9A-Fa-f]+)\r', timeout=5)[1].decode()
     return str(dut_data)
 
 
@@ -259,11 +260,20 @@ def ot_ping(
     return tx_count, rx_count
 
 
-def ping_and_check(dut: IdfDut, target: str, tx_total: int = 10, timeout: int = 6, pass_rate: float = 0.8) -> None:
+def ping_and_check(
+    dut: IdfDut,
+    target: str,
+    tx_total: int = 10,
+    timeout: int = 6,
+    pass_rate: float = 0.8,
+    size: int = 10,
+    size_range: tuple[int, int] | None = None,
+) -> None:
     tx_count = 0
     rx_count = 0
     for _ in range(tx_total):
-        tx, rx = ot_ping(dut, target, timeout=timeout, count=1, size=10, interval=6)
+        ping_size = random.randint(*size_range) if size_range else size
+        tx, rx = ot_ping(dut, target, timeout=timeout, count=1, size=ping_size, interval=6)
         tx_count += tx
         rx_count += rx
 
@@ -413,17 +423,19 @@ def wait_for_host_ra_route(
     raise AssertionError('Host did not receive valid RA in time (OMR route and onlink GUA both required)')
 
 
-def host_global_address_has_onlink_prefix(interface_name: str, onlinkprefix: str) -> bool:
+def _list_host_onlink_global_address_entries(interface_name: str, onlinkprefix: str) -> list[tuple[str, bool]]:
+    """Return (address, is_usable) for each global address in the onlink /64."""
     onlinkprefix = onlinkprefix.strip()
     if not onlinkprefix:
-        return False
+        return []
     base = onlinkprefix.rstrip(':')
     try:
         network = ipaddress.IPv6Network(f'{base}::/64', strict=False)
     except ValueError:
         logging.warning(f'Invalid onlinkprefix for /64 check: {onlinkprefix}')
-        return False
+        return []
 
+    entries: dict[str, bool] = {}
     out = subprocess.getoutput(f'ip -6 addr show dev {interface_name}')
     for line in out.splitlines():
         if 'inet6' not in line or 'scope global' not in line:
@@ -433,11 +445,30 @@ def host_global_address_has_onlink_prefix(interface_name: str, onlinkprefix: str
             continue
         addr_s = m.group(1).split('%')[0]
         try:
-            if ipaddress.IPv6Address(addr_s) in network:
-                return True
+            if ipaddress.IPv6Address(addr_s) not in network:
+                continue
         except ValueError:
             continue
-    return False
+        is_usable = 'tentative' not in line and 'dadfailed' not in line
+        if addr_s in entries:
+            entries[addr_s] = entries[addr_s] and is_usable
+        else:
+            entries[addr_s] = is_usable
+    return list(entries.items())
+
+
+def host_global_address_has_onlink_prefix(interface_name: str, onlinkprefix: str) -> bool:
+    entries = _list_host_onlink_global_address_entries(interface_name, onlinkprefix)
+    if not entries:
+        return False
+    return all(usable for _, usable in entries)
+
+
+def list_host_usable_onlink_global_addresses(interface_name: str, onlinkprefix: str) -> list[str]:
+    entries = _list_host_onlink_global_address_entries(interface_name, onlinkprefix)
+    if not entries or not all(usable for _, usable in entries):
+        return []
+    return [addr for addr, _ in entries]
 
 
 def wait_for_host_onlink_global_address(
@@ -788,9 +819,25 @@ def execute_command(dut: IdfDut, command: str, prefix: str = 'ot ') -> None:
 
 def get_output_string(dut: IdfDut, command: str, wait_time: int) -> str:
     execute_command(dut, command)
-    tmp = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
+    output = dut.expect(pexpect.TIMEOUT, timeout=wait_time)
     clean_buffer(dut)
-    return str(tmp)
+    if isinstance(output, bytes):
+        return output.decode('utf-8', errors='replace')
+    return str(output)
+
+
+def escape_ot_cli_arg(value: str) -> str:
+    return value.replace('\\', '\\\\').replace(' ', '\\ ')
+
+
+def parse_dns_browse_instance(browse_output: str, port: str = '12347') -> str:
+    normalized = re.sub(r'\r\n?', '\n', browse_output)
+    match = re.search(
+        r'DNS browse response for [^\n]+\n+([^\n]+)\n+\s+Port:' + re.escape(port),
+        normalized,
+    )
+    assert match, f'no service instance with Port:{port} in browse output: {browse_output}'
+    return match.group(1).strip()
 
 
 def wait_for_host_network(host: str = '8.8.8.8', retries: int = 6, interval: int = 10) -> None:

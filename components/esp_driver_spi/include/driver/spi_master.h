@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2010-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2010-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -69,7 +69,7 @@ typedef struct {
                                      */
     spi_clock_source_t clock_source;///< Select SPI clock source, `SPI_CLK_SRC_DEFAULT` by default.
     uint16_t duty_cycle_pos;        ///< Duty cycle of positive clock, in 1/256th increments (128 = 50%/50% duty). Setting this to 0 (=not setting it) is equivalent to setting this to 128.
-    uint16_t cs_ena_pretrans;       ///< Amount of SPI bit-cycles the cs should be activated before the transmission (0-16). This only works on half-duplex transactions.
+    uint16_t cs_ena_pretrans;       ///< Amount of SPI bit-cycles the cs should be activated before the transmission (0-16). In full-duplex mode this is not compatible with the Command and Address phases; see the Known Issues section of the SPI Master documentation.
     uint8_t cs_ena_posttrans;       ///< Amount of SPI bit-cycles the cs should stay active after the transmission (0-16)
     int clock_speed_hz;             ///< SPI clock speed in Hz. Derived from `clock_source`.
     int input_delay_ns;             /**< Maximum data valid time of slave. The time required between SCLK and MISO
@@ -118,6 +118,7 @@ typedef struct {
 #define SPI_TRANS_MULTILINE_ADDR      SPI_TRANS_MODE_DIOQIO_ADDR ///< The data lines used at address phase is the same as data phase (otherwise, only one data line is used at address phase)
 #define SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL   (1<<11) ///< By default driver will automatically re-alloc dma buffer if it doesn't meet hardware alignment or dma_capable requirements, this flag is for you to disable this feature, you will need to take care of the alignment otherwise driver will return you error ESP_ERR_INVALID_ARG
 #define SPI_TRANS_DMA_USE_PSRAM       (1<<12) ///< Use PSRAM for DMA buffer directly, has speed limit, but no temp buffer and save memory
+#define SPI_TRANS_DDRCLK              (1<<13) ///< Use DDRCLK (double clock edge) for current transaction.
 
 // Output flags
 #define SPI_TRANS_DMA_RX_FAIL         (1<<30) ///< RX transaction data lose flag, indicate DMA RX overflow

@@ -76,7 +76,7 @@ ESP-TEE divides the memory into separate regions for the TEE and REE, allocating
 Internal Memory (SRAM)
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Internal memory is allocated to the the TEE based on the Kconfig options that are available under the :ref:`Memory Configuration <esp-tee-trusted-execution-environment--enable-the-esp-tee-framework-memory-configuration>` section in the :ref:`esp-tee-trusted-execution-environment-` menu. All remaining memory is allocated to the REE.
+Internal memory is allocated to the TEE based on the Kconfig options that are available under the :ref:`Memory Configuration <esp-tee-trusted-execution-environment--enable-the-esp-tee-framework-memory-configuration>` section in the :ref:`esp-tee-trusted-execution-environment-` menu. All remaining memory is allocated to the REE.
 
 .. warning::
 
@@ -131,27 +131,58 @@ For {IDF_TARGET_NAME}, a list of secure services can be found at this :component
 Usage
 -----
 
-#. **Enable ESP-TEE**: In the :ref:`Project Configuration <project-configuration-guide>` menu, go to :ref:`esp-tee-trusted-execution-environment-` and set the option :ref:`CONFIG_SECURE_ENABLE_TEE`.
+#. **Enable ESP-TEE**: In the :ref:`Project Configuration <project-configuration-guide>` menu, go to :ref:`esp-tee-trusted-execution-environment-` and set the option :menuitem:`CONFIG_SECURE_ENABLE_TEE`.
 
 #. **Configure the TEE logging**:
 
-   - Set :ref:`CONFIG_SECURE_TEE_DEBUG_MODE` to enable logging for TEE.
+   - Set :menuitem:`CONFIG_SECURE_TEE_DEBUG_MODE` to enable logging for TEE.
 
-   - Set :ref:`CONFIG_SECURE_TEE_LOG_LEVEL` to select the logging verbosity level.
+   - Set :menuitem:`CONFIG_SECURE_TEE_LOG_LEVEL` to select the logging verbosity level.
 
 #. **Configure the TEE memory regions**:
 
-   - Set :ref:`CONFIG_SECURE_TEE_IRAM_SIZE` to configure the TEE IRAM size
+   - Set :menuitem:`CONFIG_SECURE_TEE_IRAM_SIZE` to configure the TEE IRAM size
 
-   - Set :ref:`CONFIG_SECURE_TEE_DRAM_SIZE` to configure the TEE DRAM size
+   - Set :menuitem:`CONFIG_SECURE_TEE_DRAM_SIZE` to configure the TEE DRAM size
 
-   - Set :ref:`CONFIG_SECURE_TEE_STACK_SIZE` and :ref:`CONFIG_SECURE_TEE_INTR_STACK_SIZE` to configure the TEE task and interrupt stack from the reserved DRAM
+   - Set :menuitem:`CONFIG_SECURE_TEE_STACK_SIZE` and :menuitem:`CONFIG_SECURE_TEE_INTR_STACK_SIZE` to configure the TEE task and interrupt stack from the reserved DRAM
 
 #. **Configure the partition table**:
 
-   - Select one of the simple predefined partition tables under :ref:`CONFIG_PARTITION_TABLE_TYPE` - *Single factory app, no OTA, TEE* or *Two OTA definitions, TEE*
+   - Select one of the simple predefined partition tables under :menuitem:`CONFIG_PARTITION_TABLE_TYPE` - *Single factory app, no OTA, TEE* or *Two OTA definitions, TEE*
 
    - Alternatively, select the *Custom partition table CSV* option and define your own layout as per the guidelines provided in the :ref:`tee-external-memory` section.
+
+.. _tee-versioning:
+
+Firmware Versioning
+-------------------
+
+The TEE firmware carries its own version, independent of the ESP-IDF version, in the ``version`` field of its application descriptor (:cpp:type:`esp_app_desc_t`). It is printed in the TEE boot log and reported through the :doc:`attestation <tee-attestation>` token.
+
+The version is defined in :component_file:`esp_tee/version.cmake` and :component_file:`esp_tee/include/esp_tee_version.h` and has the form ``<major>.<minor>.<patch>~v<IDF major>.<IDF minor>.<IDF patch>`` (e.g., ``1.2.0~v6.2.0``), following `Semantic Versioning <https://semver.org/>`_: the TEE version identifies the TEE source, while the suffix identifies the ESP-IDF release it was built with.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - TEE version
+     - ESP-IDF release lines
+   * - ``1.0.x``
+     - v5.5
+   * - ``1.1.x``
+     - v6.0, v6.1
+   * - ``1.2.x``
+     - v6.2
+
+.. note::
+
+    The TEE firmware version is distinct from the TEE *secure version* used by :ref:`TEE anti-rollback <tee-anti-rollback>`.
+
+Reproducible Builds and Code Hash
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The TEE binary is built reproducibly, irrespective of the REE application configuration: the same ESP-IDF release, target and TEE configuration always produce a byte-identical ``esp_tee.bin``. Options that change the compiled TEE code (e.g., the compiler optimization and assertion levels, log verbosity, Secure Boot) are part of the TEE configuration and therefore change the image and its code hash. The image still embeds packaging metadata (flash mode/frequency/size, chip revision bounds, version strings, the ESP-IDF version and the ELF digest), so its plain SHA-256 changes with them even when the compiled code does not. The **code hash** leaves those parts (the image header, the app descriptor, the checksum and the appended digest) out, covering the image segments alone, and so identifies the compiled code alone. It can be computed from a built image with :component_file:`esp_tee/scripts/esp_tee_code_hash/esp_tee_code_hash.py` and is reported by the device in the attestation token (see :doc:`tee-attestation`).
 
 Application Examples
 --------------------
@@ -162,3 +193,4 @@ API Reference
 -------------
 
 .. include-build-file:: inc/esp_tee.inc
+.. include-build-file:: inc/esp_tee_version.inc

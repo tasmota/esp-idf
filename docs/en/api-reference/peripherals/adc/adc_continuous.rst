@@ -252,7 +252,7 @@ As the above callbacks are called in an ISR context, you should always ensure th
 
 You can also register your own context when calling :cpp:func:`adc_continuous_register_event_callbacks` by the parameter ``user_data``. This user data will be passed to the callback functions directly.
 
-This function may fail due to reasons like :c:macro:`ESP_ERR_INVALID_ARG`. Especially, when :ref:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE` is enabled, this error may indicate that the callback functions are not in the internal RAM. Check the error log for more details. Besides, when it fails due to :c:macro:`ESP_ERR_INVALID_STATE`, it indicates that the ADC continuous mode driver is started, and you should not add a callback at this moment.
+This function may fail due to reasons like :c:macro:`ESP_ERR_INVALID_ARG`. Especially, when :menuitem:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE` is enabled, this error may indicate that the callback functions are not in the internal RAM. Check the error log for more details. Besides, when it fails due to :c:macro:`ESP_ERR_INVALID_STATE`, it indicates that the ADC continuous mode driver is started, and you should not add a callback at this moment.
 
 
 Conversion Done Event
@@ -266,7 +266,7 @@ When the driver completes a conversion, it triggers the :cpp:member:`adc_continu
 
 .. note::
 
-    When the Kconfig option :ref:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE` is enabled, the registered callbacks and the functions called by the callbacks should be placed in IRAM. The involved variables should be placed in internal RAM as well.
+    When the Kconfig option :menuitem:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE` is enabled, the registered callbacks and the functions called by the callbacks should be placed in IRAM. The involved variables should be placed in internal RAM as well.
 
 Pool Overflow Event
 ~~~~~~~~~~~~~~~~~~~
@@ -289,29 +289,15 @@ Function :cpp:func:`adc_continuous_read` tries to read the expected length of co
 
 This API aims to give you a chance to read all the ADC continuous conversion results.
 
-The ADC conversion results read from the above function are raw data. To calculate the voltage based on the ADC raw results, this formula can be used:
+The conversion results from the above function are raw data. Convert them to voltage in mV with the calibration APIs. See :doc:`adc_calibration`.
 
-.. parsed-literal::
+.. only:: esp32s31
 
-    Vout = Dout * Vmax / Dmax       (1)
+    On {IDF_TARGET_NAME}, each sample's raw data is a 17-bit comparator vector. Parse the buffer with :cpp:func:`adc_continuous_parse_data`, then call :cpp:func:`adc_cali_chan_raw_to_voltage`. Even-numbered channels are N-side and odd-numbered channels are P-side.
 
-where:
+.. only:: not esp32s31
 
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-    :align: center
-
-    * - Vout
-      - Digital output result, standing for the voltage.
-    * - Dout
-      - ADC raw digital reading result.
-    * - Vmax
-      - Maximum measurable input analog voltage, this is related to the ADC attenuation, please refer to the On-Chip Sensor and Analog Signal Processing chapter in `TRM <{IDF_TARGET_TRM_EN_URL}#sensor>`__.
-    * - Dmax
-      - Maximum of the output ADC raw digital reading result, which is 2^bitwidth, where the bitwidth is the :cpp:member:`adc_digi_pattern_config_t::bit_width` configured before.
-
-To do further calibration to convert the ADC raw result to voltage in mV, please refer to :doc:`adc_calibration`.
+    Call :cpp:func:`adc_cali_raw_to_voltage`. If a scheme needs the ADC channel, use :cpp:func:`adc_cali_chan_raw_to_voltage`.
 
 Parse ADC Raw Data
 ~~~~~~~~~~~~~~~~~~~~~
@@ -352,7 +338,7 @@ The parsed data structure :cpp:type:`adc_continuous_data_t` contains the followi
 
 - :cpp:member:`adc_continuous_data_t::unit`：ADC unit (ADC_UNIT_1 or ADC_UNIT_2)
 - :cpp:member:`adc_continuous_data_t::channel`：ADC channel number (0-9)
-- :cpp:member:`adc_continuous_data_t::raw_data`：ADC raw data value (0-4095, 12-bit resolution)
+- :cpp:member:`adc_continuous_data_t::raw_data`：ADC raw data value
 - :cpp:member:`adc_continuous_data_t::valid`：Whether the data is valid
 
 Read and Parse ADC Data
@@ -388,21 +374,21 @@ Hardware Limitations
 .. list::
 
     - A specific ADC unit can only work under one operating mode at any one time, either continuous mode or one-shot mode. :cpp:func:`adc_continuous_start` has provided the protection.
-    - Random Number Generator (RNG) uses ADC as an input source. When ADC continuous mode driver works, the random number generated from RNG will be less random.
+    :not esp32s31: - Random Number Generator (RNG) uses ADC as an input source. When ADC continuous mode driver works, the random number generated from RNG will be less random.
     :esp32 or esp32s2: - ADC2 is also used by Wi-Fi. :cpp:func:`adc_continuous_start` has provided the protection between Wi-Fi driver and ADC continuous mode driver.
     :esp32: - ADC continuous mode driver uses I2S0 peripheral as hardware DMA FIFO. Therefore, if I2S0 is in use already, the :cpp:func:`adc_continuous_new_handle` will return :c:macro:`ESP_ERR_NOT_FOUND`.
     :esp32: - ESP32 DevKitC: GPIO 0 cannot be used due to external auto program circuits.
     :esp32: - ESP-WROVER-KIT: GPIO 0, 2, 4, and 15 cannot be used due to external connections for different purposes.
     :esp32s2: - ADC continuous mode driver uses SPI3 peripheral as hardware DMA FIFO. Therefore, if SPI3 is in use already, the :cpp:func:`adc_continuous_new_handle` will return :c:macro:`ESP_ERR_NOT_FOUND`.
-    :esp32c3: - ADC2 DMA functionality is no longer supported to retrieve ADC conversion results due to hardware limitations, as unstable results have been observed. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
-    :esp32s3: - ADC2 DMA functionality is no longer supported to retrieve ADC conversion results due to hardware limitations, as unstable results have been observed. This issue can be found in `ESP32S3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-s3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
+    :esp32c3: - ADC2 DMA functionality is no longer supported to retrieve ADC conversion results due to hardware limitations, as unstable results have been observed. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :menuitem:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
+    :esp32s3: - ADC2 DMA functionality is no longer supported to retrieve ADC conversion results due to hardware limitations, as unstable results have been observed. This issue can be found in `ESP32S3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-s3_errata_en.pdf>`_. For compatibility, you can enable :menuitem:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
 
 .. _adc-continuous-power-management:
 
 Power Management
 ^^^^^^^^^^^^^^^^
 
-When power management is enabled, i.e., :ref:`CONFIG_PM_ENABLE` is on, the APB clock frequency may be adjusted when the system is in an idle state, thus potentially changing the behavior of ADC continuous conversion.
+When power management is enabled, i.e., :menuitem:`CONFIG_PM_ENABLE` is on, the APB clock frequency may be adjusted when the system is in an idle state, thus potentially changing the behavior of ADC continuous conversion.
 
 However, the continuous mode driver can prevent this change by acquiring a power management lock of type :cpp:enumerator:`ESP_PM_APB_FREQ_MAX`. The lock is acquired after the continuous conversion is started by :cpp:func:`adc_continuous_start`. Similarly, the lock will be released after :cpp:func:`adc_continuous_stop`. Therefore, :cpp:func:`adc_continuous_start` and :cpp:func:`adc_continuous_stop` should appear in pairs, otherwise, the power management will be out of action.
 
@@ -412,7 +398,7 @@ However, the continuous mode driver can prevent this change by acquiring a power
 IRAM Safe
 ^^^^^^^^^
 
-All the ADC continuous mode driver APIs are not IRAM-safe. They are not supposed to be run when the Cache is disabled. By enabling the Kconfig option :ref:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE`, the driver's internal ISR handler is IRAM-safe, which means even when the Cache is disabled, the driver will still save the conversion results into its internal pool.
+All the ADC continuous mode driver APIs are not IRAM-safe. They are not supposed to be run when the Cache is disabled. By enabling the Kconfig option :menuitem:`CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE`, the driver's internal ISR handler is IRAM-safe, which means even when the Cache is disabled, the driver will still save the conversion results into its internal pool.
 
 
 .. _adc-continuous-thread-safety:

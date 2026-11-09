@@ -20,7 +20,6 @@
 #include "esp_private/esp_pmu.h"
 #include "soc/regi2c_dig_reg.h"
 #include "soc/rtc.h"
-#include "hal/efuse_ll.h"
 #include "hal/efuse_hal.h"
 #include "esp_hw_log.h"
 
@@ -36,7 +35,7 @@ static uint8_t get_lp_hp_gap(void)
     uint32_t blk_version = efuse_hal_blk_version();
     uint8_t lp_hp_gap_efuse = 0;
     if (blk_version >= 2) {
-        lp_hp_gap_efuse = efuse_ll_get_dbias_vol_gap();
+        lp_hp_gap_efuse = pmu_ll_get_dbias_vol_gap();
         bool gap_flag = lp_hp_gap_efuse >> 4;
         uint8_t gap_abs_value = lp_hp_gap_efuse & 0xf;
         if (gap_flag) {
@@ -87,7 +86,9 @@ void pvt_auto_dbias_init(void)
         if (pvt_enable_flag == true) {
             return;
         }
-        SET_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_CLK_EN);
+        REG_SET_BIT(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_SITE2_RST_EN); // Must reset after pd_cpu
+        REG_CLR_BIT(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_SITE2_RST_EN);
+        SET_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_SITE2_CLK_EN);
         SET_PERI_REG_MASK(PCR_PVT_MONITOR_FUNC_CLK_CONF_REG, PCR_PVT_MONITOR_FUNC_CLK_EN);
         /*config for dbias func*/
         CLEAR_PERI_REG_MASK(PVT_DBIAS_TIMER_REG, PVT_TIMER_EN);
@@ -126,7 +127,7 @@ void IRAM_ATTR pvt_func_enable(bool enable)
             }
             SET_PERI_REG_MASK(PMU_HP_ACTIVE_HP_REGULATOR0_REG, PMU_DIG_DBIAS_INIT);     // start calibration @HP_CALI_DBIAS_DEFAULT
             SET_PERI_REG_MASK(PCR_PVT_MONITOR_FUNC_CLK_CONF_REG, PCR_PVT_MONITOR_FUNC_CLK_EN);
-            SET_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_CLK_EN);
+            SET_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_SITE2_CLK_EN);
             SET_PERI_REG_MASK(PVT_CLK_CFG_REG, PVT_MONITOR_CLK_PVT_EN);                // once enable cannot be closed
             SET_PERI_REG_MASK(PVT_COMB_PD_SITE2_UNIT0_VT1_CONF1_REG, PVT_MONITOR_EN_VT1_PD_SITE2_UNIT0); // enable pvt clk
             esp_rom_delay_us(10);
@@ -144,7 +145,7 @@ void IRAM_ATTR pvt_func_enable(bool enable)
             SET_PERI_REG_BITS(PMU_HP_SLEEP_LP_REGULATOR0_REG, PMU_HP_SLEEP_LP_REGULATOR_DBIAS, pvt_lp_dbias, PMU_HP_SLEEP_LP_REGULATOR_DBIAS_S);
             CLEAR_PERI_REG_MASK(PVT_DBIAS_TIMER_REG, PVT_TIMER_EN); //disable auto dbias
             SET_PERI_REG_MASK(PMU_HP_ACTIVE_HP_REGULATOR0_REG, PMU_DIG_REGULATOR0_DBIAS_SEL);   // hand over control of dbias to pmu
-            CLEAR_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_CLK_EN);
+            CLEAR_PERI_REG_MASK(PCR_PVT_MONITOR_CONF_REG, PCR_PVT_MONITOR_SITE2_CLK_EN);
             CLEAR_PERI_REG_MASK(PCR_PVT_MONITOR_FUNC_CLK_CONF_REG, PCR_PVT_MONITOR_FUNC_CLK_EN);
             pvt_enable_flag = false;
         }

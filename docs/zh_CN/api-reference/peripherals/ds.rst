@@ -51,7 +51,7 @@ API 函数 :cpp:func:`esp_ds_sign` 和 :cpp:func:`esp_ds_start_sign` 在 RSA_DS 
 
 **PSA 密码学驱动程序**
 
-RSA_DS 外设也通过 **PSA Crypto RSA_DS 驱动程序** 对外提供访问接口，因此可以使用标准 PSA API 执行签名（PKCS#1 v1.5 或 PSS）和 RSA 解密（PKCS#1 v1.5 或 OAEP）。在 ``Component config`` > ``mbedTLS`` 中启用 ``CONFIG_MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL``。要在 ESP-TLS 中配合使用 RSA_DS 外设（例如 TLS 客户端认证），请参阅 ESP-TLS 文档中的 :ref:`digital-signature-with-esp-tls`。
+RSA_DS 外设也通过 **PSA Crypto RSA_DS 驱动程序** 对外提供访问接口，因此可以使用标准 PSA API 执行签名（PKCS#1 v1.5 或 PSS）和 RSA 解密（PKCS#1 v1.5 或 OAEP）。启用 :menuitem:`CONFIG_MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL`。要在 ESP-TLS 中配合使用 RSA_DS 外设（例如 TLS 客户端认证），请参阅 ESP-TLS 文档中的 :ref:`digital-signature-with-esp-tls`。
 
 .. _configure-the-ds-peripheral:
 
@@ -112,6 +112,15 @@ TLS 连接所需的 RSA_DS 外设配置
                            hash, sizeof(hash), signature, sizeof(signature), &sig_len);
 
     psa_destroy_key(key_id);
+
+持久化与易失性 RSA_DS PSA 密钥
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+驱动支持两种 PSA 密钥生命周期：
+
+- ``PSA_KEY_LIFETIME_ESP_RSA_DS_VOLATILE`` （上述示例中使用）只在 PSA 密钥 槽中保存指向调用方提供的 ``esp_ds_data_ctx_t`` 以及密钥管理器恢复信息的 指针。被引用的缓冲区必须保持有效，直到调用 :cpp:func:`psa_destroy_key` 为止。这样可避免对大块数据（例如 :cpp:type:`esp_ds_data_t`，约 1200–1600 字节，因芯片而异）进行深拷贝；当这些数据已经通过 ``esp_secure_cert_mgr`` 从 flash 中以 mmap 形式可用时，这一点尤其有用。
+
+- ``PSA_KEY_LIFETIME_ESP_RSA_DS`` （持久化）在调用 :cpp:func:`psa_import_key` 时将加密的密钥数据深拷贝到 PSA 密钥槽中，并 由 PSA 与其他密钥属性一同持久化到 NVS。导入返回后，调用方即可释放原始 缓冲区；后续的 :cpp:func:`psa_sign_hash` 和 :cpp:func:`psa_asymmetric_decrypt` 调用会自动从 NVS 取回所需数据。 当应用希望密钥在重启后依然可用，且无需在每次启动时重新从外部存储 载入 ``esp_ds_data_ctx_t`` 时，应使用此生命周期。
 
 使用 RSA_DS 外设进行 SSL 双向认证
 ------------------------------------

@@ -1,14 +1,14 @@
 /*
- * SPDX-FileCopyrightText: 2010-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2010-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #pragma once
 
-#include <esp_types.h>
-#include <esp_bit_defs.h>
-#include "esp_flash_err.h"
+#include "esp_types.h"
+#include "esp_err.h"
+#include "esp_bit_defs.h"
 
 #ifdef __cplusplus
 extern "C" {

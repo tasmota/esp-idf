@@ -15,6 +15,16 @@ set(HOST_LOG_INDEX_HEADER "\"\"")
 set(BLE_HOST_TAGS "")
 set(BLE_HOST_TAGS_PRESERVE "")
 
+# default config value for ble iso module
+# (esp_ble_iso owns the unified LOG_* family; consumers like esp_ble_audio
+# and future HID-over-ISO compile under the same BLE_ISO module so that all
+# share one iso_log_index.h and one log-id counter — no per-consumer
+# bookkeeping, no redefinition risk.)
+set(BLE_ISO_CODE_PATH "")
+set(BLE_ISO_LOG_INDEX_HEADER "\"\"")
+set(BLE_ISO_TAGS "")
+set(BLE_ISO_TAGS_PRESERVE "")
+
 if(CONFIG_BLE_MESH_COMPRESSED_LOG_ENABLE)
     list(APPEND LOG_COMPRESSED_MODULE "BLE_MESH")
 
@@ -31,11 +41,39 @@ if(CONFIG_BLE_MESH_COMPRESSED_LOG_ENABLE)
     list(APPEND LOG_COMPRESSED_MODULE_CODE_PATH ${BLE_MESH_CODE_PATH})
 endif()
 
+if(CONFIG_BLE_ISO_COMPRESSED_LOG_ENABLE)
+    list(APPEND LOG_COMPRESSED_MODULE "BLE_ISO")
+
+    # esp_ble_audio sources share the same LOG_* macro family from
+    # esp_ble_iso/include/zephyr/logging/log.h; compile them under the
+    # single BLE_ISO module so they all hit one iso_log_index.h with one
+    # monotonic log-id counter. Future ISO consumers (e.g. HID-over-ISO)
+    # extend this list the same way — no per-consumer index header or
+    # Kconfig toggle.
+    set(BLE_ISO_CODE_PATH "esp_ble_iso" "esp_ble_audio")
+    set(BLE_ISO_LOG_INDEX_HEADER "iso_log_index.h")
+    set(BLE_ISO_LOG_SCRIPT_PATH
+        "${CMAKE_CURRENT_LIST_DIR}/scripts/module_scripts/ble_iso/make_iso_log_macro.py")
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/ble_iso_log_tags.cmake)
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/ble_log/include/${BLE_ISO_LOG_INDEX_HEADER}")
+        file(WRITE "${CMAKE_BINARY_DIR}/ble_log/include/${BLE_ISO_LOG_INDEX_HEADER}" "")
+    endif()
+    list(APPEND LOG_COMPRESSED_MODULE_CODE_PATH ${BLE_ISO_CODE_PATH})
+endif()
+
 if(CONFIG_BLE_HOST_COMPRESSED_LOG_ENABLE AND CONFIG_BT_BLUEDROID_ENABLED)
     list(APPEND LOG_COMPRESSED_MODULE "BLE_HOST")
 
     # update config file
-    set(HOST_CODE_PATH "host/bluedroid")
+    # BTC and OSI are shared at the source-tree level, but their TRACE macros
+    # and runtime log-level controls belong to Bluedroid. Keep them in the
+    # same compression module so they share host_log_index.h and follow the
+    # Bluedroid host-compression switch.
+    set(HOST_CODE_PATH
+        "host/bluedroid"
+        "common/btc"
+        "common/osi"
+    )
     set(HOST_LOG_INDEX_HEADER "host_log_index.h")
     set(BLE_HOST_LOG_SCRIPT_PATH
         "${CMAKE_CURRENT_LIST_DIR}/scripts/module_scripts/bluedroid/make_bluedroid_log_macro.py")
@@ -127,11 +165,24 @@ if(LOG_COMPRESSED_MODULE)
             file(WRITE "${CMAKE_BINARY_DIR}/ble_log/module_info.yml")
         endif()
         set(YML_IN  "${BT_ROOT_PATH}/common/ble_log/extension/log_compression/scripts/configs/module_info.yml.in")
+
+        # Modules may have multiple code paths; rewrite CMake lists ";" →
+        # YAML ", " into sibling variables so the originals remain CMake
+        # lists usable by any later code that wants to iterate or append.
+        string(REPLACE ";" ", " HOST_CODE_PATH_YAML "${HOST_CODE_PATH}")
+        string(REPLACE ";" ", " BLE_ISO_CODE_PATH_YAML "${BLE_ISO_CODE_PATH}")
+
         configure_file(${YML_IN} ${CONFIG_FILE_PATH} @ONLY)
 
         string(REPLACE ";" "|" MODULE_CODE_PATH "${LOG_COMPRESSED_MODULE_CODE_PATH}")
         set(MATCH_PATTERN "(${MODULE_CODE_PATH}).+\\.c")
         foreach(src ${srcs})
+            # Normalize absolute paths to relative paths (relative to CODE_BASE_PATH)
+            # so that pattern matching works and .compressed_srcs/ has a clean layout
+            if(IS_ABSOLUTE "${src}")
+                get_filename_component(src "${src}" ABSOLUTE)
+                file(RELATIVE_PATH src "${CODE_BASE_PATH}" "${src}")
+            endif()
             if(src MATCHES ${MATCH_PATTERN})
                 set(dest "${LOG_COMPRESSED_SRCS_DIR}/${src}")
                 file(WRITE "${dest}" "")
@@ -142,18 +193,6 @@ if(LOG_COMPRESSED_MODULE)
             endif()
         endforeach()
         string(REPLACE "|" ";" LOG_COMPRESSED_MODULE_CODE_PATH "${MODULE_CODE_PATH}")
-
-        # Some header files of NIMBLE are not added to include_dirs,
-        # but rely on relative path searches. This will cause the header
-        # files to be found due to the change in the source code location
-        # after using the log compression scheme.
-        # Therefore, these paths are added to include_dirs here to avoid
-        # unfinished compilation errors.
-        if(CONFIG_BT_NIMBLE_ENABLED)
-            list(APPEND include_dirs
-                "host/nimble/nimble/nimble/host/src"
-                "host/nimble/nimble/nimble/host/store/config/src")
-        endif()
 
         if(BLE_COMPRESSED_LIB_LOG_BUILD)
             execute_process(COMMAND ${BLE_PYTHON_EXECUTABLE} ${PYTHON_SCRIPT}
@@ -233,7 +272,8 @@ if(LOG_COMPRESSED_MODULE)
                                          "${jump_table_opts}")
                 endif()
 
-                if(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0)
+                if((CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 15.0) OR
+                    CMAKE_C_COMPILER_ID MATCHES "Clang")
                     set(files_with_compile_flags "host/bluedroid/device/controller.c")
                     add_flags_if_in_list("${src}"
                                          "${files_with_compile_flags}"

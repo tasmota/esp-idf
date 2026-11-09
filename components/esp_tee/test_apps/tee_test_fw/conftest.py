@@ -3,8 +3,12 @@
 # pylint: disable=W0621  # redefined-outer-name
 import base64
 import csv
+import hashlib
+import importlib.util
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -16,6 +20,7 @@ import esptool
 import pytest
 from _pytest.fixtures import FixtureRequest
 from _pytest.monkeypatch import MonkeyPatch
+from esptool.bin_image import LoadFirmwareImage
 from pytest_embedded_idf.serial import IdfSerial
 from pytest_embedded_serial_esp.serial import EspSerial
 
@@ -236,7 +241,39 @@ class TEESerial(IdfSerial):
         esptool.main(args, esp=self.esp)
 
     @EspSerial.use_esptool()
-    def copy_test_tee_img(self, partition: str, is_rollback: bool = False) -> None:
+    def flash(self, app: Any = None) -> None:
+        super().flash(app)
+        # Emulated eFuses persist across flashes: start every test from a blank state
+        if 'emul_efuse' in self.app.partition_table:
+            self.custom_erase_partition('emul_efuse')
+
+    def set_tee_img_secure_version(self, datafile: str, secure_version: int) -> None:
+        # esp_app_desc_t follows the image header and the first segment header;
+        # its second word is secure_version
+        APP_DESC_SEC_VER_OFFS = 24 + 8 + 4
+        SHA256_LEN = 32
+
+        target = self.app.sdkconfig.get('IDF_TARGET')
+        image = bytearray(Path(datafile).read_bytes())
+        assert LoadFirmwareImage(target, bytes(image)).append_digest, 'expected an image with an appended SHA-256'
+
+        offs = APP_DESC_SEC_VER_OFFS
+        old_ver, new_ver = bytes(image[offs : offs + 4]), struct.pack('<I', secure_version)
+        image[offs : offs + 4] = new_ver
+
+        # XOR checksum byte (right before the digest): flip it by the changed bytes, then redo the digest
+        checksum_pos = len(image) - SHA256_LEN - 1
+        for old_b, new_b in zip(old_ver, new_ver):
+            image[checksum_pos] ^= old_b ^ new_b
+        image[-SHA256_LEN:] = hashlib.sha256(image[:-SHA256_LEN]).digest()
+
+        patched = LoadFirmwareImage(target, bytes(image))
+        assert patched.checksum == patched.calculate_checksum(), 'checksum mismatch after patching'
+        assert patched.calc_digest == patched.stored_digest, 'digest mismatch after patching'
+        Path(datafile).write_bytes(image)
+
+    @EspSerial.use_esptool()
+    def copy_test_tee_img(self, partition: str, is_rollback: bool = False, secure_version: int | None = None) -> None:
         flash_file = os.path.join(self.app.binary_path, 'esp_tee', 'esp_tee.bin')
         encrypt = self.app.sdkconfig.get('SECURE_FLASH_ENC_ENABLED', False)
 
@@ -250,6 +287,12 @@ class TEESerial(IdfSerial):
                 if bin_data is not None:
                     data_file.write(bytes(bin_data))
                     data_file.flush()
+
+            # The embedded image carries secure_version 0; match the running TEE unless told otherwise
+            if secure_version is None:
+                secure_version = int(self.app.sdkconfig.get('SECURE_TEE_SECURE_VERSION', 0))
+            if secure_version != 0:
+                self.set_tee_img_secure_version(datafile, secure_version)
 
             if self.app.sdkconfig.get('SECURE_BOOT'):
                 keyfile = self.app.sdkconfig.get('SECURE_BOOT_SIGNING_KEY')
@@ -267,28 +310,193 @@ class TEESerial(IdfSerial):
                     ]
                 )
                 flash_file = datafile_signed
+        elif secure_version is not None:
+            # The built TEE image re-stamped with another secure version (patching a signed image is not supported)
+            assert not self.app.sdkconfig.get('SECURE_BOOT'), 'cannot re-stamp a signed TEE image'
+            datafile, datafile_signed = 'esp_tee_patched.bin', ''
+            shutil.copy(flash_file, datafile)
+            self.set_tee_img_secure_version(datafile, secure_version)
+            flash_file = datafile
 
         self.custom_write_partition(partition, flash_file, encrypt=encrypt)
 
-        if is_rollback:
+        if is_rollback or secure_version is not None:
             for file in [datafile, datafile_signed]:
-                if os.path.exists(file):
+                if file and os.path.exists(file):
                     os.remove(file)
 
     @EspSerial.use_esptool()
-    def custom_flash_w_test_tee_img_gen(self) -> None:
+    def custom_flash_w_test_tee_img_gen(self, secure_version: int | None = None) -> None:
         self.flash()
-        self.copy_test_tee_img('ota_1', False)
+        self.copy_test_tee_img('ota_1', False, secure_version)
 
     @EspSerial.use_esptool()
-    def custom_flash_w_test_tee_img_rb(self) -> None:
+    def custom_flash_w_test_tee_img_rb(self, secure_version: int | None = None) -> None:
         self.flash()
-        self.copy_test_tee_img('ota_1', True)
+        self.copy_test_tee_img('ota_1', True, secure_version)
 
     @EspSerial.use_esptool()
     def custom_flash_with_empty_sec_stg(self) -> None:
         self.flash()
         self.custom_erase_partition('secure_storage')
+
+    def get_tee_image_ref(self) -> dict[str, Any]:
+        # Reference values for the TEE claims of the attestation token, computed from the built esp_tee.bin
+        # with the host-side code hash tool (components/esp_tee/scripts/esp_tee_code_hash)
+        tool_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..',
+            '..',
+            'scripts',
+            'esp_tee_code_hash',
+            'esp_tee_code_hash.py',
+        )
+        spec = importlib.util.spec_from_file_location('esp_tee_code_hash', tool_path)
+        assert spec is not None and spec.loader is not None
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+
+        with open(os.path.join(self.app.binary_path, 'esp_tee', 'esp_tee.bin'), 'rb') as f:
+            data = f.read()
+        res = tool.compute_code_hash(data)
+        # The device computes its digest over the image without the appended digest, so it must equal that digest
+        return {
+            'version': res['info']['version'],
+            'expected_version': self.get_tee_expected_version(),
+            'digest': res['info']['digest'],
+            'code_hash': res['code_hash'],
+            'code_hash_ver': res['code_hash_ver'],
+        }
+
+    def get_tee_expected_version(self) -> str:
+        # <TEE major.minor.patch>~v<IDF major.minor.patch>, both read from the respective version.cmake
+        idf_path = Path(__file__).resolve().parents[4]
+
+        def cmake_vars(path: Path, names: list[str]) -> list[str]:
+            text = path.read_text(encoding='utf-8')
+            return [re.search(rf'^set\({name} (\d+)\)', text, re.M).group(1) for name in names]  # type: ignore
+
+        tee = cmake_vars(
+            idf_path / 'components' / 'esp_tee' / 'version.cmake',
+            ['ESP_TEE_VERSION_MAJOR', 'ESP_TEE_VERSION_MINOR', 'ESP_TEE_VERSION_PATCH'],
+        )
+        idf = cmake_vars(
+            idf_path / 'tools' / 'cmake' / 'version.cmake',
+            ['IDF_VERSION_MAJOR', 'IDF_VERSION_MINOR', 'IDF_VERSION_PATCH'],
+        )
+        return f'{tee[0]}.{tee[1]}.{tee[2]}~v{idf[0]}.{idf[1]}.{idf[2]}'
+
+    KEY_DEFS_ENCRYPTION_TEST: list[str] = [
+        'aes256_key0',
+        'aes256_key1',
+        'attest_key',
+        'ecdsa_p256_key0',
+    ]
+
+    # TEE Secure Storage Development mode
+    # NVS XTS-AES keys: E-key=0x33*32 || T-key=0xCC*32
+    NVS_KEYS_DEV_B64 = 'MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzPMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzA=='
+
+    @property
+    def nvs_partition_gen(self) -> str:
+        return str(
+            Path(os.environ['IDF_PATH'])
+            / 'components'
+            / 'nvs_flash'
+            / 'nvs_partition_generator'
+            / 'nvs_partition_gen.py'
+        )
+
+    def derive_sec_stg_nvs_keys(self, out_path: Path) -> None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.app.sdkconfig.get('SECURE_TEE_SEC_STG_MODE_RELEASE'):
+            hmac_key_src = self.TEST_KEYS_DIR / 'tee_sec_stg_hmac_key.bin'
+            self.run_command(
+                [
+                    sys.executable,
+                    self.nvs_partition_gen,
+                    'generate-key',
+                    '--key_protect_hmac',
+                    '--kp_hmac_inputkey',
+                    str(hmac_key_src),
+                    '--keyfile',
+                    out_path.name,
+                    '--outdir',
+                    str(out_path.parent),
+                ]
+            )
+            (out_path.parent / 'keys' / out_path.name).replace(out_path)
+        else:
+            self.write_keys_to_file(self.NVS_KEYS_DEV_B64, out_path)
+
+    def decrypt_sec_stg_partition(self, dump_path: Path, keys_path: Path, decrypted_path: Path) -> None:
+        self.run_command(
+            [sys.executable, self.nvs_partition_gen, 'decrypt', str(dump_path), str(keys_path), str(decrypted_path)]
+        )
+
+    _SEC_STG_HEX_LINE_RE = re.compile(
+        rb'test_esp_tee_sec_storage:\s+((?:[0-9a-f]{2} ){0,15}[0-9a-f]{2})',
+    )
+    SEC_STG_DUMP_SZ = 4096
+
+    def capture_sec_stg_partition_dump(self, dut: Any, timeout: float = 60) -> bytes:
+        dut.expect_exact('SEC_STG_DUMP_BEGIN', timeout=timeout)
+        blob = dut.expect_exact('SEC_STG_DUMP_END', timeout=timeout, return_what_before_match=True)
+
+        raw = bytearray()
+        for match in self._SEC_STG_HEX_LINE_RE.finditer(blob):
+            for tok in match.group(1).split():
+                raw.append(int(tok, 16))
+
+        if len(raw) != self.SEC_STG_DUMP_SZ:
+            raise RuntimeError(
+                f'Hex dump parse mismatch: got {len(raw)} bytes, expected {self.SEC_STG_DUMP_SZ}.\n'
+                f'Blob (first 256 bytes): {blob[:256]!r}'
+            )
+
+        # Make sure the Unity case actually passed before we trust the dump.
+        m = dut.expect(re.compile(rb'(\d+) Tests (\d+) Failures (\d+) Ignored'), timeout=timeout)
+        if int(m.group(2)) != 0:
+            raise RuntimeError(f'Unity reported {m.group(2).decode()} failures while running encryption test')
+
+        return bytes(raw)
+
+    def _run_nvs_tool_minimal(self, partition_file: Path) -> subprocess.CompletedProcess:
+        nvs_tool = Path(os.environ['IDF_PATH']) / 'components' / 'nvs_flash' / 'nvs_partition_tool' / 'nvs_tool.py'
+        return subprocess.run(
+            [sys.executable, str(nvs_tool), '-d', 'minimal', '--color', 'never', str(partition_file)],
+            capture_output=True,
+            text=True,
+        )
+
+    def verify_tee_sec_stg_encryption(self, dut: Any) -> None:
+        tmp_dir = self.TMP_DIR / 'sec_stg_encryption'
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = tmp_dir / 'tee_sec_stg_dump.bin'
+        keys_path = tmp_dir / self.NVS_KEYS_FILE
+        decrypted_path = tmp_dir / 'tee_sec_stg_decr.bin'
+        expected_key_ids = self.KEY_DEFS_ENCRYPTION_TEST
+
+        print('Verifying TEE Secure Storage NVS partition encryption (XTS-AES-512: 256-bit AES, 512-bit total key)')
+        try:
+            raw_bytes = self.capture_sec_stg_partition_dump(dut)
+            raw_path.write_bytes(raw_bytes)
+
+            self.derive_sec_stg_nvs_keys(keys_path)
+            self.decrypt_sec_stg_partition(raw_path, keys_path, decrypted_path)
+
+            print('Confirming key IDs are NOT present in the raw (encrypted) NVS dump')
+            raw_parse = self._run_nvs_tool_minimal(raw_path)
+            for key_id in expected_key_ids:
+                assert key_id not in raw_parse.stdout, f'{key_id!r} surfaced in raw dump (not encrypted)'
+
+            print('Confirming key IDs ARE present after XTS-AES decrypt with the derived NVS keys')
+            decrypted_parse = self._run_nvs_tool_minimal(decrypted_path)
+            assert decrypted_parse.returncode == 0, f'nvs_tool exit {decrypted_parse.returncode} on decrypted dump'
+            for key_id in expected_key_ids:
+                assert key_id in decrypted_parse.stdout, f'{key_id!r} missing after decrypt (wrong XTS-AES key?)'
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     KEY_DEFS: list[dict[str, Any]] = [
         {'key': 'aes256_key0', 'type': 'aes256', 'input': None, 'write_once': True},
@@ -305,6 +513,7 @@ class TEESerial(IdfSerial):
             'type': 'ecdsa_p256',
             'input': 'ecdsa_p256_key.pem',
             'write_once': True,
+            'tee_only': True,
             'b64': (
                 'LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUlNU1VpUktHaVZjSTIvbUZFekI3eXRIOVJj'
                 'd0wyUThkNDhONHNFUHFYc0RvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFSkYxYXRZQUxrdnB4cCt4N3c1dmVPQ1Vj'
@@ -364,42 +573,23 @@ class TEESerial(IdfSerial):
                 self.write_keys_to_file(entry['b64'], input_path)
                 entry['input'] = str(input_path)
 
-        idf_path = Path(os.environ['IDF_PATH'])
         ESP_TEE_SEC_STG_KEYGEN = os.path.join(
-            idf_path, 'components', 'esp_tee', 'scripts', 'esp_tee_sec_stg_keygen', 'esp_tee_sec_stg_keygen.py'
-        )
-        NVS_PARTITION_GEN = os.path.join(
-            idf_path, 'components', 'nvs_flash', 'nvs_partition_generator', 'nvs_partition_gen.py'
+            os.environ['IDF_PATH'],
+            'components',
+            'esp_tee',
+            'scripts',
+            'esp_tee_sec_stg_keygen',
+            'esp_tee_sec_stg_keygen.py',
         )
 
         nvs_keys = tmp_dir / self.NVS_KEYS_FILE
-        if self.app.sdkconfig.get('SECURE_TEE_SEC_STG_MODE_RELEASE'):
-            hmac_key_src = self.TEST_KEYS_DIR / 'tee_sec_stg_hmac_key.bin'
-            self.run_command(
-                [
-                    sys.executable,
-                    NVS_PARTITION_GEN,
-                    'generate-key',
-                    '--key_protect_hmac',
-                    '--kp_hmac_inputkey',
-                    str(hmac_key_src),
-                    '--keyfile',
-                    self.NVS_KEYS_FILE,
-                    '--outdir',
-                    str(tmp_dir),
-                ]
-            )
-            nvs_keys = tmp_dir / 'keys' / self.NVS_KEYS_FILE
-        else:
-            NVS_KEYS_DEV_B64 = (
-                'MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzPMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzA=='
-            )
-            self.write_keys_to_file(NVS_KEYS_DEV_B64, nvs_keys)
+        self.derive_sec_stg_nvs_keys(nvs_keys)
 
         cmds = [
             [sys.executable, ESP_TEE_SEC_STG_KEYGEN, '-k', entry['type'], '-o', str(tmp_dir / f'{entry["key"]}.bin')]
             + (['-i', entry['input']] if entry['input'] else [])
             + (['--write-once'] if entry['write_once'] else [])
+            + (['--tee-only'] if entry.get('tee_only') else [])
             for entry in self.KEY_DEFS
         ]
 
@@ -410,7 +600,7 @@ class TEESerial(IdfSerial):
         cmds.append(
             [
                 sys.executable,
-                NVS_PARTITION_GEN,
+                self.nvs_partition_gen,
                 'encrypt',
                 str(csv_path),
                 str(nvs_bin),
@@ -426,7 +616,7 @@ class TEESerial(IdfSerial):
 
             self.flash()
             self.custom_erase_partition('secure_storage')
-            self.custom_write_partition('secure_storage', nvs_bin)
+            self.custom_write_partition('secure_storage', str(nvs_bin))
 
         finally:
             shutil.rmtree(tmp_dir)

@@ -8,15 +8,22 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import click
+import rich_click as click
+from click.core import ParameterSource
+from esp_pylib.cli_types import BaudRateType
+from esp_pylib.cli_types import SerialPortType
+from esp_pylib.logger import log
+from rich_click import Context
 
 from idf_py_actions.errors import FatalError
 from idf_py_actions.global_options import global_options
 from idf_py_actions.tools import PropertyDict
 from idf_py_actions.tools import RunTool
 from idf_py_actions.tools import ensure_build_directory
+from idf_py_actions.tools import get_default_esp
 from idf_py_actions.tools import get_default_serial_port
 from idf_py_actions.tools import get_sdkconfig_value
+from idf_py_actions.tools import get_selected_target
 from idf_py_actions.tools import run_target
 
 PYTHON = sys.executable
@@ -31,6 +38,7 @@ BAUD_RATE = {
     'scope': 'global',
     'envvar': 'ESPBAUD',
     'default': 460800,
+    'type': BaudRateType(),
 }
 
 PORT = {
@@ -38,19 +46,13 @@ PORT = {
     'help': 'Serial port.',
     'scope': 'global',
     'envvar': 'ESPPORT',
-    'type': click.Path(),
+    'type': SerialPortType(),
     'default': None,
 }
 
 
-def yellow_print(message: str, newline: str | None = '\n') -> None:
-    """Print a message to stderr with yellow highlighting"""
-    sys.stderr.write(f'\033[0;33m{message}\033[0m{newline}')
-    sys.stderr.flush()
-
-
 def action_extensions(base_actions: dict, project_path: str) -> dict:
-    def _get_project_desc(ctx: click.core.Context, args: PropertyDict) -> Any:
+    def _get_project_desc(ctx: Context, args: PropertyDict) -> Any:
         desc_path = os.path.join(args.build_dir, 'project_description.json')
         if not os.path.exists(desc_path):
             ensure_build_directory(args, ctx.info_name)
@@ -83,7 +85,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             result += ['--no-stub']
         return result
 
-    def _get_commandline_options(ctx: click.core.Context) -> list:
+    def _get_commandline_options(ctx: Context) -> list:
         """Return all the command line options up to first action"""
         # This approach ignores argument parsing done Click
         result = []
@@ -96,9 +98,65 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
         return result
 
+    def _run_monitor(
+        monitor_args: list,
+        args: PropertyDict,
+        print_filter: str,
+        encrypted: bool,
+        no_reset: bool,
+        timestamps: bool,
+        timestamp_format: str,
+        force_color: bool,
+        disable_auto_color: bool,
+        command_file: str | None,
+    ) -> None:
+        if print_filter:
+            monitor_args += ['--print_filter', print_filter]
+        if encrypted:
+            monitor_args += ['--encrypted']
+        if no_reset:
+            monitor_args += ['--no-reset']
+        if timestamps:
+            monitor_args += ['--timestamps']
+        if timestamp_format:
+            monitor_args += ['--timestamp-format', timestamp_format]
+        if force_color or os.name == 'nt':
+            monitor_args += ['--force-color']
+        if disable_auto_color:
+            monitor_args += ['--disable-auto-color']
+        hints = not args.no_hints and os.path.isdir(args.build_dir)
+
+        # The monitor spawns gdb on a gdbstub panic and Ctrl+C then belongs to gdb, so
+        # idf.py must not exit before the monitor. Install a handler, not SIG_IGN, which
+        # is inherited by the monitor and would disable Ctrl+C in command-stream
+        # mode, where the monitor has no exit key and relies on SIGINT to stop.
+        old_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, lambda *_: None)
+        # Redirect the command file to monitor stdin so esp-idf-monitor enters
+        # command-stream mode (it selects that mode when stdin is not a TTY).
+        command_stream = open(command_file, 'rb') if command_file else None
+        try:
+            # Run from the directory idf.py was invoked in: the idf.py command handed to the
+            # monitor to re-run (on a rebuild or flash request) is relative to it, as is any
+            # relative path in it such as -C, -B or an @file argument.
+            RunTool(
+                'idf_monitor',
+                monitor_args,
+                os.getcwd(),
+                build_dir=args.build_dir,
+                hints=hints,
+                interactive=True,
+                convert_output=True,
+                stdin=command_stream,
+            )()
+        finally:
+            if command_stream is not None:
+                command_stream.close()
+            signal.signal(signal.SIGINT, old_handler)
+
     def monitor(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         print_filter: str,
         monitor_baud: str,
@@ -108,10 +166,47 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         timestamp_format: str,
         force_color: bool,
         disable_auto_color: bool,
+        command_file: str | None,
     ) -> None:
         """
         Run esp_idf_monitor to watch build output
         """
+        project_built = os.path.exists(os.path.join(args.build_dir, 'project_description.json'))
+        target_selected = project_built or get_selected_target(args)
+
+        detected_target = None
+
+        if not project_built:
+            if no_reset and args.port is None:
+                raise FatalError(
+                    '--no-reset is only supported when used with a port. '
+                    'Please specify the port with the --port argument to use this option.'
+                )
+            if not target_selected and args.port is None:
+                esp = get_default_esp()
+                args.port = esp.serial_port
+                detected_target = str(esp.CHIP_NAME.lower().replace('-', ''))
+            else:
+                detected_target = get_selected_target(args)
+            idf_monitor = os.path.join(os.environ['IDF_PATH'], 'tools/idf_monitor.py')
+            monitor_args = [PYTHON, idf_monitor]
+            monitor_args += ['-p', args.port or get_default_serial_port(detected_target)]
+            if detected_target:
+                monitor_args += ['--target', detected_target]
+            _run_monitor(
+                monitor_args,
+                args,
+                print_filter,
+                encrypted,
+                no_reset,
+                timestamps,
+                timestamp_format,
+                force_color,
+                disable_auto_color,
+                command_file,
+            )
+            return
+
         project_desc = _get_project_desc(ctx, args)
         elf_file = os.path.join(args.build_dir, project_desc['app_elf'])
 
@@ -121,11 +216,13 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         if project_desc['target'] != 'linux':
             if no_reset and args.port is None:
                 raise FatalError(
-                    'Error: --no-reset is only supported when used with a port.'
-                    'Please specify the port with the --port argument in order to use this option.'
+                    '--no-reset is only supported when used with a port. '
+                    'Please specify the port with the --port argument to use this option.'
                 )
 
-            args.port = args.port or get_default_serial_port()
+            # The target is passed explicitly, because ensure_build_directory(),
+            # which sets the build context, is not called for an already built project.
+            args.port = args.port or get_default_serial_port(project_desc['target'])
             monitor_args += ['-p', args.port]
 
             baud = monitor_baud or os.getenv('IDF_MONITOR_BAUD') or os.getenv('MONITORBAUD')
@@ -136,7 +233,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
                 # Use the global baud rate if it has been changed by the command line.
                 # Use project_desc['monitor_baud'] as the last option.
 
-                global_baud_defined = ctx._parameter_source['baud'] == click.core.ParameterSource.COMMANDLINE
+                global_baud_defined = ctx._parameter_source['baud'] == ParameterSource.COMMANDLINE
                 baud = args.baud if global_baud_defined else project_desc['monitor_baud']
 
             monitor_args += ['-b', baud]
@@ -156,56 +253,36 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         if target_arch_riscv:
             monitor_args += ['--decode-panic', 'backtrace']
 
-        if print_filter is not None:
-            monitor_args += ['--print_filter', print_filter]
-
         elf_list = [str(elf) for elf in Path(args.build_dir).rglob('*.elf')]
-        if elf_file and elf_file in elf_list:
-            # prepend the main app elf file to the list; make sure it is the first one
-            elf_list.insert(0, elf_list.pop(elf_list.index(elf_file)))
-        monitor_args.extend(elf_list)
-
-        if encrypted:
-            monitor_args += ['--encrypted']
-
-        if no_reset:
-            monitor_args += ['--no-reset']
-
-        if timestamps:
-            monitor_args += ['--timestamps']
-
-        if timestamp_format:
-            monitor_args += ['--timestamp-format', timestamp_format]
-
-        if force_color or os.name == 'nt':
-            monitor_args += ['--force-color']
-
-        if disable_auto_color:
-            monitor_args += ['--disable-auto-color']
+        if elf_list:
+            if elf_file and elf_file in elf_list:
+                # prepend the main app elf file to the list; make sure it is the first one
+                elf_list.insert(0, elf_list.pop(elf_list.index(elf_file)))
+            monitor_args.extend(elf_list)
 
         idf_py = [PYTHON] + _get_commandline_options(ctx)  # commands to re-run idf.py
-        monitor_args += ['-m', ' '.join(f"'{a}'" for a in idf_py)]
-        hints = not args.no_hints
+        # Pin the project the monitor is attached to. These directories are already resolved
+        # (including a build-file container), so they must come last: an earlier -C/-B would
+        # otherwise override them. The monitor appends the target (flash, app-flash, ...) after this.
+        idf_py += ['-C', args.project_dir, '-B', args.build_dir]
+        monitor_args += ['-m', shlex.join(idf_py)]
 
-        # Temporally ignore SIGINT, which is used in idf_monitor to spawn gdb.
-        old_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        try:
-            RunTool(
-                'idf_monitor',
-                monitor_args,
-                args.project_dir,
-                build_dir=args.build_dir,
-                hints=hints,
-                interactive=True,
-                convert_output=True,
-            )()
-        finally:
-            signal.signal(signal.SIGINT, old_handler)
+        _run_monitor(
+            monitor_args,
+            args,
+            print_filter,
+            encrypted,
+            no_reset,
+            timestamps,
+            timestamp_format,
+            force_color,
+            disable_auto_color,
+            command_file,
+        )
 
     def flash(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         flash_all: bool,
         trust_flash_content: bool,
@@ -222,7 +299,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         ensure_build_directory(args, ctx.info_name)
         project_desc = _get_project_desc(ctx, args)
         if project_desc['target'] == 'linux':
-            yellow_print('skipping flash since running on linux...')
+            log.note('skipping flash for linux target')
             return
 
         args.port = args.port or get_default_serial_port()
@@ -244,13 +321,13 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             env['IDF_TRUST_FLASH_CONTENT'] = '1'
         run_target(action, args, env, force_progression=True, interactive=True)
 
-    def erase_flash(action: str, ctx: click.core.Context, args: PropertyDict) -> None:
+    def erase_flash(action: str, ctx: Context, args: PropertyDict) -> None:
         ensure_build_directory(args, ctx.info_name)
         esptool_args = _get_esptool_args(args)
         esptool_args += ['erase-flash']
         RunTool('esptool', esptool_args, args.build_dir, hints=not args.no_hints, interactive=True)()
 
-    def global_callback(ctx: click.core.Context, global_args: dict, tasks: PropertyDict) -> None:
+    def global_callback(ctx: Context, global_args: dict, tasks: PropertyDict) -> None:
         encryption = any([task.name in ('encrypted-flash', 'encrypted-app-flash') for task in tasks])
         if encryption:
             for task in tasks:
@@ -258,20 +335,20 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
                     task.action_args['encrypted'] = True
                     break
 
-    def ota_targets(target_name: str, ctx: click.core.Context, args: PropertyDict) -> None:
+    def ota_targets(target_name: str, ctx: Context, args: PropertyDict) -> None:
         """
         Execute the target build system to build target 'target_name'.
         Additionally set global variables for baud and port.
         Calls ensure_build_directory() which will run cmake to generate a build
         directory (with the specified generator) as needed.
         """
-        args.port = args.port or get_default_serial_port()
         ensure_build_directory(args, ctx.info_name)
+        args.port = args.port or get_default_serial_port()
         run_target(target_name, args, {'ESPBAUD': str(args.baud), 'ESPPORT': args.port}, interactive=True)
 
     def merge_bin(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         output: str,
         format: str,  # noqa: A002
@@ -297,17 +374,17 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             merge_bin_args += ['-f', format]
         if md5_disable:
             if format != 'uf2':
-                yellow_print('idf.py merge-bin: --md5-disable is only valid for UF2 format. Option will be ignored.')
+                log.warn('idf.py merge-bin: --md5-disable is only valid for UF2 format. Option will be ignored.')
             else:
                 merge_bin_args += ['--md5-disable']
         if flash_offset:
             if format != 'raw':
-                yellow_print('idf.py merge-bin: --flash-offset is only valid for RAW format. Option will be ignored.')
+                log.warn('idf.py merge-bin: --flash-offset is only valid for RAW format. Option will be ignored.')
             else:
                 merge_bin_args += ['-t', flash_offset]
         if pad_to_size or fill_flash_size:
             if format != 'raw':
-                yellow_print('idf.py merge-bin: --pad-to-size is only valid for RAW format, option will be ignored.')
+                log.warn('idf.py merge-bin: --pad-to-size is only valid for RAW format, option will be ignored.')
             else:
                 merge_bin_args += ['--pad-to-size', pad_to_size or fill_flash_size]
         if merge_args:
@@ -319,7 +396,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
     def secure_decrypt_flash_data(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         aes_xts: bool,
         keyfile: str,
@@ -345,7 +422,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', decrypt_flash_data_args, args.build_dir)()
 
     def secure_digest_secure_bootloader(
-        action: str, ctx: click.core.Context, args: PropertyDict, keyfile: str, output: str, iv: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, keyfile: str, output: str, iv: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         digest_secure_bootloader_args = [PYTHON, '-m', 'espsecure', 'digest-secure-bootloader']
@@ -361,7 +438,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
     def secure_encrypt_flash_data(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         aes_xts: bool,
         keyfile: str,
@@ -387,7 +464,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', encrypt_flash_data_args, args.build_dir)()
 
     def secure_generate_flash_encryption_key(
-        action: str, ctx: click.core.Context, args: PropertyDict, keylen: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, keylen: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         generate_flash_encryption_key_args = [PYTHON, '-m', 'espsecure', 'generate-flash-encryption-key']
@@ -398,7 +475,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', generate_flash_encryption_key_args, args.project_dir)()
 
     def secure_generate_signing_key(
-        action: str, ctx: click.core.Context, args: PropertyDict, version: str, scheme: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, version: str, scheme: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         generate_signing_key_args = [PYTHON, '-m', 'espsecure', 'generate-signing-key']
@@ -419,7 +496,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', generate_signing_key_args, args.project_dir)()
 
     def secure_generate_key_digest(
-        action: str, ctx: click.core.Context, args: PropertyDict, keyfile: str, output: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, keyfile: str, output: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         generate_key_digest_args = [PYTHON, '-m', 'espsecure', 'digest-sbv2-public-key']
@@ -431,7 +508,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
     def secure_sign_data(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         version: str,
         keyfile: str,
@@ -460,7 +537,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', sign_data_args, args.build_dir)()
 
     def secure_verify_signature(
-        action: str, ctx: click.core.Context, args: PropertyDict, version: str, keyfile: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, version: str, keyfile: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         verify_signature_args = [PYTHON, '-m', 'espsecure', 'verify-signature']
@@ -474,7 +551,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
     def secure_generate_nvs_partition_key(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         encryption_scheme: str,
         keyfile: str,
@@ -492,7 +569,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
         RunTool('espsecure', generate_nvs_partition_key_args, args.project_dir)()
 
     def secure_encrypt_nvs_partition(
-        action: str, ctx: click.core.Context, args: PropertyDict, keyfile: str, **extra_args: str
+        action: str, ctx: Context, args: PropertyDict, keyfile: str, **extra_args: str
     ) -> None:
         ensure_build_directory(args, ctx.info_name)
         encrypt_nvs_partition_args = [PYTHON, '-m', 'esp_idf_nvs_partition_gen', 'encrypt']
@@ -505,7 +582,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             encrypt_nvs_partition_args += [extra_args['partition_size']]
         RunTool('espsecure', encrypt_nvs_partition_args, args.project_dir)()
 
-    def _parse_efuse_args(ctx: click.core.Context, args: PropertyDict, extra_args: dict) -> list:
+    def _parse_efuse_args(ctx: Context, args: PropertyDict, extra_args: dict) -> list:
         efuse_args = []
         if args.port:
             efuse_args += ['-p', args.port]
@@ -522,7 +599,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             efuse_args += ['--do-not-confirm']
         return efuse_args
 
-    def efuse_burn(action: str, ctx: click.core.Context, args: PropertyDict, **extra_args: dict) -> None:
+    def efuse_burn(action: str, ctx: Context, args: PropertyDict, **extra_args: dict) -> None:
         ensure_build_directory(args, ctx.info_name)
         burn_efuse_args = [PYTHON, '-m', 'espefuse']
         burn_efuse_args += _parse_efuse_args(ctx, args, extra_args)
@@ -531,7 +608,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             burn_efuse_args += list(extra_args['efuse_positional_args'])
         RunTool('espefuse', burn_efuse_args, args.build_dir)()
 
-    def efuse_burn_key(action: str, ctx: click.core.Context, args: PropertyDict, **extra_args: str) -> None:
+    def efuse_burn_key(action: str, ctx: Context, args: PropertyDict, **extra_args: str) -> None:
         ensure_build_directory(args, ctx.info_name)
         burn_key_args = [PYTHON, '-m', 'espefuse']
         burn_key_args += _parse_efuse_args(ctx, args, extra_args)
@@ -546,9 +623,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             burn_key_args += extra_args['efuse_positional_args']
         RunTool('espefuse', burn_key_args, args.project_dir, build_dir=args.build_dir)()
 
-    def efuse_dump(
-        action: str, ctx: click.core.Context, args: PropertyDict, file_name: str, **extra_args: dict
-    ) -> None:
+    def efuse_dump(action: str, ctx: Context, args: PropertyDict, file_name: str, **extra_args: dict) -> None:
         ensure_build_directory(args, ctx.info_name)
         dump_args = [PYTHON, '-m', 'espefuse']
         dump_args += _parse_efuse_args(ctx, args, extra_args)
@@ -557,7 +632,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             dump_args += ['--file-name', file_name]
         RunTool('espefuse', dump_args, args.build_dir)()
 
-    def efuse_read_protect(action: str, ctx: click.core.Context, args: PropertyDict, **extra_args: dict) -> None:
+    def efuse_read_protect(action: str, ctx: Context, args: PropertyDict, **extra_args: dict) -> None:
         ensure_build_directory(args, ctx.info_name)
         read_protect_args = [PYTHON, '-m', 'espefuse']
         read_protect_args += _parse_efuse_args(ctx, args, extra_args)
@@ -568,7 +643,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
 
     def efuse_summary(
         action: str,
-        ctx: click.core.Context,
+        ctx: Context,
         args: PropertyDict,
         format: str,  # noqa: A002
         **extra_args: dict,
@@ -583,7 +658,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
             summary_args += [str(extra_args['efuse_name'])]
         RunTool('espefuse', summary_args, args.build_dir)()
 
-    def efuse_write_protect(action: str, ctx: click.core.Context, args: PropertyDict, **extra_args: dict) -> None:
+    def efuse_write_protect(action: str, ctx: Context, args: PropertyDict, **extra_args: dict) -> None:
         ensure_build_directory(args, ctx.info_name)
         write_protect_args = [PYTHON, '-m', 'espefuse']
         write_protect_args += _parse_efuse_args(ctx, args, extra_args)
@@ -850,7 +925,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
                 'help': (
                     'Generate a private key for signing secure boot images as per the secure boot version.'
                     ' Key file is generated in PEM format, Secure Boot V1 - ECDSA NIST256p private key.'
-                    ' Secure Boot V2 - RSA 3072, ECDSA NIST384p, ECDSA NIST256p, ECDSA NIST192p private key.'
+                    ' Secure Boot V2 - RSA 3072, ECDSA NIST384p, ECDSA NIST256p private key.'
                 ),
                 'options': [
                     {
@@ -862,7 +937,7 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
                     {
                         'names': ['--scheme', '-s'],
                         'help': ('Scheme of secure boot signing.'),
-                        'type': click.Choice(['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384']),
+                        'type': click.Choice(['rsa3072', 'ecdsa256', 'ecdsa384']),
                     },
                 ],
                 'arguments': [
@@ -1183,6 +1258,17 @@ def action_extensions(base_actions: dict, project_path: str) -> dict:
                         'names': ['--disable-auto-color'],
                         'is_flag': True,
                         'help': 'Disable auto coloring logs',
+                    },
+                    {
+                        'names': ['-c', '--command-file'],
+                        'type': click.Path(exists=True, dir_okay=False, readable=True),
+                        'default': None,
+                        'help': (
+                            'Run IDF Monitor in command-stream mode, reading line-based commands from FILE '
+                            '(empty lines and lines starting with # are ignored). '
+                            'See the IDF Monitor documentation for the list of commands '
+                            '(reset, expect, send, sleep, exit, and others).'
+                        ),
                     },
                 ],
                 'order_dependencies': [

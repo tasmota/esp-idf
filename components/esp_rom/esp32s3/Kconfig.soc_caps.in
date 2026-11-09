@@ -83,6 +83,10 @@ config ESP_ROM_HAS_NEWLIB_32BIT_TIME
     bool
     default y
 
+config ESP_ROM_HAS_LIBGCC
+    bool
+    default y
+
 config ESP_ROM_NEEDS_SET_CACHE_MMU_SIZE
     bool
     default y
@@ -126,3 +130,7 @@ config ESP_ROM_CONSOLE_OUTPUT_SECONDARY
 config ESP_ROM_HAS_REGI2C_IMPL
     bool
     default y
+
+config ESP_ROM_BOOTLOADER_OFFSET_FLASH
+    hex
+    default 0x0

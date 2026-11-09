@@ -27,9 +27,9 @@ except ImportError:
     import idf
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
-idf_py_path = os.path.join(current_dir, '..', 'idf.py')
+idf_py_path = os.path.normpath(os.path.join(current_dir, '..', 'idf.py'))
 extension_path = os.path.join(current_dir, 'test_idf_extensions', 'test_ext')
-py_actions_path = os.path.join(current_dir, '..', 'idf_py_actions')
+py_actions_path = os.path.normpath(os.path.join(current_dir, '..', 'idf_py_actions'))
 link_path = os.path.join(py_actions_path, 'test_ext')
 
 
@@ -142,9 +142,11 @@ class TestDependencyManagement(TestWithoutExtensions):
             standalone_mode=False,
         )
         sys.stderr = sys.__stderr__
+        # The shared esp_pylib logger wraps long lines at the console width; collapse whitespace
+        # so the substring check does not depend on where the line break lands.
         self.assertIn(
-            'WARNING: Commands "all", "clean" are found in the list of commands more than once.',
-            capturedOutput.getvalue(),
+            'Commands "all", "clean" are found in the list of commands more than once.',
+            ' '.join(capturedOutput.getvalue().split()),
         )
 
         sys.stderr = capturedOutput
@@ -154,8 +156,37 @@ class TestDependencyManagement(TestWithoutExtensions):
         )
         sys.stderr = sys.__stderr__
         self.assertIn(
-            'WARNING: Command "clean" is found in the list of commands more than once.', capturedOutput.getvalue()
+            'Command "clean" is found in the list of commands more than once.',
+            ' '.join(capturedOutput.getvalue().split()),
         )
+
+    def test_forbid_chaining(self):
+        for args in (['--dry-run', 'build', 'mcp-server'], ['--dry-run', 'mcp-server', 'build']):
+            with self.assertRaises(idf.FatalError) as ctx:
+                idf.init_cli()(args=args, standalone_mode=False)
+            self.assertIn('not allowed to be chained with other commands', str(ctx.exception))
+            self.assertIn('Please use it as a standalone idf.py command', str(ctx.exception))
+            self.assertIn('mcp-server', str(ctx.exception))
+
+
+class TestIdfVersionSeeding(TestWithoutExtensions):
+    def test_idf_version_seeded_when_unset(self):
+        from idf_py_actions.tools import idf_version_from_cmake
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop('IDF_VERSION', None)
+            idf.init_cli()(args=['--dry-run', 'build'], standalone_mode=False)
+            self.assertIn('IDF_VERSION', os.environ)
+            expected = idf_version_from_cmake()
+            self.assertIsNotNone(expected)
+            expected_stripped = expected.lstrip('v')
+            self.assertEqual(os.environ['IDF_VERSION'], expected_stripped)
+            self.assertFalse(os.environ['IDF_VERSION'].startswith('v'))
+
+    def test_idf_version_not_overwritten_when_set(self):
+        with mock.patch.dict(os.environ, {'IDF_VERSION': '0.0.0-sentinel'}):
+            idf.init_cli()(args=['--dry-run', 'build'], standalone_mode=False)
+            self.assertEqual(os.environ['IDF_VERSION'], '0.0.0-sentinel')
 
 
 class TestVerboseFlag(TestWithoutExtensions):
@@ -217,7 +248,7 @@ class TestDeprecations(TestWithoutExtensions):
             )
         except subprocess.CalledProcessError as e:
             output = e.output.decode('utf-8', 'ignore').replace('\r\n', '\n')
-            self.assertIn('Error: Command "test-2" is deprecated and was removed\n', output)
+            self.assertIn('Command "test-2" is deprecated and was removed', output)
 
     def test_exit_with_error_for_option(self):
         try:
@@ -228,7 +259,7 @@ class TestDeprecations(TestWithoutExtensions):
             )
         except subprocess.CalledProcessError as e:
             self.assertIn(
-                'Error: Option "test_5" is deprecated since v2.0 and was removed in v3.0.',
+                'Option "test_5" is deprecated since v2.0 and was removed in v3.0.',
                 e.output.decode('utf-8', 'ignore'),
             )
 
@@ -252,21 +283,42 @@ class TestDeprecations(TestWithoutExtensions):
             env=os.environ,
             stderr=subprocess.STDOUT,
         ).decode('utf-8', 'ignore')
-        self.assertIn('Warning: Option "test_sub_1" is deprecated and will be removed in future versions.', output)
+        output = ' '.join(output.split())
+        self.assertIn('Option "test_sub_1" is deprecated and will be removed in future versions.', output)
         self.assertIn(
-            'Warning: Command "test-1" is deprecated and will be removed in future versions. '
-            'Please use alternative command.',
+            'Command "test-1" is deprecated and will be removed in future versions. Please use alternative command.',
             output,
         )
-        self.assertIn('Warning: Option "test_1" is deprecated and will be removed in future versions.', output)
+        self.assertIn('Option "test_1" is deprecated and will be removed in future versions.', output)
         self.assertIn(
-            'Warning: Option "test_2" is deprecated and will be removed in future versions. '
-            'Please update your parameters.',
+            'Option "test_2" is deprecated and will be removed in future versions. Please update your parameters.',
             output,
         )
-        self.assertIn('Warning: Option "test_3" is deprecated and will be removed in future versions.', output)
+        self.assertIn('Option "test_3" is deprecated and will be removed in future versions.', output)
         self.assertNotIn('"test-0" is deprecated', output)
         self.assertNotIn('"test_0" is deprecated', output)
+
+
+class TestMachineReadableStdout(TestWithoutExtensions):
+    """Executing action / Done are omitted when a task owns stdout."""
+
+    def _cli(self) -> Any:
+        return idf.init_cli()
+
+    def test_uses_machine_readable_stdout_mcp_server(self):
+        from types import SimpleNamespace
+
+        task = SimpleNamespace(name='mcp-server', action_args={})
+        self.assertTrue(self._cli()._uses_machine_readable_stdout(task))
+
+    def test_uses_machine_readable_stdout_help_json(self):
+        from types import SimpleNamespace
+
+        cli = self._cli()
+        with_json = SimpleNamespace(name='help', action_args={'json_option': True})
+        without_json = SimpleNamespace(name='help', action_args={'json_option': False})
+        self.assertTrue(cli._uses_machine_readable_stdout(with_json))
+        self.assertFalse(cli._uses_machine_readable_stdout(without_json))
 
 
 class TestHelpOutput(TestWithoutExtensions):

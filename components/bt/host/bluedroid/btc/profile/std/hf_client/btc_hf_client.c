@@ -78,7 +78,12 @@ void bta_hf_client_bqb_esco_s4_ctrl(BOOLEAN enable)
 /************************************************************************************
 **  Static variables
 ************************************************************************************/
-const int btc_hf_client_version = HFP_HF_VERSION_1_7;
+const int btc_hf_client_version =
+#if UC_BT_HFP_LC3_ENABLE
+    HFP_HF_VERSION_1_9;
+#else
+    HFP_HF_VERSION_1_7;
+#endif
 
 #if HFP_DYNAMIC_MEMORY == FALSE
 static hf_client_local_param_t hf_client_local_param;
@@ -349,6 +354,19 @@ bt_status_t btc_hf_client_disconnect_audio( bt_bdaddr_t *bd_addr )
         return BT_STATUS_SUCCESS;
     }
 
+    return BT_STATUS_FAIL;
+}
+
+bt_status_t btc_hf_client_audio_data_send(uint16_t sync_conn_hdl, uint8_t *p_buff_start, uint8_t *p_data, uint8_t data_len)
+{
+#if (BTM_SCO_HCI_INCLUDED == TRUE) && (BTA_HFP_EXT_CODEC == TRUE)
+    CHECK_HF_CLIENT_SLC_CONNECTED();
+
+    if (sync_conn_hdl != ESP_INVALID_CONN_HANDLE && hf_client_local_param.btc_hf_client_cb.sync_conn_hdl == sync_conn_hdl) {
+        BTA_HfClientAudioDataSend(sync_conn_hdl, p_buff_start, p_data, data_len);
+        return BT_STATUS_SUCCESS;
+    }
+#endif
     return BT_STATUS_FAIL;
 }
 
@@ -796,6 +814,9 @@ bt_status_t btc_hf_client_execute_service(BOOLEAN b_enable)
         /* Enable and register with BTA-HFClient */
         BTA_HfClientEnable(bte_hf_client_evt);
         hf_client_local_param.btc_hf_client_features = BTC_HF_CLIENT_FEATURES;
+#if UC_BT_HFP_LC3_ENABLE
+        hf_client_local_param.btc_hf_client_features |= BTA_HF_CLIENT_FEAT_SWB;
+#endif
         if (btc_hf_client_version >= HFP_HF_VERSION_1_7)
         {
             hf_client_local_param.btc_hf_client_features |= BTA_HF_CLIENT_FEAT_ESCO_S4;
@@ -1106,6 +1127,17 @@ void btc_hf_client_cb_handler(btc_msg_t *msg)
         case BTA_HF_CLIENT_AUDIO_MSBC_OPEN_EVT:
             do {
                 param.audio_stat.state = ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC;
+                memcpy(param.audio_stat.remote_bda, &hf_client_local_param.btc_hf_client_cb.connected_bda,
+                       sizeof(esp_bd_addr_t));
+                hf_client_local_param.btc_hf_client_cb.sync_conn_hdl = p_data->hdr.sync_conn_handle;
+                param.audio_stat.sync_conn_handle = p_data->hdr.sync_conn_handle;
+                param.audio_stat.preferred_frame_size = p_data->audio_stat.preferred_frame_size;
+                btc_hf_client_cb_to_app(ESP_HF_CLIENT_AUDIO_STATE_EVT, &param);
+            } while (0);
+            break;
+        case BTA_HF_CLIENT_AUDIO_LC3_OPEN_EVT:
+            do {
+                param.audio_stat.state = ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_LC3;
                 memcpy(param.audio_stat.remote_bda, &hf_client_local_param.btc_hf_client_cb.connected_bda,
                        sizeof(esp_bd_addr_t));
                 hf_client_local_param.btc_hf_client_cb.sync_conn_hdl = p_data->hdr.sync_conn_handle;

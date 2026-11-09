@@ -31,7 +31,7 @@
 #define BTA_HF_H2_HEADER_SN1_BIT_OFFSET2    15
 
 #define BTA_HF_H2_HEADER_SYNC_WORD_CHECK(p) \
-    ((((UINT16)(((UINT8 *)(p))[0])) | (((UINT16)(((UINT8 *)(p))[1])) << 8)) & \
+    (((((UINT16)(((UINT8 *)(p))[0])) | (((UINT16)(((UINT8 *)(p))[1])) << 8)) & \
     BTA_HF_H2_HEADER_SYNC_WORD_MASK) == \
     BTA_HF_H2_HEADER_SYNC_WORD)
 
@@ -419,19 +419,21 @@ uint32_t bta_hf_client_sco_co_out_data(UINT8 *p_buf)
 static void bta_hf_client_decode_msbc_frame(UINT8 **data, UINT8 *length, BOOLEAN is_bad_frame){
     OI_STATUS status;
     const OI_BYTE *zero_signal_frame_data;
-    UINT8 zero_signal_frame_len = BTM_MSBC_FRAME_DATA_SIZE;
+    OI_UINT32 frame_len = *length;
+    OI_UINT32 zero_signal_frame_len = BTM_MSBC_FRAME_DATA_SIZE;
     UINT32 sbc_raw_data_size = HF_SBC_DEC_RAW_DATA_SIZE;
 
     if (is_bad_frame){
         status = OI_CODEC_SBC_CHECKSUM_MISMATCH;
     } else {
         status = OI_CODEC_SBC_DecodeFrame(&bta_hf_client_co_cb.decoder_context, (const OI_BYTE **)data,
-                                          (OI_UINT32 *)length,
+                                          &frame_len,
                                           (OI_INT16 *)bta_hf_client_co_cb.decode_raw_data,
                                           (OI_UINT32 *)&sbc_raw_data_size);
+        *length = (UINT8)frame_len;
     }
 
-// PLC_INCLUDED will be set to TRUE when enabling Wide Band Speech
+// PLC_INCLUDED will be set to TRUE when enabling Wideband Speech
 #if (PLC_INCLUDED == TRUE)
     switch(status){
         case OI_OK:
@@ -450,7 +452,7 @@ static void bta_hf_client_decode_msbc_frame(UINT8 **data, UINT8 *length, BOOLEAN
             zero_signal_frame_data = sbc_plc_zero_signal_frame();
             sbc_raw_data_size = HF_SBC_DEC_RAW_DATA_SIZE;
             status = OI_CODEC_SBC_DecodeFrame(&bta_hf_client_co_cb.decoder_context, &zero_signal_frame_data,
-                                                (OI_UINT32 *)&zero_signal_frame_len,
+                                                &zero_signal_frame_len,
                                                 (OI_INT16 *)bta_hf_client_co_cb.decode_raw_data,
                                                 (OI_UINT32 *)&sbc_raw_data_size);
             sbc_plc_bad_frame(&(bta_hf_ct_plc.plc_state), bta_hf_client_co_cb.decode_raw_data, bta_hf_ct_plc.sbc_plc_out);
@@ -497,11 +499,23 @@ void bta_hf_client_sco_co_in_data(BT_HDR  *p_buf, tBTM_SCO_DATA_FLAG status)
         return;
     }
 
+    if (p_buf->len < HCI_SCO_PREAMBLE_SIZE) {
+        APPL_TRACE_ERROR("%s SCO packet too short: %u", __func__, p_buf->len);
+        osi_free(p_buf);
+        return;
+    }
+
     UINT8 *p = (UINT8 *)(p_buf + 1) + p_buf->offset;
+    UINT8 * const data_end = p + p_buf->len;
     UINT8 pkt_size = 0;
 
     STREAM_SKIP_UINT16(p);
     STREAM_TO_UINT8 (pkt_size, p);
+
+    UINT16 rem = (data_end > p) ? (UINT16)(data_end - p) : 0;
+    if (pkt_size > rem) {
+        pkt_size = (UINT8)rem;
+    }
 
 #if (BTC_HFP_EXT_CODEC == TRUE)
     if (hf_air_mode == BTM_SCO_AIR_MODE_CVSD) {
@@ -523,22 +537,32 @@ void bta_hf_client_sco_co_in_data(BT_HDR  *p_buf, tBTM_SCO_DATA_FLAG status)
                 osi_free(p_buf);
             } else {
                 BT_HDR  *p_new_buf = osi_calloc(sizeof(BT_HDR) + BTM_MSBC_FRAME_SIZE);
+                if (p_new_buf == NULL) {
+                    APPL_TRACE_ERROR("bta_hf_client_sco_co_in_data ENOMEM");
+                    osi_free(p_buf);
+                    bta_hf_client_co_cb.rx_first_pkt = !bta_hf_client_co_cb.rx_first_pkt;
+                    bta_hf_client_co_cb.is_bad_frame = false;
+                    return;
+                }
                 p_new_buf->offset = 0;
                 UINT8 *p_data = (UINT8 *)(p_new_buf + 1) + p_new_buf->offset;
+                UINT16 data_len = BTM_MSBC_FRAME_SIZE;
                 memcpy(p_data, bta_hf_client_co_cb.rx_half_msbc_data, BTM_MSBC_FRAME_SIZE / 2);
                 memcpy(p_data + BTM_MSBC_FRAME_SIZE / 2, p, pkt_size);
                 osi_free(p_buf);
                 if (BTA_HF_H2_HEADER_SYNC_WORD_CHECK(p_data)) {
                     /* H2 header sync word found, skip */
                     p_data += 2;
+                    data_len -= 2;
                 }
                 else if (!bta_hf_client_co_cb.is_bad_frame){
                     /* not a bad frame, assume as H1 header */
                     p_data += 1;
+                    data_len -= 1;
                 }
-                btc_hf_client_audio_data_cb_to_app((uint8_t *)p_new_buf, (uint8_t *)p_data, BTM_MSBC_FRAME_SIZE, bta_hf_client_co_cb.is_bad_frame);
+                btc_hf_client_audio_data_cb_to_app((uint8_t *)p_new_buf, (uint8_t *)p_data, data_len, bta_hf_client_co_cb.is_bad_frame);
                 bta_hf_client_co_cb.is_bad_frame = false;
-                memset(bta_hf_client_co_cb.rx_half_msbc_data, 0, BTM_MSBC_FRAME_SIZE);
+                memset(bta_hf_client_co_cb.rx_half_msbc_data, 0, BTM_MSBC_FRAME_SIZE / 2);
             }
             bta_hf_client_co_cb.rx_first_pkt = !bta_hf_client_co_cb.rx_first_pkt;
         }
@@ -546,15 +570,19 @@ void bta_hf_client_sco_co_in_data(BT_HDR  *p_buf, tBTM_SCO_DATA_FLAG status)
             if (pkt_size > BTM_MSBC_FRAME_SIZE) {
                 pkt_size = BTM_MSBC_FRAME_SIZE;
             }
-            if (BTA_HF_H2_HEADER_SYNC_WORD_CHECK(p)) {
+            UINT16 data_len = pkt_size;
+            if (data_len >= 2 && BTA_HF_H2_HEADER_SYNC_WORD_CHECK(p)) {
                 /* H2 header sync word found, skip */
                 p += 2;
-            }
-            else if (!bta_hf_client_co_cb.is_bad_frame){
+                data_len -= 2;
+            } else if (data_len >= 1 && !bta_hf_client_co_cb.is_bad_frame) {
                 /* not a bad frame, assume as H1 header */
                 p += 1;
+                data_len -= 1;
+            } else {
+                bta_hf_client_co_cb.is_bad_frame = true;
             }
-            btc_hf_client_audio_data_cb_to_app((uint8_t *)p_buf, (uint8_t *)p, pkt_size, bta_hf_client_co_cb.is_bad_frame);
+            btc_hf_client_audio_data_cb_to_app((uint8_t *)p_buf, (uint8_t *)p, data_len, bta_hf_client_co_cb.is_bad_frame);
             bta_hf_client_co_cb.is_bad_frame = false;
         }
         else {
@@ -589,6 +617,7 @@ void bta_hf_client_sco_co_in_data(BT_HDR  *p_buf, tBTM_SCO_DATA_FLAG status)
                 }
 
                 data = bta_hf_client_co_cb.decode_msbc_data;
+                pkt_size += BTM_MSBC_FRAME_SIZE / 2;
                 bta_hf_client_decode_msbc_frame(&data, &pkt_size, bta_hf_client_co_cb.is_bad_frame);
                 bta_hf_client_co_cb.is_bad_frame = false;
             }

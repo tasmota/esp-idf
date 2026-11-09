@@ -71,12 +71,14 @@ static BOOLEAN get_peer_bd_addr(tBTA_AV_RCB *p_rcb, BD_ADDR out_addr)
 static void report_data_event(BT_HDR *pkt, UINT8 *p_data, UINT16 data_len, BOOLEAN final)
 {
     tBTA_AV_CA_DATA ca_data;
+
+    /* bta_av_safe_cback frees p_hdr when the upper layer callback is already gone. */
     ca_data.status = BT_STATUS_SUCCESS;
     ca_data.final = final;
     ca_data.data_len = data_len;
     ca_data.p_data = p_data;
     ca_data.p_hdr = pkt;
-    (*bta_av_cb.p_cback)(BTA_AV_CA_DATA_EVT, (tBTA_AV *) &ca_data);
+    bta_av_safe_cback(BTA_AV_CA_DATA_EVT, (tBTA_AV *) &ca_data);
 }
 
 static void report_error_data_event(UINT16 status)
@@ -87,7 +89,7 @@ static void report_error_data_event(UINT16 status)
     ca_data.data_len = 0;
     ca_data.p_data = NULL;
     ca_data.p_hdr = NULL;
-    (*bta_av_cb.p_cback)(BTA_AV_CA_DATA_EVT, (tBTA_AV *) &ca_data);
+    bta_av_safe_cback(BTA_AV_CA_DATA_EVT, (tBTA_AV *) &ca_data);
 }
 
 static void build_and_send_connect_req(tBTA_AV_RCB *p_rcb)
@@ -162,7 +164,9 @@ void bta_av_ca_goep_event_handler(UINT16 handle, UINT8 event, tGOEPC_MSG *p_msg)
     tBTA_AV_DATA *p_data = NULL;
     UINT16 rcb_idx;
 
-    if (p_msg == NULL) {
+    if (p_msg == NULL && (event == GOEPC_OPENED_EVT ||
+                          event == GOEPC_CLOSED_EVT ||
+                          event == GOEPC_RESPONSE_EVT)) {
         goto error;
     }
 
@@ -298,7 +302,6 @@ void bta_av_ca_api_get(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
     GOEPC_RequestAddHeader(p_rcb->cover_art_goep_hdl, COVER_ART_HEADER_ID_IMG_HANDLE, (UINT8 *)image_handle_utf16, BTA_AV_CA_IMG_HDL_UTF16_LEN);
     if (p_data->api_ca_get.type == BTA_AV_CA_GET_IMAGE) {
         GOEPC_RequestAddHeader(p_rcb->cover_art_goep_hdl, COVER_ART_HEADER_ID_IMG_DESCRIPTOR, (UINT8 *)p_data->api_ca_get.image_descriptor, p_data->api_ca_get.image_descriptor_len);
-        osi_free(p_data->api_ca_get.image_descriptor);
     }
     /* always request to enable srm */
     GOEPC_RequestSetSRM(p_rcb->cover_art_goep_hdl, TRUE, FALSE);
@@ -314,7 +317,10 @@ error:
 void bta_av_ca_response(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
 {
     tOBEX_PARSE_INFO info;
-    OBEX_ParseResponse(p_data->ca_response.pkt, p_data->ca_response.opcode, &info);
+    if (OBEX_ParseResponse(p_data->ca_response.pkt, p_data->ca_response.opcode, &info) != OBEX_SUCCESS) {
+        osi_free(p_data->ca_response.pkt);
+        goto error;
+    }
     /* we always use a final get */
     if (p_data->ca_response.opcode == OBEX_OPCODE_GET_FINAL
         && (info.response_code == OBEX_RESPONSE_CODE_CONTINUE || info.response_code == (OBEX_RESPONSE_CODE_CONTINUE | OBEX_FINAL_BIT_MASK)))
@@ -322,13 +328,15 @@ void bta_av_ca_response(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
         UINT8 *header = NULL;
         UINT8 *body_data = NULL;
         UINT16 body_data_len = 0;
+        UINT8 *pkt_data = (UINT8 *)(p_data->ca_response.pkt + 1) + p_data->ca_response.pkt->offset;
+        UINT8 *pkt_end = pkt_data + p_data->ca_response.pkt->len;
         while((header = OBEX_GetNextHeader(p_data->ca_response.pkt, &info)) != NULL) {
             switch (*header)
             {
             case OBEX_HEADER_ID_BODY:
             /* actually,END_OF_BODY should not in this continue response */
             case OBEX_HEADER_ID_END_OF_BODY: {
-                UINT16 hdr_len = OBEX_GetHeaderLength(header);
+                UINT16 hdr_len = OBEX_GetHeaderLength(header, pkt_end);
                 UINT16 seg_len = (hdr_len >= 3) ? (UINT16)(hdr_len - 3) : 0;
                 if (body_data == NULL) {
                     /* first body header */
@@ -373,7 +381,10 @@ error:
 void bta_av_ca_response_final(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
 {
     tOBEX_PARSE_INFO info;
-    OBEX_ParseResponse(p_data->ca_response.pkt, p_data->ca_response.opcode, &info);
+    if (OBEX_ParseResponse(p_data->ca_response.pkt, p_data->ca_response.opcode, &info) != OBEX_SUCCESS) {
+        osi_free(p_data->ca_response.pkt);
+        goto error;
+    }
     UINT8 *header = NULL;
     if (p_data->ca_response.opcode == OBEX_OPCODE_CONNECT) {
         /* we expect a success response code with final bit set */
@@ -385,20 +396,27 @@ void bta_av_ca_response_final(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
                 p_rcb->cover_art_max_tx = info.max_packet_length;
             }
             BOOLEAN cid_found = false;
+            UINT8 *pkt_data = (UINT8 *)(p_data->ca_response.pkt + 1) + p_data->ca_response.pkt->offset;
+            UINT8 *pkt_end = pkt_data + p_data->ca_response.pkt->len;
             while((header = OBEX_GetNextHeader(p_data->ca_response.pkt, &info)) != NULL) {
                 if (*header == OBEX_HEADER_ID_CONNECTION_ID) {
+                    if (OBEX_GetHeaderLength(header, pkt_end) != 5) {
+                        osi_free(p_data->ca_response.pkt);
+                        goto error;
+                    }
                     cid_found = true;
                     memcpy((UINT8 *)(&p_rcb->cover_art_cid), header + 1, 4);
                     break;
                 }
             }
             if (!cid_found) {
+                osi_free(p_data->ca_response.pkt);
                 goto error;
             }
             tBTA_AV_CA_STATUS ca_status;
             ca_status.connected = TRUE;
             ca_status.reason = BT_STATUS_SUCCESS;
-            (*bta_av_cb.p_cback)(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
+            bta_av_safe_cback(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
             /* done, free response packet */
             osi_free(p_data->ca_response.pkt);
         }
@@ -412,13 +430,15 @@ void bta_av_ca_response_final(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
         UINT16 body_data_len = 0;
         /* check response code is success */
         if (info.response_code == (OBEX_RESPONSE_CODE_OK | OBEX_FINAL_BIT_MASK)) {
+            UINT8 *pkt_data = (UINT8 *)(p_data->ca_response.pkt + 1) + p_data->ca_response.pkt->offset;
+            UINT8 *pkt_end = pkt_data + p_data->ca_response.pkt->len;
             while((header = OBEX_GetNextHeader(p_data->ca_response.pkt, &info)) != NULL) {
                 switch (*header)
                 {
                 /* actually, BODY should not in this final response */
                 case OBEX_HEADER_ID_BODY:
                 case OBEX_HEADER_ID_END_OF_BODY: {
-                    UINT16 hdr_len = OBEX_GetHeaderLength(header);
+                    UINT16 hdr_len = OBEX_GetHeaderLength(header, pkt_end);
                     UINT16 seg_len = (hdr_len >= 3) ? (UINT16)(hdr_len - 3) : 0;
                     if (body_data == NULL) {
                         /* first body header */
@@ -484,7 +504,7 @@ void bta_av_ca_goep_disconnect(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
     tBTA_AV_CA_STATUS ca_status;
     ca_status.connected = FALSE;
     ca_status.reason = p_data->ca_disconnect.reason;
-    (*bta_av_cb.p_cback)(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
+    bta_av_safe_cback(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
 }
 
 void bta_av_ca_force_disconnect(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
@@ -501,7 +521,7 @@ void bta_av_ca_force_disconnect(tBTA_AV_RCB *p_rcb, tBTA_AV_DATA *p_data)
     ca_status.connected = FALSE;
     /* force disconnect by upper, set reason to success */
     ca_status.reason = BT_STATUS_SUCCESS;
-    (*bta_av_cb.p_cback)(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
+    bta_av_safe_cback(BTA_AV_CA_STATUS_EVT, (tBTA_AV *) &ca_status);
 }
 
 void bta_av_ca_reset(tBTA_AV_RCB *p_rcb)

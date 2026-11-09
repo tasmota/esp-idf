@@ -49,7 +49,7 @@
 #define PARLIO_LL_TX_DATA_LINE_AS_CLK_GATE  15 // TXD[15] can be used as clock gate signal
 
 #if HAL_CONFIG(CHIP_SUPPORT_MIN_REV) >= 300
-#define PARLIO_LL_TX_VALID_MAX_DELAY        32767
+#define PARLIO_LL_TX_VALID_MAX_DELAY        65535
 #define PARLIO_LL_SUPPORT_TX_EOF_FROM_DMA   1   // Support to treat DMA EOF as TX unit EOF
 #endif
 
@@ -92,6 +92,7 @@ static inline void _parlio_ll_enable_bus_clock(int group_id, bool enable)
  *
  * @param group_id  The group id of the parlio module
  */
+__attribute__((always_inline))
 static inline void _parlio_ll_reset_register(int group_id)
 {
     (void)group_id;
@@ -114,6 +115,7 @@ static inline void _parlio_ll_reset_register(int group_id)
  * @param dev Parallel IO register base address
  * @param src Clock source
  */
+__attribute__((always_inline))
 static inline void _parlio_ll_rx_set_clock_source(parl_io_dev_t *dev, parlio_clock_source_t src)
 {
     (void)dev;
@@ -136,6 +138,7 @@ static inline void _parlio_ll_rx_set_clock_source(parl_io_dev_t *dev, parlio_clo
         HAL_ASSERT(false);
         break;
     }
+    LP_AON_CLKRST.hp_clk_ctrl.hp_pad_parlio_rx_clk_en = (src == PARLIO_CLK_SRC_EXTERNAL);
     HP_SYS_CLKRST.peri_clk_ctrl117.reg_parlio_rx_clk_src_sel = clk_sel;
 }
 
@@ -197,7 +200,6 @@ __attribute__((always_inline))
 static inline void _parlio_ll_rx_enable_clock(parl_io_dev_t *dev, bool en)
 {
     (void)dev;
-    LP_AON_CLKRST.hp_clk_ctrl.hp_pad_parlio_rx_clk_en = en;
     HP_SYS_CLKRST.peri_clk_ctrl117.reg_parlio_rx_clk_en = en;
 }
 
@@ -486,6 +488,7 @@ static inline void _parlio_ll_tx_set_clock_source(parl_io_dev_t *dev, parlio_clo
         HAL_ASSERT(false);
         break;
     }
+    LP_AON_CLKRST.hp_clk_ctrl.hp_pad_parlio_tx_clk_en = (src == PARLIO_CLK_SRC_EXTERNAL);
     HP_SYS_CLKRST.peri_clk_ctrl118.reg_parlio_tx_clk_src_sel = clk_sel;
 }
 
@@ -548,7 +551,6 @@ __attribute__((always_inline))
 static inline void _parlio_ll_tx_enable_clock(parl_io_dev_t *dev, bool en)
 {
     (void)dev;
-    LP_AON_CLKRST.hp_clk_ctrl.hp_pad_parlio_tx_clk_en = en;
     HP_SYS_CLKRST.peri_clk_ctrl118.reg_parlio_tx_clk_en = en;
 }
 

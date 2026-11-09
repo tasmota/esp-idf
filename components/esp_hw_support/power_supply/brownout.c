@@ -25,7 +25,7 @@
 #include "sdkconfig.h"
 #include "esp_rom_serial_output.h"
 #include "hal/uart_ll.h"
-#include "soc/power_supply_periph.h"
+#include "hal/power_supply_periph.h"
 #include "esp_brownout.h"
 #include "esp_check.h"
 #include "esp_memory_utils.h"
@@ -99,6 +99,9 @@ void esp_brownout_init(void)
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2
     rtc_isr_register(rtc_brownout_isr_handler, NULL, RTC_CNTL_BROWN_OUT_INT_ENA_M, RTC_INTR_FLAG_IRAM);
+#elif CONFIG_IDF_TARGET_ESP32S31
+    intr_handle_t bod_intr;
+    esp_intr_alloc_intrstatus(power_supply_periph_signal.irq, ESP_INTR_FLAG_IRAM, (uint32_t)brownout_ll_intr_get_status_reg(), BROWNOUT_DETECTOR_LL_INTERRUPT_MASK, &rtc_brownout_isr_handler, NULL, &bod_intr);
 #else
     intr_handle_t bod_intr;
     esp_intr_alloc_intrstatus(power_supply_periph_signal.irq, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_SHARED, (uint32_t)brownout_ll_intr_get_status_reg(), BROWNOUT_DETECTOR_LL_INTERRUPT_MASK, &rtc_brownout_isr_handler, NULL, &bod_intr);

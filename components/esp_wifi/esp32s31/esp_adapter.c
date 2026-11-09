@@ -35,6 +35,9 @@
 #include "esp_phy_init.h"
 #include "phy_init_data.h"
 #endif
+#if CONFIG_MAC_BB_PD && SOC_PM_MODEM_RETENTION_BY_REGDMA
+#include "esp_private/phy.h"
+#endif
 #include "soc/rtc_cntl_periph.h"
 #include "soc/rtc.h"
 #include "esp_private/periph_ctrl.h"
@@ -57,8 +60,8 @@
 #define TAG "esp_adapter"
 
 #ifdef CONFIG_PM_ENABLE
-extern void wifi_apb80m_request(void);
-extern void wifi_apb80m_release(void);
+extern void wifi_pm_sleep_lock_acquire(void);
+extern void wifi_pm_sleep_lock_release(void);
 #endif
 
 IRAM_ATTR void *wifi_malloc(size_t size)
@@ -351,17 +354,17 @@ static int32_t esp_event_post_wrapper(const char *event_base, int32_t event_id, 
     }
 }
 
-static void IRAM_ATTR wifi_apb80m_request_wrapper(void)
+static void IRAM_ATTR wifi_pm_sleep_lock_acquire_wrapper(void)
 {
 #ifdef CONFIG_PM_ENABLE
-    wifi_apb80m_request();
+    wifi_pm_sleep_lock_acquire();
 #endif
 }
 
-static void IRAM_ATTR wifi_apb80m_release_wrapper(void)
+static void IRAM_ATTR wifi_pm_sleep_lock_release_wrapper(void)
 {
 #ifdef CONFIG_PM_ENABLE
-    wifi_apb80m_release();
+    wifi_pm_sleep_lock_release();
 #endif
 }
 
@@ -621,7 +624,7 @@ static void * coex_schm_get_phase_by_idx_wrapper(int phase_idx)
 
 static int coex_configure_preemption_end_cb_wrapper(bool is_register, int(*cb)(uint32_t))
 {
-#if CONFIG_SW_COEXIST_ENABLE && CONFIG_COEX_ISO_INT_SCHEME
+#if CONFIG_SW_COEXIST_ENABLE && SOC_BLE_ISO_SUPPORTED
     return esp_coex_configure_iso_end_wifi_cb(is_register, cb);
 #else
     return 0;
@@ -649,6 +652,49 @@ static void esp_phy_disable_wrapper(void)
     phy_wifi_enable_set(0);
     esp_phy_disable(PHY_MODEM_WIFI);
 }
+
+static bool esp_wifi_disable_ac_ax_wrapper(void)
+{
+    return false; // disable 11ac and 11ax is not supported on esp32s31.
+}
+
+#if SOC_PM_MODEM_RETENTION_BY_REGDMA
+static int32_t esp_phy_wifi_bb_sleep_retention_attach_wrapper(void)
+{
+#if CONFIG_MAC_BB_PD
+    return (int32_t)esp_phy_wifi_bb_sleep_retention_attach();
+#else
+    return 1;
+#endif
+}
+
+static int32_t esp_phy_wifi_bb_sleep_retention_detach_wrapper(void)
+{
+#if CONFIG_MAC_BB_PD
+    return (int32_t)esp_phy_wifi_bb_sleep_retention_detach();
+#else
+    return 1;
+#endif
+}
+
+static int32_t esp_wifi_mac_sleep_retention_attach_wrapper(void)
+{
+#if CONFIG_MAC_BB_PD
+    return (int32_t)esp_wifi_internal_mac_sleep_retention_attach();
+#else
+    return 1;
+#endif
+}
+
+static int32_t esp_wifi_mac_sleep_retention_detach_wrapper(void)
+{
+#if CONFIG_MAC_BB_PD
+    return (int32_t)esp_wifi_internal_mac_sleep_retention_detach();
+#else
+    return 1;
+#endif
+}
+#endif
 
 wifi_osi_funcs_t g_wifi_osi_funcs = {
     ._version = ESP_WIFI_OS_ADAPTER_VERSION,
@@ -701,8 +747,8 @@ wifi_osi_funcs_t g_wifi_osi_funcs = {
     ._rand = esp_random,
     ._dport_access_stall_other_cpu_start_wrap = esp_empty_wrapper,
     ._dport_access_stall_other_cpu_end_wrap = esp_empty_wrapper,
-    ._wifi_apb80m_request = wifi_apb80m_request_wrapper,
-    ._wifi_apb80m_release = wifi_apb80m_release_wrapper,
+    ._wifi_pm_sleep_lock_acquire = wifi_pm_sleep_lock_acquire_wrapper,
+    ._wifi_pm_sleep_lock_release = wifi_pm_sleep_lock_release_wrapper,
     ._phy_disable = esp_phy_disable_wrapper,
     ._phy_enable = esp_phy_enable_wrapper,
     ._phy_update_country_info = esp_phy_update_country_info,
@@ -774,5 +820,12 @@ wifi_osi_funcs_t g_wifi_osi_funcs = {
     ._coex_schm_flexible_period_get = coex_schm_flexible_period_get_wrapper,
     ._coex_schm_get_phase_by_idx = coex_schm_get_phase_by_idx_wrapper,
     ._coex_configure_preemption_end_cb = coex_configure_preemption_end_cb_wrapper,
+    ._wifi_disable_ac_ax = esp_wifi_disable_ac_ax_wrapper,
+#if SOC_PM_MODEM_RETENTION_BY_REGDMA
+    ._wifi_bb_sleep_retention_attach = esp_phy_wifi_bb_sleep_retention_attach_wrapper,
+    ._wifi_bb_sleep_retention_detach = esp_phy_wifi_bb_sleep_retention_detach_wrapper,
+    ._wifi_mac_sleep_retention_attach = esp_wifi_mac_sleep_retention_attach_wrapper,
+    ._wifi_mac_sleep_retention_detach = esp_wifi_mac_sleep_retention_detach_wrapper,
+#endif
     ._magic = ESP_WIFI_OS_ADAPTER_MAGIC,
 };

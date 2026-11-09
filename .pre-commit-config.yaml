@@ -32,6 +32,7 @@ repos:
             .*.yuv|
             .*.rgb|
             .*.gray|
+            .*.ppm|
             .*COPYING.*|
             docs/sphinx-known-warnings\.txt
           )$
@@ -42,12 +43,15 @@ repos:
         args: ['-f=lf']
         exclude: *whitespace_excludes
       - id: double-quote-string-fixer
+      # '--branch' is passed explicitly because the hook otherwise falls back to
+      # protecting 'master' and 'main', which would fail these checks for reasons
+      # unrelated to their names. An empty value never matches a branch name.
       - id: no-commit-to-branch
         name: Do not use more than one slash in the branch name
-        args: ['--pattern', '^[^/]*/[^/]*/']
+        args: ['--branch', '', '--pattern', '^[^/]*/[^/]*/']
       - id: no-commit-to-branch
         name: Do not use uppercase letters in the branch name
-        args: ['--pattern', '^[^A-Z]*[A-Z]']
+        args: ['--branch', '', '--pattern', '^[^A-Z]*[A-Z]']
   - repo: https://github.com/codespell-project/codespell
     rev: v2.3.0
     hooks:
@@ -94,11 +98,12 @@ repos:
         name: Check type annotations in python files
         entry: tools/ci/check_type_comments.py
         additional_dependencies:
-          - 'mypy'
+          - 'mypy<1.20.2'
           - 'mypy-extensions'
           - 'types-setuptools'
           - 'types-PyYAML'
           - 'types-requests'
+          - 'esp-pylib>=1.1.0' # required for log.die() type narrowing
         exclude: >
           (?x)^(
               .*_pb2.py
@@ -137,6 +142,7 @@ repos:
         pass_filenames: false
         additional_dependencies:
           - pyparsing
+          - 'esp-pylib>=1.1.0'
       - id: check-all-apps-readmes
         name: Check if all apps readme files match given .build-test-rules.yml files. Modify the supported target tables
         entry: tools/ci/check_build_test_rules.py check-readmes
@@ -145,7 +151,16 @@ repos:
         require_serial: true
         additional_dependencies:
           - PyYAML == 5.3.1
-          - idf-build-apps~=2.13
+          - idf-build-apps>=2.16.1,<3
+      - id: check-build-test-rules-depends-components
+        name: Check if all depends_components in .build-test-rules.yml files are existing components
+        entry: tools/ci/check_build_test_rules.py check-depends-components
+        language: python
+        files: '\.build-test-rules\.yml$|^\.idf_build_apps\.toml$|(^|/)components/[^/]+/CMakeLists\.txt$|^tools/ci/check_build_test_rules\.py$'
+        pass_filenames: false
+        additional_dependencies:
+          - PyYAML == 5.3.1
+          - idf-build-apps>=2.16.1,<3
       - id: sort-yaml-files
         name: sort yaml files
         entry: tools/ci/sort_yaml.py
@@ -166,14 +181,27 @@ repos:
         language: python
         always_run: true
         require_serial: true
-      - id: gitlab-yaml-linter
-        name: Check gitlab yaml files
-        entry: tools/ci/gitlab_yaml_linter.py
-        language: python
-        files: '\.gitlab-ci\.yml|\.gitlab/ci/.+\.yml|\.gitmodules'
+      - id: check-wifi-remote-api
+        name: Check wifi-remote API generation
+        description: Runs generate_and_check.py and fails if any generated files differ from the index.
+        entry: bash -c "cd components/esp_wifi/remote/scripts/ && python3 generate_and_check.py"
+        language: system
+        files: >
+          (?x)^(
+            components/esp_wifi/remote/scripts/(ignore_extensions\.h|copyright_header\.h)|
+            components/esp_wifi/include/(esp_wifi.*|esp_mesh.*|esp_now.*)\.h|
+            components/esp_wifi/Kconfig|
+            components/wpa_supplicant/esp_supplicant/include/esp_eap_client\.h|
+            components/soc/.+/include/soc/Kconfig\.soc_caps\.in
+          )$
         pass_filenames: false
-        additional_dependencies:
-          - PyYAML == 5.3.1
+        verbose: true
+      - id: check-err-codes-registration
+        name: Check error code headers are registered
+        entry: tools/ci/check_err_codes_registration.py
+        language: python
+        files: 'components/.+\.h$|components/.+CMakeLists\.txt$'
+        pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1
     hooks:
@@ -211,11 +239,6 @@ repos:
       name: shellcheck dash (export.sh)
       args: ['--shell', 'dash', '-x']
       files: 'export.sh'
-  - repo: https://github.com/espressif/esp-pwsh-check
-    rev: v1.0.1
-    hooks:
-    - id: check-powershell-scripts
-      stages: [manual]
   - repo: https://github.com/espressif/esp-idf-sbom.git
     rev: v0.13.0
     hooks:
@@ -228,7 +251,7 @@ repos:
         name: Lint rST files in docs folder using Sphinx Lint
         files: ^(docs/en|docs/zh_CN)/.*\.(rst|inc)$
   - repo: https://github.com/espressif/esp-idf-kconfig.git
-    rev: v3.2.0
+    rev: v3.10.0
     hooks:
       - id: check-kconfig-files
       - id: check-deprecated-kconfig-options
@@ -237,3 +260,5 @@ repos:
     hooks:
       - id: check-tests-missing-config
         files: 'pytest_.*\.py$|sdkconfig(\..*)?$|\.idf_build_apps\.toml$|\.idf_ci\.toml$'
+        additional_dependencies:
+          - 'esp-pylib[cli]'

@@ -14,8 +14,8 @@
 #include "esp_private/sleep_cpu.h"
 #include "esp_private/esp_sleep_internal.h"
 #include "esp_private/esp_pmu.h"
-#include "hal/ledc_periph.h"
 #include "esp_private/sleep_retention.h"
+#include "esp_private/ledc_priv.h"
 #include "esp_rom_serial_output.h"
 
 // Note. Test cases in this file cannot run one after another without reset
@@ -87,6 +87,7 @@ TEST_CASE("ledc can output after light sleep (LEDC power domain pd)", "[ledc]")
 
     // ledc driver does not have channel release, we will do retention release here to avoid memory leak
     sleep_retention_module_t module = ledc_reg_retention_info[0].module_id;
+    sleep_retention_module_detach(module);
     sleep_retention_module_free(module);
     sleep_retention_module_deinit(module);
 }

@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | --------- |
 
 # OpenThread Border Router Example
 
@@ -22,7 +22,7 @@ By default, two SoCs are required to run this example:
 * Another IEEE 802.15.4 SoC (ESP32-H2) loaded with [ot_cli](../ot_cli) example.
 
 Connect the two SoCs via UART, below is an example setup with ESP32 DevKitC and ESP32-H2 DevKitC:
-![thread_br](image/thread-border-router-esp32-esp32h2.jpg)
+![thread_br](image/thread-border-router-esp32-esp32h2.webp)
 
 ESP32 pin | ESP32-H2 pin
 ----------|-------------

@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include "esp_log.h"
 #include "esp_hci_internal.h"
 #include "common/hci_driver_h4.h"
 #include "common/hci_driver_util.h"
@@ -44,6 +45,16 @@
 #define HCI_H4_SM_W4_HEADER     1
 #define HCI_H4_SM_W4_PAYLOAD    2
 #define HCI_H4_SM_COMPLETED     3
+#define HCI_H4_SM_WAIT_RESET    4
+
+/* Buffer allocation failed. The stream is still in sync, so the state machine
+ * is kept as is and the allocation is retried on the next pass.
+ */
+#define HCI_H4_ERR_MEM          (-1)
+/* The stream cannot be parsed anymore, the current packet has to be dropped. */
+#define HCI_H4_ERR_SYNC_LOSS    (-2)
+
+#define TAG                                              "HCI_H4"
 
 struct hci_h4_input_buffer {
     const uint8_t *buf;
@@ -59,6 +70,9 @@ hci_h4_frame_start(struct hci_h4_sm *rxs, uint8_t pkt_type)
 
     switch (rxs->pkt_type) {
     case HCI_H4_CMD:
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+    case HCI_H4_SYNC:
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
         rxs->min_len = 3;
         break;
     case HCI_H4_ACL:
@@ -72,7 +86,7 @@ hci_h4_frame_start(struct hci_h4_sm *rxs, uint8_t pkt_type)
 #endif // (!CONFIG_BT_CONTROLLER_ENABLED)
     default:
         /* !TODO: Sync loss. Need to wait for reset. */
-        return -1;
+        return HCI_H4_ERR_SYNC_LOSS;
     }
 
     return 0;
@@ -110,6 +124,7 @@ hci_h4_sm_w4_header(struct hci_h4_sm *h4sm, struct hci_h4_input_buffer *ib)
 {
     int rc;
     uint16_t conn_handle = 0;
+    uint16_t handle_flags = 0;
 
     rc = hci_h4_ib_pull_min_len(h4sm, ib);
     if (rc) {
@@ -122,49 +137,70 @@ hci_h4_sm_w4_header(struct hci_h4_sm *h4sm, struct hci_h4_input_buffer *ib)
         HCI_TRANS_ASSERT(h4sm->allocs && h4sm->allocs->cmd, 0, 0);
         h4sm->pkt = h4sm->allocs->cmd();
         if (!h4sm->pkt) {
-            return -1;
+            return HCI_H4_ERR_MEM;
         }
 
         memcpy(h4sm->pkt->data, h4sm->hdr, h4sm->len);
         h4sm->exp_len = h4sm->hdr[2] + 3;
         break;
     case HCI_H4_ACL:
-        conn_handle = btdm_get_le16(&h4sm->hdr[0]) & HCI_INTERNAL_CONN_MASK;
-#if UC_BT_CTRL_BLE_IS_ENABLE
-        if (HCI_INTERNAL_CONN_IS_BLE(conn_handle)) {
-            h4sm->om = h4sm->allocs->acl();
-            if (!h4sm->om) {
-                return -1;
-            }
-
-            if (ble_mbuf_append(h4sm->om, h4sm->hdr, h4sm->len)) {
-                return -1;
-            }
-            h4sm->exp_len = btdm_get_le16(&h4sm->hdr[2]) + 4;
-            break;
-        }
-#endif // UC_BT_CTRL_BLE_IS_ENABLE
+        handle_flags = btdm_get_le16(&h4sm->hdr[0]);
+        conn_handle = handle_flags & HCI_INTERNAL_CONN_MASK;
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE
-        if (HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
+        if (HCI_INTERNAL_ACL_IS_BREDR_BCAST(handle_flags) || HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
             h4sm->exp_len = btdm_get_le16(&h4sm->hdr[2]) + 4;
             h4sm->pkt = h4sm->allocs->bredr_acl(conn_handle);
             if (!h4sm->pkt) {
-                return -1;
+                return HCI_H4_ERR_MEM;
             }
             memcpy(h4sm->pkt->data, h4sm->hdr, h4sm->len);
             break;
         }
 #endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
-        return -1;
+#if UC_BT_CTRL_BLE_IS_ENABLE
+        if (HCI_INTERNAL_CONN_IS_BLE(conn_handle)) {
+            h4sm->om = h4sm->allocs->acl();
+            if (!h4sm->om) {
+                return HCI_H4_ERR_MEM;
+            }
+
+            if (ble_mbuf_append(h4sm->om, h4sm->hdr, h4sm->len)) {
+                /* Release the mbuf so that the retry starts from a clean state. */
+                h4sm->frees->acl(h4sm->om);
+                h4sm->om = NULL;
+                return HCI_H4_ERR_MEM;
+            }
+            h4sm->exp_len = btdm_get_le16(&h4sm->hdr[2]) + 4;
+            break;
+        }
+#endif // UC_BT_CTRL_BLE_IS_ENABLE
+        return HCI_H4_ERR_SYNC_LOSS;
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE
     case HCI_H4_SYNC:
         conn_handle = btdm_get_le16(&h4sm->hdr[0]) & HCI_INTERNAL_CONN_MASK;
         h4sm->exp_len = h4sm->hdr[2] + 3;
         h4sm->pkt = h4sm->allocs->sync(conn_handle);
-        if (!h4sm->pkt) {
-            return -1;
+        if (h4sm->pkt != NULL) {
+            memcpy(h4sm->pkt->data, h4sm->hdr, h4sm->len);
         }
-        memcpy(h4sm->pkt->data, h4sm->hdr, h4sm->len);
+        /**
+         * According to the Bluetooth Core Specification, SCO flow control
+         * in the H2C direction is disabled by default. Therefore, occasional
+         * SCO buffer allocation failures are expected to be tolerated, in
+         * which case the packet should be discarded directly.
+         *
+         * When flow control is enabled, the controller guarantees that the
+         * number of SCO buffers matches the value reported by the response
+         * of "HCI Read Buffer Size" command. Therefore, allocation failures
+         * indicate incorrect credit management by the host, and no "Number
+         * Of Completed Packets" event is required.
+         *
+         * A corner case may occur during SCO disconnection, where packets
+         * continue to arrive before the "Disconnect Complete" event is
+         * received. In this case, the host is expected to reclaim the
+         * corresponding credits when handling the disconnect event, so no
+         * "Number Of Completed Packets" event is needed either.
+         */
         break;
 #endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
 #if !CONFIG_BT_CONTROLLER_ENABLED
@@ -189,7 +225,7 @@ hci_h4_sm_w4_header(struct hci_h4_sm *h4sm, struct hci_h4_input_buffer *ib)
         } else {
             h4sm->buf = h4sm->allocs->evt(0);
             if (!h4sm->buf) {
-                return -1;
+                return HCI_H4_ERR_MEM;
             }
         }
 
@@ -202,17 +238,17 @@ hci_h4_sm_w4_header(struct hci_h4_sm *h4sm, struct hci_h4_input_buffer *ib)
 #endif // !CONFIG_BT_CONTROLLER_ENABLED
 #if CONFIG_BT_LE_ISO_SUPPORT
     case HCI_H4_ISO:
-        h4sm->exp_len = (btdm_get_le16(&h4sm->hdr[2]) & 0x7fff) + 4;
+        h4sm->exp_len = (btdm_get_le16(&h4sm->hdr[2]) & 0x3fff) + 4;
         h4sm->buf = h4sm->allocs->iso(h4sm->exp_len);
         if (!h4sm->buf) {
-            return -1;
+            return HCI_H4_ERR_MEM;
         }
 
         memcpy(h4sm->buf, h4sm->hdr, h4sm->len);
         break;
 #endif // CONFIG_BT_LE_ISO_SUPPORT
     default:
-        return -2;
+        return HCI_H4_ERR_SYNC_LOSS;
     }
 
     return 0;
@@ -223,10 +259,14 @@ hci_h4_sm_w4_payload(struct hci_h4_sm *h4sm,
                      struct hci_h4_input_buffer *ib)
 {
     uint16_t len;
+    uint16_t handle_flags = 0;
 
     len = min(ib->len, h4sm->exp_len - h4sm->len);
     switch (h4sm->pkt_type) {
     case HCI_H4_CMD:
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+    case HCI_H4_SYNC:
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
         if (h4sm->pkt) {
             memcpy(&h4sm->pkt->data[h4sm->len], ib->buf, len);
         }
@@ -240,9 +280,10 @@ hci_h4_sm_w4_payload(struct hci_h4_sm *h4sm,
         }
         break;
     case HCI_H4_ACL:
-        uint16_t conn_handle = btdm_get_le16(&h4sm->hdr[0]) & HCI_INTERNAL_CONN_MASK;
+        handle_flags = btdm_get_le16(&h4sm->hdr[0]);
+        uint16_t conn_handle = handle_flags & HCI_INTERNAL_CONN_MASK;
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE
-        if (HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
+        if (HCI_INTERNAL_ACL_IS_BREDR_BCAST(handle_flags) || HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
             memcpy(&h4sm->pkt->data[h4sm->len], ib->buf, len);
             break;
         }
@@ -258,13 +299,13 @@ hci_h4_sm_w4_payload(struct hci_h4_sm *h4sm,
                 len = BLE_MBUF_PKTLEN(h4sm->om) - mbuf_len;
                 h4sm->len += len;
                 hci_h4_ib_consume(ib, len);
-                return -1;
+                return HCI_H4_ERR_MEM;
             }
         }
 #endif // UC_BT_CTRL_BLE_IS_ENABLE
         break;
     default:
-        return -2;
+        return HCI_H4_ERR_SYNC_LOSS;
     }
 
     h4sm->len += len;
@@ -279,11 +320,24 @@ hci_h4_sm_completed(struct hci_h4_sm *h4sm)
 {
     int rc;
     uint8_t data_source = 0xFF;
+    uint16_t handle_flags = 0;
+    uint16_t conn_handle = 0;
 
     switch (h4sm->pkt_type) {
 #if CONFIG_BT_CONTROLLER_ENABLED
     case HCI_H4_ACL:
-        uint16_t conn_handle = btdm_get_le16(&h4sm->hdr[0]) & HCI_INTERNAL_CONN_MASK;
+        handle_flags = btdm_get_le16(&h4sm->hdr[0]);
+        conn_handle = handle_flags & HCI_INTERNAL_CONN_MASK;
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+        if (HCI_INTERNAL_ACL_IS_BREDR_BCAST(handle_flags) || HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
+            if (h4sm->buf) {
+                rc = h4sm->frame_cb(h4sm->pkt_type, (void *)h4sm->buf, h4sm->len, HCI_DRIVER_BREDR_ACL);
+                HCI_TRANS_ASSERT(rc == 0, rc, 0);
+                h4sm->buf = NULL;
+            }
+            break;
+        }
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
 #if UC_BT_CTRL_BLE_IS_ENABLE
         if (HCI_INTERNAL_CONN_IS_BLE(conn_handle)) {
             if (h4sm->om) {
@@ -293,23 +347,22 @@ hci_h4_sm_completed(struct hci_h4_sm *h4sm)
             }
         }
 #endif // UC_BT_CTRL_BLE_IS_ENABLE
-#if UC_BT_CTRL_BR_EDR_IS_ENABLE
-        if (HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
-            if (h4sm->buf) {
-                rc = h4sm->frame_cb(h4sm->pkt_type, (void *)h4sm->buf, h4sm->len, HCI_DRIVER_BREDR_ACL);
-                HCI_TRANS_ASSERT(rc == 0, rc, 0);
-                h4sm->buf = NULL;
-            }
-        }
-#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
         break;
     case HCI_H4_CMD:
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+    case HCI_H4_SYNC:
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
     case HCI_H4_ISO:
         if (h4sm->buf) {
             switch(h4sm->pkt_type) {
                 case HCI_H4_CMD:
                     data_source = HCI_DRIVER_CMD;
                     break;
+#if UC_BT_CTRL_BR_EDR_IS_ENABLE
+                case HCI_H4_SYNC:
+                    data_source = HCI_DRIVER_BREDR_SYNC;
+                    break;
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
                 case HCI_H4_ISO:
                     data_source = HCI_DRIVER_LE_ISO;
                     break;
@@ -347,9 +400,73 @@ hci_h4_sm_completed(struct hci_h4_sm *h4sm)
     }
 }
 
+/* H4 type + HCI Reset (opcode 0x0C03, plen 0). */
+static const uint8_t s_hci_h4_reset_pattern[] = {HCI_H4_CMD, 0x03, 0x0C, 0x00};
+
+static int
+hci_h4_sm_dispatch_reset_cmd(struct hci_h4_sm *h4sm)
+{
+    HCI_TRANS_ASSERT(h4sm->allocs && h4sm->allocs->cmd, 0, 0);
+    h4sm->pkt_type = HCI_H4_CMD;
+    h4sm->pkt = h4sm->allocs->cmd();
+    if (!h4sm->pkt) {
+        return HCI_H4_ERR_MEM;
+    }
+
+    memcpy(h4sm->pkt->data, &s_hci_h4_reset_pattern[1], 3);
+    h4sm->len = 3;
+    hci_h4_sm_completed(h4sm);
+    h4sm->reset_match_idx = 0;
+    h4sm->state = HCI_H4_SM_W4_PKT_TYPE;
+    return 0;
+}
+
+static int
+hci_h4_sm_wait_for_reset(struct hci_h4_sm *h4sm, struct hci_h4_input_buffer *ib)
+{
+    int rc;
+
+    /* Pattern already fully matched; retry delivery after a previous OOM. */
+    if (h4sm->reset_match_idx == sizeof(s_hci_h4_reset_pattern)) {
+        return hci_h4_sm_dispatch_reset_cmd(h4sm);
+    }
+
+    for (uint16_t i = 0; i < ib->len; i++) {
+        if (ib->buf[i] == s_hci_h4_reset_pattern[h4sm->reset_match_idx]) {
+            h4sm->reset_match_idx++;
+        } else {
+            if (ib->buf[i] == s_hci_h4_reset_pattern[0]) {
+                h4sm->reset_match_idx = 1;
+            } else {
+                h4sm->reset_match_idx = 0;
+            }
+        }
+        if (h4sm->reset_match_idx == sizeof(s_hci_h4_reset_pattern)) {
+            hci_h4_ib_consume(ib, i + 1);
+            rc = hci_h4_sm_dispatch_reset_cmd(h4sm);
+            if (rc == HCI_H4_ERR_MEM) {
+                /* Reset bytes are already consumed; keep idx at 4 and retry alloc. */
+                h4sm->state = HCI_H4_SM_WAIT_RESET;
+            }
+            return rc;
+        }
+    }
+
+    if (h4sm->reset_match_idx) {
+        /* Need more data */
+        hci_h4_ib_consume(ib, ib->len);
+        return 1;
+    }
+
+    return HCI_H4_ERR_SYNC_LOSS;
+}
+
 static int
 hci_h4_sm_free_buf(struct hci_h4_sm *h4sm)
 {
+    uint16_t handle_flags = 0;
+    uint16_t conn_handle = 0;
+
     switch (h4sm->pkt_type) {
         case HCI_H4_CMD:
             if (h4sm->buf) {
@@ -366,19 +483,20 @@ hci_h4_sm_free_buf(struct hci_h4_sm *h4sm)
             break;
 #endif  // (!CONFIG_BT_CONTROLLER_ENABLED)
         case HCI_H4_ACL:
-            uint16_t conn_handle = btdm_get_le16(&h4sm->hdr[0]) & HCI_INTERNAL_CONN_MASK;
-            if (HCI_INTERNAL_CONN_IS_BLE(conn_handle)) {
-#if UC_BT_CTRL_BLE_IS_ENABLE
-                if (h4sm->om) {
-                    h4sm->frees->acl(h4sm->om);
-                    h4sm->om = NULL;
-                }
-#endif
-            } else {
+            handle_flags = btdm_get_le16(&h4sm->hdr[0]);
+            conn_handle = handle_flags & HCI_INTERNAL_CONN_MASK;
+            if (HCI_INTERNAL_ACL_IS_BREDR_BCAST(handle_flags) || HCI_INTERNAL_CONN_IS_BREDR(conn_handle)) {
 #if UC_BT_CTRL_BR_EDR_IS_ENABLE
                 if (h4sm->pkt) {
                     h4sm->frees->bredr_acl(h4sm->pkt);
                     h4sm->pkt = NULL;
+                }
+#endif // UC_BT_CTRL_BR_EDR_IS_ENABLE
+            } else {
+#if UC_BT_CTRL_BLE_IS_ENABLE
+                if (h4sm->om) {
+                    h4sm->frees->acl(h4sm->om);
+                    h4sm->om = NULL;
                 }
 #endif
             }
@@ -420,7 +538,8 @@ hci_h4_sm_rx(struct hci_h4_sm *h4sm, const uint8_t *buf, uint16_t len)
         switch (h4sm->state) {
         case HCI_H4_SM_W4_PKT_TYPE:
             if (hci_h4_frame_start(h4sm, ib.buf[0]) < 0) {
-                return -1;
+                rc = HCI_H4_ERR_SYNC_LOSS;
+                break;
             }
 
             hci_h4_ib_consume(&ib, 1);
@@ -446,27 +565,32 @@ hci_h4_sm_rx(struct hci_h4_sm *h4sm, const uint8_t *buf, uint16_t len)
             hci_h4_sm_completed(h4sm);
             h4sm->state = HCI_H4_SM_W4_PKT_TYPE;
             break;
+        case HCI_H4_SM_WAIT_RESET:
+            rc = hci_h4_sm_wait_for_reset(h4sm, &ib);
+            break;
         default:
-            return -1;
+            rc = HCI_H4_ERR_SYNC_LOSS;
+            break;
         }
     }
 
-    if (rc < 0) {
+    if ((rc < 0) && (rc != HCI_H4_ERR_MEM)) {
         hci_h4_sm_free_buf(h4sm);
-        h4sm->state = HCI_H4_SM_W4_PKT_TYPE;
-        return -1;
+        h4sm->reset_match_idx = 0;
+        h4sm->state = HCI_H4_SM_WAIT_RESET;
+        return rc;
     }
+
     /* Calculate consumed bytes
      *
      * Note: we should always consume some bytes unless there is an oom error.
-     * It's also possible that we have an oom error but already consumed some
-     * data, in such case just return success and error will be returned on next
-     * pass.
+     * On oom the state machine is left untouched so that the allocation is
+     * retried on the next pass, and the number of bytes actually taken from
+     * `buf` is reported to let the caller resubmit the remaining data.
      */
     len = len - ib.len;
     if (len == 0) {
-        HCI_TRANS_ASSERT((rc < 0), rc, ib.len);
-        return -1;
+        HCI_TRANS_ASSERT((rc == HCI_H4_ERR_MEM), rc, ib.len);
     }
 
     return len;

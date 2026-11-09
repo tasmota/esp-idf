@@ -21,10 +21,14 @@ On {IDF_TARGET_NAME}, ESP-IDF provides implementations of VFS drivers for I/O ov
 
     - UART
     :SOC_USB_SERIAL_JTAG_SUPPORTED: - USB Serial/JTAG
-    :esp32s2 or esp32s3: - USB CDC (using USB_OTG peripheral)
+    :SOC_USB_OTG_CONSOLE_SUPPORTED: - USB CDC (using USB_OTG peripheral)
     - "Null" (no output)
 
 Standard I/O is not limited to these options, though. See below on enabling custom destinations for standard I/O.
+
+.. note::
+
+    The console path is separate from an application UART that you open with the :doc:`UART driver <../api-reference/peripherals/uart>` on other pins. If a UART peripheral provides console output, a USB-to-UART bridge chip is required. Many development boards already include this bridge chip onboard for console communication between the PC and the default UART0. If a USB or USB Serial/JTAG peripheral provides console output, no adapter chip is needed. The USB connector on the development board connects directly to the chip's USB D+/D- pins. Traffic on other UART ports does not appear in ``idf.py monitor`` unless a given port is configured as the console. For details, see :doc:`Establish Serial Connection with {IDF_TARGET_NAME} <../get-started/establish-serial-connection>`.
 
 Configuration
 -------------
@@ -33,11 +37,11 @@ Built-in implementations of standard I/O can be selected using several Kconfig o
 
 .. list::
 
-    - :ref:`CONFIG_ESP_CONSOLE_UART_DEFAULT<CONFIG_ESP_CONSOLE_UART_DEFAULT>` — Enables UART with default options (pin numbers, baud rate) for standard I/O.
-    - :ref:`CONFIG_ESP_CONSOLE_UART_CUSTOM<CONFIG_ESP_CONSOLE_UART_CUSTOM>` — Enables UART for standard I/O, with TX/RX pin numbers and baud rate configurable via Kconfig.
-    :esp32s2 or esp32s3: - :ref:`CONFIG_ESP_CONSOLE_USB_CDC<CONFIG_ESP_CONSOLE_USB_CDC>` — Enables USB CDC (using USB_OTG peripheral) for standard I/O. See :doc:`usb-otg-console` for details about hardware connections required.
-    :SOC_USB_SERIAL_JTAG_SUPPORTED: - :ref:`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG<CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG>` — Enables USB Serial/JTAG for standard I/O. See :doc:`usb-serial-jtag-console` for details about hardware connections required.
-    - :ref:`CONFIG_ESP_CONSOLE_NONE<CONFIG_ESP_CONSOLE_NONE>` — Disables standard I/O. If this option is selected, ``stdin``, ``stdout``, and ``stderr`` will be mapped to ``/dev/null`` and won't produce any output or generate any input.
+    - :menuitem:`CONFIG_ESP_CONSOLE_UART_DEFAULT` — Enables UART with default options (pin numbers, baud rate) for standard I/O.
+    - :menuitem:`CONFIG_ESP_CONSOLE_UART_CUSTOM` — Enables UART for standard I/O, with TX/RX pin numbers and baud rate configurable via Kconfig.
+    :SOC_USB_OTG_CONSOLE_SUPPORTED: - :menuitem:`CONFIG_ESP_CONSOLE_USB_CDC` — Enables USB CDC (using USB_OTG peripheral) for standard I/O. See :doc:`usb-otg-console` for details about hardware connections required.
+    :SOC_USB_SERIAL_JTAG_SUPPORTED: - :menuitem:`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG` — Enables USB Serial/JTAG for standard I/O. See :doc:`usb-serial-jtag-console` for details about hardware connections required.
+    - :menuitem:`CONFIG_ESP_CONSOLE_NONE` — Disables standard I/O. If this option is selected, ``stdin``, ``stdout``, and ``stderr`` will be mapped to ``/dev/null`` and won't produce any output or generate any input.
 
 Enabling one of these options will cause the corresponding VFS driver to be built into the application and used to open ``stdin``, ``stdout``, and ``stderr`` streams. Data written to ``stdout`` and ``stderr`` will be sent over the selected interface, and input from the selected interface will be available on ``stdin``.
 
@@ -55,12 +59,14 @@ Enabling one of these options will cause the corresponding VFS driver to be buil
 
     The following secondary console options are available:
 
-        - :ref:`CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG<CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG>`
+        - :menuitem:`CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG`
+
+    The secondary console is the compile-time equivalent of a runtime auxiliary sink described below. It is a fixed, output-only destination.
 
 Standard Streams and FreeRTOS Tasks
 -----------------------------------
 
-ESP-IDF provides two different implementations of standard I/O streams based on the selected LibC implementation defined by :ref:`CONFIG_LIBC`. The behavior of ``stdin``, ``stdout``, and ``stderr`` streams differs between these implementations, particularly regarding how they are shared across FreeRTOS tasks.
+ESP-IDF provides two different implementations of standard I/O streams based on the selected LibC implementation defined by :menuitem:`CONFIG_LIBC`. The behavior of ``stdin``, ``stdout``, and ``stderr`` streams differs between these implementations, particularly regarding how they are shared across FreeRTOS tasks.
 
 Common to both implementations, each stream (``stdin``, ``stdout``, ``stderr``) has a mutex associated with it to protect the stream from concurrent access by multiple tasks. For example, if two tasks are writing to ``stdout`` at the same time, the mutex ensures that the outputs from each task are not mixed together.
 
@@ -102,7 +108,7 @@ When the interrupt-driven driver is installed, it is also possible to enable/dis
 
     When the interrupt-driven driver is installed, it is also possible to enable/disable non-blocking behavior using ``fcntl`` function with ``O_NONBLOCK`` flag.
 
-.. only:: esp32s2 or esp32s3
+.. only:: SOC_USB_OTG_CONSOLE_SUPPORTED
 
     USB CDC (using USB_OTG peripheral)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -117,13 +123,13 @@ VFS drivers provide an optional newline conversion feature for input and output.
 Applications can configure this behavior globally using the following Kconfig options:
 
     - For output
-        - :ref:`CONFIG_LIBC_STDOUT_LINE_ENDING_CRLF<CONFIG_LIBC_STDOUT_LINE_ENDING_CRLF>`
-        - :ref:`CONFIG_LIBC_STDOUT_LINE_ENDING_CR<CONFIG_LIBC_STDOUT_LINE_ENDING_CR>`
-        - :ref:`CONFIG_LIBC_STDOUT_LINE_ENDING_LF<CONFIG_LIBC_STDOUT_LINE_ENDING_LF>`
+        - :menuitem:`CONFIG_LIBC_STDOUT_LINE_ENDING_CRLF`
+        - :menuitem:`CONFIG_LIBC_STDOUT_LINE_ENDING_CR`
+        - :menuitem:`CONFIG_LIBC_STDOUT_LINE_ENDING_LF`
     - For input
-        - :ref:`CONFIG_LIBC_STDIN_LINE_ENDING_CRLF<CONFIG_LIBC_STDIN_LINE_ENDING_CRLF>`
-        - :ref:`CONFIG_LIBC_STDIN_LINE_ENDING_CR<CONFIG_LIBC_STDIN_LINE_ENDING_CR>`
-        - :ref:`CONFIG_LIBC_STDIN_LINE_ENDING_LF<CONFIG_LIBC_STDIN_LINE_ENDING_LF>`
+        - :menuitem:`CONFIG_LIBC_STDIN_LINE_ENDING_CRLF`
+        - :menuitem:`CONFIG_LIBC_STDIN_LINE_ENDING_CR`
+        - :menuitem:`CONFIG_LIBC_STDIN_LINE_ENDING_LF`
 
 
 It is also possible to configure line ending conversion for the specific VFS driver:
@@ -132,7 +138,7 @@ It is also possible to configure line ending conversion for the specific VFS dri
 
     - For UART: :cpp:func:`uart_vfs_dev_port_set_rx_line_endings` and :cpp:func:`uart_vfs_dev_port_set_tx_line_endings`
     :SOC_USB_SERIAL_JTAG_SUPPORTED: - For USB Serial/JTAG: :cpp:func:`usb_serial_jtag_vfs_set_rx_line_endings` and :cpp:func:`usb_serial_jtag_vfs_set_tx_line_endings`
-    :esp32s2 or esp32s3: - For USB CDC (using USB_OTG peripheral): :cpp:func:`esp_vfs_dev_cdcacm_set_rx_line_endings` and :cpp:func:`esp_vfs_dev_cdcacm_set_tx_line_endings`
+    :SOC_USB_OTG_CONSOLE_SUPPORTED: - For USB CDC (using USB_OTG peripheral): :cpp:func:`esp_vfs_dev_cdcacm_set_rx_line_endings` and :cpp:func:`esp_vfs_dev_cdcacm_set_tx_line_endings`
 
 Buffering
 ---------
@@ -170,3 +176,33 @@ Once you have created a custom VFS driver, use :cpp:func:`esp_vfs_register_fs()`
     stderr = f;
 
 Note that logging functions (``ESP_LOGE()``, etc.) write their output to ``stdout``. Keep this in mind when using logging within the implementation of your custom VFS (or any components which it calls). For example, if the custom VFS driver's ``write()`` operation fails and uses ``ESP_LOGE()`` to log the error, this will cause the output to be sent to ``stdout``, which would again call the custom VFS driver's ``write()`` operation. This would result in an infinite loop. It is recommended to keep track of this re-entry condition in the VFS driver's ``write()`` implementation, and return immediately if the write operation is still in progress.
+
+Console I/O multiplexer
+-----------------------
+
+In addition to redirecting ``stdout`` and ``stderr`` manually (as shown above), ESP-IDF provides a console I/O multiplexer that lets an application register one or more custom VFS backends and switch between them at runtime, without reassigning the ``stdin``/``stdout``/``stderr`` streams itself.
+
+The multiplexer is exposed on ``/dev/console`` and manages backends in two roles:
+
+- **Primary** — the active read and write backend. Both application input (``stdin``) and output (``stdout``/``stderr``) go through it. Exactly one backend is the primary at any time. Use :cpp:func:`esp_stdio_set_primary_driver` to choose it; the call returns the previously active primary, so the application can restore it later. The previous primary is not removed — it stays registered as a write-only auxiliary. The default console selected in Kconfig is registered automatically at boot and starts as the primary.
+- **Auxiliary** — a write-only sink. Every byte written to ``stdout`` and ``stderr`` is fanned out to all registered auxiliaries in addition to the primary. This is useful, for example, to mirror console output to a log file or a network connection while keeping the interactive console on the physical interface.
+
+A backend is added with :cpp:func:`esp_stdio_register_driver` (initially as an auxiliary) and removed with :cpp:func:`esp_stdio_unregister_driver`. The backend currently acting as the primary cannot be unregistered; promote another one with :cpp:func:`esp_stdio_set_primary_driver` first.
+
+The maximum number of backends that can be registered at once (the primary plus all auxiliaries, including the Kconfig default) is set by :ref:`CONFIG_ESP_STDIO_MAX_VFS_ENTRIES`.
+
+The multiplexer API is declared in ``esp_stdio.h`` and is available when ``CONFIG_VFS_SUPPORT_IO`` is enabled. See the :ref:`API reference <esp-stdio-api-reference>` below for the full behavior of each call.
+
+Example
+^^^^^^^
+
+The :example:`system/esp_stdio/runtime_registration` example shows the full flow: it registers a custom backend, makes it the active console, and later reverts to the previous one.
+
+The same re-entrancy caveat described above for logging applies here: the backend's ``write()`` implementation must not trigger logging that would recursively write to the console.
+
+.. _esp-stdio-api-reference:
+
+API Reference
+^^^^^^^^^^^^^
+
+.. include-build-file:: inc/esp_stdio.inc

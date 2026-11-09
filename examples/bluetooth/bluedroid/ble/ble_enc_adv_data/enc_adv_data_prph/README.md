@@ -1,9 +1,11 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | --------- |
 
 # BLE Encrypted Advertising Data Peripheral Example (Bluedroid)
 
 This example demonstrates how to use BLE Encrypted Advertising Data (EAD) feature with Bluedroid stack.
+
+Encryption uses the host APIs in `esp_ble_ead.h` (`esp_ble_ead_encrypt`). Enable `CONFIG_BT_BLE_FEAT_ENC_ADV_DATA` (already set in `sdkconfig.defaults`).
 
 ## Overview
 
@@ -30,7 +32,7 @@ The Encrypted Advertising Data feature (introduced in Bluetooth Core Specificati
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │                     BLE Advertising Packet                            │  │
 │  ├──────────┬─────────────┬────────────────┬────────────────────────────┤  │
-│  │  Flags   │  Name "key" │  UUID 0x2C01   │  Encrypted Data (AD 0x31) │  │
+│  │  Flags   │  Name "key" │  UUID 0x1800   │  Encrypted Data (AD 0x31) │  │
 │  │  (3B)    │    (5B)     │     (4B)       │         (16B)              │  │
 │  └──────────┴─────────────┴────────────────┴────────────────────────────┘  │
 │                                                                             │
@@ -89,7 +91,7 @@ Offset  Length  Type  Data                    Description
 ──────  ──────  ────  ────                    ───────────
 0       2       0x01  0x06                    Flags: LE General Discoverable
 3       4       0x09  'k' 'e' 'y'             Complete Local Name
-8       3       0x03  0x01 0x2C               16-bit Service UUID: 0x2C01
+8       3       0x03  0x00 0x18               16-bit Service UUID: 0x1800
 12      16      0x31  [Encrypted Payload]     Encrypted Advertising Data
 
 Encrypted Payload Detail:

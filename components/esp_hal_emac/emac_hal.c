@@ -37,16 +37,34 @@ static esp_err_t emac_hal_flush_trans_fifo(emac_hal_context_t *hal)
 
 void emac_hal_init(emac_hal_context_t *hal)
 {
-    hal->dma_regs = &EMAC_DMA;
-    hal->mac_regs = &EMAC_MAC;
-#if SOC_IS(ESP32)
-    hal->ext_regs = &EMAC_EXT;
-#else
-    hal->ext_regs = NULL;
-#endif
-#if SOC_EMAC_IEEE1588V2_SUPPORTED
-    hal->ptp_regs = &EMAC_PTP;
-#endif
+    *hal = emac_hal_get_context();
+}
+
+esp_err_t emac_hal_ref_clock_select(emac_hal_context_t *hal, int sel)
+{
+    if (!emac_ll_ref_clock_supported()) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    emac_ll_ref_clock_select(hal->ext_regs, sel);
+    return ESP_OK;
+}
+
+esp_err_t emac_hal_ref_clock_enable(emac_hal_context_t *hal, bool enable)
+{
+    if (!emac_ll_ref_clock_supported()) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    emac_ll_ref_clock_enable(hal->ext_regs, enable);
+    return ESP_OK;
+}
+
+esp_err_t emac_hal_ref_clock_div(emac_hal_context_t *hal, int div)
+{
+    if (!emac_ll_ref_clock_supported()) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    emac_ll_ref_clock_div(hal->ext_regs, div);
+    return ESP_OK;
 }
 
 void emac_hal_find_set_closest_csr_clock_range(emac_hal_context_t *hal, int mdc_freq_hz, int freq_hz)
@@ -166,12 +184,12 @@ void emac_hal_init_dma_default(emac_hal_context_t *hal, emac_hal_dma_config_t *h
     /* DMAOMR Configuration */
     /* Enable Dropping of TCP/IP Checksum Error Frames */
     emac_ll_drop_tcp_err_frame_enable(hal->dma_regs, true);
-#if SOC_IS(ESP32P4)
-    /* Disable Receive Store Forward (Rx FIFO is only 256B) */
-    emac_ll_recv_store_forward_enable(hal->dma_regs, false);
-#else
+#if SOC_IS(ESP32)
     /* Enable Receive Store Forward */
     emac_ll_recv_store_forward_enable(hal->dma_regs, true);
+#else
+    /* Disable Receive Store Forward (Rx FIFO is only 256B) */
+    emac_ll_recv_store_forward_enable(hal->dma_regs, false);
 #endif
     /* Enable Flushing of Received Frames because of the unavailability of receive descriptors or buffers */
     emac_ll_flush_recv_frame_enable(hal->dma_regs, true);
@@ -329,7 +347,8 @@ static inline uint32_t nanosecond2subsecond(emac_hal_context_t *hal, uint32_t na
 
 esp_err_t emac_hal_get_rxdesc_timestamp(emac_hal_context_t *hal, eth_dma_rx_descriptor_t *rxdesc, uint32_t *seconds, uint32_t *nano_seconds)
 {
-    if (!rxdesc->RDES0.TSAvailIPChecksumErrGiantFrame) {
+    eth_dma_rdes0_t rdes0 = { .Value = rxdesc->RDES0.Value };
+    if (!rdes0.TSAvailIPChecksumErrGiantFrame) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -339,13 +358,15 @@ esp_err_t emac_hal_get_rxdesc_timestamp(emac_hal_context_t *hal, eth_dma_rx_desc
     if (nano_seconds) {
         *nano_seconds = subsecond2nanosecond(hal, rxdesc->TimeStampLow);
     }
-    rxdesc->RDES0.TSAvailIPChecksumErrGiantFrame = 0;
+    rdes0.TSAvailIPChecksumErrGiantFrame = 0;
+    rxdesc->RDES0.Value = rdes0.Value;
     return ESP_OK;
 }
 
 esp_err_t emac_hal_get_txdesc_timestamp(emac_hal_context_t *hal, eth_dma_tx_descriptor_t *txdesc, uint32_t *seconds, uint32_t *nano_seconds)
 {
-    if (txdesc->TDES0.Own == EMAC_LL_DMADESC_OWNER_DMA || !txdesc->TDES0.TxTimestampStatus) {
+    eth_dma_tdes0_t tdes0 = { .Value = txdesc->TDES0.Value };
+    if (tdes0.Own == EMAC_LL_DMADESC_OWNER_DMA || !tdes0.TxTimestampStatus) {
         return ESP_ERR_INVALID_STATE;
     }
     if (seconds) {
@@ -354,7 +375,8 @@ esp_err_t emac_hal_get_txdesc_timestamp(emac_hal_context_t *hal, eth_dma_tx_desc
     if (nano_seconds) {
         *nano_seconds = subsecond2nanosecond(hal, txdesc->TimeStampLow);
     }
-    txdesc->TDES0.TxTimestampStatus = 0;
+    tdes0.TxTimestampStatus = 0;
+    txdesc->TDES0.Value = tdes0.Value;
     return ESP_OK;
 }
 
@@ -404,12 +426,25 @@ esp_err_t emac_hal_ptp_start(emac_hal_context_t *hal, const emac_hal_ptp_config_
     int32_t to = 0;
     /* If you are using the Fine correction method */
     if (config->upd_method == ETH_PTP_UPDATE_METHOD_FINE) {
-        /**
-         *           2^32                 2^32                      TsysClk(ns)
-         * Addend = ——————— = —————————————————————————— = 2^32 * ——————————————
-         *           ratio     SysClk(MHz)/PTPaccur(MHz)            Taccur(ns)
+        /*
+         * Compute the addend from the actual integer base_increment written
+         * to hardware, not from the ideal ptp_req_accuracy_ns. Because
+         * base_increment is a uint8_t, the cast truncates the fractional
+         * part, making the real sub-second step differ from the requested
+         * accuracy. This is especially required for IEEE 802.1AS where the
+         * uncorrected rate must already be within 200 ppm (neighborRateRatio)
+         * before Sync messages arrive, so we derive the addend from
+         * the truncated value directly.
          */
-        uint32_t base_addend = (1ll << 32) * config->ptp_clk_src_period_ns / config->ptp_req_accuracy_ns;
+        double increment_ns;
+        if (emac_ll_is_ts_digital_roll_set(hal->ptp_regs)) {
+            increment_ns = (double)base_increment;
+        } else {
+            increment_ns = (double)base_increment * 1.0e9 / (double)(1ULL << 31);
+        }
+        uint32_t base_addend = (uint32_t)((double)(1ULL << 32) *
+                                          config->ptp_clk_src_period_ns /
+                                          increment_ns);
         emac_ll_set_ts_addend_val(hal->ptp_regs, base_addend);
         emac_ll_ts_addend_do_update(hal->ptp_regs);
         while (!emac_ll_is_ts_addend_update_done(hal->ptp_regs) && to < EMAC_PTP_INIT_TIMEOUT_US) {

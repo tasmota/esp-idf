@@ -25,6 +25,7 @@
 #include "hci/hci_trans_int.h"
 #include "osi/thread.h"
 #include "osi/pkt_queue.h"
+#include "osi/fixed_queue.h"
 #include "esp_bt_main.h"
 #if (BLE_ADV_REPORT_FLOW_CONTROL == TRUE)
 #include "osi/mutex.h"
@@ -34,10 +35,8 @@
 #include "esp_bt.h"
 #endif
 #include "esp_bluedroid_hci.h"
+#include "bt_common.h"
 
-#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
-#include "l2c_int.h"
-#endif ///C2H_FLOW_CONTROL_INCLUDED == TRUE
 #include "stack/hcimsgs.h"
 #include "hci_log/bt_hci_log.h"
 
@@ -260,6 +259,12 @@ static void hci_upstream_data_handler(void *arg)
             }
         }
     } while (0);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    /* Notify batch end; upper layer flushes only if HCI accounted credit. */
+    if (hci_hal_env.callbacks != NULL && hci_hal_env.callbacks->c2h_credit_flush != NULL) {
+        hci_hal_env.callbacks->c2h_credit_flush();
+    }
+#endif
 #if (BLE_42_SCAN_EN == TRUE)
     do {
         pkts_to_process = pkt_queue_length(adv_rpt_q);
@@ -284,22 +289,6 @@ static bool hci_upstream_data_post(uint32_t timeout)
 {
     return osi_thread_post_event(hci_hal_env.upstream_data_ready, timeout);
 }
-
-#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
-static void hci_packet_complete(BT_HDR *packet){
-    uint8_t type;
-    uint16_t handle;
-    uint16_t num_packets = 1;
-    uint8_t *stream = packet->data + packet->offset;
-
-    STREAM_TO_UINT8(type, stream);
-    if (type == DATA_TYPE_ACL/* || type == DATA_TYPE_SCO*/) {
-        STREAM_TO_UINT16(handle, stream);
-        handle = handle & HCI_DATA_HANDLE_MASK;
-        btsnd_hcic_host_num_xmitted_pkts(1, &handle, &num_packets);
-    }
-}
-#endif ///C2H_FLOW_CONTROL_INCLUDED == TRUE
 
 bool host_recv_adv_packet(uint8_t *packet, uint16_t len)
 {
@@ -448,6 +437,17 @@ int hci_adv_credits_force_release(uint16_t num)
 #endif
 #endif // #if (BLE_42_SCAN_EN == TRUE)
 
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+static void hci_hal_acl_c2h_credit(uint8_t *handle_stream)
+{
+    uint16_t handle = (uint16_t)handle_stream[0] | (((uint16_t)handle_stream[1]) << 8);
+
+    if (hci_hal_env.callbacks != NULL && hci_hal_env.callbacks->c2h_credit != NULL) {
+        hci_hal_env.callbacks->c2h_credit(handle & HCI_DATA_HANDLE_MASK, 1);
+    }
+}
+#endif
+
 static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
 {
     uint8_t type, hdr_size;
@@ -459,10 +459,11 @@ static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
     }
     stream = packet->data + packet->offset;
 
-#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
-    hci_packet_complete(packet);
-#endif ///C2H_FLOW_CONTROL_INCLUDED == TRUE
-
+    if (packet->len < 1) {
+        /* No H4 type byte: cannot tell if this was ACL, so no C2H credit. */
+        osi_free(packet);
+        return;
+    }
     STREAM_TO_UINT8(type, stream);
     packet->offset++;
     packet->len--;
@@ -484,6 +485,7 @@ static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
         HCI_TRACE_ERROR("%s Unknown HCI message type. Dropping this byte 0x%x,"
                   " min %x, max %x\n", __func__, type,
                   DATA_TYPE_ACL, DATA_TYPE_EVENT);
+        /* Not an ACL H4 type: Host_Number_Of_Completed_Packets does not apply. */
         osi_free(packet);
         return;
     }
@@ -491,6 +493,11 @@ static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
     if (packet->len < hdr_size) {
         HCI_TRACE_ERROR("Wrong packet length type=%d pkt_len=%d hdr_len=%d",
                   type, packet->len, hdr_size);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        if (type == DATA_TYPE_ACL && packet->len >= 2) {
+            hci_hal_acl_c2h_credit(stream);
+        }
+#endif
         osi_free(packet);
         return;
     }
@@ -506,6 +513,11 @@ static void hci_hal_h4_hdl_rx_packet(BT_HDR *packet)
     if (length != (packet->len - hdr_size)) {
         HCI_TRACE_ERROR("%s: SECURITY: parameter length (%d) exceeds packet bounds (%d)",
                         __func__, length, packet->len - hdr_size);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        if (type == DATA_TYPE_ACL) {
+            hci_hal_acl_c2h_credit(packet->data + packet->offset);
+        }
+#endif
         osi_free(packet);
         return;
     }
@@ -585,14 +597,20 @@ void bt_record_hci_data(uint8_t *data, uint16_t len)
 #endif // (BLE_50_FEATURE_SUPPORT == TRUE)
     )) {
         bt_hci_log_record_hci_adv(HCI_LOG_DATA_TYPE_ADV, &data[2], len - 2);
+#if BT_HCI_INSIGHTS_INCLUDED
+        bt_hci_log_record_insights(HCI_LOG_DATA_TYPE_ADV, &data[2], len - 2);
+#endif
     } else {
         uint8_t data_type;
-        if (data[0] == HCI_LOG_DATA_TYPE_ISO_DATA) {
+        if (data[0] == DATA_TYPE_ISO) {
             data_type = HCI_LOG_DATA_TYPE_ISO_DATA;
         } else {
             data_type = ((data[0] == 2) ? HCI_LOG_DATA_TYPE_C2H_ACL : data[0]);
         }
         bt_hci_log_record_hci_data(data_type, &data[1], len - 1);
+#if BT_HCI_INSIGHTS_INCLUDED
+        bt_hci_log_record_insights(data_type, &data[1], len - 1);
+#endif
     }
 #endif // (BT_HCI_LOG_INCLUDED == TRUE)
 }
@@ -602,9 +620,9 @@ static int host_recv_pkt_cb(uint8_t *data, uint16_t len)
 #if CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
     ble_log_spi_out_hci_write(BLE_LOG_SPI_OUT_SOURCE_HCI_UPSTREAM, data, len);
 #endif // CONFIG_BT_BLE_LOG_SPI_OUT_HCI_ENABLED
-#if CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED
+#if CONFIG_BLE_LOG_HCI_LOG_ENABLED
     ble_log_write_hci(BLE_LOG_HCI_UPSTREAM, data, len);
-#endif /* CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED */
+#endif /* CONFIG_BLE_LOG_HCI_LOG_ENABLED */
     //Target has packet to host, malloc new buffer for packet
     BT_HDR *pkt = NULL;
 #if (BLE_42_SCAN_EN == TRUE)

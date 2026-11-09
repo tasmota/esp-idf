@@ -77,7 +77,13 @@ idf.py
 
 没有必要多次运行 ``cmake``。第一次构建后，往后每次只需运行 ``ninja`` 即可。如果项目需要重新配置，``ninja`` 会自动重新调用 ``cmake``。
 
-使用 Ninja 生成器配合 ``idf.py`` 时，可以通过设置环境变量 ``IDF_PY_BUILD_JOBS`` 来限制并行构建任务数。例如：
+使用 ``idf.py`` 时，可以通过 ``-j``/``--jobs`` 选项来控制传递给底层构建工具（Ninja 或 Make）的并行构建任务数。例如：
+
+.. code-block:: bash
+
+    idf.py -j 6 build
+
+也可以通过设置环境变量 ``IDF_PY_BUILD_JOBS`` 来指定该值，当未提供 ``-j``/``--jobs`` 时，该环境变量将作为默认值使用：
 
 .. code-block:: bash
 
@@ -138,7 +144,7 @@ idf.py
 设置 Python 解释器
 ------------------
 
-ESP-IDF 适用于 Python 3.10 以上版本。
+ESP-IDF 适用于 Python 3.11 以上版本。
 
 ``idf.py`` 和其他的 Python 脚本会使用默认的 Python 解释器运行，如 ``python``。你可以通过 ``python3 $IDF_PATH/tools/idf.py ...`` 命令切换到别的 Python 解释器，或者通过设置 shell 别名或其他脚本来简化该命令。
 
@@ -148,6 +154,43 @@ ESP-IDF 适用于 Python 3.10 以上版本。
 
 如果想在命令行中更优雅地管理 Python 的各个版本，请查看 pyenv_ 或 virtualenv_ 工具，它们会帮助你更改默认的 python 版本。
 
+
+.. _build-acceleration:
+
+构建加速
+--------
+
+ESP-IDF 支持多种用于加速构建过程的工具。这些工具充当编译器启动器，封装并调用实际的编译器。
+
+CCache
+^^^^^^
+
+CCache_ 是一种编译器缓存工具，通过缓存先前的编译结果来加速重新编译。启用后，当使用相同的源代码和编译器标志重复编译时，CCache 会直接返回缓存结果，而无需重新编译。
+
+关于如何启用或禁用 CCache，请参见 :ref:`idf_py_global_options` 章节。
+
+Configdep 封装器
+^^^^^^^^^^^^^^^^^
+
+``esp-idf-configdep`` 工具对编译器生成的依赖文件进行后处理，以减少由 ``sdkconfig.h`` 变更引起的不必要重建。
+
+通常在任一配置选项发生变化时，凡是包含 ``sdkconfig.h`` 的源文件都会被重建，因为编译器会将 ``sdkconfig.h`` 记录为直接依赖。Configdep 工具会在初次构建后编辑这些依赖文件，使源文件不再直接依赖 ``sdkconfig.h``。取而代之的是，源文件会依赖由 ``esp-idf-kconfig`` 创建的一种特殊文件结构：每个配置选项都有各自的文件，当某个选项被修改时，只会更新对应的文件。这样一来，只有实际使用到该变更选项的源文件会被重建，而并非整个项目。
+
+重要：源文件不会被修改，仍然包含 ``#include <sdkconfig.h>``，并且无需更改源代码中的任何内容，Configdep 工具即可正常工作。该工具仅作用于生成的依赖文件 (``.d``) 进行工作。
+
+若重建时仅有少量配置选项频繁变更，该工具尤为有用。Configdep 默认启用。
+
+有关如何启用或禁用 Configdep，请参见 :ref:`idf_py_global_options` 章节。
+
+串联使用加速工具
+^^^^^^^^^^^^^^^^
+
+启用多个加速工具时，它们会以编译器启动器链的形式串联使用。该链按照以下顺序应用：
+
+1. **esp-idf-configdep** （若启用） - 处理依赖文件并优化由 ``sdkconfig.h`` 变更引起的重建
+2. **ccache** （若启用） - 缓存编译结果
+
+链中的每个工具都会封装下一个工具，最终调用实际的编译器。这样可以叠加多个工具的优势。然而，组合使用多个工具并不总能带来最佳性能，因此可能需要针对具体项目尝试不同的工具组合，以获得最佳构建性能。
 
 .. _example-project-structure:
 
@@ -391,7 +434,7 @@ ESP-IDF 在搜索所有待构建的组件时，会按照以下优先级搜索组
 - ``IDF_TARGET``：项目的硬件目标名称。
 - ``PROJECT_VER``：项目版本号。
 
-  * 如果设置 :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` 选项，将会使用 :ref:`CONFIG_APP_PROJECT_VER` 的值。
+  * 如果设置 :menuitem:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` 选项，将会使用 :menuitem:`CONFIG_APP_PROJECT_VER` 的值。
   * 或者，如果在项目 CMakeLists.txt 文件中设置了 ``PROJECT_VER`` 变量，则该变量值可以使用。
   * 或者，如果 ``PROJECT_DIR/version.txt`` 文件存在，其内容会用作 ``PROJECT_VER`` 的值。
   * 或者，如果在 CMakeLists.txt 文件中将 ``VERSION`` 参数传递给 ``project()`` 调用，形式为 ``project(... VERSION x.y.z.w )``，那么 ``VERSION`` 参数将用作为 ``PROJECT_VER`` 的值。``VERSION`` 参数必须符合 `cmake 标准 <https://cmake.org/cmake/help/v3.22/command/project.html>`_。
@@ -427,6 +470,74 @@ ESP-IDF 在搜索所有待构建的组件时，会按照以下优先级搜索组
     如已借助 ``idf_component_register`` 中的 ``SRC_DIRS`` 变量填充源文件，CMake `set_source_files_properties`_ 命令将无法使用，详情请参考 :ref:`cmake-file-globbing`。
 
 请注意，上述两条命令只能在组件 CMakeLists 文件的 ``idf_component_register`` 命令之后调用。
+
+.. only:: esp32p4
+
+    .. _cmake-llvm-optimizations:
+
+    LLVM 优化
+    ^^^^^^^^^^^^^^^^^^
+
+    ESP-IDF 可以把额外的 LLVM/Clang 优化应用到选定的源文件上：在 menuconfig 中启用相应选项，再在 CMake 里标记组件或文件列表。menuconfig 选项对应的编译器标志由 ESP-IDF 设置，项目无需手写这些标志。
+
+    在 :ref:`project-configuration-menu` 的 Compiler options > LLVM optimizations 下启用 :menuitem:`CONFIG_COMPILER_LLVM_MEMCPY_OPTIMIZATION`。相关标志仅应用于你在 CMake 中选定的组件或源文件。
+
+    应用于整个组件：
+
+    .. code-block:: cmake
+
+      idf_component_register(SRCS "foo.c" "bar.c"
+                             INCLUDE_DIRS "."
+                             ENABLE_LLVM_OPT)
+
+    应用于一个或多个源文件（在 ``idf_component_register`` 之后调用）：
+
+    .. code-block:: cmake
+
+      idf_component_enable_llvm_opt(SRCS "foo.c" "bar.c")
+
+    源文件路径必须与传递给 ``idf_component_register`` 的路径一致。与 ``set_source_files_properties`` 一样，通过 ``SRC_DIRS`` 查找到的源文件不支持按文件选择优化。
+
+    LVGL 等第三方组件不会调用上述 helper。在 ``idf_component_register`` 之后，用标准 CMake 命令取出依赖的库 target 并套用导出的标志。``IDF_LLVM_OPT_ALL`` 包含 menuconfig 中已启用的全部 LLVM 优化对应的标志；``IDF_LLVM_OPT_MEMCPY`` 只包含 :menuitem:`CONFIG_COMPILER_LLVM_MEMCPY_OPTIMIZATION` 对应的标志。当对应选项关闭或编译器不是 Clang 时，二者均为空：
+
+    managed ``lvgl`` 组件的库 target（组件仓库名为 :code:`lvgl__lvgl`，不是它的源文件列表）：
+
+    .. code-block:: cmake
+
+      idf_component_get_property(lvgl_lib "lvgl__lvgl" COMPONENT_LIB)
+      if(IDF_LLVM_OPT_ALL)
+          target_compile_options(${lvgl_lib} PRIVATE ${IDF_LLVM_OPT_ALL})
+      endif()
+
+    若只应用 memcpy 优化：
+
+    .. code-block:: cmake
+
+      idf_component_get_property(lvgl_lib "lvgl__lvgl" COMPONENT_LIB)
+      if(IDF_LLVM_OPT_MEMCPY)
+          target_compile_options(${lvgl_lib} PRIVATE ${IDF_LLVM_OPT_MEMCPY})
+      endif()
+
+    这样无需修改第三方的 CMakeLists。不要对大型组件中的全部源文件启用；见下方限制。
+
+    高级用户可以追加额外的 Clang 或 LLVM 标志。这些标志会与 menuconfig 中启用的 LLVM 优化一起应用。省略 ``SRCS`` 时，自定义标志将应用于整个组件：
+
+    .. code-block:: cmake
+
+      idf_component_enable_llvm_opt(
+          SRCS "foo.c"
+          OPTIONS "-mllvm=-my-custom-llvm-option")
+
+    当前 menuconfig 选项使用 RISC-V PIE 扩展加速 ``memcpy``。请安装并选用乐鑫 Clang 工具链（``IDF_TOOLCHAIN=clang``）；当活动编译器为 GCC 时，IDF 不会注入这些标志。后续可在不改动 CMake 启用 API 的情况下，通过 menuconfig 添加新选项。示例见 :example:`system/llvm_opt` 与 :example:`system/llvm_memcpy_opt`。
+
+    使用限制：
+
+    - 需要乐鑫 Clang 工具链。如果所选编译器不是 Clang，``ENABLE_LLVM_OPT``、``idf_component_enable_llvm_opt``、``IDF_LLVM_OPT_ALL`` 和 ``IDF_LLVM_OPT_MEMCPY`` 不会产生任何效果。
+    - 当前仅在 ESP32-P4 上完成验证。
+    - 仅在优化热点路径时启用。优先对已测量的文件列表启用。结果依赖对齐、长度、芯片修订以及 Flash/Cache 布局。
+    - **不要** 对整个工程或大型组件中的全部源文件启用。生成代码会使用 PIE 协处理器：某个尚未拥有 PIE 的任务第一次执行 PIE 指令时会陷入内核，内核惰性保存上一任拥有者的寄存器并恢复当前任务的寄存器；每个这样的任务都会重复该切换，整体应用可能反而变慢。额外代码体积（I-cache）也可能有影响，但是次要因素。详见 :doc:`../api-reference/system/freertos_idf`。
+    - 不要在 ISR 中使用该 memcpy 选项：中断上下文中使用 PIE 协处理器不被允许，并会导致运行中止。
+    - 不要把 CMake 标记当作全局 ``-O`` 替代。
 
 
 .. _component-configuration:
@@ -941,7 +1052,7 @@ CMake 文件可以使用 ``IDF_TARGET`` 变量来获取当前的硬件目标。
 有些组件的源文件可能并不是由组件本身提供，而必须从另外的文件生成。假设组件需要一个头文件，该文件由 BMP 文件转换后（使用 bmp2h 工具）的二进制数据组成，然后将头文件包含在名为 graphics_lib.c 的文件中::
 
     add_custom_command(OUTPUT logo.h
-         COMMAND bmp2h -i ${COMPONENT_DIR}/logo.bmp -o log.h
+         COMMAND bmp2h -i ${COMPONENT_DIR}/logo.bmp -o logo.h
          DEPENDS ${COMPONENT_DIR}/logo.bmp
          VERBATIM)
 
@@ -995,6 +1106,10 @@ CMake 文件可以使用 ``IDF_TARGET`` 变量来获取当前的硬件目标。
     target_add_binary_data(myproject.elf "main/data.bin" TEXT)
 
 并将这行代码放在项目 CMakeLists.txt 的 ``project()`` 命令之后，修改 ``myproject.elf`` 为你自己的项目名。如果最后一个参数是 ``TEXT``，那么构建系统会嵌入以 null 结尾的字符串，如果最后一个参数被设置为 ``BINARY``，则将文件内容按照原样嵌入。
+
+可选的 ``ALIGN`` 参数用于将嵌入数据的起始符号对齐到指定的正整数 2 的幂。例如，将二进制数据按 16 字节对齐::
+
+  target_add_binary_data(myproject.elf "main/data.bin" BINARY ALIGN 16)
 
 有关使用此技术的示例，请查看 file_serving 示例 :example_file:`protocols/http_server/file_serving/main/CMakeLists.txt` 中的 main 组件，两个文件会在编译时加载并链接到固件中。
 
@@ -1293,7 +1408,7 @@ ESP-IDF 提供了一个模板 CMake 项目，可以基于此轻松创建应用�
 
 .. only:: esp32
 
-   .. note:: IDF 构建系统只能为其构建的源文件设置编译器标志。当使用外部 CMakeLists.txt 文件并启用 PSRAM 时，记得在 C 编译器参数中添加 ``mfix-esp32-psram-cache-issue``。参见:ref:`CONFIG_SPIRAM_CACHE_WORKAROUND` 了解更多信息。
+   .. note:: IDF 构建系统只能为其构建的源文件设置编译器标志。当使用外部 CMakeLists.txt 文件并启用 PSRAM 时，记得在 C 编译器参数中添加 ``mfix-esp32-psram-cache-issue``。参见:menuitem:`CONFIG_SPIRAM_CACHE_WORKAROUND` 了解更多信息。
 
 
 .. _cmake_buildsystem_api:
@@ -1517,6 +1632,10 @@ ESP-IDF 组件命令
   - KCONFIG - 覆盖默认的 Kconfig 文件。
   - KCONFIG_PROJBUILD - 覆盖默认的 Kconfig.projbuild 文件。
   - WHOLE_ARCHIVE - 如果指定了此参数，链接时会在组件库的前后分别添加 ``-Wl,--whole-archive`` 和 ``-Wl,--no-whole-archive``。这与设置 ``WHOLE_ARCHIVE`` 组件属性的效果一致。
+
+.. only:: esp32p4
+
+  在 ESP32-P4 上，``idf_component_register`` 还接受 ``ENABLE_LLVM_OPT``，用于将 menuconfig 中启用的 LLVM 优化应用于组件中的所有源文件。如果所选编译器不是 Clang，该参数会被忽略。详见 :ref:`cmake-llvm-optimizations`。
 
 以下内容用于 :ref:`将数据嵌入到组件中<cmake_embed_data>`，并在确定组件是否仅用于配置时被视为源文件。这意味着，即使组件没有指定源文件，如果组件指定了以下其中之一，仍然会在内部为组件创建一个静态库。
 

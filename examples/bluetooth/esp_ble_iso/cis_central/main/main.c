@@ -5,42 +5,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
 #include "esp_log.h"
 #include "nvs_flash.h"
-#include "esp_system.h"
-#include "esp_timer.h"
-
-#include "host/ble_gap.h"
-#include "services/gap/ble_svc_gap.h"
 
 #include "esp_ble_iso_common_api.h"
 
 #include "ble_iso_example_init.h"
 #include "ble_iso_example_utils.h"
 
-#define TAG "CIS_CEN"
-
-#define LOCAL_DEVICE_NAME       "CIS Central"
+#include "central.h"
 
 #define TARGET_DEVICE_NAME      "CIS Peripheral"
 #define TARGET_DEVICE_NAME_LEN  (sizeof(TARGET_DEVICE_NAME) - 1)
 
-#define SCAN_INTERVAL           160     /* 100ms */
-#define SCAN_WINDOW             160     /* 100ms */
-
-#define INIT_SCAN_INTERVAL      16      /* 10ms */
-#define INIT_SCAN_WINDOW        16      /* 10ms */
-#define CONN_INTERVAL           64      /* 64 * 1.25 = 80ms */
-#define CONN_LATENCY            0
-#define CONN_TIMEOUT            500     /* 500 * 10ms = 5s */
-#define CONN_MAX_CE_LEN         0xFFFF
-#define CONN_MIN_CE_LEN         0xFFFF
-#define CONN_DURATION           10000   /* 10s */
-
-#define SECURITY_LEVEL          ESP_BLE_ISO_SECURITY_MITM
+#define SECURITY_LEVEL          ESP_BLE_ISO_SECURITY_NO_MITM
 
 #define CIG_LATENCY_MS          10      /* 10ms */
 #define CIG_SDU_INTERVAL_US     10000   /* 10ms */
@@ -50,17 +32,44 @@
 #define CIS_PHY                 ESP_BLE_ISO_PHY_2M
 #define CIS_RTN                 2
 #define CIS_SDU_SIZE            120
+#define CIS_COUNT               2
 
 static bool acl_connected;
 
-static uint16_t iso_seq_num;
-static uint8_t iso_data[CIS_SDU_SIZE];
-
 static esp_ble_iso_cig_t *out_cig;
 
-static example_iso_tx_scheduler_t tx_scheduler;
+struct cis_ctx {
+    esp_ble_iso_chan_t         chan;
+    uint16_t                   seq_num;
+    example_iso_tx_count_t     tx_count;
+    uint8_t                    data[CIS_SDU_SIZE];
+    char                       name[8];
+    bool                       tx_on;
+};
 
-static void iso_chan_send(void);
+static struct cis_ctx cis_ctxs[CIS_COUNT];
+
+/* One scheduler for the CIG, running while any CIS sends: each tick sends one
+ * SDU on every CIS.
+ */
+static example_iso_tx_scheduler_t tx_scheduler;
+static size_t tx_cis_count;
+#if CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+static example_iso_tx_sync_t tx_sync;
+#else /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+static int iso_chan_send(struct cis_ctx *ctx);
+#endif /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+
+static struct cis_ctx *ctx_by_chan(const esp_ble_iso_chan_t *chan)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(cis_ctxs); i++) {
+        if (&cis_ctxs[i].chan == chan) {
+            return &cis_ctxs[i];
+        }
+    }
+
+    return NULL;
+}
 
 static void iso_connected_cb(esp_ble_iso_chan_t *chan)
 {
@@ -68,44 +77,88 @@ static void iso_connected_cb(esp_ble_iso_chan_t *chan)
         .pid    = ESP_BLE_ISO_DATA_PATH_HCI,
         .format = ESP_BLE_ISO_CODING_FORMAT_TRANSPARENT,
     };
+    struct cis_ctx *ctx = ctx_by_chan(chan);
     esp_err_t err;
 
-    ESP_LOGI(TAG, "ISO channel %p connected", chan);
+    ESP_LOGI(TAG, "[%s] Connected", ctx->name);
 
     err = esp_ble_iso_setup_data_path(chan, ESP_BLE_ISO_DATA_PATH_DIR_INPUT, &data_path);
     if (err) {
-        ESP_LOGE(TAG, "Failed to setup ISO data path, err %d", err);
+        ESP_LOGE(TAG, "[%s] Failed to setup data path, err %d", ctx->name, err);
         return;
     }
 
-    iso_seq_num = 0;
-    example_iso_tx_scheduler_reset(&tx_scheduler);
-
-    /* Note: esp timer is not accurate enough */
-    err = example_iso_tx_scheduler_start(&tx_scheduler, CIG_SDU_INTERVAL_US);
+#if CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+    err = example_iso_tx_sync_start(&tx_sync, chan, CIG_SDU_INTERVAL_US);
     if (err) {
-        ESP_LOGE(TAG, "Failed to start tx scheduler, err %d", err);
+        ESP_LOGE(TAG, "[%s] Timestamp TX start failed, err %d", ctx->name, err);
         return;
     }
+#endif /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
 
-    iso_chan_send();
+    if (tx_cis_count == 0) {
+        example_iso_tx_scheduler_reset(&tx_scheduler);
+
+        /* Note: esp timer is not accurate enough */
+        err = example_iso_tx_scheduler_start(&tx_scheduler, CIG_SDU_INTERVAL_US);
+        if (err) {
+            ESP_LOGE(TAG, "Scheduler start failed, err %d", err);
+            return;
+        }
+    }
+
+    ctx->tx_on = true;
+    ctx->tx_count = (example_iso_tx_count_t){0};
+    tx_cis_count++;
+
+    ESP_LOGI(TAG, "[%s] Starting TX %s timestamps", ctx->name,
+             IS_ENABLED(CONFIG_EXAMPLE_ISO_TX_TIMESTAMP) ? "with" : "without");
+
+#if !CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+    ctx->seq_num = 0;
+    iso_chan_send(ctx);
+#endif /* !CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
 }
 
 static void iso_disconnected_cb(esp_ble_iso_chan_t *chan, uint8_t reason)
 {
+    struct cis_ctx *ctx = ctx_by_chan(chan);
     esp_err_t err;
 
-    ESP_LOGI(TAG, "ISO channel %p disconnected, reason 0x%02x", chan, reason);
+    ESP_LOGI(TAG, "[%s] Disconnected, reason 0x%02x", ctx->name, reason);
 
-    err = example_iso_tx_scheduler_stop(&tx_scheduler);
+#if CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+    example_iso_tx_sync_stop(&tx_sync, chan);
+#endif /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+
+    /* Other CIS keep sending. */
+    if (ctx->tx_on) {
+        ctx->tx_on = false;
+        if (--tx_cis_count == 0) {
+            err = example_iso_tx_scheduler_stop(&tx_scheduler);
+            if (err) {
+                ESP_LOGE(TAG, "Scheduler stop failed, err %d", err);
+            }
+        }
+    }
+
+    /* Per BT Core 6.0 §7.7.5: a CIS on the Central retains its handle and
+     * data path across HCI_Disconnection_Complete (only the Peripheral side
+     * and other connection types get auto-deleted by the controller). So on
+     * the Central we must remove explicitly, otherwise the next setup on
+     * reconnect returns Command Disallowed.
+     */
+    err = esp_ble_iso_remove_data_path(chan, ESP_BLE_ISO_DATA_PATH_DIR_INPUT);
     if (err) {
-        ESP_LOGE(TAG, "Failed to stop tx scheduler, err %d", err);
+        ESP_LOGE(TAG, "[%s] Failed to remove data path, err %d", ctx->name, err);
     }
 }
 
 static void iso_sent_cb(esp_ble_iso_chan_t *chan, void *user_data)
 {
-    example_iso_tx_scheduler_on_sent(&tx_scheduler, user_data, TAG, "chan", chan);
+    struct cis_ctx *ctx = ctx_by_chan(chan);
+
+    example_iso_tx_scheduler_on_sent(&tx_scheduler, user_data, &ctx->tx_count, TAG, ctx->name);
 }
 
 static esp_ble_iso_chan_ops_t iso_ops = {
@@ -125,24 +178,20 @@ static esp_ble_iso_chan_qos_t iso_qos = {
     .rx = NULL,
 };
 
-static esp_ble_iso_chan_t iso_chan = {
-    .ops = &iso_ops,
-    .qos = &iso_qos,
-    .required_sec_level = SECURITY_LEVEL,
-};
-
 static void create_cig_and_cis(uint16_t acl_handle)
 {
-    esp_ble_iso_connect_param_t connect_param = {0};
+    esp_ble_iso_connect_param_t connect_param[CIS_COUNT] = {0};
     esp_ble_iso_cig_param_t cig_param = {0};
-    esp_ble_iso_chan_t *channels[1] = {0};
+    esp_ble_iso_chan_t *channels[CIS_COUNT] = {0};
     int err;
+
+    for (size_t i = 0; i < ARRAY_SIZE(cis_ctxs); i++) {
+        channels[i] = &cis_ctxs[i].chan;
+    }
 
     if (out_cig) {
         goto connect;
     }
-
-    channels[0] = &iso_chan;
 
     cig_param.cis_channels = channels;
     cig_param.num_cis = ARRAY_SIZE(channels);
@@ -161,103 +210,78 @@ static void create_cig_and_cis(uint16_t acl_handle)
     }
 
 connect:
-    connect_param.iso_chan = &iso_chan;
+    /* Both CIS ride the same ACL to the peer. */
+    for (size_t i = 0; i < ARRAY_SIZE(connect_param); i++) {
+        connect_param[i].iso_chan = &cis_ctxs[i].chan;
+    }
 
-    err = esp_ble_iso_chan_connect(&connect_param, acl_handle, 1);
+    err = esp_ble_iso_chan_connect(connect_param, acl_handle, ARRAY_SIZE(connect_param));
     if (err) {
         ESP_LOGE(TAG, "Failed to create CIS, err %d", err);
         return;
     }
 }
 
-static void iso_chan_send(void)
+#if !CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+static int iso_chan_send(struct cis_ctx *ctx)
 {
     int err;
 
-    memset(iso_data, (uint8_t)iso_seq_num, sizeof(iso_data));
+    memset(ctx->data, (uint8_t)ctx->seq_num, sizeof(ctx->data));
 
-    err = esp_ble_iso_chan_send(&iso_chan,
-                                iso_data,
-                                sizeof(iso_data),
-                                iso_seq_num);
+    err = esp_ble_iso_chan_send(&ctx->chan,
+                                ctx->data,
+                                sizeof(ctx->data),
+                                ctx->seq_num);
     if (err) {
-        ESP_LOGD(TAG, "Failed to transmit data on channel %p", &iso_chan);
-        return;
+        ESP_LOGD(TAG, "[%s] Send failed, err %d", ctx->name, err);
+        return err;
     }
 
-    iso_seq_num++;
+    ctx->seq_num++;
+
+    return 0;
 }
+#else /* !CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+static int tx_send_cb(esp_ble_iso_chan_t *chan, uint16_t seq_num,
+                      uint32_t timestamp, bool ts_valid)
+{
+    struct cis_ctx *ctx = ctx_by_chan(chan);
+    int err;
+
+    memset(ctx->data, (uint8_t)seq_num, sizeof(ctx->data));
+    /* The timestamp, 0 without one, tells the receiver which SDUs of the
+     * channels belong together, e.g. the left and right audio of one frame.
+     */
+    if (!ts_valid) {
+        timestamp = 0;
+    }
+    memcpy(ctx->data, &timestamp, sizeof(timestamp));
+
+    if (ts_valid) {
+        err = esp_ble_iso_chan_send_ts(chan, ctx->data, sizeof(ctx->data), seq_num, timestamp);
+    } else {
+        err = esp_ble_iso_chan_send(chan, ctx->data, sizeof(ctx->data), seq_num);
+    }
+    if (err) {
+        ESP_LOGW(TAG, "[%s] Send failed, err %d", ctx->name, err);
+    }
+
+    return err;
+}
+#endif /* !CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
 
 static void tx_scheduler_cb(void *arg)
 {
-    (void)arg;
-    iso_chan_send();
-}
-
-static void ext_scan_start(void)
-{
-    struct ble_gap_disc_params params = {0};
-    uint8_t own_addr_type;
-    int err;
-
-    err = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to determine address type, err %d", err);
-        return;
+#if CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+    example_iso_tx_sync_send_next(&tx_sync);
+#else /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+    for (size_t i = 0; i < ARRAY_SIZE(cis_ctxs); i++) {
+        if (cis_ctxs[i].tx_on) {
+            iso_chan_send(&cis_ctxs[i]);
+        }
     }
-
-    params.passive = 1;
-    params.itvl = SCAN_INTERVAL;
-    params.window = SCAN_WINDOW;
-
-    err = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &params,
-                       example_iso_gap_event_cb, NULL);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start scanning, err %d", err);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Extended scan started");
-}
-
-static int conn_create(uint8_t addr_type, uint8_t addr[6])
-{
-    struct ble_gap_conn_params params = {0};
-    uint8_t own_addr_type = 0;
-    ble_addr_t dst = {0};
-    int err;
-
-    err = ble_gap_disc_cancel();
-    if (err) {
-        ESP_LOGE(TAG, "Failed to stop scanning, err %d", err);
-        return err;
-    }
-
-    err = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to determine address type, err %d", err);
-        return err;
-    }
-
-    params.scan_itvl = INIT_SCAN_INTERVAL;
-    params.scan_window = INIT_SCAN_WINDOW;
-    params.itvl_min = CONN_INTERVAL;
-    params.itvl_max = CONN_INTERVAL;
-    params.latency = CONN_LATENCY;
-    params.supervision_timeout = CONN_TIMEOUT;
-    params.max_ce_len = CONN_MAX_CE_LEN;
-    params.min_ce_len = CONN_MIN_CE_LEN;
-
-    dst.type = addr_type;
-    memcpy(dst.val, addr, sizeof(dst.val));
-
-    return ble_gap_connect(own_addr_type, &dst, CONN_DURATION, &params,
-                           example_iso_gap_event_cb, NULL);
-}
-
-static int pairing_start(uint16_t conn_handle)
-{
-    return ble_gap_security_initiate(conn_handle);
+#endif /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
 }
 
 static bool data_cb(uint8_t type, const uint8_t *data,
@@ -291,9 +315,19 @@ static void ext_scan_recv(esp_ble_iso_gap_app_event_t *event)
         return;
     }
 
+    err = ext_scan_stop();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to stop scanning, err %d", err);
+        return;
+    }
+
     err = conn_create(event->ext_scan_recv.addr.type, event->ext_scan_recv.addr.val);
     if (err) {
         ESP_LOGE(TAG, "Failed to create connection, err %d", err);
+        /* Scan was stopped above. acl_disconnect (which restarts scan) only
+         * fires on an established connection — resume here to avoid a
+         * no-scan / no-conn dead state. */
+        ext_scan_start();
         return;
     }
 
@@ -305,21 +339,20 @@ static void acl_connect(esp_ble_iso_gap_app_event_t *event)
     int err;
 
     if (event->acl_connect.status) {
-        ESP_LOGE(TAG, "connection failed, status %d", event->acl_connect.status);
+        ESP_LOGE(TAG, "Connection failed, status %d", event->acl_connect.status);
         acl_connected = false;
+        /* Async failure: acl_disconnect won't fire (never established),
+         * so restart scanning here to avoid a no-scan / no-conn dead state. */
+        ext_scan_start();
         return;
     }
 
-    ESP_LOGI(TAG, "Conn established:");
-    ESP_LOGI(TAG, "conn_handle 0x%04x status 0x%02x role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
-             event->acl_connect.conn_handle, event->acl_connect.status,
-             event->acl_connect.role, event->acl_connect.dst.val[5],
-             event->acl_connect.dst.val[4], event->acl_connect.dst.val[3],
-             event->acl_connect.dst.val[2], event->acl_connect.dst.val[1],
-             event->acl_connect.dst.val[0]);
+    ESP_LOGI(TAG, "Connected: handle %u role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
+             event->acl_connect.conn_handle, event->acl_connect.role,
+             EXAMPLE_BT_ADDR_PRINT_ARGS(event->acl_connect.dst.val));
 
-    if (iso_chan.required_sec_level == ESP_BLE_ISO_SECURITY_NO_MITM ||
-            iso_chan.required_sec_level == ESP_BLE_ISO_SECURITY_MITM) {
+    if (SECURITY_LEVEL == ESP_BLE_ISO_SECURITY_NO_MITM ||
+            SECURITY_LEVEL == ESP_BLE_ISO_SECURITY_MITM) {
         err = pairing_start(event->acl_connect.conn_handle);
         if (err) {
             ESP_LOGE(TAG, "Failed to initiate security, err %d", err);
@@ -332,7 +365,7 @@ static void acl_connect(esp_ble_iso_gap_app_event_t *event)
 
 static void acl_disconnect(esp_ble_iso_gap_app_event_t *event)
 {
-    ESP_LOGI(TAG, "Conn terminated: conn_handle 0x%04x reason 0x%02x",
+    ESP_LOGI(TAG, "Disconnected: handle %u reason 0x%02x",
              event->acl_disconnect.conn_handle, event->acl_disconnect.reason);
 
     acl_connected = false;
@@ -343,19 +376,15 @@ static void acl_disconnect(esp_ble_iso_gap_app_event_t *event)
 static void security_change(esp_ble_iso_gap_app_event_t *event)
 {
     if (event->security_change.status) {
-        ESP_LOGE(TAG, "security change failed, status %d", event->security_change.status);
+        security_failed_recover(event->security_change.conn_handle,
+                                event->security_change.status);
         return;
     }
 
-    ESP_LOGI(TAG, "Security change:");
-    ESP_LOGI(TAG, "conn_handle 0x%04x status 0x%02x role %u sec_level %u bonded %u "
-             "peer %02x:%02x:%02x:%02x:%02x:%02x",
-             event->security_change.conn_handle, event->security_change.status,
-             event->security_change.role, event->security_change.sec_level,
-             event->security_change.bonded, event->security_change.dst.val[5],
-             event->security_change.dst.val[4], event->security_change.dst.val[3],
-             event->security_change.dst.val[2], event->security_change.dst.val[1],
-             event->security_change.dst.val[0]);
+    ESP_LOGI(TAG, "Security: handle %u level %u bonded %u",
+             event->security_change.conn_handle,
+             event->security_change.sec_level,
+             event->security_change.bonded);
 
     create_cig_and_cis(event->security_change.conn_handle);
 }
@@ -401,25 +430,42 @@ void app_main(void)
         return;
     }
 
+    err = app_host_init();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to init host, err %d", err);
+        return;
+    }
+
     err = esp_ble_iso_common_init(&info);
     if (err) {
         ESP_LOGE(TAG, "Failed to initialize ISO, err %d", err);
         return;
     }
 
-    err = ble_svc_gap_device_name_set(LOCAL_DEVICE_NAME);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to set device name, err %d", err);
-        return;
+    for (size_t i = 0; i < ARRAY_SIZE(cis_ctxs); i++) {
+        cis_ctxs[i].chan.ops = &iso_ops;
+        cis_ctxs[i].chan.qos = &iso_qos;
+        snprintf(cis_ctxs[i].name, sizeof(cis_ctxs[i].name), "CIS #%zu", i);
     }
 
-    err = example_iso_tx_scheduler_init(&tx_scheduler,
-                                        tx_scheduler_cb,
-                                        NULL);
+#if CONFIG_EXAMPLE_ISO_TX_TIMESTAMP
+    tx_sync.send = tx_send_cb;
+#endif /* CONFIG_EXAMPLE_ISO_TX_TIMESTAMP */
+    err = example_iso_tx_scheduler_init(&tx_scheduler, tx_scheduler_cb, NULL);
     if (err) {
         ESP_LOGE(TAG, "Failed to init tx scheduler, err %d", err);
         return;
     }
 
-    ext_scan_start();
+    err = set_device_name();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to set device name, err %d", err);
+        return;
+    }
+
+    err = ext_scan_start();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to start scan, err %d", err);
+        return;
+    }
 }

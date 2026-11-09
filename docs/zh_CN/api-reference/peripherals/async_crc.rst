@@ -1,6 +1,6 @@
-====================
-异步 CRC (Async CRC)
-====================
+=============
+异步 CRC 计算
+=============
 
 :link_to_translation:`en:[English]`
 
@@ -100,7 +100,8 @@
 创建驱动程序实例时，您需要配置：
 
 - **backlog**：可排队等待的最大 CRC 请求数。较高的值使用更多内存，但在突发工作负载下提供更好的吞吐量。
-- **dma_burst_size**：DMA 传输突发大小（字节）。
+- **intr_priority**：DMA 中断优先级。设置为 ``0`` 时使用默认的低/中优先级；设置为非零值时请求指定的中断优先级。
+- **dma_burst_size**：DMA 传输突发大小（字节）。设为 ``0`` 表示使用驱动默认值（16 字节），设为 ``1`` 表示关闭数据突发传输。
 
 驱动程序句柄 ``crc_hdl`` 是一个不透明指针，用于所有后续操作。
 
@@ -161,15 +162,12 @@ CRC 计算完成时会在中断上下文中调用回调函数。回调接收：
     const char *data = "Hello, World!";
     size_t data_len = strlen(data);
 
-    // 阻塞 CRC，1000ms 超时
-    ESP_ERROR_CHECK(esp_crc_calc_blocking(crc_hdl, data, data_len, &params, 1000, &crc_result));
+    // 阻塞 CRC，无限期等待
+    ESP_ERROR_CHECK(esp_crc_calc_blocking(crc_hdl, data, data_len, &params, -1, &crc_result));
 
     printf("CRC 结果: 0x%08X\n", crc_result);
 
-阻塞 API 支持：
-
-- **timeout_ms >= 0**：等待指定的毫秒数
-- **timeout_ms < 0**：无限期等待
+阻塞 API 仅支持 ``timeout_ms = -1``，表示无限期等待直到 CRC 计算完成。
 
 卸载驱动程序
 ------------
@@ -329,6 +327,7 @@ DMA 突发大小
 
 - 较大的突发大小可以提高吞吐量
 - 典型值：16、32、64 字节
+- 设为 ``0`` 表示使用驱动默认值（16 字节），设为 ``1`` 表示关闭数据突发传输
 
 最佳值取决于芯片的 DMA 控制器功能。
 

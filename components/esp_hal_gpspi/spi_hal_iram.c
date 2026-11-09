@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -37,23 +37,30 @@ void spi_hal_setup_device(spi_hal_context_t *hal, const spi_hal_dev_config_t *de
     spi_ll_master_set_cs_setup(hw, dev->cs_setup);
     spi_ll_master_set_cs_hold(hw, dev->cs_hold);
     spi_ll_master_select_cs(hw, dev->cs_pin_id);
+#if SOC_SPI_SUPPORT_DDR_CLOCK
+    spi_ll_enable_ddr_mode(hw, dev->timing_conf.use_ddr_clk);
+#endif
 }
 
 esp_err_t spi_hal_cal_clock_conf(const spi_hal_timing_param_t *timing_param, spi_hal_timing_conf_t *timing_conf)
 {
     spi_ll_clock_val_t reg_val;
     int dummy, miso_delay;
-    int eff_clk_n = spi_ll_master_cal_clock(timing_param->clk_src_hz, timing_param->expected_freq, timing_param->duty_cycle, &reg_val);
+    // Hardware halves the output frequency when DDR is enabled; calculate with 2x so the effective rate stays the same.
+    uint32_t expected_freq = timing_param->use_ddr_clk ? timing_param->expected_freq * 2 : timing_param->expected_freq;
+    int eff_clk_n = spi_ll_master_cal_clock(timing_param->clk_src_hz, expected_freq, timing_param->duty_cycle, &reg_val);
 
     //When the speed is too fast, we may need to use dummy cycles to compensate the reading.
     //But these don't work for full-duplex connections.
     spi_hal_cal_timing(timing_param->clk_src_hz, eff_clk_n, timing_param->use_gpio, timing_param->input_delay_ns, &dummy, &miso_delay);
 
 #if SPI_LL_SUPPORT_TIME_TUNING
-    const int freq_limit = spi_hal_get_freq_limit(timing_param->use_gpio, timing_param->input_delay_ns);
-
     if (!(timing_param->half_duplex || dummy == 0 || timing_param->no_compensate)) {
-        // This only a short log used as a "key" of the idf hint system, see `hints.yml`
+        // Short log used as a "key" by the idf hint system (see `hints.yml`).
+        // freq_limit is consumed only by HAL_EARLY_LOGE; mark unused so
+        // -Wunused-variable stays quiet when the macro expands to empty.
+        const int freq_limit __attribute__((unused)) =
+            spi_hal_get_freq_limit(timing_param->use_gpio, timing_param->input_delay_ns);
         HAL_EARLY_LOGE(SPI_HAL_TAG, "The clock_speed_hz should less than %d", freq_limit);
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -61,8 +68,10 @@ esp_err_t spi_hal_cal_clock_conf(const spi_hal_timing_param_t *timing_param, spi
 
     if (timing_conf) {
         timing_conf->clock_reg = reg_val;
+        timing_conf->use_ddr_clk = timing_param->use_ddr_clk;
         timing_conf->expect_freq = timing_param->expected_freq;
-        timing_conf->real_freq = eff_clk_n;
+        // eff_clk_n was calculated for 2x in DDR; report the effective data rate to the user.
+        timing_conf->real_freq = timing_param->use_ddr_clk ? eff_clk_n / 2 : eff_clk_n;
         timing_conf->timing_dummy = dummy;
         timing_conf->timing_miso_delay = miso_delay;
     }
@@ -170,8 +179,11 @@ void spi_hal_setup_trans(spi_hal_context_t *hal, const spi_hal_dev_config_t *dev
     }
     spi_ll_set_miso_delay(hw, miso_delay_mode, miso_delay_num);
 
+#if SPI_LL_SUPPORT_FD_TX_WAIT_DMA
+    // enable tx data wait only when tx is used, otherwise rx only trans will hang on start
+    spi_ll_master_enable_fd_wait_dma_tx_data(hw, trans->send_buffer && trans->tx_bitlen);
+#endif
     spi_ll_set_mosi_bitlen(hw, trans->tx_bitlen);
-
     if (dev->half_duplex) {
         spi_ll_set_miso_bitlen(hw, trans->rx_bitlen);
     } else {
@@ -270,28 +282,27 @@ void spi_hal_fetch_result(const spi_hal_context_t *hal)
 *----------------------------------------------------------------------------*/
 void spi_hal_sct_set_conf_bits_len(spi_hal_context_t *hal, uint32_t conf_len)
 {
-    spi_ll_set_conf_phase_bits_len(hal->hw, conf_len);
+    spi_ll_set_conf_phase_bitlen(hal->hw, conf_len);
 }
 
 void spi_hal_sct_init_conf_buffer(spi_hal_context_t *hal, uint32_t *conf_buffer)
 {
-    spi_ll_init_conf_buffer(hal->hw, conf_buffer);
+    spi_sct_ll_init_conf_buffer(hal->hw, (spi_ll_sct_full_reg_t *)conf_buffer);
 }
 
 void spi_hal_sct_format_conf_buffer(spi_hal_context_t *hal, const spi_hal_seg_config_t *config, const spi_hal_dev_config_t *dev, uint32_t *conf_buffer)
 {
-    spi_ll_format_line_mode_conf_buff(hal->hw, hal->trans_config.line_mode, conf_buffer);
-    spi_ll_format_prep_phase_conf_buffer(hal->hw, config->cs_setup, conf_buffer);
-    spi_ll_format_cmd_phase_conf_buffer(hal->hw, config->cmd, config->cmd_bits, dev->tx_lsbfirst, conf_buffer);
-    spi_ll_format_addr_phase_conf_buffer(hal->hw, config->addr, config->addr_bits, dev->rx_lsbfirst, conf_buffer);
-    spi_ll_format_dummy_phase_conf_buffer(hal->hw, config->dummy_bits, conf_buffer);
-    spi_ll_format_dout_phase_conf_buffer(hal->hw, config->tx_bitlen, conf_buffer);
-    spi_ll_format_din_phase_conf_buffer(hal->hw, config->rx_bitlen, conf_buffer);
-    spi_ll_format_done_phase_conf_buffer(hal->hw, config->cs_hold, conf_buffer);
-    spi_ll_format_conf_phase_conf_buffer(hal->hw, config->seg_end, conf_buffer);
-#if SPI_LL_SUPPORT_SEG_GAP
-    spi_ll_format_conf_bitslen_buffer(hal->hw, config->seg_gap_len, conf_buffer);
-#endif
+    spi_ll_sct_full_reg_t *sct_cfg = (spi_ll_sct_full_reg_t *)conf_buffer;
+
+    spi_sct_ll_set_line_mode(sct_cfg, hal->trans_config.line_mode);
+    spi_sct_ll_set_cs_setup(sct_cfg, config->cs_setup);
+    spi_sct_ll_set_cs_hold(sct_cfg, config->cs_hold);
+    spi_sct_ll_set_command(sct_cfg, config->cmd, config->cmd_bits, dev->tx_lsbfirst);
+    spi_sct_ll_set_addr(sct_cfg, config->addr, config->addr_bits, dev->tx_lsbfirst);
+    spi_sct_ll_set_dummy(sct_cfg, config->dummy_bits);
+    spi_sct_ll_set_mosi_bitlen(sct_cfg, config->tx_bitlen);
+    spi_sct_ll_set_miso_bitlen(sct_cfg, config->rx_bitlen);
+    spi_sct_ll_mark_sct_end(sct_cfg, config->seg_end);
 }
 
 #endif  //#ifdef SPI_LL_PERIPH_HAS_SCT

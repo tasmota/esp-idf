@@ -119,9 +119,9 @@ When :doc:`Flash Encryption <../flash-encryption>` is enabled, the REE can still
 Additionally with :ref:`Secure Boot <secure_boot-guide>` enabled, any unauthorized modifications to the TEE firmware will be detected during boot, causing signature verification to fail. Thus, the combination of Flash Encryption and Secure Boot provides a robust level of protection suitable for most applications.
 However, do note that while the TEE firmware integrity is protected, other TEE partitions (e.g., :doc:`Secure Storage <tee-sec-storage>`, :ref:`TEE OTA data <tee-ota-data-partition>`) can be modified through direct writes.
 
-For stronger isolation, you can enable :ref:`CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1`, which completely blocks access to all TEE flash regions via SPI1 for the REE. With this setting, all SPI flash read, write, and erase operations are routed through service calls to the TEE. While this option provides enhanced security, it introduces some performance overhead.
+For stronger isolation, you can enable :menuitem:`CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1`, which completely blocks access to all TEE flash regions via SPI1 for the REE. With this setting, all SPI flash read, write, and erase operations are routed through service calls to the TEE. While this option provides enhanced security, it introduces some performance overhead.
 
-The table below shows the rough time taken to read and write to a 1MB partition in 256B chunks with :doc:`../../api-reference/storage/partition`, highlighting the impact of ESP-TEE and the :ref:`CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1` configuration.
+The table below shows the rough time taken to read and write to a 1MB partition in 256B chunks with :doc:`../../api-reference/storage/partition`, highlighting the impact of ESP-TEE and the :menuitem:`CONFIG_SECURE_TEE_EXT_FLASH_MEMPROT_SPI1` configuration.
 
 .. list-table:: Flash Protection: Performance Impact
    :header-rows: 1
@@ -171,7 +171,6 @@ The following peripherals are protected using the APM module and accessible only
     :SOC_SHA_SUPPORTED: - SHA accelerator
     :SOC_ECC_SUPPORTED: - ECC accelerator
     :SOC_HMAC_SUPPORTED: - Hash-Based Message Authentication Code (HMAC) module
-    :SOC_DIG_SIGN_SUPPORTED: - Digital Signature module
 
 .. note::
 
@@ -181,6 +180,7 @@ The following peripherals are protected using the APM module and accessible only
 
       :SOC_MPI_SUPPORTED: - MPI accelerator (RSA)
       :SOC_ECDSA_SUPPORTED: - ECDSA accelerator
+      :SOC_DIG_SIGN_SUPPORTED: - Digital Signature module
 
 Firmware
 ^^^^^^^^

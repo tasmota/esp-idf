@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -7,8 +7,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <inttypes.h>
+#include <stdlib.h>
 
 #include "esp_log.h"
+#include "esp_system.h"
 
 #include "freertos/FreeRTOSConfig.h"
 #include "freertos/FreeRTOS.h"
@@ -44,7 +47,8 @@ static TaskHandle_t s_bt_app_task_handle = NULL;  /* handle of application task 
 
 static bool bt_app_send_msg(bt_app_msg_t *msg)
 {
-    if (msg == NULL) {
+    if (msg == NULL || s_bt_app_task_queue == NULL) {
+        ESP_LOGE(BT_APP_CORE_TAG, "%s failed: msg=%p, queue=%p", __func__, msg, s_bt_app_task_queue);
         return false;
     }
 
@@ -82,6 +86,9 @@ static void bt_app_task_handler(void *arg)
             } /* switch (msg.sig) */
 
             if (msg.param) {
+                if (msg.free_cb) {
+                    msg.free_cb(msg.param);
+                }
                 free(msg.param);
             }
         }
@@ -92,7 +99,8 @@ static void bt_app_task_handler(void *arg)
  * EXTERNAL FUNCTION DEFINITIONS
  *******************************/
 
-bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, int param_len, bt_app_copy_cb_t p_copy_cback)
+bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, int param_len,
+                          bt_app_copy_cb_t p_copy_cback, bt_app_free_cb_t p_free_cback)
 {
     ESP_LOGD(BT_APP_CORE_TAG, "%s event: 0x%x, param len: %d", __func__, event, param_len);
 
@@ -102,6 +110,7 @@ bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, i
     msg.sig = BT_APP_SIG_WORK_DISPATCH;
     msg.event = event;
     msg.cb = p_cback;
+    msg.free_cb = p_free_cback;
 
     if (param_len == 0) {
         return bt_app_send_msg(&msg);
@@ -112,8 +121,20 @@ bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, i
             if (p_copy_cback) {
                 p_copy_cback(msg.param, p_params, param_len);
             }
-            return bt_app_send_msg(&msg);
+            if (!bt_app_send_msg(&msg)) {
+                if (p_free_cback) {
+                    p_free_cback(msg.param);
+                }
+                free(msg.param);
+                return false;
+            }
+            return true;
         }
+        ESP_LOGE(BT_APP_CORE_TAG, "%s malloc failed, event: 0x%x, param_len: %d, free_heap: %" PRIu32,
+                 __func__, event, param_len, esp_get_free_heap_size());
+    } else {
+        ESP_LOGE(BT_APP_CORE_TAG, "%s invalid args, event: 0x%x, p_params: %p, param_len: %d",
+                 __func__, event, p_params, param_len);
     }
 
     return false;
@@ -122,7 +143,7 @@ bool bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t event, void *p_params, i
 void bt_app_task_start_up(void)
 {
     s_bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
-    xTaskCreate(bt_app_task_handler, "BtAppTask", 3072, NULL, 10, &s_bt_app_task_handle);
+    xTaskCreate(bt_app_task_handler, "BtAppTask", 4096, NULL, 10, &s_bt_app_task_handle);
 }
 
 void bt_app_task_shut_down(void)
@@ -132,6 +153,15 @@ void bt_app_task_shut_down(void)
         s_bt_app_task_handle = NULL;
     }
     if (s_bt_app_task_queue) {
+        bt_app_msg_t msg;
+        while (xQueueReceive(s_bt_app_task_queue, &msg, 0) == pdTRUE) {
+            if (msg.param) {
+                if (msg.free_cb) {
+                    msg.free_cb(msg.param);
+                }
+                free(msg.param);
+            }
+        }
         vQueueDelete(s_bt_app_task_queue);
         s_bt_app_task_queue = NULL;
     }

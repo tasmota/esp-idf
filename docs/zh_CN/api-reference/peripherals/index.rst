@@ -9,6 +9,7 @@
     :SOC_ADC_SUPPORTED: adc/index
     :SOC_ANA_CMPR_SUPPORTED: ana_cmpr
     :SOC_GDMA_SUPPORT_CRC: async_crc
+    :SOC_DMA2D_SUPPORTED: async_color_convert
     :SOC_ASYNC_MEMCPY_SUPPORTED: async_memcpy
     :SOC_BITSCRAMBLER_SUPPORTED: bitscrambler
     :SOC_MIPI_CSI_SUPPORTED: camera_driver
@@ -31,7 +32,7 @@
     lcd/index
     :SOC_GP_LDO_SUPPORTED: ldo_regulator
     :SOC_LEDC_SUPPORTED: ledc
-    :SOC_MCPWM_SUPPORTED: mcpwm
+    :SOC_MCPWM_SUPPORTED: mcpwm/index
     :SOC_PARLIO_SUPPORTED: parlio/index
     :SOC_PCNT_SUPPORTED: pcnt
     :SOC_PPA_SUPPORTED: ppa
@@ -41,6 +42,8 @@
     :SOC_GPSPI_SUPPORTED: sdspi_host
     :SOC_SDIO_SLAVE_SUPPORTED: sdio_slave
     :SOC_SDM_SUPPORTED: sdm
+    :SOC_SHA_SUPPORT_SM3: sm3
+    :SOC_ECC_SUPPORT_CURVE_SM2: sm2
     :SOC_SPI_FLASH_SUPPORTED: spi_flash/index
     :SOC_GPSPI_SUPPORTED: spi_master
     :SOC_GPSPI_SUPPORTED: spi_slave

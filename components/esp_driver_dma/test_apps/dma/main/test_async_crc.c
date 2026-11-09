@@ -31,14 +31,14 @@ typedef struct {
 
 static void test_async_crc_various_poly(async_crc_handle_t driver)
 {
-    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC Share::Connect::Innovate";
+    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::END!";
     // CRC online: https://www.lddgo.net/en/encrypt/crc
     static test_crc_case_t crc_test_cases[] = {
         {
             .crc_bit_width = 8,
             .init_value = 0x00,
             .poly_hex = 0x07,
-            .expected_result = 0xB8,
+            .expected_result = 0x08,
         },
         {
             .crc_bit_width = 8,
@@ -47,13 +47,13 @@ static void test_async_crc_various_poly(async_crc_handle_t driver)
             .reverse_data_mask = true,
             .reverse_result = true,
             .final_xor = 0x1F,
-            .expected_result = 0xB7,
+            .expected_result = 0x1F,
         },
         {
             .crc_bit_width = 16,
             .init_value = 0xFFFF,
             .poly_hex = 0x1021,
-            .expected_result = 0xA9B2,
+            .expected_result = 0x0ED7,
         },
         {
             .crc_bit_width = 16,
@@ -62,7 +62,7 @@ static void test_async_crc_various_poly(async_crc_handle_t driver)
             .reverse_data_mask = true,
             .reverse_result = true,
             .final_xor = 0xABCD,
-            .expected_result = 0x9C6B,
+            .expected_result = 0x055C,
         }
     };
     uint32_t result = 0;
@@ -128,7 +128,7 @@ static bool test_async_crc_result_cb(async_crc_handle_t crc_hdl, async_crc_event
 
 static void test_async_crc_calc_with_callback(async_crc_handle_t driver)
 {
-    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC Share::Connect::Innovate";
+    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::END!";
     SemaphoreHandle_t sem = xSemaphoreCreateBinary();
     crc_async_user_context_t user_ctx = {
         .sem = sem,
@@ -143,8 +143,8 @@ static void test_async_crc_calc_with_callback(async_crc_handle_t driver)
 
     TEST_ESP_OK(esp_async_crc_calc(driver, test_input_string, strlen(test_input_string), &params, test_async_crc_result_cb, &user_ctx));
     TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreTake(sem, pdMS_TO_TICKS(100)));
-    printf("CRC Result: 0x%"PRIx32", Expected: 0x9D1B\r\n", user_ctx.crc_result);
-    TEST_ASSERT_EQUAL(0x9D1B, user_ctx.crc_result);
+    printf("CRC Result: 0x%"PRIx32", Expected: 0x4372\r\n", user_ctx.crc_result);
+    TEST_ASSERT_EQUAL(0x4372, user_ctx.crc_result);
     vSemaphoreDelete(sem);
 }
 
@@ -172,7 +172,7 @@ TEST_CASE("async_crc calculation with callback", "[async_crc]")
 
 static void test_async_crc_multiple_requests(async_crc_handle_t driver)
 {
-    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC Share::Connect::Innovate";
+    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::END!";
     SemaphoreHandle_t sem = xSemaphoreCreateCounting(TEST_ASYNC_CRC_BENCH_COUNTS, 0);
     crc_async_user_context_t user_ctx = {
         .sem = sem,
@@ -192,7 +192,7 @@ static void test_async_crc_multiple_requests(async_crc_handle_t driver)
         TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreTake(sem, pdMS_TO_TICKS(100)));
     }
     printf("CRC Result of request 0x%"PRIx32"\r\n", user_ctx.crc_result);
-    TEST_ASSERT_EQUAL(0x692F6C7E, user_ctx.crc_result);
+    TEST_ASSERT_EQUAL(0x6D9BD7D5, user_ctx.crc_result);
     vSemaphoreDelete(sem);
 };
 
@@ -200,13 +200,88 @@ TEST_CASE("async_crc multiple requests", "[async_crc]")
 {
     async_crc_config_t config = {
         .backlog = TEST_ASYNC_CRC_BENCH_COUNTS,
-        .dma_burst_size = 32,
+        .dma_burst_size = 16,
     };
     async_crc_handle_t driver = NULL;
 #if SOC_HAS(AHB_GDMA)
     printf("Testing async CRC performance benchmark by AHB GDMA\r\n");
     TEST_ESP_OK(esp_async_crc_install_gdma_ahb(&config, &driver));
     test_async_crc_multiple_requests(driver);
+    TEST_ESP_OK(esp_async_crc_uninstall(driver));
+#endif
+}
+
+static uint32_t test_rom_crc32_le_reference(const uint8_t *data, size_t len)
+{
+    uint32_t crc = (uint32_t)~UINT32_MAX;
+
+    crc = esp_crc32_le(crc, data, len);
+
+    return ~crc ^ UINT32_MAX;
+}
+
+static uint16_t test_rom_crc16_xmodem_reference(const uint8_t *data, size_t len)
+{
+    uint16_t crc = (uint16_t)~0x0000;
+
+    crc = esp_crc16_be(crc, data, len);
+
+    return (uint16_t)(~crc ^ 0x0000);
+}
+
+static void test_async_crc_matches_rom_helper(async_crc_handle_t driver, bool supports_crc32)
+{
+    static const char test_input_string[] __attribute__((aligned(16))) = "GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::GDMACRC::TEST::LONGSTRING::REPEAT::END!";
+    size_t input_len = strlen(test_input_string);
+    uint32_t async_result = 0;
+
+    if (supports_crc32) {
+        async_crc_params_t crc32_params = {
+            .width = 32,
+            .polynomial = 0x04C11DB7,
+            .init_value = UINT32_MAX,
+            .final_xor_value = UINT32_MAX,
+            .reverse_input = true,
+            .reverse_output = true,
+        };
+        uint32_t crc32_rom_result = test_rom_crc32_le_reference((const uint8_t *)test_input_string, input_len);
+        TEST_ESP_OK(esp_crc_calc_blocking(driver, test_input_string, input_len, &crc32_params, -1, &async_result));
+        printf("CRC-32 async result: 0x%"PRIx32", ROM helper result: 0x%"PRIx32"\r\n", async_result, crc32_rom_result);
+        TEST_ASSERT_EQUAL_HEX32(crc32_rom_result, async_result);
+    }
+
+    async_crc_params_t crc16_params = {
+        .width = 16,
+        .polynomial = 0x1021,
+        .init_value = 0x0000,
+        .final_xor_value = 0x0000,
+        .reverse_input = false,
+        .reverse_output = false,
+    };
+    uint16_t crc16_rom_result = test_rom_crc16_xmodem_reference((const uint8_t *)test_input_string, input_len);
+    TEST_ESP_OK(esp_crc_calc_blocking(driver, test_input_string, input_len, &crc16_params, -1, &async_result));
+    printf("CRC-16/XMODEM async result: 0x%"PRIx32", ROM helper result: 0x%04x\r\n", async_result, crc16_rom_result);
+    TEST_ASSERT_EQUAL_HEX16(crc16_rom_result, async_result);
+}
+
+TEST_CASE("async_crc matches ROM helper results for standard CRC flavors", "[async_crc]")
+{
+    async_crc_config_t config = {
+        .backlog = 1,
+        .dma_burst_size = 16,
+    };
+    async_crc_handle_t driver = NULL;
+#if SOC_HAS(AHB_GDMA)
+    printf("Testing async CRC against ROM helper by AHB GDMA\r\n");
+    TEST_ESP_OK(esp_async_crc_install_gdma_ahb(&config, &driver));
+    test_async_crc_matches_rom_helper(driver, true);
+    TEST_ESP_OK(esp_async_crc_uninstall(driver));
+#endif
+
+#if SOC_HAS(AXI_GDMA)
+    printf("Testing async CRC against ROM helper by AXI GDMA\r\n");
+    TEST_ESP_OK(esp_async_crc_install_gdma_axi(&config, &driver));
+    test_async_crc_matches_rom_helper(driver, false);
     TEST_ESP_OK(esp_async_crc_uninstall(driver));
 #endif
 }

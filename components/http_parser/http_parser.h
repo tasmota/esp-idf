@@ -53,7 +53,7 @@ typedef unsigned __int64 uint64_t;
 # define HTTP_PARSER_STRICT 1
 #endif
 
-/* Maximium header size allowed. If the macro is not defined
+/* Maximum header size allowed. If the macro is not defined
  * before including this header then the default is used. To
  * change the maximum header size, define the macro in the build
  * environment (e.g. -DHTTP_MAX_HEADER_SIZE=<value>). To remove
@@ -78,7 +78,7 @@ typedef struct http_parser_settings http_parser_settings;
  * chunked' headers that indicate the presence of a body.
  *
  * Returning `2` from on_headers_complete will tell parser that it should not
- * expect neither a body nor any futher responses on this connection. This is
+ * expect neither a body nor any further responses on this connection. This is
  * useful for handling responses to a CONNECT request which may not contain
  * `Upgrade` or `Connection: upgrade` headers.
  *
@@ -132,6 +132,11 @@ typedef int (*http_cb) (http_parser*);
   /* RFC-2068, section 19.6.1.2 */  \
   XX(31, LINK,        LINK)         \
   XX(32, UNLINK,      UNLINK)       \
+  XX(33, QUERY,       QUERY)        /* RFC 10008 */
+
+/* HTTP_QUERY is an enumerator, not a #define. Downstream may use
+ * #if defined(HTTP_PARSER_HAS_QUERY) for compile-time detection. */
+#define HTTP_PARSER_HAS_QUERY 1
 
 enum http_method
   {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,8 +7,10 @@
 #define _ESP_TLS_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "esp_err.h"
 #include "esp_tls_errors.h"
+#include "esp_key_config.h"
 #include "sdkconfig.h"
 #ifdef CONFIG_ESP_TLS_USING_MBEDTLS
 #include "mbedtls/ssl.h"
@@ -160,6 +162,10 @@ typedef struct esp_tls_cfg {
     const unsigned char *clientkey_pem_buf; /*!< Client key legacy name */
     };
 
+    const esp_key_config_t *client_key;     /*!< Unified key config. Must remain valid for session lifetime.
+                                                 Any PSA key referenced here remains owned by the caller; ESP-TLS does not
+                                                 destroy it on cleanup, so the application must release it with psa_destroy_key(). */
+
     union {
     unsigned int clientkey_bytes;           /*!< Size of client key pointed to by
                                                  clientkey_pem_buf
@@ -184,8 +190,12 @@ typedef struct esp_tls_cfg {
                                                  underneath socket will be configured in non
                                                  blocking mode after tls session is established */
 
-    bool use_secure_element;                /*!< Enable this option to use secure element or
-                                                 atecc608a chip */
+    bool use_secure_element;                /*!< @deprecated No longer functional; setting this to true
+                                                 makes the connection fail with ESP_ERR_NOT_SUPPORTED.
+                                                 Use `client_key` (esp_key_config_t) together with
+                                                 CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED instead.
+                                                 Kept only for source compatibility; will be removed in
+                                                 the next major release. */
 
     int timeout_ms;                         /*!< Network timeout in milliseconds.
                                                  Note: If this value is not set, by default the timeout is
@@ -198,8 +208,14 @@ typedef struct esp_tls_cfg {
     const char *common_name;                /*!< If non-NULL, server certificate CN must match this name.
                                                  If NULL, server certificate CN must match hostname. */
 
-    bool skip_common_name;                  /*!< Skip any validation of server certificate CN field.
-                                                 This field should be set to false for SNI to function correctly. */
+    bool skip_common_name;                  /*!< When true, esp-tls skips the call to
+                                                 mbedtls_ssl_set_hostname(). This disables BOTH
+                                                 server-hostname matching against the certificate
+                                                 (CN/SAN) and Server Name Indication (SNI), not just
+                                                 the legacy CN field. Only set on loopback / debug
+                                                 clients that can tolerate the loss of hostname
+                                                 authentication. Must be false for SNI to function
+                                                 correctly. */
 
     tls_keep_alive_cfg_t *keep_alive_cfg;   /*!< Enable TCP keep-alive timeout for SSL connection */
 
@@ -226,8 +242,9 @@ typedef struct esp_tls_cfg {
 #endif /* CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS */
 
     esp_tls_addr_family_t addr_family;      /*!< The address family to use when connecting to a host. */
-    const int *ciphersuites_list;           /*!< Pointer to a zero-terminated array of IANA identifiers of TLS ciphersuites.
-                                                Please check the list validity by esp_tls_get_ciphersuites_list() API */
+    const int *ciphersuites_list;           /*!< Pointer to a zero-terminated array of IANA identifiers of TLS ciphersuites. */
+    const uint16_t *groups_list;            /*!< Pointer to a zero-terminated array of IANA identifiers of TLS supported groups
+                                                The array is not copied. It must stay valid for the lifetime of the connection. */
     esp_tls_proto_ver_t tls_version;        /*!< TLS protocol version of the connection, e.g., TLS 1.2, TLS 1.3 (default - no preference) */
 
 #if CONFIG_MBEDTLS_DYNAMIC_BUFFER
@@ -309,6 +326,10 @@ typedef struct esp_tls_cfg_server {
     const unsigned char *serverkey_pem_buf;     /*!< Server key legacy name */
     };
 
+    const esp_key_config_t *server_key;         /*!< Unified key config. Must remain valid for session lifetime.
+                                                     Any PSA key referenced here remains owned by the caller; ESP-TLS does not
+                                                     destroy it on cleanup, so the application must release it with psa_destroy_key(). */
+
     union {
     unsigned int serverkey_bytes;               /*!< Size of server key pointed to by
                                                      serverkey_pem_buf */
@@ -328,8 +349,12 @@ typedef struct esp_tls_cfg_server {
 
     esp_tls_ecdsa_curve_t ecdsa_curve;          /*!< ECDSA curve to use (SECP256R1 or SECP384R1) */
 
-    bool use_secure_element;                    /*!< Enable this option to use secure element or
-                                                 atecc608a chip */
+    bool use_secure_element;                    /*!< @deprecated No longer functional; setting this to true
+                                                     makes the connection fail with ESP_ERR_NOT_SUPPORTED.
+                                                     Use `server_key` (esp_key_config_t) together with
+                                                     CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED instead.
+                                                     Kept only for source compatibility; will be removed in
+                                                     the next major release. */
 
     uint32_t tls_handshake_timeout_ms;                   /*!< TLS handshake timeout in milliseconds.
                                                     Note: If this value is not set, by default the timeout is
@@ -364,6 +389,12 @@ typedef struct esp_tls_cfg_server {
     const int *ciphersuites_list;               /*!< Pointer to a zero-terminated array of IANA identifiers of TLS ciphersuites.
                                                      Please check the list validity by esp_tls_get_ciphersuites_list() API.
                                                      This allows per-server cipher suite configuration. */
+
+    const uint16_t *groups_list;                /*!< Pointer to a zero-terminated array of IANA identifiers of TLS supported groups
+                                                     (named groups for key exchange, formerly named curves).
+                                                     The array is not copied. It must stay valid for the lifetime of the connection.
+                                                     Please check the list validity by esp_tls_get_supported_groups_list() API.
+                                                     This allows per-server group configuration. */
 } esp_tls_cfg_server_t;
 
 /**
@@ -716,12 +747,19 @@ mbedtls_x509_crt *esp_tls_get_global_ca_store(void);
 /**
  * @brief Get supported TLS ciphersuites list.
  *
- * See https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4 for the list of ciphersuites
- *
  * @return  Pointer to a zero-terminated array of IANA identifiers of TLS ciphersuites.
  *
  */
 const int *esp_tls_get_ciphersuites_list(void);
+
+/**
+ * @brief Get supported TLS groups list.
+ *
+ * @return  Pointer to a zero-terminated array of IANA identifiers of TLS supported groups,
+ *          or NULL if the configured TLS stack does not report the list.
+ *
+ */
+const uint16_t *esp_tls_get_supported_groups_list(void);
 
 /**
  * @brief      Initialize server side TLS/SSL connection

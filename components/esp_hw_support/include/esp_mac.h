@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +12,22 @@
 #ifndef MAC2STR
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
+#endif
+
+#ifndef MAC2OUI
+/**
+ * @brief Expand the first three bytes of a MAC address for formatting with MACOUI.
+ *
+ * Use as printf(MACOUI, MAC2OUI(mac)). For locally administered or randomized
+ * addresses, these bytes may not identify a manufacturer.
+ *
+ * @param a Pointer to a MAC address containing at least three bytes.
+ */
+#define MAC2OUI(a) (a)[0], (a)[1], (a)[2]
+/**
+ * @brief printf format string for use with MAC2OUI.
+ */
+#define MACOUI "%02x:%02x:%02x"
 #endif
 
 #ifdef __cplusplus
@@ -116,6 +132,8 @@ esp_err_t esp_efuse_mac_get_default(uint8_t *mac);
   * This function first get base MAC address using esp_base_mac_addr_get().
   * Then calculates the MAC address of the specific interface requested,
   * refer to ESP-IDF Programming Guide for the algorithm.
+  *
+  * @note This function reads MAC address directly from efuse(and might be different from MAC address read using esp_wifi_get_mac() API).
   *
   * The MAC address set by the esp_iface_mac_addr_set() function will not depend on the base MAC address.
   *

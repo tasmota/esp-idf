@@ -12,12 +12,14 @@
 
 static uint8_t log_count;
 #if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
-static size_t host_mem_used_size = 0;
+static _Atomic size_t host_mem_used_size = 0;
 #endif // CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
+
+void *nimble_mem_realloc(void *ptr, size_t size);
 
 #if CONFIG_BT_NIMBLE_MEM_DEBUG
 
-#define NIMBLE_MEM_DBG_INFO_MAX    1024*3
+#define NIMBLE_MEM_DBG_INFO_MAX    (1024 * 3)
 typedef struct {
     void *p;
     int size;
@@ -79,6 +81,7 @@ void nimble_mem_dbg_record(void *p, int size, const char *func, int line)
 
     if (i >= NIMBLE_MEM_DBG_INFO_MAX) {
         ESP_LOGE("BT_NIMBLE_MEM", "%s full %s %d !!\n", __func__, func, line);
+        return;
     }
 
     nimble_mem_dbg_current_size += size;
@@ -117,7 +120,7 @@ void nimble_mem_dbg_clean(void *p, const char *func, int line)
     }
 
     if (i >= NIMBLE_MEM_DBG_INFO_MAX) {
-        ESP_LOGE("BT_NIMBLE_MEM", "%s full %s %d !!\n", __func__, func, line);
+        ESP_LOGE("BT_NIMBLE_MEM", "%s pointer %s %d not found!!\n", __func__, func, line);
     }
 }
 
@@ -195,7 +198,7 @@ void *nimble_mem_dbg_realloc(void *ptr, size_t new_size, const char *func, int l
     size_t old_size = 0;
     int i;
 
-    void *new_ptr = realloc(ptr, new_size);
+    void *new_ptr = nimble_mem_realloc(ptr, new_size);
     if (new_ptr == NULL && new_size > 0) {
         // realloc failed, keep old ptr record
         return NULL;
@@ -233,6 +236,7 @@ void *nimble_mem_dbg_realloc(void *ptr, size_t new_size, const char *func, int l
 
         if (i >= NIMBLE_MEM_DBG_INFO_MAX) {
             ESP_LOGE("BT_NIMBLE_MEM", "%s full %s %d !!\n", __func__, func, line);
+            return new_ptr;
         }
 
         nimble_mem_dbg_current_size += new_size;
@@ -277,7 +281,8 @@ void *nimble_mem_malloc(size_t size)
     }
 #if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
     if(mem) {
-        host_mem_used_size += heap_caps_get_allocated_size(mem);
+        size_t alloc_size = heap_caps_get_allocated_size(mem);
+        __atomic_fetch_add(&host_mem_used_size, alloc_size, __ATOMIC_RELAXED);
     }
 #endif // CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
     return mem;
@@ -300,9 +305,52 @@ void *nimble_mem_calloc(size_t n, size_t size)
 #endif
 #if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
     if(mem) {
-        host_mem_used_size += heap_caps_get_allocated_size(mem);
+        size_t alloc_size = heap_caps_get_allocated_size(mem);
+        __atomic_fetch_add(&host_mem_used_size, alloc_size, __ATOMIC_RELAXED);
     }
 #endif // CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
+    return mem;
+}
+
+#if !CONFIG_BT_NIMBLE_LOW_SPEED_MODE
+IRAM_ATTR
+#endif
+void *nimble_mem_realloc(void *ptr, size_t size)
+{
+    void *mem = NULL;
+#if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
+    size_t old_size = 0;
+    if (ptr) {
+        old_size = heap_caps_get_allocated_size(ptr);
+    }
+#endif
+
+#ifdef CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL
+    mem = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+#elif CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL
+    mem = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+#elif CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_IRAM_8BIT
+    mem = heap_caps_realloc_prefer(ptr, size, 2,
+                                   MALLOC_CAP_INTERNAL|MALLOC_CAP_IRAM_8BIT,
+                                   MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+#else
+    mem = realloc(ptr, size);
+#endif
+
+#if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
+    if (mem) {
+        /* Successful realloc: replace old_size contribution with new block size. */
+        size_t new_size = heap_caps_get_allocated_size(mem);
+        __atomic_fetch_sub(&host_mem_used_size, old_size, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&host_mem_used_size, new_size, __ATOMIC_RELAXED);
+    } else if (ptr && size == 0) {
+        /* realloc(ptr, 0) freed the block and returned NULL; deduct old_size. */
+        __atomic_fetch_sub(&host_mem_used_size, old_size, __ATOMIC_RELAXED);
+    }
+    /* If mem == NULL and size != 0, realloc failed; ptr is still valid and
+     * host_mem_used_size remains unchanged, which is the correct state. */
+#endif // CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
+
     return mem;
 }
 
@@ -314,8 +362,7 @@ void nimble_mem_free(void *ptr)
 #if CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
     if (ptr) {
         size_t alloc_size = heap_caps_get_allocated_size(ptr);
-        // assert(host_mem_used_size >= alloc_size);
-        host_mem_used_size -= alloc_size;
+        __atomic_fetch_sub(&host_mem_used_size, alloc_size, __ATOMIC_RELAXED);
     }
 #endif // CONFIG_BT_LE_USED_MEM_STATISTICS_ENABLED
     if (ptr) {

@@ -6,24 +6,11 @@
  */
 
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "cap_initiator.h"
 
-#define ADV_HANDLE              0x00
-#define ADV_SID                 0
-#define ADV_TX_POWER            127
-#define ADV_ADDRESS             BLE_OWN_ADDR_PUBLIC
-#define ADV_PRIMARY_PHY         BLE_HCI_LE_PHY_1M
-#define ADV_SECONDARY_PHY       BLE_HCI_LE_PHY_2M
-#define ADV_INTERVAL            BLE_GAP_ADV_ITVL_MS(200)
-
-#define PER_ADV_INTERVAL        BLE_GAP_ADV_ITVL_MS(100)
-
-#define LOCAL_DEVICE_NAME       "CAP Broadcast Source"
 #define LOCAL_BROADCAST_ID      0x123456
 
 ESP_BLE_AUDIO_BAP_LC3_BROADCAST_PRESET_16_2_1_DEFINE(broadcast_preset_16_2_1,
@@ -31,20 +18,44 @@ ESP_BLE_AUDIO_BAP_LC3_BROADCAST_PRESET_16_2_1_DEFINE(broadcast_preset_16_2_1,
                                                      ESP_BLE_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 
 static esp_ble_audio_cap_broadcast_source_t *broadcast_source;
-static esp_ble_audio_cap_stream_t broadcast_stream;
+static esp_ble_audio_cap_stream_t broadcast_streams[SINK_STREAM_COUNT];
+
+/* One BIS per channel. The subgroup codec configuration is shared, so the channel
+ * allocation is carried per BIS as Codec Specific Configuration.
+ */
+static const esp_ble_audio_location_t bis_locations[] = {
+    ESP_BLE_AUDIO_LOCATION_FRONT_LEFT,
+    ESP_BLE_AUDIO_LOCATION_FRONT_RIGHT,
+};
+_Static_assert(ARRAY_SIZE(bis_locations) >= SINK_STREAM_COUNT,
+               "Need one channel allocation per broadcast stream");
+
+static uint8_t bis_data[SINK_STREAM_COUNT][6];
+
+static int broadcast_stream_index(const esp_ble_audio_bap_stream_t *stream)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(broadcast_streams); i++) {
+        if (stream == &broadcast_streams[i].bap_stream) {
+            return (int)i;
+        }
+    }
+
+    return -1;
+}
 
 static void broadcast_stream_started_cb(esp_ble_audio_bap_stream_t *stream)
 {
     esp_ble_audio_cap_stream_t *cap_stream;
     int err;
 
-    ESP_LOGI(TAG, "Broadcast stream %p started", stream);
+    ESP_LOGI(TAG, "[SRC #%d] Stream started", broadcast_stream_index(stream));
 
     cap_stream = CONTAINER_OF(stream, esp_ble_audio_cap_stream_t, bap_stream);
 
-    err = cap_initiator_tx_register_stream(cap_stream);
+    err = cap_initiator_tx_register_stream(cap_stream, true);
     if (err) {
-        ESP_LOGE(TAG, "Failed to register stream %p for TX, err %d", stream, err);
+        ESP_LOGE(TAG, "[SRC #%d] Failed to register TX, err %d",
+                 broadcast_stream_index(stream), err);
     }
 }
 
@@ -52,7 +63,8 @@ static void broadcast_stream_stopped_cb(esp_ble_audio_bap_stream_t *stream, uint
 {
     esp_ble_audio_cap_stream_t *cap_stream;
 
-    ESP_LOGI(TAG, "Broadcast stream %p stopped, reason 0x%02x", stream, reason);
+    ESP_LOGI(TAG, "[SRC #%d] Stream stopped, reason 0x%02x",
+             broadcast_stream_index(stream), reason);
 
     cap_stream = CONTAINER_OF(stream, esp_ble_audio_cap_stream_t, bap_stream);
 
@@ -63,7 +75,8 @@ static void broadcast_stream_disconnected_cb(esp_ble_audio_bap_stream_t *stream,
 {
     esp_ble_audio_cap_stream_t *cap_stream;
 
-    ESP_LOGI(TAG, "Broadcast stream %p disconnected, reason 0x%02x", stream, reason);
+    ESP_LOGI(TAG, "[SRC #%d] ISO disconnected, reason 0x%02x",
+             broadcast_stream_index(stream), reason);
 
     cap_stream = CONTAINER_OF(stream, esp_ble_audio_cap_stream_t, bap_stream);
 
@@ -146,129 +159,13 @@ static uint8_t *per_adv_data_get(uint8_t *data_len)
     return data;
 }
 
-static int ext_adv_start(void)
-{
-    struct ble_gap_periodic_adv_params per_params = {0};
-    struct ble_gap_ext_adv_params ext_params = {0};
-    struct os_mbuf *data = NULL;
-    uint8_t *ext_data = NULL;
-    uint8_t *per_data = NULL;
-    uint8_t data_len = 0;
-    int err;
-
-    ext_params.connectable = 0;
-    ext_params.scannable = 0;
-    ext_params.legacy_pdu = 0;
-    ext_params.own_addr_type = ADV_ADDRESS;
-    ext_params.primary_phy = ADV_PRIMARY_PHY;
-    ext_params.secondary_phy = ADV_SECONDARY_PHY;
-    ext_params.tx_power = ADV_TX_POWER;
-    ext_params.sid = ADV_SID;
-    ext_params.itvl_min = ADV_INTERVAL;
-    ext_params.itvl_max = ADV_INTERVAL;
-
-    err = ble_gap_ext_adv_configure(ADV_HANDLE, &ext_params, NULL,
-                                    example_audio_gap_event_cb, NULL);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to configure ext adv params, err %d", err);
-        goto end;
-    }
-
-    ext_data = ext_adv_data_get(&data_len);
-    if (ext_data == NULL) {
-        err = -ENOMEM;
-        goto end;
-    }
-
-    data = os_msys_get_pkthdr(data_len, 0);
-    if (data == NULL) {
-        ESP_LOGE(TAG, "Failed to get ext adv mbuf");
-        err = -ENOMEM;
-        goto end;
-    }
-
-    err = os_mbuf_append(data, ext_data, data_len);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to append ext adv data, err %d", err);
-        os_mbuf_free_chain(data);
-        goto end;
-    }
-
-    err = ble_gap_ext_adv_set_data(ADV_HANDLE, data);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to set ext adv data, err %d", err);
-        goto end;
-    }
-
-    per_params.include_tx_power = 0;
-    per_params.itvl_min = PER_ADV_INTERVAL;
-    per_params.itvl_max = PER_ADV_INTERVAL;
-
-    err = ble_gap_periodic_adv_configure(ADV_HANDLE, &per_params);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to configure per adv params, err %d", err);
-        goto end;
-    }
-
-    per_data = per_adv_data_get(&data_len);
-    if (per_data == NULL) {
-        err = -ENOMEM;
-        goto end;
-    }
-
-    data = os_msys_get_pkthdr(data_len, 0);
-    if (data == NULL) {
-        ESP_LOGE(TAG, "Failed to get per adv mbuf");
-        err = -ENOMEM;
-        goto end;
-    }
-
-    err = os_mbuf_append(data, per_data, data_len);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to append per adv data, err %d", err);
-        os_mbuf_free_chain(data);
-        goto end;
-    }
-
-    err = ble_gap_periodic_adv_set_data(ADV_HANDLE, data);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to set per adv data, err %d", err);
-        goto end;
-    }
-
-    err = ble_gap_periodic_adv_start(ADV_HANDLE);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start per advertising, err %d", err);
-        goto end;
-    }
-
-    err = ble_gap_ext_adv_start(ADV_HANDLE, 0, 0);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start ext advertising, err %d", err);
-        goto end;
-    }
-
-    ESP_LOGI(TAG, "Extended adv instance %u started", ADV_HANDLE);
-
-end:
-    if (ext_data) {
-        free(ext_data);
-    }
-    if (per_data) {
-        free(per_data);
-    }
-    return err;
-}
-
 int cap_initiator_broadcast_start(void)
 {
-    esp_ble_audio_cap_initiator_broadcast_stream_param_t stream_params = {
-        .stream = &broadcast_stream,
-    };
+    esp_ble_audio_cap_initiator_broadcast_stream_param_t stream_params[SINK_STREAM_COUNT] = {0};
     esp_ble_audio_cap_initiator_broadcast_subgroup_param_t subgroup_param = {
         .codec_cfg = &broadcast_preset_16_2_1.codec_cfg,
-        .stream_params = &stream_params,
-        .stream_count = 1,
+        .stream_params = stream_params,
+        .stream_count = ARRAY_SIZE(stream_params),
     };
     const esp_ble_audio_cap_initiator_broadcast_create_param_t create_param = {
         .qos = &broadcast_preset_16_2_1.qos,
@@ -278,9 +175,30 @@ int cap_initiator_broadcast_start(void)
     esp_ble_audio_bap_broadcast_adv_info_t info = {
         .adv_handle = ADV_HANDLE,
     };
+    /* BASE (per_adv_data_get) needs broadcast_source to exist — build after create. */
+    uint8_t *ext_data = NULL;
+    uint8_t *per_data = NULL;
+    uint8_t ext_len = 0;
+    uint8_t per_len = 0;
     int err;
 
     ESP_LOGI(TAG, "Creating broadcast source");
+
+    for (size_t i = 0; i < ARRAY_SIZE(stream_params); i++) {
+        const esp_ble_audio_location_t loc = bis_locations[i];
+
+        /* LTV: length, type, 4-octet Audio_Channel_Allocation (little endian) */
+        bis_data[i][0] = 5;
+        bis_data[i][1] = ESP_BLE_AUDIO_CODEC_CFG_CHAN_ALLOC;
+        bis_data[i][2] = (uint8_t)loc;
+        bis_data[i][3] = (uint8_t)(loc >> 8);
+        bis_data[i][4] = (uint8_t)(loc >> 16);
+        bis_data[i][5] = (uint8_t)(loc >> 24);
+
+        stream_params[i].stream = &broadcast_streams[i];
+        stream_params[i].data = bis_data[i];
+        stream_params[i].data_len = sizeof(bis_data[i]);
+    }
 
     err = esp_ble_audio_cap_initiator_broadcast_audio_create(&create_param, &broadcast_source);
     if (err) {
@@ -288,7 +206,19 @@ int cap_initiator_broadcast_start(void)
         return err;
     }
 
-    err = ext_adv_start();
+    ext_data = ext_adv_data_get(&ext_len);
+    if (ext_data == NULL) {
+        err = -ENOMEM;
+        goto end;
+    }
+
+    per_data = per_adv_data_get(&per_len);
+    if (per_data == NULL) {
+        err = -ENOMEM;
+        goto end;
+    }
+
+    err = ext_adv_start(ext_data, ext_len, per_data, per_len);
     if (err) {
         goto end;
     }
@@ -302,22 +232,29 @@ int cap_initiator_broadcast_start(void)
     err = esp_ble_audio_cap_initiator_broadcast_audio_start(broadcast_source, ADV_HANDLE);
     if (err) {
         ESP_LOGE(TAG, "Failed to start broadcast source, err %d", err);
-        goto end;
     }
 
-    return 0;
-
 end:
-    err = esp_ble_audio_cap_initiator_broadcast_audio_delete(broadcast_source);
+    if (ext_data != NULL) {
+        free(ext_data);
+    }
+    if (per_data != NULL) {
+        free(per_data);
+    }
     if (err) {
-        ESP_LOGE(TAG, "Failed to delete broadcast source, err %d", err);
+        esp_err_t e = esp_ble_audio_cap_initiator_broadcast_audio_delete(broadcast_source);
+        if (e) {
+            ESP_LOGE(TAG, "Failed to delete broadcast source, err %d", e);
+        }
     }
     return err;
 }
 
 int cap_initiator_broadcast_init(void)
 {
-    esp_ble_audio_cap_stream_ops_register(&broadcast_stream, &broadcast_stream_ops);
+    for (size_t i = 0; i < ARRAY_SIZE(broadcast_streams); i++) {
+        esp_ble_audio_cap_stream_ops_register(&broadcast_streams[i], &broadcast_stream_ops);
+    }
 
     ESP_LOGI(TAG, "CAP initiator broadcast initialized");
 

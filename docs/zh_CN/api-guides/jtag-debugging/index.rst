@@ -7,7 +7,7 @@ JTAG 调试
 
 .. note::
 
-    也可以使用 ``idf.py monitor`` 来调试 {IDF_TARGET_NAME}，免于设置 JTAG 或 OpenOCD。请参阅 :doc:`../../api-guides/tools/idf-monitor` 和 :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`。
+    也可以使用 ``idf.py monitor`` 来调试 {IDF_TARGET_NAME}，免于设置 JTAG 或 OpenOCD。请参阅 :doc:`../../api-guides/tools/idf-monitor` 和 :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`。
 
 .. highlight:: none
 
@@ -29,6 +29,8 @@ JTAG 调试
     如果你不熟悉 GDB，请查看此小节以获取 :ref:`Eclipse 集成开发环境 <jtag-debugging-examples-eclipse>` 以及 :ref:`命令行终端 <jtag-debugging-examples-command-line>` 提供的调试示例。
 :ref:`jtag-debugging-building-openocd`
     OpenOCD 源码构建流程参考。
+:ref:`jtag-debugging-semihosting`
+    介绍 semihosting 功能。
 :ref:`jtag-debugging-tips-and-quirks`
     介绍使用 OpenOCD 和 GDB 通过 JTAG 接口调试 {IDF_TARGET_NAME} 时的注意事项和补充内容。
 
@@ -184,7 +186,7 @@ OpenOCD 安装完成后就可以配置 {IDF_TARGET_NAME} 目标（即带 JTAG �
     :start-after: run-openocd
     :end-before: ---
 
-{IDF_TARGET_FTDI_CONFIG:default="Not Updated!", esp32s3="board/esp32s3-ftdi.cfg", esp32c3="board/esp32c3-ftdi.cfg", esp32c6="board/esp32c6-ftdi.cfg", esp32h2="board/esp32h2-ftdi.cfg", esp32h21="board/esp32h21-ftdi.cfg", esp32h4="board/esp32h4-ftdi.cfg", esp32p4="board/esp32p4-ftdi.cfg", esp32c5="board/esp32c5-ftdi.cfg", esp32c61="board/esp32c61-ftdi.cfg"}
+{IDF_TARGET_FTDI_CONFIG:default="Not Updated!", esp32s3="board/esp32s3-ftdi.cfg", esp32c3="board/esp32c3-ftdi.cfg", esp32c6="board/esp32c6-ftdi.cfg", esp32h2="board/esp32h2-ftdi.cfg", esp32h21="board/esp32h21-ftdi.cfg", esp32h4="board/esp32h4-ftdi.cfg", esp32p4="board/esp32p4-ftdi.cfg", esp32c5="board/esp32c5-ftdi.cfg", esp32c61="board/esp32c61-ftdi.cfg, esp32s31="board/esp32s31-ftdi.cfg"}
 
 .. note::
 
@@ -221,7 +223,7 @@ OpenOCD 安装完成后就可以配置 {IDF_TARGET_NAME} 目标（即带 JTAG �
 
 其中 OpenOCD 的烧写命令 ``program_esp`` 格式如下：
 
-``program_esp <image_file> <offset> [verify] [reset] [exit] [compress] [encrypt] [no_clock_boost] [restore_clock] [no_skip_loaded]``
+``program_esp <image_file> <offset> [verify] [reset] [exit] [compress] [encrypt] [no_clock_boost] [restore_clock] [no_skip_loaded] [force]``
 
 -  ``image_file`` - 程序镜像文件存放的路径
 -  ``offset`` - 镜像烧写到 flash 中的偏移地址
@@ -233,6 +235,7 @@ OpenOCD 安装完成后就可以配置 {IDF_TARGET_NAME} 目标（即带 JTAG �
 - ``no_clock_boost`` - 禁用在烧写前将目标时钟频率设置为其最大可能值（可选）。默认情况下禁用该选项，即默认启用时钟提升。
 - ``restore_clock`` - 可选。烧写完成后将时钟频率恢复到初始值。默认情况下不启用。
 - ``no_skip_loaded`` - 可选。烧写前不检查该二进制文件是否已被加载，默认情况下不启用。
+- ``force`` - 可选。禁用对镜像文件中检测到的芯片类型和版本范围进行目标兼容性检查。此检查默认启用。
 
 替代方法：使用 ``program_esp_bins``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -256,7 +259,7 @@ OpenOCD 安装完成后就可以配置 {IDF_TARGET_NAME} 目标（即带 JTAG �
 
 OpenOCD 烧录命令 ``program_esp_bins`` 格式如下：
 
-``program_esp_bins <build_dir> <json_file> [verify] [reset] [exit] [compress] [no_clock_boost] [restore_clock] [no_skip_loaded]``
+``program_esp_bins <build_dir> <json_file> [verify] [reset] [exit] [compress] [no_clock_boost] [restore_clock] [no_skip_loaded] [force]``
 
  - ``build_dir`` - 包含 ``flasher_args.json`` 文件的构建目录路径。
  - ``json_file`` - 包含 flash 配置的 JSON 文件名称（通常为 ``flasher_args.json``）。
@@ -314,6 +317,18 @@ OpenOCD 烧录命令 ``program_esp_bins`` 格式如下：
 
 如需根据特定需求从源码构建 OpenOCD，请参考 `OpenOCD 构建工作流程 <https://github.com/espressif/openocd-esp32/blob/master/.github/workflows/build_openocd.yml>`_。该工作流演示了如何在不同平台 (Windows, Linux, macOS) 上构建 OpenOCD。
 
+.. _jtag-debugging-semihosting:
+
+semihosting
+-----------
+
+借助 semihosting 机制，运行在 {IDF_TARGET_NAME} 上的代码能够通过调试器与主机 PC 进行通信，例如打印调试信息或读写文件等。
+
+.. toctree::
+    :maxdepth: 1
+
+    semihosting
+
 .. _jtag-debugging-tips-and-quirks:
 
 注意事项和补充内容
@@ -326,7 +341,6 @@ OpenOCD 烧录命令 ``program_esp_bins`` 格式如下：
 
     tips-and-quirks
 
-
 相关文档
 --------
 
@@ -337,11 +351,12 @@ OpenOCD 烧录命令 ``program_esp_bins`` 格式如下：
 
     using-debugger
     debugging-examples
+    semihosting
     tips-and-quirks
-    ../app_trace
 
 - :doc:`using-debugger`
 - :doc:`debugging-examples`
+- :doc:`semihosting`
 - :doc:`tips-and-quirks`
-- :doc:`../app_trace`
+- :doc:`../tracing/index`
 - `ESP-Prog 调试板介绍 <https://docs.espressif.com/projects/espressif-esp-iot-solution/zh_CN/latest/hw-reference/ESP-Prog_guide.html>`__

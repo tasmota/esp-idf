@@ -13,9 +13,9 @@
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/mspi_timing_tuning.h"
 #include "esp_private/esp_psram_impl.h"
-#include "esp_private/esp_psram_ldo.h"
 #include "hal/psram_ctrlr_ll.h"
 #include "hal/mspi_ll.h"
+#include "hal/mspi_pms_ll.h"
 #include "soc/rtc.h"
 
 #define AP_OCT_PSRAM_SYNC_READ             0x0000
@@ -379,22 +379,24 @@ static void s_set_psram_cs_timing(void)
 #if CONFIG_SPIRAM_ECC_ENABLE
 static void s_mspi_ecc_show_info(void)
 {
-    for (int i = 0; i < PSRAM_CTRLR_LL_PMS_REGION_NUMS; i++) {
-        ESP_EARLY_LOGV(TAG, "region[%d] addr: 0x%08x", i, psram_ctrlr_ll_get_pms_region_start_addr(PSRAM_CTRLR_LL_MSPI_ID_2, i));
-        ESP_EARLY_LOGV(TAG, "region[%d] size: 0x%08x", i, psram_ctrlr_ll_get_pms_region_size(PSRAM_CTRLR_LL_MSPI_ID_2, i));
+    for (int i = 0; i < MSPI_LL_PMS_REGION_NUM; i++) {
+        ESP_EARLY_LOGV(TAG, "region[%d] addr: 0x%08x", i, mspi_ll_pms_get_region_addr(MSPI_PMS_MEM_PSRAM, i));
+        ESP_EARLY_LOGV(TAG, "region[%d] size: 0x%08x", i, mspi_ll_pms_get_region_size(MSPI_PMS_MEM_PSRAM, i));
     }
 
     uint32_t page_size = psram_ctrlr_ll_get_page_size(PSRAM_CTRLR_LL_MSPI_ID_2);
     ESP_EARLY_LOGV(TAG, "ECC page size: %d", page_size);
 }
+#endif  //#if CONFIG_SPIRAM_ECC_ENABLE
 
 /**
- * Enable error correcting code feature
+ * Configure error correcting code feature
  *
  * Can add an input parameter for selecting ECC mode if needed
  */
 static void s_configure_psram_ecc(void)
 {
+#if CONFIG_SPIRAM_ECC_ENABLE
     psram_ctrlr_ll_enable_16to18_ecc(PSRAM_CTRLR_LL_MSPI_ID_2, true);
     psram_ctrlr_ll_enable_skip_page_corner(PSRAM_CTRLR_LL_MSPI_ID_2, true);
     psram_ctrlr_ll_enable_ecc_addr_conversion(PSRAM_CTRLR_LL_MSPI_ID_2, 2048);
@@ -404,21 +406,19 @@ static void s_configure_psram_ecc(void)
      * Default: ACE0 range: 0 ~ 256MB
      * Current PSRAM is 8MB, ACE0 is enough
      */
-    psram_ctrlr_ll_enable_pms_region_ecc(PSRAM_CTRLR_LL_MSPI_ID_2, 0, true);
+    mspi_ll_pms_set_region_attr(MSPI_PMS_MEM_PSRAM, 0, MSPI_PMS_MODE_TEE, MSPI_PMS_ATTR_ECC);
 
     ESP_EARLY_LOGI(TAG, "ECC is enabled");
     s_mspi_ecc_show_info();
+#else
+    psram_ctrlr_ll_enable_16to18_ecc(PSRAM_CTRLR_LL_MSPI_ID_2, false);
+    psram_ctrlr_ll_enable_ecc_addr_conversion(PSRAM_CTRLR_LL_MSPI_ID_2, false);
+    mspi_ll_pms_set_region_attr(MSPI_PMS_MEM_PSRAM, 0, MSPI_PMS_MODE_TEE, MSPI_PMS_ATTR_RD | MSPI_PMS_ATTR_WR);
+#endif
 }
-#endif  //#if CONFIG_SPIRAM_ECC_ENABLE
 
 esp_err_t esp_psram_impl_enable(void)
 {
-#if PSRAM_CTRLR_LL_DEDICATED_LDO
-    esp_psram_power_cfg_t config = {
-        .voltage_mv = CONFIG_SPIRAM_LDO_VOLTAGE_DOMAIN,
-    };
-    esp_psram_power_init(&config);
-#endif
 #if SOC_CLK_MPLL_SUPPORTED
     // We need to use the acquire and freq_set functions directly instead of general clk_tree API for IRAM safe function
     esp_clk_tree_mpll_acquire();
@@ -440,9 +440,7 @@ esp_err_t esp_psram_impl_enable(void)
     s_set_psram_cs_timing();
     psram_ctrlr_ll_enable_split_trans(PSRAM_CTRLR_LL_MSPI_ID_2, true);
     psram_ctrlr_ll_set_page_size(PSRAM_CTRLR_LL_MSPI_ID_2, 2048);
-#if CONFIG_SPIRAM_ECC_ENABLE
     s_configure_psram_ecc();
-#endif
     //enter MSPI slow mode to init PSRAM device registers
     psram_ctrlr_ll_set_bus_clock(PSRAM_CTRLR_LL_MSPI_ID_2, AP_OCT_PSRAM_MPLL_DEFAULT_FREQ_MHZ / CONFIG_SPIRAM_SPEED);
     psram_ctrlr_ll_set_bus_clock(PSRAM_CTRLR_LL_MSPI_ID_3, AP_OCT_PSRAM_MPLL_DEFAULT_FREQ_MHZ / CONFIG_SPIRAM_SPEED);
@@ -488,7 +486,7 @@ esp_err_t esp_psram_impl_enable(void)
 
 uint8_t esp_psram_impl_get_cs_io(void)
 {
-    ESP_EARLY_LOGI(TAG, "psram CS IO is dedicated");
+    ESP_EARLY_LOGD(TAG, "psram CS IO is dedicated");
     return -1;
 }
 
@@ -563,15 +561,8 @@ void esp_psram_impl_exit_halfsleep_mode(void)
     // Record the tick exiting halfsleep mode
     s_halfsleep_ctx.halfsleep_wakeup_tick = rtc_time_get();
 
-    // Do a SPI dummy write transmission to invalid address to wake up from halfsleep mode
-    uint8_t null = 0;
-    psram_ctrlr_ll_common_transaction(PSRAM_CTRLR_LL_MSPI_ID_3,
-                                      AP_OCT_PSRAM_REG_WRITE, AP_OCT_PSRAM_WR_CMD_BITLEN,
-                                      0xFF, AP_OCT_PSRAM_ADDR_BITLEN,
-                                      0,
-                                      &null, 0,
-                                      NULL, 0,
-                                      false);
+    // Set CE# to active to wakeup PSRAM halfsleep
+    psram_ctrlr_ll_half_sleep_wakeup();
 }
 
 void esp_psram_impl_resume_from_halfsleep_mode(uint32_t slowclk_period)

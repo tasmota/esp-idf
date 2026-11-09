@@ -125,8 +125,7 @@ void BTA_AgRegister(tBTA_SERVICE_MASK services, tBTA_SEC sec_mask,tBTA_AG_FEAT f
         p_buf->app_id = app_id;
         for (i = 0; i < BTA_AG_NUM_IDX; i++) {
             if (p_service_names != NULL && p_service_names[i]) {
-                BCM_STRNCPY_S(p_buf->p_name[i], p_service_names[i], BTA_SERVICE_NAME_LEN);
-                p_buf->p_name[i][BTA_SERVICE_NAME_LEN] = '\0';
+                BCM_STRLCPY_S(p_buf->p_name[i], p_service_names[i], BTA_SERVICE_NAME_LEN + 1);
             } else {
                 p_buf->p_name[i][0] = '\0';
             }
@@ -356,7 +355,7 @@ void BTA_AgCiData(UINT16 handle)
 *******************************************************************************/
 void BTA_AgAudioBuffAlloc(UINT16 size, UINT8 **pp_buff, UINT8 **pp_data)
 {
-    /* reserve 1 byte at last, when the size is mSBC frame size (57), then we got a buffer that can hold 60 bytes data */
+    /* reserve trailing space for H2 header and optional eSCO padding (mSBC: 57+2+1=60, LC3: 58+2=60) */
     BT_HDR *p_buf= (BT_HDR *)osi_calloc(sizeof(BT_HDR) + BTA_AG_BUFF_OFFSET_MIN + BTA_AG_H2_HEADER_LEN + size + 1);
     if (p_buf != NULL) {
         /* mSBC offset is large than CVSD, so this is also work in CVSD air mode */

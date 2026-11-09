@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -14,6 +14,7 @@
 #include "esp_check.h"
 #include "esp_pm.h"
 #include "esp_cache.h"
+#include "esp_private/sd_host_buffer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "driver/sd_host_sdmmc.h"
@@ -95,7 +96,6 @@ typedef struct {
     size_t desc_remaining;
 } sd_host_sdmmc_trans_state_t;
 
-typedef struct sd_host_sdmmc_slot_t sd_host_sdmmc_slot_t;
 typedef struct sd_host_sdmmc_ctlr_t sd_host_sdmmc_ctlr_t;
 
 /**
@@ -277,11 +277,6 @@ esp_err_t sd_host_slot_set_cclk_always_on_internal(sd_host_sdmmc_slot_t *slot, b
  *
  * @param[in] slot       SD Host Slot handle
  * @param[in] enable     enable or not
- *
- * @return
- *        - ESP_OK:              On success
- *        - ESP_ERR_INVALID_ARG: Invalid arguments
- *        - ESP_ERR_NOT_FOUND:   Command not found
  */
 void sd_host_slot_enable_clk_cmd11(sd_host_sdmmc_slot_t *slot, bool enable);
 
@@ -333,19 +328,6 @@ void sd_host_dma_prepare(sd_host_sdmmc_slot_t *slot, void* data_ptr, size_t data
 /*---------------------------------------------------------------
                         Info APIs
 ---------------------------------------------------------------*/
-/**
- * @brief Check SD buffer alignment
- *
- * @param[in] slot        SD Host slot handle
- * @param[in] buf         Buffer pointer
- * @param[in] size        Buffer size
- *
- * @return
- *        - True: alignment requirement is satisfied
- *        - False: alignment requirement is not satisfied
- */
-bool sd_host_check_buffer_alignment(sd_host_sdmmc_slot_t *slot, const void *buf, size_t size);
-
 /**
  * @brief Get SD Host slot real frequency
  *

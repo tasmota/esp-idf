@@ -16,11 +16,14 @@
 #include "psa/initial_attestation.h"
 
 #include "esp_tee.h"
+#include "esp_app_desc.h"
+#include "esp_tee_code_hash.h"
+#include "esp_tee_version.h"
 #include "secure_service_num.h"
 
 #include "esp_tee_sec_storage.h"
 
-#include "cJSON.h"
+#include "json_parser.h"
 #include "unity.h"
 
 #include "test_esp_tee_att_data.h"
@@ -141,6 +144,33 @@ cleanup:
     return (ret);
 }
 
+/* Feed the text of the named object member, exactly as it appears in the
+ * token, to the running hash. The TEE hashes the header, eat and public_key
+ * objects as it generated them and splices the same text into the token, so
+ * the bytes are taken verbatim rather than re-serialized. */
+static void hash_token_object(jparse_ctx_t *jctx, const char *name, psa_hash_operation_t *operation)
+{
+    int len = 0;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object_strlen(jctx, name, &len));
+    char *str = calloc(1, len + 1);
+    TEST_ASSERT_NOT_NULL(str);
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object_str(jctx, name, str, len + 1));
+    TEST_ASSERT_PSA_OK(psa_hash_update(operation, (const unsigned char *)str, len));
+    free(str);
+}
+
+/* The named string member of the current object, decoded, in a buffer the
+ * caller frees */
+static char *fetch_token_string(jparse_ctx_t *jctx, const char *name)
+{
+    int len = 0;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_strlen(jctx, name, &len));
+    char *str = calloc(1, len + 1);
+    TEST_ASSERT_NOT_NULL(str);
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_string(jctx, name, str, len + 1));
+    return str;
+}
+
 static void prehash_token_data(const char *token_json, uint8_t *digest, size_t len)
 {
     TEST_ASSERT_NOT_NULL(token_json);
@@ -148,36 +178,19 @@ static void prehash_token_data(const char *token_json, uint8_t *digest, size_t l
     TEST_ASSERT_NOT_EQUAL(0, len);
 
     // Parse JSON string
-    cJSON *root = cJSON_Parse(token_json);
-    TEST_ASSERT_NOT_NULL(root);
+    jparse_ctx_t jctx;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_parse_start(&jctx, token_json, strlen(token_json)));
 
-    // Fetching the data to be verified
-    cJSON *header = cJSON_GetObjectItemCaseSensitive(root, "header");
-    TEST_ASSERT_NOT_NULL(header);
-
-    cJSON *eat = cJSON_GetObjectItemCaseSensitive(root, "eat");
-    TEST_ASSERT_NOT_NULL(eat);
-
-    cJSON *public_key = cJSON_GetObjectItemCaseSensitive(root, "public_key");
-    TEST_ASSERT_NOT_NULL(public_key);
-
-    char *header_str = cJSON_PrintUnformatted(header);
-    char *eat_str = cJSON_PrintUnformatted(eat);
-    char *public_key_str = cJSON_PrintUnformatted(public_key);
-
+    // Hashing the data to be verified
     psa_hash_operation_t operation = PSA_HASH_OPERATION_INIT;
     TEST_ASSERT_PSA_OK(psa_hash_setup(&operation, PSA_ALG_SHA_256));
+    hash_token_object(&jctx, "header", &operation);
+    hash_token_object(&jctx, "eat", &operation);
+    hash_token_object(&jctx, "public_key", &operation);
     size_t digest_len = 0;
-    TEST_ASSERT_PSA_OK(psa_hash_update(&operation, (const unsigned char *)header_str, strlen(header_str)));
-    TEST_ASSERT_PSA_OK(psa_hash_update(&operation, (const unsigned char *)eat_str, strlen(eat_str)));
-    TEST_ASSERT_PSA_OK(psa_hash_update(&operation, (const unsigned char *)public_key_str, strlen(public_key_str)));
     TEST_ASSERT_PSA_OK(psa_hash_finish(&operation, digest, SHA256_DIGEST_SZ, &digest_len));
 
-    free(public_key_str);
-    free(eat_str);
-    free(header_str);
-
-    cJSON_Delete(root);
+    json_parse_end(&jctx);
 }
 
 static void fetch_pubkey(const char *token_json, esp_tee_sec_storage_ecdsa_pubkey_t *pubkey_ctx)
@@ -186,18 +199,17 @@ static void fetch_pubkey(const char *token_json, esp_tee_sec_storage_ecdsa_pubke
     TEST_ASSERT_NOT_NULL(pubkey_ctx);
 
     // Parse JSON string
-    cJSON *root = cJSON_Parse(token_json);
-    TEST_ASSERT_NOT_NULL(root);
-
-    cJSON *public_key = cJSON_GetObjectItemCaseSensitive(root, "public_key");
-    TEST_ASSERT_NOT_NULL(token_json);
-
-    cJSON *compressed = cJSON_GetObjectItemCaseSensitive(public_key, "compressed");
-    TEST_ASSERT_NOT_NULL(compressed);
+    jparse_ctx_t jctx;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_parse_start(&jctx, token_json, strlen(token_json)));
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "public_key"));
+    char *compressed = fetch_token_string(&jctx, "compressed");
+    json_obj_leave_object(&jctx);
+    json_parse_end(&jctx);
 
     uint8_t *pubkey_buf = NULL;
     size_t pubkey_buf_sz = 0;
-    hexstr_to_bytes(compressed->valuestring, &pubkey_buf, &pubkey_buf_sz);
+    hexstr_to_bytes(compressed, &pubkey_buf, &pubkey_buf_sz);
+    free(compressed);
 
     mbedtls_ecp_keypair keypair;
     mbedtls_ecp_keypair_init(&keypair);
@@ -209,7 +221,6 @@ static void fetch_pubkey(const char *token_json, esp_tee_sec_storage_ecdsa_pubke
     mbedtls_ecp_keypair_free(&keypair);
 
     free(pubkey_buf);
-    cJSON_Delete(root);
 }
 
 static void fetch_signature(const char *token_json, esp_tee_sec_storage_ecdsa_sign_t *sign_ctx)
@@ -218,31 +229,27 @@ static void fetch_signature(const char *token_json, esp_tee_sec_storage_ecdsa_si
     TEST_ASSERT_NOT_NULL(sign_ctx);
 
     // Parse JSON string
-    cJSON *root = cJSON_Parse(token_json);
-    TEST_ASSERT_NOT_NULL(root);
-
-    cJSON *sign = cJSON_GetObjectItemCaseSensitive(root, "sign");
-    TEST_ASSERT_NOT_NULL(sign);
-
-    cJSON *sign_r = cJSON_GetObjectItemCaseSensitive(sign, "r");
-    TEST_ASSERT_NOT_NULL(sign_r);
-
-    cJSON *sign_s = cJSON_GetObjectItemCaseSensitive(sign, "s");
-    TEST_ASSERT_NOT_NULL(sign_s);
+    jparse_ctx_t jctx;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_parse_start(&jctx, token_json, strlen(token_json)));
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "sign"));
+    char *sign_r = fetch_token_string(&jctx, "r");
+    char *sign_s = fetch_token_string(&jctx, "s");
+    json_obj_leave_object(&jctx);
+    json_parse_end(&jctx);
 
     uint8_t *sign_r_buf = NULL;
     size_t sign_r_buf_sz = 0;
-    hexstr_to_bytes(sign_r->valuestring, &sign_r_buf, &sign_r_buf_sz);
+    hexstr_to_bytes(sign_r, &sign_r_buf, &sign_r_buf_sz);
     memcpy(sign_ctx->signature, sign_r_buf, sign_r_buf_sz);
     free(sign_r_buf);
+    free(sign_r);
 
     uint8_t *sign_s_buf = NULL;
     size_t sign_s_buf_sz = 0;
-    hexstr_to_bytes(sign_s->valuestring, &sign_s_buf, &sign_s_buf_sz);
+    hexstr_to_bytes(sign_s, &sign_s_buf, &sign_s_buf_sz);
     memcpy(sign_ctx->signature + sign_r_buf_sz, sign_s_buf, sign_s_buf_sz);
     free(sign_s_buf);
-
-    cJSON_Delete(root);
+    free(sign_s);
 }
 
 static void verify_attestation_token(const uint8_t *token_buf, size_t token_len)
@@ -349,4 +356,60 @@ TEST_CASE("PSA Attestation: Test psa_initial_attestation_get_token", "[attestati
 TEST_CASE("PSA Attestation: Test psa_initial_attestation_get_token_size", "[attestation]")
 {
     TEST_ASSERT_PSA_OK(psa_initial_attestation_get_token_size_test());
+}
+
+TEST_CASE("PSA Attestation: Verify the TEE image code hash claim", "[attestation]")
+{
+    uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_32];
+    uint8_t token_buffer[PSA_INITIAL_ATTEST_MAX_TOKEN_SIZE];
+    size_t token_buffer_size = 0, token_size = 0;
+
+    memset(challenge, 0x2a, sizeof(challenge));
+    memset(token_buffer, 0, sizeof(token_buffer));
+
+    TEST_ASSERT_PSA_OK(psa_initial_attest_get_token_size(sizeof(challenge), &token_buffer_size));
+    TEST_ASSERT_LESS_OR_EQUAL(sizeof(token_buffer), token_buffer_size);
+    TEST_ASSERT_PSA_OK(psa_initial_attest_get_token(challenge, sizeof(challenge), token_buffer,
+                                                    token_buffer_size, &token_size));
+    verify_attestation_token(token_buffer, token_size);
+
+    jparse_ctx_t jctx;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_parse_start(&jctx, (const char *)token_buffer, strlen((const char *)token_buffer)));
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "eat"));
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "sw_claims"));
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "tee"));
+
+    /* The reported TEE version must be the one this tree declares (esp_tee_version.h + IDF release line) */
+    char *ver = fetch_token_string(&jctx, "ver");
+    TEST_ASSERT_EQUAL_STRING(ESP_TEE_VERSION_STR, ver);
+
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_object(&jctx, "part_digest"));
+    bool digest_validated = false;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_bool(&jctx, "digest_validated", &digest_validated));
+    TEST_ASSERT_TRUE(digest_validated);
+
+    char *calc_digest = fetch_token_string(&jctx, "calc_digest");
+    TEST_ASSERT_EQUAL(2 * SHA256_DIGEST_SZ, strlen(calc_digest));
+
+    /* The code hash claim must be present and follow the definition this build knows */
+    char *calc_code_hash = fetch_token_string(&jctx, "calc_code_hash");
+    TEST_ASSERT_EQUAL(2 * SHA256_DIGEST_SZ, strlen(calc_code_hash));
+    int code_hash_ver = 0;
+    TEST_ASSERT_EQUAL(OS_SUCCESS, json_obj_get_int(&jctx, "code_hash_ver", &code_hash_ver));
+    TEST_ASSERT_EQUAL(ESP_TEE_IMG_CODE_HASH_VER, code_hash_ver);
+
+    json_obj_leave_object(&jctx);
+    json_obj_leave_object(&jctx);
+    json_obj_leave_object(&jctx);
+    json_obj_leave_object(&jctx);
+    json_parse_end(&jctx);
+
+    /* NOTE: Consumed by the pytest, which compares the values against the built esp_tee.bin */
+    printf("TEE image version: %s\n", ver);
+    printf("TEE image digest: %s\n", calc_digest);
+    printf("TEE code hash: %s (ver %d)\n", calc_code_hash, code_hash_ver);
+
+    free(ver);
+    free(calc_digest);
+    free(calc_code_hash);
 }

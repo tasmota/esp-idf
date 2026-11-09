@@ -48,9 +48,7 @@
 #include "esp_private/esp_clk_tree_common.h"
 #include "bt_osi_mem.h"
 
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
 #include "esp_private/sleep_modem.h"
-#endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
 #include "esp_private/esp_modem_clock.h"
 
 #include "freertos/FreeRTOS.h"
@@ -428,7 +426,7 @@ void esp_bt_read_ctrl_log_from_flash(bool output)
 
     print_len = 0;
     max_print_len = 4096;
-    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA, &mapped_ptr, &mmap_handle);
+    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, &mapped_ptr, &mmap_handle);
     if (err != ESP_OK) {
         ESP_LOGE("FLASH", "Mmap failed: %s", esp_err_to_name(err));
         return;
@@ -956,12 +954,8 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     }
 
     os_msys_init();
-#if CONFIG_BT_NIMBLE_ENABLED
-    // ble_npl_eventq_init() need to use npl function in rom and must be called after esp_bt_controller_init()
-    /* Initialize default event queue */
-    ble_npl_eventq_init(nimble_port_get_dflt_eventq());
-#endif
-    esp_phy_modem_init();
+
+    esp_phy_modem_init(SLEEP_MODEM_BT);
     periph_module_enable(PERIPH_BT_MODULE);
     periph_module_reset(PERIPH_BT_MODULE);
 
@@ -1041,11 +1035,9 @@ controller_init_err:
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     ble_controller_deinit();
 modem_deint:
-    esp_phy_modem_deinit();
+    esp_phy_modem_deinit(SLEEP_MODEM_BT);
     periph_module_disable(PERIPH_BT_MODULE);
-#if CONFIG_BT_NIMBLE_ENABLED
-    ble_npl_eventq_deinit(nimble_port_get_dflt_eventq());
-#endif // CONFIG_BT_NIMBLE_ENABLED
+
 free_mem:
     os_msys_buf_free();
     npl_freertos_mempool_deinit();
@@ -1072,10 +1064,6 @@ esp_err_t esp_bt_controller_deinit(void)
 
     periph_module_disable(PERIPH_BT_MODULE);
 
-#if CONFIG_BT_NIMBLE_ENABLED
-    /* De-initialize default event queue */
-    ble_npl_eventq_deinit(nimble_port_get_dflt_eventq());
-#endif
     os_msys_buf_free();
 
     esp_unregister_npl_funcs();
@@ -1087,7 +1075,7 @@ esp_err_t esp_bt_controller_deinit(void)
 
     npl_freertos_mempool_deinit();
 
-    esp_phy_modem_deinit();
+    esp_phy_modem_deinit(SLEEP_MODEM_BT);
 
     ble_controller_status = ESP_BT_CONTROLLER_STATUS_IDLE;
 

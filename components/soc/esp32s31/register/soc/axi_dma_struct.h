@@ -567,7 +567,7 @@ typedef union {
          */
         uint32_t rx_ch_arb_weigh_chn: 4;
         /** rx_arb_weigh_opt_dir_chn : R/W; bitpos: [8]; default: 0;
-         *  0: mean not optimization weight function ,1: mean optimization
+         *  0: enable weight optimization, 1: disable weight optimization
          */
         uint32_t rx_arb_weigh_opt_dir_chn: 1;
         uint32_t reserved_9: 23;
@@ -648,7 +648,12 @@ typedef union {
          *  underflow.
          */
         uint32_t outfifo_l3_udf_chn_int_raw: 1;
-        uint32_t reserved_10: 22;
+        /** out_link_switch_chn_int_raw : R/WTC/SS; bitpos: [10]; default: 0;
+         *  The raw interrupt bit turns to high level when the dma switch to new link for Tx
+         *  channel0.
+         */
+        uint32_t out_link_switch_chn_int_raw: 1;
+        uint32_t reserved_11: 21;
     };
     uint32_t val;
 } axi_dma_out_int_raw_chn_reg_t;
@@ -698,7 +703,11 @@ typedef union {
          *  The raw interrupt status bit for the OUTFIFO_UDF_L3_CH_INT interrupt.
          */
         uint32_t outfifo_l3_udf_chn_int_st: 1;
-        uint32_t reserved_10: 22;
+        /** out_link_switch_chn_int_st : RO; bitpos: [10]; default: 0;
+         *  The raw interrupt status bit for the OUT_LINK_SWITCH_CH_INT interrupt.
+         */
+        uint32_t out_link_switch_chn_int_st: 1;
+        uint32_t reserved_11: 21;
     };
     uint32_t val;
 } axi_dma_out_int_st_chn_reg_t;
@@ -748,7 +757,11 @@ typedef union {
          *  The interrupt enable bit for the OUTFIFO_UDF_L3_CH_INT interrupt.
          */
         uint32_t outfifo_l3_udf_chn_int_ena: 1;
-        uint32_t reserved_10: 22;
+        /** out_link_switch_chn_int_ena : R/W; bitpos: [10]; default: 0;
+         *  The interrupt enable bit for the OUT_LINK_SWITCH_CH_INT interrupt.
+         */
+        uint32_t out_link_switch_chn_int_ena: 1;
+        uint32_t reserved_11: 21;
     };
     uint32_t val;
 } axi_dma_out_int_ena_chn_reg_t;
@@ -798,7 +811,11 @@ typedef union {
          *  Set this bit to clear the OUTFIFO_UDF_L3_CH_INT interrupt.
          */
         uint32_t outfifo_l3_udf_chn_int_clr: 1;
-        uint32_t reserved_10: 22;
+        /** out_link_switch_chn_int_clr : WT; bitpos: [10]; default: 0;
+         *  Set this bit to clear the OUT_LINK_SWITCH_CH_INT interrupt.
+         */
+        uint32_t out_link_switch_chn_int_clr: 1;
+        uint32_t reserved_11: 21;
     };
     uint32_t val;
 } axi_dma_out_int_clr_chn_reg_t;
@@ -1125,7 +1142,7 @@ typedef union {
          */
         uint32_t tx_ch_arb_weigh_chn: 4;
         /** tx_arb_weigh_opt_dir_chn : R/W; bitpos: [8]; default: 0;
-         *  0: mean not optimization weight function ,1: mean optimization
+         *  0: enable weight optimization, 1: disable weight optimization
          */
         uint32_t tx_arb_weigh_opt_dir_chn: 1;
         uint32_t reserved_9: 23;

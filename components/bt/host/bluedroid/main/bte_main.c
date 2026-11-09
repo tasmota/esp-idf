@@ -36,6 +36,9 @@
 #include "osi/hash_functions.h"
 #include "device/controller.h"
 #include "hci/hci_layer.h"
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+#include "stack/c2h_credit.h"
+#endif
 #include "bta/bta_api.h"
 
 /*******************************************************************************
@@ -55,7 +58,7 @@ static const hci_t *hci;
 **  Static functions
 *******************************************************************************/
 static void bte_main_disable(void);
-static void bte_main_enable(void);
+static bool bte_main_enable(void);
 
 /*******************************************************************************
 **  Externs
@@ -92,7 +95,11 @@ int bte_main_boot_entry(bluedroid_init_done_cb_t cb)
     }
 
     //Enable HCI
-    bte_main_enable();
+    if (!bte_main_enable()) {
+        osi_deinit();
+        bluedroid_init_done_cb = NULL;
+        return -3;
+    }
 
     return 0;
 }
@@ -108,12 +115,11 @@ int bte_main_boot_entry(bluedroid_init_done_cb_t cb)
 ******************************************************************************/
 void bte_main_shutdown(void)
 {
+    bte_main_disable();
 
 #if (BT_BLE_DYNAMIC_ENV_MEMORY == TRUE)
     free_controller_param();
 #endif
-
-    bte_main_disable();
 
     osi_deinit();
 }
@@ -125,19 +131,23 @@ void bte_main_shutdown(void)
 ** Description      BTE MAIN API - Creates all the BTE tasks. Should be called
 **                  part of the Bluetooth stack enable sequence
 **
-** Returns          None
+** Returns          true for success, otherwise false
 **
 ******************************************************************************/
-static void bte_main_enable(void)
+static bool bte_main_enable(void)
 {
     APPL_TRACE_DEBUG("Enable HCI\n");
     if (hci_start_up()) {
         APPL_TRACE_ERROR("Start HCI Host Layer Failure\n");
-        return;
+        return false;
     }
 
     //Now Test Case Not Supported BTU
-    BTU_StartUp();
+    if (!BTU_StartUp()) {
+        hci_shut_down();
+        return false;
+    }
+    return true;
 }
 
 /******************************************************************************
@@ -158,6 +168,11 @@ static void bte_main_disable(void)
         module_shut_down(get_module(HCI_MODULE));
         module_shut_down(get_module(BTSNOOP_MODULE));
     */
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    /* Host → mail handoff before HCI credit/thread teardown. */
+    btu_c2h_credit_close();
+#endif
 
     hci_shut_down();
 

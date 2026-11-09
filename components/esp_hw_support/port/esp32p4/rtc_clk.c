@@ -30,7 +30,9 @@ ESP_HW_LOG_ATTR_TAG(TAG, "rtc_clk");
 static int s_cur_cpll_freq = 0;
 
 // MPLL frequency option, 400MHz. Zero if MPLL is not enabled.
+#ifndef BOOTLOADER_BUILD
 static SPM_DRAM_ATTR uint32_t s_cur_mpll_freq = 0;
+#endif
 
 void rtc_clk_32k_enable(bool enable)
 {
@@ -641,6 +643,7 @@ bool rtc_dig_8m_enabled(void)
     return clk_ll_rc_fast_digi_is_enabled();
 }
 
+#ifndef BOOTLOADER_BUILD
 //------------------------------------MPLL-------------------------------------//
 SPM_IRAM_ATTR void rtc_clk_mpll_disable(void)
 {
@@ -661,13 +664,12 @@ void rtc_clk_mpll_configure(uint32_t xtal_freq, uint32_t mpll_freq, bool thread_
     } else {
         ANALOG_CLOCK_ENABLE();
     }
-    /* MPLL calibration start */
-    clk_ll_mpll_calibration_start();
-    clk_ll_mpll_set_config(mpll_freq, xtal_freq);
-    /* wait calibration done */
-    while(!clk_ll_mpll_calibration_is_done());
-    /* MPLL calibration stop */
-    clk_ll_mpll_calibration_stop();
+
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
+    clk_ll_mpll_set_config_v1(mpll_freq, xtal_freq);
+#else
+    clk_ll_mpll_set_config_v3(mpll_freq, xtal_freq);
+#endif
 
     if (thread_safe) {
         _regi2c_ctrl_ll_master_enable_clock(false);
@@ -681,3 +683,4 @@ SPM_IRAM_ATTR uint32_t rtc_clk_mpll_get_freq(void)
 {
     return s_cur_mpll_freq;
 }
+#endif

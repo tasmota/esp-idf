@@ -26,6 +26,9 @@
 #include "soc/clk_tree_defs.h"
 #include "test_common.h"
 #include "esp_attr.h"
+#include "esp_timer.h"
+#include "esp_task_wdt.h"
+#include "sdkconfig.h"
 
 #define BUF_SIZE         (100)
 #define UART_BAUD_11520  (11520)
@@ -175,10 +178,18 @@ TEST_CASE("test uart get baud-rate", "[uart]")
 
     uart_config(uart_num, UART_BAUD_115200, port_param.default_src_clk);
 
+    soc_module_clk_t restart_clk = port_param.default_src_clk;
+    for (size_t i = 0; i < clk_srcs_num; i++) {
+        if (clk_srcs[i] != SOC_MOD_CLK_RC_FAST) {
+            restart_clk = clk_srcs[i];
+            break;
+        }
+    }
+
     const uint32_t test_baudrate_vals[] = {UART_BAUD_11520, UART_BAUD_115200};
     for (size_t i = 0; i < sizeof(test_baudrate_vals) / sizeof(test_baudrate_vals[0]); i++) {
         for (size_t j = 0; j < clk_srcs_num; j++) {
-            uart_config_t uart_config = {
+            uart_config_t config = {
                 .baud_rate = test_baudrate_vals[i],
                 .source_clk = clk_srcs[j],
                 .data_bits = UART_DATA_8_BITS,
@@ -186,15 +197,27 @@ TEST_CASE("test uart get baud-rate", "[uart]")
                 .stop_bits = UART_STOP_BITS_1,
                 .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             };
-            TEST_ESP_OK(uart_param_config(uart_num, &uart_config));
+            TEST_ESP_OK(uart_param_config(uart_num, &config));
 
             uint32_t actual_baudrate = 0;
             uart_get_baudrate(uart_num, &actual_baudrate);
             TEST_ASSERT_UINT32_WITHIN(test_baudrate_vals[i] * TOLERANCE, test_baudrate_vals[i], actual_baudrate);
+
+            if (clk_srcs[j] == SOC_MOD_CLK_RC_FAST) {
+                TEST_ESP_OK(uart_driver_delete(uart_num));
+                uart_config(uart_num, UART_BAUD_115200, restart_clk);
+
+                const uint8_t tx_data = 0x55;
+                uint8_t rx_data = 0;
+                TEST_ASSERT_EQUAL(1, uart_write_bytes(uart_num, &tx_data, sizeof(tx_data)));
+                TEST_ESP_OK(uart_wait_tx_done(uart_num, pdMS_TO_TICKS(100)));
+                TEST_ASSERT_EQUAL(1, uart_read_bytes(uart_num, &rx_data, sizeof(rx_data), pdMS_TO_TICKS(100)));
+                TEST_ASSERT_EQUAL_HEX8(tx_data, rx_data);
+            }
         }
     }
 
-    uart_driver_delete(uart_num);
+    TEST_ESP_OK(uart_driver_delete(uart_num));
 }
 
 TEST_CASE("test uart tx data with break", "[uart]")
@@ -495,6 +518,88 @@ TEST_CASE("uart tx ring buffer free space test", "[uart]")
     }
 }
 
+typedef struct {
+    uart_port_t uart_num;
+    const uint8_t *data;
+    size_t len;
+    volatile bool done;
+} uart_blocked_write_param_t;
+
+static void uart_blocked_write_task(void *arg)
+{
+    uart_blocked_write_param_t *param = (uart_blocked_write_param_t *)arg;
+    uart_write_bytes(param->uart_num, param->data, param->len);
+    param->done = true;
+    vTaskDelete(NULL);
+}
+
+TEST_CASE("uart write blocks when tx ring buffer is full", "[uart]")
+{
+    uart_port_param_t port_param = {};
+    TEST_ASSERT(port_select(&port_param));
+    // This is a test on the driver API, no need to test for both HP/LP uart port, call port_select() to be compatible with pytest
+    // Let's only test on HP UART
+    if (port_param.port_num < SOC_UART_HP_NUM) {
+        uart_port_t uart_num = port_param.port_num;
+        const int tx_ring_size = 1024 * 2;
+        const int write_len = tx_ring_size + 512; // one write that cannot fit without waiting
+        uint8_t *wr_data = (uint8_t *)malloc(write_len);
+        TEST_ASSERT_NOT_NULL(wr_data);
+        uart_config_t uart_config = {
+            .baud_rate = 2000000,
+            .data_bits = UART_DATA_8_BITS,
+            .parity = UART_PARITY_DISABLE,
+            .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
+            .rx_flow_ctrl_thresh = port_param.rx_flow_ctrl_thresh,
+            .source_clk = port_param.default_src_clk,
+        };
+        uart_wait_tx_idle_polling(uart_num);
+        TEST_ESP_OK(uart_param_config(uart_num, &uart_config));
+        TEST_ESP_OK(uart_driver_install(uart_num, 256, tx_ring_size, 20, NULL, 0));
+        // Let CTS be high, so that transmission is blocked, the TX ISR cannot drain
+        // The write then fills the ring and must wait in the data-chunk loop (free_size == 0),
+        // not only on the descriptor xRingbufferSend.
+        esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT, uart_periph_signal[uart_num].pins[SOC_UART_PERIPH_SIGNAL_CTS].signal, false);
+
+        uart_blocked_write_param_t write_param = {
+            .uart_num = uart_num,
+            .data = wr_data,
+            .len = write_len,
+            .done = false,
+        };
+        TaskHandle_t writer = NULL;
+        const BaseType_t core = xPortGetCoreID();
+        // Watch this core's idle task. A polling writer starves idle and trips the TWDT;
+        // a blocked writer lets idle run so the delay below is safe.
+        esp_task_wdt_config_t twdt_config = {
+            .timeout_ms = 2000,
+            .idle_core_mask = (uint32_t)(1 << core),
+            .trigger_panic = true,
+        };
+        TEST_ESP_OK(esp_task_wdt_init(&twdt_config));
+        // Lower priority than this test task, same core: after we yield, polling would leave
+        // the writer eReady (undesired); blocking on tx_space_sem leaves it eBlocked (desired).
+        TEST_ASSERT_EQUAL(pdPASS, xTaskCreatePinnedToCore(uart_blocked_write_task, "uart_tx_block", 4096,
+                                                          &write_param, 2, &writer, core));
+        vTaskDelay(pdMS_TO_TICKS(3500));
+        TEST_ASSERT_FALSE(write_param.done);
+        TEST_ASSERT_EQUAL(eBlocked, eTaskGetState(writer));
+        TEST_ESP_OK(esp_task_wdt_deinit());
+
+        // Let CTS be low, so that transmission is unblocked
+        esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ZERO_INPUT, uart_periph_signal[uart_num].pins[SOC_UART_PERIPH_SIGNAL_CTS].signal, false);
+        for (int i = 0; i < 50 && !write_param.done; i++) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        TEST_ASSERT_TRUE(write_param.done);
+        uart_wait_tx_done(uart_num, portMAX_DELAY);
+
+        TEST_ESP_OK(uart_driver_delete(uart_num));
+        free(wr_data);
+    }
+}
+
 TEST_CASE("uart int state restored after flush", "[uart]")
 {
     uart_port_param_t port_param = {};
@@ -533,10 +638,9 @@ TEST_CASE("uart int state restored after flush", "[uart]")
         // This means RX IO should also only use LP_GPIO matrix to connect the RX signal
         // In case the selected RX IO is the LP UART IOMUX IO, and the IO has been configured to IOMUX function in the driver
         // Do the following:
-        TEST_ESP_OK(rtc_gpio_iomux_func_sel(uart_rx, RTCIO_LL_PIN_FUNC));
         const int uart_rx_signal = uart_periph_signal[uart_num].pins[SOC_UART_PERIPH_SIGNAL_RX].signal;
-        TEST_ESP_OK(lp_gpio_connect_in_signal(uart_rx, uart_rx_signal, false));
-        TEST_ESP_OK(lp_gpio_connect_out_signal(uart_rx, uart_tx_signal, false, false));
+        TEST_ESP_OK(lp_gpio_matrix_input(uart_rx, uart_rx_signal, false));
+        TEST_ESP_OK(lp_gpio_matrix_output(uart_rx, uart_tx_signal, false, false));
 #else
         // The only way is to use loop back feature
         TEST_ESP_OK(uart_set_loop_back(uart_num, true));
@@ -593,25 +697,21 @@ TEST_CASE("uart int state restored after flush", "[uart]")
     free(data);
 }
 
-TEST_CASE("uart in one-wire mode", "[uart]")
+static void uart_one_wire_test(uart_port_t uart_num, int io_num, soc_module_clk_t source_clk)
 {
-    uart_port_param_t port_param = {};
-    TEST_ASSERT(port_select(&port_param));
-    port_param.tx_pin_num = port_param.rx_pin_num; // let tx and rx use the same pin
-
-    uart_port_t uart_num = port_param.port_num;
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = port_param.default_src_clk,
+        .source_clk = source_clk,
     };
 
     TEST_ESP_OK(uart_driver_install(uart_num, BUF_SIZE * 2, 0, 20, NULL, 0));
     TEST_ESP_OK(uart_param_config(uart_num, &uart_config));
-    esp_err_t err = uart_set_pin(uart_num, port_param.tx_pin_num, port_param.rx_pin_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    // Same pin for TX and RX forces the GPIO-matrix path
+    esp_err_t err = uart_set_pin(uart_num, io_num, io_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (uart_num < SOC_UART_HP_NUM) {
         TEST_ESP_OK(err);
 #if SOC_UART_LP_NUM > 0
@@ -646,6 +746,231 @@ TEST_CASE("uart in one-wire mode", "[uart]")
     TEST_ESP_OK(uart_driver_delete(uart_num));
 }
 
+TEST_CASE("uart in one-wire mode", "[uart]")
+{
+    uart_port_param_t port_param = {};
+    TEST_ASSERT(port_select(&port_param));
+
+    if (port_param.port_num < SOC_UART_HP_NUM) {
+        // Test all HP UART ports that can use the GPIO matrix, except the console UART.
+        for (uart_port_t uart_num = UART_NUM_0; uart_num < SOC_UART_HP_NUM; uart_num++) {
+            if (uart_num != CONFIG_CONSOLE_UART_NUM) {
+                uart_one_wire_test(uart_num, port_param.rx_pin_num, port_param.default_src_clk);
+            }
+        }
+    } else {
+        uart_one_wire_test(port_param.port_num, port_param.rx_pin_num, port_param.default_src_clk);
+    }
+}
+
+// XON/XOFF software flow control characters (must match the ones the driver programs into the hardware)
+#define TEST_UART_XON_CHAR   (0x11)
+#define TEST_UART_XOFF_CHAR  (0x13)
+
+// A small, fixed amount of payload written to the UART to probe whether the transmitter is draining it.
+// Kept well within the smallest HW TX FIFO (the LP UART has only 16 bytes) so the write always fits and, since
+// the FIFO is empty at every call site, uart_write_bytes() never blocks waiting for FIFO space.
+#define TEST_UART_TX_PROBE_BYTES  (8)
+
+// The probe window: a running transmitter drains TEST_UART_TX_PROBE_BYTES in well under 1 ms at any reasonable
+// baud rate, so 100 ms is plenty to tell "draining" (tx goes idle) from "paused" (tx never goes idle).
+#define TEST_UART_TX_PROBE_WINDOW_MS  (100)
+
+// Queue a fixed chunk of payload through the driver's TX path (installed with no TX ring buffer, so the bytes
+// go straight to the HW TX FIFO). The payload byte must differ from XON/XOFF; its value is irrelevant to the
+// local TX flow control decision.
+static void test_uart_write_txfifo_probe(uart_port_t uart_num)
+{
+    uint8_t payload[TEST_UART_TX_PROBE_BYTES];
+    memset(payload, 0x55, sizeof(payload));
+    uart_write_bytes(uart_num, payload, sizeof(payload));
+}
+
+// Return true once TX has stopped draining (i.e. an XOFF was received and the transmitter paused).
+// Each iteration queues a small probe into the (empty) FIFO and waits for the transmitter to go idle: if it
+// cannot finish within the probe window the transmitter is paused. Otherwise it drained the probe (running),
+// leaving the FIFO empty again for the next iteration.
+static bool test_uart_wait_tx_paused(uart_port_t uart_num, int timeout_ms)
+{
+    int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    while (esp_timer_get_time() < deadline) {
+        test_uart_write_txfifo_probe(uart_num);
+        if (uart_wait_tx_done(uart_num, pdMS_TO_TICKS(TEST_UART_TX_PROBE_WINDOW_MS)) == ESP_ERR_TIMEOUT) {
+            return true; // probe could not drain -> paused
+        }
+    }
+    return false;
+}
+
+// Return true once TX starts draining again (i.e. an XON was received and the transmitter resumed).
+// The probe bytes queued by the pause step are still sitting in the FIFO (nothing drains while paused), so we
+// just wait for the transmitter to finally go idle, which only happens once it resumes and shifts them out.
+static bool test_uart_wait_tx_resumed(uart_port_t uart_num, int timeout_ms)
+{
+    int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    while (esp_timer_get_time() < deadline) {
+        if (uart_wait_tx_done(uart_num, pdMS_TO_TICKS(TEST_UART_TX_PROBE_WINDOW_MS)) == ESP_OK) {
+            return true; // FIFO drained -> resumed
+        }
+    }
+    return false;
+}
+
+// Wait until the RX FIFO has accumulated more than the XOFF threshold (so an XOFF should have been sent).
+static bool test_uart_wait_rxfifo_filled(uart_dev_t *hw, uint32_t xoff_thresh, int timeout_ms)
+{
+    int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    while (esp_timer_get_time() < deadline) {
+        if (uart_ll_get_rxfifo_len(hw) > xoff_thresh) {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    return false;
+}
+
+// Drain the whole HW RX FIFO directly (the driver's RX interrupts are disabled), dropping the level below the
+// XON threshold so the hardware sends an XON.
+static void test_uart_drain_rxfifo(uart_dev_t *hw)
+{
+    uint8_t buf[64];
+    uint32_t len;
+    while ((len = uart_ll_get_rxfifo_len(hw)) > 0) {
+        if (len > sizeof(buf)) {
+            len = sizeof(buf);
+        }
+        uart_ll_read_rxfifo(hw, buf, len);
+    }
+}
+
+/*
+ * This test verifies both directions of the UART hardware software-flow-control (XON/XOFF) feature:
+ *   1. Receiving flow control: once the UART receives an XOFF character it must stop transmitting, and resume
+ *      once it receives an XON character.
+ *   2. Sending flow control: once the RX FIFO fills past the XOFF threshold the UART must transmit an XOFF
+ *      character, and once it is drained below the XON threshold it must transmit an XON character.
+ *
+ * For the HP UART port, the test taps the UART RX onto the console UART RX pad so the host (pytest) can inject
+ * XON/XOFF (direction 1) over the very same serial connection it already uses to talk to the console, without
+ * extra wiring. For direction 2, the console TX pad is temporarily re-routed to the UART TX signal so the host
+ * can observe the XON/XOFF characters the UART sends. The console UART RX pad is a regular (HP) GPIO though,
+ * while the LP UART can only use LP-capable (RTC) GPIOs, so it cannot borrow the console pads. Hence for the LP
+ * UART port the test keeps the LP UART on its normal pins and a manual tester is expected to physically wire
+ * the console/UART0 RX and TX lines to them. (CI only exercises HP UART.)
+ *
+ * The UART TX shifts data out at the configured baud rate regardless of where it is routed, so direction 1 is
+ * observed on the DUT by watching the HW TX FIFO drain.
+ */
+TEST_CASE("uart software flow control (XON/XOFF)", "[uart_flow_ctrl]")
+{
+    uart_port_param_t port_param = {};
+    TEST_ASSERT(port_select(&port_param));
+    uart_port_t uart_num = port_param.port_num;
+    uart_dev_t *hw = UART_LL_GET_HW(uart_num);
+    const bool is_hp_uart = (uart_num < SOC_UART_HP_NUM);
+
+    printf("Note that if you are in any terminal program, likely the XON/XOFF will be trapped by the shell. Run 'stty -ixon -ixoff' to let the keys pass through your terminal application!\n");
+
+    int rx_pin, tx_pin;
+    if (is_hp_uart) {
+        // HP UART: tap the UART RX onto the console UART RX pad so the host can inject XON/XOFF over the console.
+        // The TX is left unrouted for now; it is hijacked onto the console TX pad later for the sending direction.
+        rx_pin = uart_periph_signal[CONFIG_CONSOLE_UART_NUM].pins[SOC_UART_PERIPH_SIGNAL_RX].default_gpio;
+        TEST_ASSERT(rx_pin >= 0);
+        tx_pin = UART_PIN_NO_CHANGE;
+    } else {
+        // LP UART: keep both pins on their normal IOs; a manual tester wires the console/UART0 lines to them.
+        printf("LP UART needs manual wiring of console UART lines to the UART pins (TX-to-RX, RX-to-TX)\n");
+        rx_pin = port_param.rx_pin_num;
+        tx_pin = port_param.tx_pin_num;
+    }
+
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = port_param.default_src_clk,
+    };
+    // No TX ring buffer: the direct FIFO writes below go straight to the HW TX FIFO, so monitoring the FIFO
+    // level reflects the real transmitter state.
+    TEST_ESP_OK(uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0));
+    TEST_ESP_OK(uart_param_config(uart_num, &uart_config));
+    TEST_ESP_OK(uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+    // RX FIFO thresholds and fill size that drive the *sending* direction (part 2). They must fit the HW FIFO,
+    // which is much smaller on the LP UART (16 bytes) than on the HP UART (128 bytes).
+    // - xoff_thresh: when the RX FIFO rises above this, the hardware sends XOFF
+    // - xon_thresh:  when the RX FIFO drops below this, the hardware sends XON
+    // - fill_bytes:  amount the host sends, chosen > xoff_thresh and <= HW FIFO length (so no overflow)
+    int xon_thresh, xoff_thresh, fill_bytes;
+    if (is_hp_uart) {
+        xon_thresh = 10;
+        xoff_thresh = 40;
+        fill_bytes = 64;
+    } else {
+        xon_thresh = 2;
+        xoff_thresh = 8;
+        fill_bytes = 12;
+    }
+
+    // Enable software flow control with the thresholds above.
+    TEST_ESP_OK(uart_set_sw_flow_ctrl(uart_num, true, xon_thresh, xoff_thresh));
+
+    // ---- Part 1: receiving XON/XOFF pauses / resumes the transmitter ----
+    printf("\n");
+    printf("Send %#04x (XOFF - Ctrl+S) to stop UART transmission\n", TEST_UART_XOFF_CHAR);
+    bool paused = test_uart_wait_tx_paused(uart_num, 20000);
+    TEST_ASSERT_MESSAGE(paused, "UART transmitter did not pause after receiving XOFF");
+    printf("UART transmission stopped\n");
+
+    printf("Send %#04x (XON - Ctrl+Q) to start UART transmission\n", TEST_UART_XON_CHAR);
+    bool resumed = test_uart_wait_tx_resumed(uart_num, 20000);
+    TEST_ASSERT_MESSAGE(resumed, "UART transmitter did not resume after receiving XON");
+    printf("UART transmission resumed\n");
+
+    // Part 1 left the transmitter idle (uart_wait_tx_done returned OK); reset the TX FIFO anyway to guarantee a
+    // clean slate before observing the auto XON/XOFF.
+    uart_ll_txfifo_rst(hw);
+
+    // ---- Part 2: filling / draining the RX FIFO makes the UART send XOFF / XON ----
+    // Disable the driver's RX interrupts so the RX FIFO is not auto-drained; we drain it explicitly below. This
+    // guarantees the XOFF is sent (FIFO stays above the XOFF threshold) before we drop it below the XON threshold.
+    TEST_ESP_OK(uart_disable_rx_intr(uart_num));
+    uart_ll_rxfifo_rst(hw);
+
+    printf("\n");
+    printf("Send %d bytes to fill RX FIFO\n", fill_bytes);
+    fflush(stdout);
+
+    const int console_tx_pin = uart_periph_signal[CONFIG_CONSOLE_UART_NUM].pins[SOC_UART_PERIPH_SIGNAL_TX].default_gpio;
+    const int console_tx_signal = uart_periph_signal[CONFIG_CONSOLE_UART_NUM].pins[SOC_UART_PERIPH_SIGNAL_TX].signal;
+    const int uart_tx_signal = uart_periph_signal[uart_num].pins[SOC_UART_PERIPH_SIGNAL_TX].signal;
+
+    if (is_hp_uart) {
+        // Make sure the prompt is fully sent, then hijack the console TX pad so the host reads the UART's TX.
+        uart_wait_tx_idle_polling(CONFIG_CONSOLE_UART_NUM);
+        gpio_func_sel(console_tx_pin, PIN_FUNC_GPIO);
+        esp_rom_gpio_connect_out_signal(console_tx_pin, uart_tx_signal, false, false);
+    }
+
+    bool filled = test_uart_wait_rxfifo_filled(hw, xoff_thresh, 20000); // by now an XOFF should have been sent
+    test_uart_drain_rxfifo(hw);                                         // dropping below XON threshold sends XON
+    uart_wait_tx_idle_polling(uart_num);                   // let the XON finish transmitting
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    if (is_hp_uart) {
+        // Restore the console TX pad so the unity test result can be reported over the console again.
+        esp_rom_gpio_connect_out_signal(console_tx_pin, console_tx_signal, false, false);
+    }
+    TEST_ASSERT_MESSAGE(filled, "RX FIFO was not filled past the XOFF threshold by the host");
+    printf("Please manually read the TX signal to confirm that it actually sent XOFF and XON characters\n");
+
+    TEST_ESP_OK(uart_set_sw_flow_ctrl(uart_num, false, 0, 0));
+    TEST_ESP_OK(uart_driver_delete(uart_num));
+}
+
 static void uart_console_write_task(void *arg)
 {
     while (1) {
@@ -660,7 +985,8 @@ TEST_CASE("uart auto baud rate detection", "[uart]")
     TEST_ASSERT(port_select(&port_param));
     // This is indeed a standalone feature, no need to specify the uart port, call port_select() to be compatible with pytest
     // And this test case no need to be tested twice on HP/LP uart ports both exist targets (also, LP UART does not support auto baud rate detection functionality)
-    if (port_param.port_num < SOC_UART_HP_NUM) {
+    uart_port_t uart_num = port_param.port_num;
+    if (uart_num < SOC_UART_HP_NUM) {
         TaskHandle_t console_write_task = NULL;
         xTaskCreate(uart_console_write_task, "uart_console_write_task", 2048, NULL, 5, &console_write_task);
         vTaskDelay(20);
@@ -675,9 +1001,9 @@ TEST_CASE("uart auto baud rate detection", "[uart]")
         uart_bitrate_res_t res = {};
 
         uart_get_baudrate(CONFIG_CONSOLE_UART_NUM, &actual_baudrate);
-        TEST_ESP_OK(uart_detect_bitrate_start(UART_NUM_1, &conf)); // acquire a new uart port
+        TEST_ESP_OK(uart_detect_bitrate_start(uart_num, &conf)); // acquire a new uart port
         vTaskDelay(pdMS_TO_TICKS(500));
-        TEST_ESP_OK(uart_detect_bitrate_stop(UART_NUM_1, false, &res)); // no releasing
+        TEST_ESP_OK(uart_detect_bitrate_stop(uart_num, false, &res)); // no releasing
         detected_baudrate = res.clk_freq_hz * 2 / res.pos_period; // assume the wave has a slow falling slew rate
         TEST_ASSERT_INT32_WITHIN(actual_baudrate * 0.03, actual_baudrate, detected_baudrate); // allow 3% error
 
@@ -685,9 +1011,9 @@ TEST_CASE("uart auto baud rate detection", "[uart]")
         uart_set_baudrate(CONFIG_CONSOLE_UART_NUM, 38400);
 
         uart_get_baudrate(CONFIG_CONSOLE_UART_NUM, &actual_baudrate);
-        TEST_ESP_OK(uart_detect_bitrate_start(UART_NUM_1, NULL)); // use the previously acquired uart port
+        TEST_ESP_OK(uart_detect_bitrate_start(uart_num, NULL)); // use the previously acquired uart port
         vTaskDelay(pdMS_TO_TICKS(500));
-        TEST_ESP_OK(uart_detect_bitrate_stop(UART_NUM_1, true, &res)); // release the uart port
+        TEST_ESP_OK(uart_detect_bitrate_stop(uart_num, true, &res)); // release the uart port
         detected_baudrate = res.clk_freq_hz * 2 / res.pos_period;
         TEST_ASSERT_INT32_WITHIN(actual_baudrate * 0.03, actual_baudrate, detected_baudrate);
 
@@ -695,9 +1021,9 @@ TEST_CASE("uart auto baud rate detection", "[uart]")
         uart_set_baudrate(CONFIG_CONSOLE_UART_NUM, CONFIG_CONSOLE_UART_BAUDRATE);
 
         uart_get_baudrate(CONFIG_CONSOLE_UART_NUM, &actual_baudrate);
-        TEST_ESP_OK(uart_detect_bitrate_start(UART_NUM_1, &conf)); // acquire a new uart port again
+        TEST_ESP_OK(uart_detect_bitrate_start(uart_num, &conf)); // acquire a new uart port again
         vTaskDelay(pdMS_TO_TICKS(500));
-        TEST_ESP_OK(uart_detect_bitrate_stop(UART_NUM_1, true, &res)); // release it
+        TEST_ESP_OK(uart_detect_bitrate_stop(uart_num, true, &res)); // release it
         detected_baudrate = res.clk_freq_hz * 2 / res.pos_period;
         TEST_ASSERT_INT32_WITHIN(actual_baudrate * 0.03, actual_baudrate, detected_baudrate);
 
@@ -710,25 +1036,27 @@ IRAM_ATTR static void uart_signal_inject_glitch_task(void *param)
     uart_port_param_t *port_param = (uart_port_param_t *)param;
     uart_port_t uart_num = port_param->port_num;
     uint32_t tx_pin = port_param->tx_pin_num;
+    uint32_t tx_signal = UART_PERIPH_SIGNAL(uart_num, SOC_UART_PERIPH_SIGNAL_TX);
     // while sending, frequently disconnect from UART TX signal and set level to high to create glitches
     gpio_ll_set_level(&GPIO, tx_pin, 1);
+    gpio_ll_output_enable(&GPIO, tx_pin);
 #if SOC_UART_LP_NUM > 0 && SOC_LP_GPIO_MATRIX_SUPPORTED
     uint32_t rtc_gpio_num = rtc_io_number_get(tx_pin);
     rtcio_ll_set_level(rtc_gpio_num, 1);
+    rtcio_ll_output_enable(rtc_gpio_num);
 #endif
 
     while (1) {
         // make sure the glitch is always less than 6us
         portDISABLE_INTERRUPTS();
         if (uart_num < SOC_UART_HP_NUM) {
-            esp_rom_gpio_connect_out_signal(tx_pin, SIG_GPIO_OUT_IDX, false, false);
-            gpio_ll_set_output_enable_ctrl(&GPIO, tx_pin, false, false);
-            esp_rom_gpio_connect_out_signal(tx_pin, UART_PERIPH_SIGNAL(uart_num, SOC_UART_PERIPH_SIGNAL_TX), false, false);
+            gpio_ll_set_output_signal_matrix_source(&GPIO, tx_pin, SIG_GPIO_OUT_IDX, false);
+            // // When IO is set to GPIO use, its output control is only controlled by the GPIO_ENABLE_REG only
+            gpio_ll_set_output_signal_matrix_source(&GPIO, tx_pin, tx_signal, false);
 #if SOC_UART_LP_NUM > 0 && SOC_LP_GPIO_MATRIX_SUPPORTED
         } else {
-            rtcio_ll_matrix_out(rtc_gpio_num, LP_SIG_GPIO_OUT_IDX, false, false);
-            rtcio_ll_set_output_enable_ctrl(rtc_gpio_num, false, false);
-            rtcio_ll_matrix_out(rtc_gpio_num, UART_PERIPH_SIGNAL(uart_num, SOC_UART_PERIPH_SIGNAL_TX), false, false);
+            rtcio_ll_set_output_signal_matrix_source(rtc_gpio_num, LP_SIG_GPIO_OUT_IDX, false);
+            rtcio_ll_set_output_signal_matrix_source(rtc_gpio_num, tx_signal, false);
 #endif
         }
         portENABLE_INTERRUPTS();

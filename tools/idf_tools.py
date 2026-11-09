@@ -27,13 +27,13 @@
 #   the PATH to point to the installed tools and set up other environment variables
 #   needed by the tools.
 import argparse
-import contextlib
 import copy
 import datetime
 import errno
 import fnmatch
 import functools
 import hashlib
+import http.client
 import json
 import os
 import platform
@@ -69,8 +69,10 @@ from typing import IO
 from typing import Any
 from typing import Optional
 from urllib.error import ContentTooShortError
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 from urllib.parse import urlparse
+from urllib.request import Request
 from urllib.request import urlopen
 from urllib.response import addinfourl
 
@@ -94,6 +96,13 @@ VERSION_REGEX_REPLACE_DEFAULT = r'\1'
 IDF_MAINTAINER = os.environ.get('IDF_MAINTAINER') or False
 TODO_MESSAGE = 'TODO'
 DOWNLOAD_RETRY_COUNT = 3
+# Without a timeout a stalled connection blocks forever. The timeout applies to each socket operation, so a slow
+# download which keeps receiving data is not interrupted.
+DOWNLOAD_TIMEOUT = 60  # seconds
+# Counts only resume attempts in a row which receive no data, so a connection which drops repeatedly can still finish
+# a large archive.
+DOWNLOAD_RESUME_COUNT = 5
+DOWNLOAD_RESUME_MAX_DELAY = 10  # seconds
 URL_PREFIX_MAP_SEPARATOR = ','
 IDF_TOOLS_INSTALL_CMD = os.environ.get('IDF_TOOLS_INSTALL_CMD')
 IDF_TOOLS_EXPORT_CMD = os.environ.get('IDF_TOOLS_INSTALL_CMD')
@@ -505,8 +514,10 @@ def get_file_size_sha256(filename: str, block_size: int = 65536) -> tuple[int, s
 
 def report_progress(count: int, block_size: int, total_size: int) -> None:
     """
-    Prints progress (count * block_size * 100 / total_size) to stdout.
+    Prints download progress to stdout.
     """
+    if g.quiet or total_size <= 0:
+        return
     percent = int(count * block_size * 100 / total_size)
     percent = min(100, percent)
     sys.stdout.write(f'\r{percent}%')
@@ -578,6 +589,7 @@ def urlretrieve_ctx(
 ) -> tuple[str, addinfourl]:
     """
     Retrieve data from given URL. An alternative version of urlretrieve which takes SSL context as an argument.
+    An interrupted HTTP(S) download of known size is resumed with a Range request to the original URL.
     """
     url_type, path = splittype(url)
 
@@ -585,7 +597,9 @@ def urlretrieve_ctx(
     extra_urlopen_args = {}
     if context:
         extra_urlopen_args['context'] = context
-    with contextlib.closing(urlopen(url, data, **extra_urlopen_args)) as fp:  # type: ignore
+    # fp is replaced on each resume, so a with block would close only the first response.
+    fp = urlopen(url, data, DOWNLOAD_TIMEOUT, **extra_urlopen_args)  # type: ignore
+    try:
         headers = fp.info()
 
         # Just return the local path and the "headers" for file://
@@ -602,22 +616,89 @@ def urlretrieve_ctx(
             size = int(headers.get('content-length', -1))
             read = 0
             blocknum = 0
+            # The size is needed to notice a body that ends early and to check the resumed response. Range is defined
+            # for GET requests over HTTP(S) only, and file:// mirrors ignore it.
+            resumable = size >= 0 and data is None and url_type in ('http', 'https')
+            etag = headers.get('ETag')
+            failures = 0
+            reason = 'connection closed'
 
             if reporthook:
                 reporthook(blocknum, bs, size)
 
             while True:
-                block = fp.read(bs)
-                if not block:
+                if fp is None:
+                    try:
+                        # GitHub redirects to a signed URL which expires, so the original URL is requested again.
+                        req = Request(url, headers={'Range': f'bytes={read}-'})
+                        fp = urlopen(req, None, DOWNLOAD_TIMEOUT, **extra_urlopen_args)  # type: ignore
+                    except (OSError, http.client.HTTPException) as e:
+                        reason = repr(e)
+                        # Python 3.14 reports an error response which is left open as a ResourceWarning.
+                        if isinstance(e, HTTPError):
+                            e.close()
+                    else:
+                        resumed_headers = fp.info()
+                        # Appending anything other than the rest of the same file would corrupt it. Content-Length
+                        # is checked because http.client stops reading there, and a longer body would be appended in
+                        # full. The ETag is compared because GitHub ignores If-Range. A missing ETag cannot be
+                        # compared, and then the total size in Content-Range is the only check.
+                        if (
+                            fp.getcode() != 206
+                            or resumed_headers.get('Content-Range') != f'bytes {read}-{size - 1}/{size}'
+                            or resumed_headers.get('Content-Length') != str(size - read)
+                            or (etag is not None and resumed_headers.get('ETag', etag) != etag)
+                        ):
+                            raise ContentTooShortError(
+                                f'retrieval incomplete: got only {read} out of {size} bytes and the server did not '
+                                'send the rest of the same file',
+                                result,
+                            )
+
+                block = b''
+                if fp is not None:
+                    # Resets, timeouts and TLS errors are all OSError. socket.timeout is not a TimeoutError before
+                    # Python 3.10. The write below stays outside the try, so a local disk error is not retried as a
+                    # network error.
+                    try:
+                        block = fp.read(bs)
+                    except (OSError, http.client.HTTPException) as e:
+                        if not resumable:
+                            raise
+                        reason = repr(e)
+                if block:
+                    read += len(block)
+                    tfp.write(block)
+                    blocknum += 1
+                    failures = 0
+                    if reporthook:
+                        reporthook(blocknum, bs, size)
+                    continue
+
+                if fp is not None:
+                    fp.close()
+                    fp = None
+                # http.client returns b'' instead of raising IncompleteRead when the connection closes early, so the
+                # size is the only way to notice the truncation.
+                if not resumable or read >= size:
                     break
-                read += len(block)
-                tfp.write(block)
-                blocknum += 1
-                if reporthook:
-                    reporthook(blocknum, bs, size)
+                # The progress line has no line ending yet and the warning would continue it. The flush keeps the order
+                # when stdout and stderr go to the same pipe.
+                if reporthook and failures == 0 and not g.quiet:
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
+                failures += 1
+                if failures > DOWNLOAD_RESUME_COUNT:
+                    break
+                warn(f'Download interrupted after {read} of {size} bytes ({reason}), resuming')
+                reason = 'connection closed'
+                time.sleep(min(2**failures, DOWNLOAD_RESUME_MAX_DELAY))
+    finally:
+        if fp is not None:
+            fp.close()
 
     if size >= 0 and read < size:
-        raise ContentTooShortError(f'retrieval incomplete: got only {read} out of {size} bytes', result)
+        raise ContentTooShortError(f'retrieval incomplete: got only {read} out of {size} bytes ({reason})', result)
 
     return result
 
@@ -998,7 +1079,25 @@ class IDFTool:
                 f'non-zero exit code ({e.returncode}) with message: {e.stderr.decode("utf-8", errors="ignore")}'
             )  # type: ignore
 
-        return self.parse_tool_version(version_cmd_result.decode('utf-8'))
+        version_str = version_cmd_result.decode('utf-8')
+        if not version_str.strip():
+            # The tool ran and exited successfully, but produced no output when its
+            # output was captured. On some Windows systems, antivirus, endpoint-security
+            # or DLP/encryption software intercepts short-lived toolchain processes and
+            # strips their stdout when it is captured through a pipe, while the same
+            # command works when run directly in a terminal. Surface an actionable hint
+            # instead of silently reporting the version as 'unknown', which otherwise
+            # sends users into a fruitless reinstall loop.
+            # See https://github.com/espressif/esp-idf/issues/18727
+            warn(
+                f'tool {self.name} ran but returned no version output. This is usually caused by '
+                'antivirus, endpoint-security or DLP/encryption software stripping the output of '
+                'toolchain processes; the same command often works when run directly in a terminal. '
+                'Add an exclusion for the ESP-IDF tools directory in that software. If the problem '
+                'persists, run the tool manually to check for a missing DLL.'
+            )
+            return UNKNOWN_VERSION
+        return self.parse_tool_version(version_str)
 
     def get_version_from_file(self, version: str) -> str:
         """
@@ -2703,7 +2802,8 @@ def get_constraints(idf_version: str, online: bool = True) -> str:
 
     for _ in range(DOWNLOAD_RETRY_COUNT):
         err = download(constraint_url, temp_path)
-        if not os.path.isfile(temp_path):
+        # A truncated file would be reused until the end of the day, and the constraints file has no checksum.
+        if err is not None or not os.path.isfile(temp_path):
             warn(f'Download failure: {err}')
             warn(f'Failed to download {constraint_url} to {temp_path}')
             continue
@@ -2748,13 +2848,6 @@ def action_install_python_env(args):  # type: ignore
             # Reinstallation of the virtual environment could help if pip was installed for the main Python
             reinstall = True
 
-        if sys.platform != 'win32':
-            try:
-                subprocess.check_call([virtualenv_python, '-c', 'import curses'], stdout=sys.stdout, stderr=sys.stderr)
-            except subprocess.CalledProcessError:
-                warn('curses can not be imported, new virtual environment will be created.')
-                reinstall = True
-
     if reinstall and os.path.exists(idf_python_env_path):
         warn(f'Removing the existing Python environment in {idf_python_env_path}')
         shutil.rmtree(idf_python_env_path)
@@ -2764,8 +2857,9 @@ def action_install_python_env(args):  # type: ignore
     else:
         virtualenv_options = []
         info(f'Creating a new Python environment in {idf_python_env_path}')
-        try:
-            environ_idf_python_env_path = os.environ['IDF_PYTHON_ENV_PATH']
+        environ_idf_python_env_path = os.environ.get('IDF_PYTHON_ENV_PATH')
+        # An empty value selects the default path in get_python_env_path(), so the checks below are skipped as well
+        if environ_idf_python_env_path:
             correct_env_path = environ_idf_python_env_path.endswith(
                 PYTHON_VENV_DIR_TEMPLATE.format(idf_version, PYTHON_VER_MAJOR_MINOR)
             )
@@ -2785,16 +2879,14 @@ def action_install_python_env(args):  # type: ignore
                 PYTHON_VENV_DIR_TEMPLATE.format(r'\d+\.\d+', r'\d+\.\d+'), environ_idf_python_env_path
             ):
                 virtualenv_options.append('--clear')  # delete environment if already exists
-            elif os.listdir(environ_idf_python_env_path):  # show the message only if the directory is not empty
+            # The directory may not exist yet (first install or after --reinstall); venv creates it with its parents
+            elif os.path.isdir(environ_idf_python_env_path) and os.listdir(environ_idf_python_env_path):
                 info(
                     f'IDF_PYTHON_ENV_PATH is set to {environ_idf_python_env_path}, '
                     'but it does not appear to be an ESP-IDF Python virtual environment directory. '
                     'Existing data in this folder will be preserved to prevent unintentional data loss.'
                 )
 
-        except KeyError:
-            # if IDF_PYTHON_ENV_PATH not defined then the above checks can be skipped
-            pass
         subprocess.check_call(
             [sys.executable, '-m', 'venv', *virtualenv_options, idf_python_env_path],
             stdout=sys.stdout,
@@ -2803,10 +2895,10 @@ def action_install_python_env(args):  # type: ignore
         try:
             with open(os.path.join(idf_python_env_path, VENV_VER_FILE), 'w', encoding='utf-8') as f:
                 f.write(idf_version)
-        except OSError:
+        except OSError as e:
             warn(
                 'The following issue occurred while generating the '
-                'ESP-IDF version file in the Python environment: {e}. '
+                f'ESP-IDF version file in the Python environment: {e}. '
                 '(Diagnostic information. It can be ignored.)'
             )
 
@@ -3015,6 +3107,10 @@ def action_add_version(args: Any) -> None:
     )
     updated_tools = []
     for file_size, file_sha256, file_name in checksum_info:
+        skip_files = ['debug-sections', 'esp8266-multilib']
+        if any(skip_file in file_name for skip_file in skip_files):
+            continue
+
         xz_file = file_name.replace('.tar.gz', '.tar.xz')
         if xz_file in updated_tools:
             # .tar.xz archives are preferable, but .tar.gz is needed, for example, when using PlatformIO
@@ -3126,6 +3222,7 @@ def action_uninstall(args: Any) -> None:
             else:
                 tool_name, tool_version = tool_spec.split('@', 1)
             tool_obj = tools_info_for_platform[tool_name]
+            archive_version = None
             if tool_version is None:
                 tool_version = tool_obj.get_preferred_installed_version()
             # mypy-checks
@@ -3133,9 +3230,8 @@ def action_uninstall(args: Any) -> None:
                 archive_version = tool_obj.versions[tool_version].get_download_for_platform(CURRENT_PLATFORM)
             if archive_version is not None:
                 archive_version_url = archive_version.url
-
-            archive = os.path.basename(archive_version_url)
-            used_archives.append(archive)
+                archive = os.path.basename(archive_version_url)
+                used_archives.append(archive)
 
         downloaded_archives = os.listdir(dist_path)
         for archive in downloaded_archives:

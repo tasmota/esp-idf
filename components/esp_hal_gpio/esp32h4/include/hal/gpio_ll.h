@@ -39,6 +39,8 @@
 #define GPIO_LL_PRO_CPU_2_INTR_ENA    (BIT(1))
 #define GPIO_LL_INTR_SOURCE0   ETS_GPIO_INTERRUPT_PRO_SOURCE
 
+#define GPIO_LL_CLK_SRC_SELECTABLE 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -273,6 +275,34 @@ static inline void gpio_ll_pin_filter_enable(gpio_dev_t *hw, uint32_t gpio_num)
 static inline void gpio_ll_pin_filter_disable(gpio_dev_t *hw, uint32_t gpio_num)
 {
     IO_MUX.gpio[gpio_num].filter_en = 0;
+}
+
+/**
+ * @brief Enable GPIO hysteresis
+ *
+ * @param hw Peripheral GPIO hardware instance address.
+ * @param gpio_num GPIO number
+ */
+static inline void gpio_ll_pin_input_hysteresis_enable(gpio_dev_t *hw, uint32_t gpio_num)
+{
+    // On ESP32H4, there is an efuse bit that controls the hysteresis enable or not for all IOs.
+    // We are not going to use the hardware control for H4.
+    // Therefore, we need to always switch to use software control first.
+    // i.e. Swt hys_sel to 1, so that hys_en determines whether hysteresis is enabled or not
+    IO_MUX.gpio[gpio_num].hys_sel = 1;
+    IO_MUX.gpio[gpio_num].hys_en = 1;
+}
+
+/**
+ * @brief Disable GPIO hysteresis
+ *
+ * @param hw Peripheral GPIO hardware instance address.
+ * @param gpio_num GPIO number
+ */
+static inline void gpio_ll_pin_input_hysteresis_disable(gpio_dev_t *hw, uint32_t gpio_num)
+{
+    IO_MUX.gpio[gpio_num].hys_sel = 1;
+    IO_MUX.gpio[gpio_num].hys_en = 0;
 }
 
 /**
@@ -554,6 +584,7 @@ static inline void gpio_ll_set_output_enable_ctrl(gpio_dev_t *hw, uint8_t gpio_n
  * @param signal_idx Peripheral signal index (tagged as output attribute). Particularly, `SIG_GPIO_OUT_IDX` means disconnect GPIO and other peripherals. Only the GPIO driver can control the output level.
  * @param out_inv True if the signal output needs to be inverted, otherwise False.
  */
+__attribute__((always_inline))
 static inline void gpio_ll_set_output_signal_matrix_source(gpio_dev_t *hw, uint32_t gpio_num, uint32_t signal_idx, bool out_inv)
 {
     hw->funcn_out_sel_cfg[gpio_num].out_sel = signal_idx;
@@ -745,6 +776,15 @@ __attribute__((always_inline))
 static inline void gpio_ll_sleep_output_enable(gpio_dev_t *hw, uint32_t gpio_num)
 {
     IO_MUX.gpio[gpio_num].mcu_oe = 1;
+}
+
+/**
+ * @brief Clear all GPIO dedicated control signals
+ */
+__attribute__((always_inline))
+static inline void gpio_ll_clear_dedicated_ctrl(void)
+{
+    // no dedicated ctrl pad
 }
 
 #ifdef __cplusplus

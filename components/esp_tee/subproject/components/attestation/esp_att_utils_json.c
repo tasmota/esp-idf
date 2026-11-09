@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,7 +11,6 @@
 #include "esp_err.h"
 
 #if ESP_TEE_BUILD
-#include "bootloader_sha.h"
 #include "esp_tee_sec_storage.h"
 #endif
 #include "esp_random.h"
@@ -62,6 +61,7 @@ static esp_err_t part_metadata_to_json(const esp_att_part_metadata_t *metadata, 
     json_gen_obj_set_string(&json_gen, "ver", (char *)metadata->ver);
     json_gen_obj_set_string(&json_gen, "idf_ver", (char *)metadata->idf_ver);
     json_gen_obj_set_int(&json_gen, "secure_ver", metadata->secure_ver);
+    json_gen_obj_set_int(&json_gen, "secure_ver_efuse", metadata->secure_ver_efuse);
 
     // Add "part_chip_rev" object
     json_gen_push_object(&json_gen, "part_chip_rev");
@@ -86,13 +86,29 @@ static esp_err_t part_metadata_to_json(const esp_att_part_metadata_t *metadata, 
     if (metadata->type == ESP_ATT_PART_TYPE_TEE || metadata->type == ESP_ATT_PART_TYPE_APP) {
         json_gen_obj_set_bool(&json_gen, "secure_padding", metadata->part_digest.secure_padding);
     }
+
+    /* TEE-only auxiliary measurement: image digest with packaging bytes masked */
+    if (metadata->part_digest.code_hash_ver != 0) {
+        char calc_code_hash_hexstr[DIGEST_HEXSTR_LEN];
+        err = esp_att_utils_hexbuf_to_hexstr(metadata->part_digest.calc_code_hash, sizeof(metadata->part_digest.calc_code_hash),
+                                             calc_code_hash_hexstr, sizeof(calc_code_hash_hexstr));
+        if (err != ESP_OK) {
+            return err;
+        }
+        json_gen_obj_set_string(&json_gen, "calc_code_hash", calc_code_hash_hexstr);
+        json_gen_obj_set_int(&json_gen, "code_hash_ver", metadata->part_digest.code_hash_ver);
+    }
     json_gen_pop_object(&json_gen);
 
     // End the top-level JSON object
     json_gen_end_object(&json_gen);
 
     // Finalize the JSON string generation
-    json_gen_str_end(&json_gen);
+    int len = json_gen_str_end(&json_gen);
+    if (len < 0 || len > ESP_ATT_CLAIM_JSON_MAX_SZ) {
+        free(json_buf);
+        return ESP_ERR_INVALID_SIZE;
+    }
 
     *claim_json = json_buf;
     return ESP_OK;
@@ -129,6 +145,10 @@ esp_err_t esp_att_utils_header_to_json(const esp_att_token_hdr_t *tk_hdr, char *
 
     // Finalize the JSON string generation
     *len = json_gen_str_end(&json_gen);
+    if (*len < 0 || *len > ESP_ATT_HDR_JSON_MAX_SZ) {
+        free(json_buf);
+        return ESP_ERR_INVALID_SIZE;
+    }
 
     *header_json = json_buf;
     return ESP_OK;
@@ -174,7 +194,30 @@ esp_err_t esp_att_utils_eat_data_to_json(struct esp_att_sw_claim_list *head, con
     free(auth_challenge_hexstr);
 
     json_gen_obj_set_int(&json_gen, "client_id", cfg->client_id);
+    json_gen_obj_set_int(&json_gen, "chip_id", cfg->chip_id);
     json_gen_obj_set_int(&json_gen, "device_ver", cfg->device_ver);
+
+    json_gen_push_object(&json_gen, "ueid");
+
+    char mac_hexstr[ESP_ATT_EAT_UEID_MAC_SZ * 2 + 1] = {0};
+    err = esp_att_utils_hexbuf_to_hexstr(cfg->ueid_mac, sizeof(cfg->ueid_mac),
+                                         mac_hexstr, sizeof(mac_hexstr));
+    if (err != ESP_OK) {
+        free(json_buf);
+        return err;
+    }
+    json_gen_obj_set_string(&json_gen, "mac", mac_hexstr);
+
+    char opt_id_hexstr[ESP_ATT_EAT_UEID_OPT_ID_SZ * 2 + 1] = {0};
+    err = esp_att_utils_hexbuf_to_hexstr(cfg->ueid_opt_id, sizeof(cfg->ueid_opt_id),
+                                         opt_id_hexstr, sizeof(opt_id_hexstr));
+    if (err != ESP_OK) {
+        free(json_buf);
+        return err;
+    }
+    json_gen_obj_set_string(&json_gen, "optional_id", opt_id_hexstr);
+
+    json_gen_pop_object(&json_gen);
 
     char dev_id_hexstr[ESP_ATT_EAT_DEV_ID_SZ * 2 + 1] = {0};
     err = esp_att_utils_hexbuf_to_hexstr(cfg->device_id, sizeof(cfg->device_id), dev_id_hexstr, sizeof(dev_id_hexstr));
@@ -201,6 +244,7 @@ esp_err_t esp_att_utils_eat_data_to_json(struct esp_att_sw_claim_list *head, con
         esp_err_t err = part_metadata_to_json(&claim->metadata, &claim_json);
         if (err != ESP_OK || claim_json == NULL) {
             ESP_LOGE(TAG, "Failed to format the FW metadata to JSON!");
+            free(json_buf);
             return err;
         }
 
@@ -214,6 +258,10 @@ esp_err_t esp_att_utils_eat_data_to_json(struct esp_att_sw_claim_list *head, con
 
     // Finalize the JSON string generation
     *len = json_gen_str_end(&json_gen);
+    if (*len < 0 || *len > ESP_ATT_EAT_JSON_MAX_SZ) {
+        free(json_buf);
+        return ESP_ERR_INVALID_SIZE;
+    }
     *eat_json = json_buf;
 
     return ESP_OK;
@@ -252,9 +300,12 @@ esp_err_t esp_att_utils_pubkey_to_json(const esp_att_ecdsa_keypair_t *keypair, c
 
     // Finalize the JSON string generation
     *len = json_gen_str_end(&json_gen);
-    *pubkey_json = json_buf;
-
     free(pubkey_hexstr);
+    if (*len < 0 || *len > ESP_ATT_PUBKEY_JSON_MAX_SZ) {
+        free(json_buf);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    *pubkey_json = json_buf;
 
     return ESP_OK;
 }
@@ -294,10 +345,13 @@ esp_err_t esp_att_utils_sign_to_json(const esp_att_ecdsa_keypair_t *keypair, con
 
     // Finalize the JSON string generation
     *len = json_gen_str_end(&json_gen);
-    *sign_json = json_buf;
-
     free(sign_r_hexstr);
     free(sign_s_hexstr);
+    if (*len < 0 || *len > ESP_ATT_SIGN_JSON_MAX_SZ) {
+        free(json_buf);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    *sign_json = json_buf;
 
     return ESP_OK;
 }

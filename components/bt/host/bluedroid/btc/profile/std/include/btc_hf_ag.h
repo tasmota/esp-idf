@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -57,7 +57,8 @@ typedef enum
     //REG
     BTC_HF_REGISTER_DATA_CALLBACK_EVT,
     BTC_HF_REGISTER_AUDIO_DATA_CALLBACK_EVT,
-    BTC_HF_REQUEST_PKT_STAT_EVT
+    BTC_HF_REQUEST_PKT_STAT_EVT,
+    BTC_HF_SET_CODEC_EVT
 } btc_hf_act_t;
 
 /* btc_hf_args_t */
@@ -190,6 +191,17 @@ typedef union
         UINT16            sync_conn_handle;
     } pkt_sync_hd;
 
+    // BTC_HF_SET_CODEC_EVT
+    struct ag_set_codec_param {
+        bt_bdaddr_t           remote_addr;
+        esp_hf_codec_mode_t   mode;
+    } set_codec;
+
+    // BTC_HF_INIT_EVT
+    struct init_cfg {
+        uint8_t service_mask;
+    } init_cfg;
+
 } btc_hf_args_t;
 
 /************************************************************************************
@@ -218,11 +230,13 @@ typedef struct
     int                                num_held;
     esp_hf_call_status_t               call_state;
     esp_hf_call_setup_status_t         call_setup_state;
+    uint8_t                            peer_service; /* esp_hf_ag_service_t, 0 if none */
 } btc_hf_cb_t;
 
 typedef struct
 {
     bool                               initialized;
+    tBTA_SERVICE_MASK                  services;
     int                                hf_idx;
     btc_hf_cb_t                       *btc_hf_cb;
     esp_hf_incoming_data_cb_t          btc_hf_incoming_data_cb;
@@ -254,9 +268,11 @@ void btc_hf_arg_deep_free(btc_msg_t *msg);
 
 bt_status_t btc_hf_ci_sco_data(void);
 
-bool btc_hf_ag_audio_data_send(uint16_t sync_conn_hdl, uint8_t *p_buff_start, uint8_t *p_data, uint8_t data_len);
+bt_status_t btc_hf_ag_audio_data_send(uint16_t sync_conn_hdl, uint8_t *p_buff_start, uint8_t *p_data, uint8_t data_len);
 
 void btc_hf_get_profile_status(esp_hf_profile_status_t *param);
+
+BOOLEAN btc_hf_ag_is_connected(bt_bdaddr_t *bd_addr);
 #endif  // BTC_HF_INCLUDED == TRUE
 
 #endif /* __BTC_HF_AG_H__ */

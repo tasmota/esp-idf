@@ -40,7 +40,10 @@ IDF 监视器是一个串行终端程序，使用了 esp-idf-monitor_ 包，用�
      - 重置设备，并通过 RTS 线（如已连接）重新启动应用程序。
    * - * Ctrl + F
      - 编译并烧录此项目
-     - 暂停 idf_monitor，运行 ``flash`` 目标，然后恢复 idf_monitor。任何改动的源文件都会被重新编译，然后重新烧录。如果 idf_monitor 是以参数 ``-E`` 启动的，则会运行目标 ``encrypted-flash``。
+     - 暂停 idf_monitor，运行 ``flash`` 目标，然后恢复 idf_monitor。任何改动的源文件都会被重新编译，然后重新烧录。若存在已烧录的二进制文件，默认使用 :ref:`快速重新烧录 <flash-with-idf-py>`。如果启动 idf_monitor 时使用了参数 ``-E``，则会运行目标 ``encrypted-flash``。
+   * - * Ctrl + E (或者 E)
+     - 编译并全量烧录此项目
+     - 与 Ctrl + F 相同（运行 ``flash`` 目标），但会通过设置环境变量 ``IDF_FLASH_FULL`` 禁用快速重新烧录。等效于 ``idf.py flash -a``/``--all``。如果 idf_monitor 启动时使用了参数 ``-E``，则会运行目标 ``encrypted-flash``。需要 esp-idf-monitor 1.10.0 或更高版本。
    * - * Ctrl + A (或者 A)
      - 仅编译及烧录应用程序
      - 暂停 idf_monitor，运行 ``app-flash`` 目标，然后恢复 idf_monitor。 这与 ``flash`` 类似，但只有主应用程序被编译并被重新烧录。如果 idf_monitor 是以参数 ``-E`` 启动的，则会运行目标 ``encrypted-flash``。
@@ -49,7 +52,7 @@ IDF 监视器是一个串行终端程序，使用了 esp-idf-monitor_ 包，用�
      - 激活时，会丢弃所有传入的串行数据。允许在不退出监视器的情况下快速暂停和检查日志输出。
    * - * Ctrl + L
      - 停止/恢复向文件写入日志输出
-     - 在工程目录下创建一个文件，用于写入日志输出。可使用快捷键停止/恢复该功能（退出 IDF 监视器也会终止该功能）。
+     - 在当前工作目录下创建一个文件，用于写入日志输出。可使用快捷键停止/恢复该功能（退出 IDF 监视器也会终止该功能）。
    * - * Ctrl + I (或者 I)
      - 停止/恢复打印时间标记
      - IDF 监视器可以在每一行的开头打印一个时间标记。时间标记的格式可以通过 ``--timestamp-format`` 命令行参数来改变。
@@ -61,7 +64,7 @@ IDF 监视器是一个串行终端程序，使用了 esp-idf-monitor_ 包，用�
      -
    * - Ctrl + C
      - 中断正在运行的应用程序
-     - 暂停 IDF 监视器并运行 GDB_ 项目调试器，从而在运行时调试应用程序。这需要启用 :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME` 选项。
+     - 暂停 IDF 监视器并运行 GDB_ 项目调试器，从而在运行时调试应用程序。这需要启用 :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME` 选项。
 
 除了 ``Ctrl-]`` 和 ``Ctrl-T``，其他快捷键信号会通过串口发送到目标设备。
 
@@ -73,7 +76,7 @@ IDF 监视器会根据日志级别自动为输出内容进行着色。该功能�
 
 该功能默认启用。如需禁用，请使用命令行选项 ``--disable-auto-color``。
 
-着色是基于日志级别进行的，日志级别后可选择是否显示时间戳和标签。如需在 {IDF_TARGET_NAME} 端启用着色，参见 :ref:`CONFIG_LOG_COLORS`。
+着色是基于日志级别进行的，日志级别后可选择是否显示时间戳和标签。如需在 {IDF_TARGET_NAME} 端启用着色，参见 :menuitem:`CONFIG_LOG_COLORS`。
 
 有关日志的更多信息，参见 :doc:`日志记录 <../../api-reference/system/log>`。
 
@@ -241,6 +244,13 @@ ROM ELF 文件会根据 ``IDF_PATH`` 和 ``ESP_ROM_ELF_DIR`` 环境变量的路�
 
     将环境变量 ``ESP_MONITOR_DECODE`` 设置为 ``0`` 或者调用 esp_idf_monitor 的特定命令行选项 ``python -m esp_idf_monitor --disable-address-decoding`` 来禁止地址解码。
 
+.. _idf-monitor-target-detection:
+
+自动检测目标芯片
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+默认情况下，在项目中运行 ``idf.py monitor`` 会连接项目已配置的目标芯片。对于尚未构建、也未配置目标芯片的项目，该命令可连接任意目标芯片：执行命令后，程序会自动检测默认串口上的芯片，并将其传给监视器。因此，可以在新项目中直接运行 ``idf.py monitor``，无需先调用 ``idf.py set-target``。
+
 连接时复位目标芯片
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -275,9 +285,9 @@ IDF 监视器的默认复位序列可在大多数环境中使用。使用默认�
 
 GDBStub 支持在运行时进行调试。GDBStub 在目标上运行，并通过串口连接到主机从而接收调试命令。GDBStub 支持读取内存和变量、检查调用堆栈帧等命令。虽然没有 JTAG 调试通用，但由于 GDBStub 完全通过串行端口完成通信，故不需要使用特殊硬件（如 JTAG/USB 桥接器）。
 
-通过设置 :ref:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`，可以将目标配置为在后台运行 GDBStub。GDBStub 将保持在后台运行，直到通过串行端口发送 ``Ctrl+C`` 导致应用程序中断（即停止程序执行），从而让 GDBStub 处理调试命令。
+通过设置 :menuitem:`CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME`，可以将目标配置为在后台运行 GDBStub。GDBStub 将保持在后台运行，直到通过串行端口发送 ``Ctrl+C`` 导致应用程序中断（即停止程序执行），从而让 GDBStub 处理调试命令。
 
-此外，还可以通过设置 :ref:`CONFIG_ESP_SYSTEM_PANIC` 为 ``GDBStub on panic`` 来配置 panic 处理程序，使其在发生 crash 事件时运行 GDBStub。当 crash 发生时，GDBStub 将通过串口输出特殊的字符串模式，表示 GDBStub 正在运行。
+此外，还可以通过设置 :menuitem:`CONFIG_ESP_SYSTEM_PANIC` 为 ``GDBStub on panic`` 来配置 panic 处理程序，使其在发生 crash 事件时运行 GDBStub。当 crash 发生时，GDBStub 将通过串口输出特殊的字符串模式，表示 GDBStub 正在运行。
 
 无论是通过发送 ``Ctrl+C`` 还是收到特殊字符串模式，IDF 监视器都会自动启动 GDB，从而让用户发送调试命令。GDB 退出后，通过 RTS 串口线复位目标。如果未连接 RTS 串口线，请按复位键，手动复位开发板。
 
@@ -352,6 +362,124 @@ GDBStub 支持在运行时进行调试。GDBStub 在目标上运行，并通过�
     D (309) light_driver: [light_init, 74]:status: 1, mode: 2
 
 
+.. _idf-monitor-command-stream:
+
+命令流模式
+===================
+
+要使用交互式快捷键，监视器的输入端必须连接到终端 (TTY)。但当输入来自管道或文件，或者完全没有连接输入（例如在持续集成作业中）时，监视器会自动切换到命令流模式。在该模式下，它会从重定向的输入中按行读取命令。
+
+当计划将多个 ``idf.py`` 命令串联使用时，建议通过 ``--command-file`` 从文件读取，而不是从管道读取，以避免影响其他工具的标准输入。若在不带诸如 ``flash`` 等附加命令的情况下调用 ``idf.py monitor``，则通过管道读取命令是安全的。请参阅以下示例以了解推荐的用法。
+
+.. code-block:: bash
+
+    idf.py monitor --command-file commands.txt
+    idf.py flash monitor --command-file commands.txt
+
+即使标准输入不是 TTY，将数据通过管道传给 ``idf.py monitor`` 也同样可行：
+
+.. code-block:: bash
+
+    printf 'reset\nexpect --timeout 10 ALL TESTS PASSED\n' | idf.py monitor
+
+命令
+~~~~~~~~
+
+.. list-table::
+    :widths: 30 70
+    :header-rows: 1
+
+    * - 命令
+      - 操作
+    * - ``reset``
+      - 使用 RTS 线对芯片执行硬复位。
+    * - ``flash``
+      - 运行构建系统的 ``flash`` 目标（默认为快速烧录）。
+    * - ``flash-all``
+      - 以完整烧录的方式运行 ``flash`` 目标，禁用快速烧录（等同于 ``idf.py flash -a``）。
+    * - ``app-flash``
+      - 运行构建系统的 ``app-flash`` 目标。
+    * - ``send <text>``
+      - 向设备发送 ``<text>``，并在其后附加已配置的行结束序列。
+    * - ``sleep <seconds>``
+      - 暂停命令处理指定时长，同时串口输出继续进行（接受浮点值和 ``inf``）。
+    * - ``expect <regex>``
+      - 等待直到某条串口输出行通过 ``re.search`` 与该 Python 正则表达式匹配。
+    * - ``expect --timeout <seconds> <regex>``
+      - 最多等待给定时长以获得匹配，该时长必须为正数且有限。超时会报告错误并中止剩余命令。
+    * - ``output``
+      - 切换是否打印串口输出。
+    * - ``log``
+      - 切换是否将输出保存到日志文件。
+    * - ``timestamps``
+      - 切换是否在串口输出前添加时间戳。
+    * - ``bootloader``
+      - 将芯片复位进入下载 (bootloader) 模式。
+    * - ``exit``
+      - 清空待处理的串口输出后退出 IDF 监视器。
+
+空行和以 ``#`` 开头的行会被忽略。每条已处理的命令都会回显到标准错误，因此当标准输出被重定向到文件时，脚本的进度仍然可见。
+
+``expect`` 在等待新的输出之前，还会检查一个有界缓冲区中最近接收的行。匹配前会移除行尾，因此 ``$`` 锚点同时适用于 LF 和 CRLF 输出。``expect`` 命令还能匹配没有行尾的提示符。
+
+结束命令流
+~~~~~~~~~~~~~~~~~~~~~~~
+
+在读取到至少一条命令后，遇到 EOF 将结束会话。因此，命令文件可以以 ``exit``、最后一个 ``expect``，或直接 EOF 结束。若标准输入从一开始就是空的（例如重定向自 ``/dev/null``，或在 Docker 运行时未使用 ``-i``），IDF 监视器将进入仅监视模式，并持续显示串口输出，直至被外部以 ``Ctrl+C`` 或 ``SIGTERM`` 停止。
+
+示例
+~~~~~~~~
+
+等待匹配某个正则表达式，然后退出：
+
+.. code-block:: bash
+
+    printf 'expect ALL TESTS PASSED\n' | idf.py monitor > test.log
+
+作为最后一条命令，``expect`` 会在匹配到该正则表达式后让监视器退出。未指定 ``--timeout`` 时，它将一直等待。
+
+最多等待十秒以匹配某个正则表达式：
+
+.. code-block:: bash
+
+    printf 'reset\nexpect --timeout 10 Hello world!\n' | idf.py monitor > boot.log
+
+若未匹配到该正则表达式，则不会执行后续命令。IDF 监视器在退出前会清空待处理的输出并刷新日志。
+
+复位设备并捕获十秒的启动输出：
+
+.. code-block:: bash
+
+    printf 'reset\nsleep 10\n' | idf.py monitor > boot.log
+
+无需 ``exit`` 命令，因为 EOF 会结束非空的命令流。
+
+驱动控制台应用程序：
+
+.. code-block:: bash
+
+    idf.py monitor <<'EOF'
+    reset
+    expect esp>
+    send free
+    expect \d+
+    exit
+    EOF
+
+以仅监视模式运行：
+
+.. code-block:: bash
+
+    idf.py monitor < /dev/null
+
+
+.. note::
+
+    由于命令流模式没有终端，无法从目标的 GDB stub 启动交互式 GDB 会话。
+
+ESP-IDF 的 MCP ``monitor device`` 工具会使用此模式。参见 :ref:`mcp-monitor-device`。
+
+
 .. _configuration-file:
 
 配置文件
@@ -361,6 +489,46 @@ GDBStub 支持在运行时进行调试。GDBStub 在目标上运行，并通过�
 
 有关配置文件的更多详细信息，请参阅 `IDF 监视器文档`_。
 
+主机侧命令标记
+==============
+
+当设备日志行以支持的标记开头时，IDF 监视器可以执行主机侧辅助命令。
+
+对于 eFuse token 解码，可在固件日志中输出以下任一格式：
+
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY <TOKEN> [附加参数]``
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP <TOKEN>``
+
+检测到标记后，监视器会在主机侧调用 ``espefuse``，并以内联方式打印解码结果。
+
+示例 1（带自定义表的 summary）：
+
+.. code-block:: text
+
+  I (441) app: IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY EFSR:esp32c3:100:... --extend-efuse-table main/esp_efuse_custom_table.csv
+
+该日志行会触发等价于以下命令的主机侧执行：
+
+.. code-block:: text
+
+  espefuse --token EFSR:esp32c3:100:... --extend-efuse-table main/esp_efuse_custom_table.csv summary --active
+
+示例 2（原始转储）：
+
+.. code-block:: text
+
+  I (442) app: IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP EFSR:esp32c3:100:...
+
+该日志行会触发等价于以下命令的主机侧执行：
+
+.. code-block:: text
+
+  espefuse --token EFSR:esp32c3:100:... dump
+
+.. important::
+
+    请将 token 参数视为敏感数据（尤其是 ``EFSW``/``EFSRW``），因为它们可能在这些值仍处于暂存状态、尚未烧写、也尚未受读保护时，以明文暴露密钥值。关于 token 格式和生成 API，请参见 :doc:`eFuse 管理器 <../../api-reference/system/efuse>`。
+
 
 IDF 监视器已知问题
 =================================
@@ -369,7 +537,7 @@ IDF 监视器已知问题
 
 - 消息中包含换行符时，自动着色无法检测日志级别。在这种情况下，IDF Monitor 只会为消息的第一行着色。
 
-  为了避免这个问题，可以在 menuconfig 中启用 :ref:`CONFIG_LOG_COLORS`。注意，这可能会对二进制文件的大小和性能产生一定影响。
+  为了避免这个问题，可以在 menuconfig 中启用 :menuitem:`CONFIG_LOG_COLORS`。注意，这可能会对二进制文件的大小和性能产生一定影响。
 
 - 在 Windows 上，如果在 IDF 监视器关闭之前直接关闭了终端，某些驱动程序可能无法释放串口。要解决此问题，可以尝试重新拔插 USB 线，在某些情况下，需要重启计算机。目前，已知该问题会影响 CH9102 USB-to-UART 桥接芯片，而 CP210x 和 CH340 等驱动通常不会受到影响。
 
@@ -378,5 +546,5 @@ IDF 监视器已知问题
 如果在使用 IDF 监视器过程中遇到问题，可以访问 `IDF 监视器的 GitHub 仓库 <https://github.com/espressif/esp-idf-monitor/issues>`_ 查看已知问题及其当前状态。如果遇到的问题没有相关记录，可以提交一个新的问题报告。
 
 .. _esp-idf-monitor: https://github.com/espressif/esp-idf-monitor
-.. _IDF 监视器文档: https://github.com/espressif/esp-idf-monitor/blob/v1.5.0/README.md#documentation
+.. _IDF 监视器文档: https://github.com/espressif/esp-idf-monitor/blob/v1.10.0/README.md#documentation
 .. _gdb: https://sourceware.org/gdb/download/onlinedocs/

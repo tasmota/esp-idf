@@ -149,6 +149,18 @@
     * 全色彩空间：RGB 和 YUV 的取值范围为 0-255
     * 有限色彩空间：RGB 取值范围为 16-240，YUV Y 分量取值范围为 16-240，U-V 分量取值范围为 16-235
 
+    .. note::
+
+        - 当 :cpp:member:`esp_cam_ctlr_dvp_config_t::cam_data_width` 配置为 8 时：
+
+            - 像素时钟 CAM_PCLK 频率建议值需小于 80 MHz；
+            - 如果同时通过 :cpp:func:`esp_cam_ctlr_format_conversion` 配置了 YUV 与 RGB 之间的格式转换，则 CAM_PCLK 频率建议值需小于 60 MHz。
+
+        - 当 :cpp:member:`esp_cam_ctlr_dvp_config_t::cam_data_width` 配置为 16 时：
+
+            - CAM_PCLK 频率建议值需小于 40 MHz；
+            - 如果同时通过 :cpp:func:`esp_cam_ctlr_format_conversion` 配置了 YUV 与 RGB 之间的格式转换，则 CAM_PCLK 频率建议值需小于 30 MHz。
+
     .. code:: c
 
         #include "esp_err.h"
@@ -315,8 +327,8 @@ Kconfig 选项
 
 .. list::
 
-    :SOC_MIPI_CSI_SUPPORTED: - :ref:`CONFIG_CAM_CTLR_MIPI_CSI_ISR_CACHE_SAFE`，详情请参阅 :ref:`cam-thread-safety`。
-    :SOC_ISP_DVP_SUPPORTED: - :ref:`CONFIG_CAM_CTLR_ISP_DVP_ISR_CACHE_SAFE`，详情请参阅 :ref:`cam-thread-safety`。
+    :SOC_MIPI_CSI_SUPPORTED: - :menuitem:`CONFIG_CAM_CTLR_MIPI_CSI_ISR_CACHE_SAFE`，详情请参阅 :ref:`cam-thread-safety`。
+    :SOC_ISP_DVP_SUPPORTED: - :menuitem:`CONFIG_CAM_CTLR_ISP_DVP_ISR_CACHE_SAFE`，详情请参阅 :ref:`cam-thread-safety`。
 
 .. _cam-iram-safe:
 
@@ -329,8 +341,8 @@ IRAM 安全
 
 .. list::
 
-    :SOC_MIPI_CSI_SUPPORTED: - :ref:`CONFIG_CAM_CTLR_MIPI_CSI_ISR_CACHE_SAFE`
-    :SOC_ISP_DVP_SUPPORTED: - :ref:`CONFIG_CAM_CTLR_ISP_DVP_ISR_CACHE_SAFE`
+    :SOC_MIPI_CSI_SUPPORTED: - :menuitem:`CONFIG_CAM_CTLR_MIPI_CSI_ISR_CACHE_SAFE`
+    :SOC_ISP_DVP_SUPPORTED: - :menuitem:`CONFIG_CAM_CTLR_ISP_DVP_ISR_CACHE_SAFE`
 
 - 即使 cache 被禁用也能启用中断服务
 - 将 ISR 使用的所有函数放入 IRAM
@@ -343,6 +355,7 @@ IRAM 安全
 
 * :example:`peripherals/camera/mipi_isp_dsi` 演示了如何使用 ``esp_driver_cam`` 组件从 MIPI CSI 摄像头传感器捕获信号，传入 ISP 模块，并通过 DSI 接口将其显示在 LCD 屏幕上。
 * :example:`peripherals/camera/dvp_isp_dsi` 演示了如何使用 ``esp_driver_cam`` 组件从 DVP 摄像头传感器捕获信号，传入 ISP 模块，并通过 DSI 接口将其显示在 LCD 屏幕上。
+* :example:`peripherals/camera/dvp_dsi` 演示了如何使用 ``esp_driver_cam`` 组件通过 DVP 接口采集摄像头传感器数据，并在 MIPI DSI LCD 上显示。
 
 API 参考
 --------

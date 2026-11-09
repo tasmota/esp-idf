@@ -294,6 +294,7 @@ typedef enum {
     ESP_BT_GAP_WRITE_NEW_CONN_TX_PWR_RNG_EVT,       /*!< Write new connection transmit power range event (for ACL) */
     ESP_BT_GAP_READ_TX_PWR_LVL_EVT,                 /*!< Read inq/iscan/page/pscan transmit power level event */
     ESP_BT_GAP_WRITE_TX_PWR_LVL_EVT,                /*!< Write inq/iscan/page/pscan transmit power level event */
+    ESP_BT_GAP_SNIFF_SUBRATING_EVT,                 /*!< Sniff subrating event */
     ESP_BT_GAP_EVT_MAX,
 } esp_bt_gap_cb_event_t;
 
@@ -332,6 +333,18 @@ typedef struct {
     esp_bt_discovery_mode_t disc_mode;       /*!< Discovery mode */
     uint8_t bredr_acl_link_num;              /*!< Number of bredr link connections */
 } esp_bt_gap_profile_status_t;
+
+/**
+ * @brief Classic Bluetooth Security Setting Mask
+ */
+#define ESP_BT_SEC_NONE            0x0000       /*!< No security. */
+#define ESP_BT_SEC_AUTHORIZE       0x0001       /*!< Authorization required. */
+#define ESP_BT_SEC_AUTHENTICATE    0x0012       /*!< Authentication required. */
+#define ESP_BT_SEC_ENCRYPT         0x0024       /*!< Encryption required. */
+#define ESP_BT_SEC_MODE4_LEVEL4    0x0040       /*!< Mode 4 level 4 service, i.e. incoming/outgoing MITM and P-256 encryption */
+#define ESP_BT_SEC_MITM            0x3000       /*!< Man-In-The-Middle protection */
+#define ESP_BT_SEC_IN_16_DIGITS    0x4000       /*!< Min 16 digit for pin code */
+typedef uint16_t esp_bt_sec_t;                  /*!< Security type */
 
 /// GAP state callback parameters
 typedef union {
@@ -582,6 +595,18 @@ typedef union {
         esp_bt_status_t status;                /*!< Indicate the get device name success status */
         char *name;                            /*!< Name of bluetooth device */
     } get_dev_name_cmpl;                       /*!< Get device name complete status parameter struct */
+
+    /**
+     * @brief ESP_BT_GAP_SNIFF_SUBRATING_EVT
+     */
+    struct sniff_subrating_param {
+        esp_bt_status_t stat;                  /*!< Sniff Subrating status */
+        esp_bd_addr_t bda;                     /*!< remote bluetooth device address */
+        uint16_t max_tx_latency;               /*!< Max transmit latency, unit is 0.625ms */
+        uint16_t max_rx_latency;               /*!< Max receive latency, unit is 0.625ms */
+        uint16_t min_remote_timeout;           /*!< Min remote timeout, unit is 0.625ms */
+        uint16_t min_local_timeout;            /*!< Min local timeout, unit is 0.625ms */
+    } sniff_subrating;                         /*!< Sniff Subrating event parameter struct */
 } esp_bt_gap_cb_param_t;
 
 /**
@@ -618,11 +643,11 @@ static inline uint32_t esp_bt_gap_get_cod_major_dev(uint32_t cod)
 }
 
 /**
- * @brief           get minor service field of COD
+ * @brief           get minor device field of COD
  *
  * @param[in]       cod: Class of Device
  *
- * @return          minor service bits
+ * @return          minor device bits
  */
 static inline uint32_t esp_bt_gap_get_cod_minor_dev(uint32_t cod)
 {
@@ -667,6 +692,8 @@ static inline bool esp_bt_gap_is_valid_cod(uint32_t cod)
  *
  * @return
  *                  - ESP_OK : Succeed
+ *                  - ESP_ERR_INVALID_ARG: if argument invalid
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
  *                  - ESP_FAIL: others
  */
 esp_err_t esp_bt_gap_register_callback(esp_bt_gap_cb_t callback);
@@ -930,7 +957,7 @@ esp_err_t esp_bt_gap_remove_bond_device(esp_bd_addr_t bd_addr);
 *                  It will return the device bonded number immediately.
 *
 * @return          - >= 0 : bonded devices number
-*                  - ESP_FAIL  : failed
+*                  - < 0 : failed
 *
 */
 int esp_bt_gap_get_bond_device_num(void);

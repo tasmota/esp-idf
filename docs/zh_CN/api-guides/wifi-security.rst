@@ -39,7 +39,6 @@ API 及用法
 
     为最大限度地利用 PMF 的额外安全性优势，已弃用 ``pmf_cfg`` 中的 ``capable`` 标志，并在内部设置为 ``true``。
 
-
 企业级 Wi-Fi
 ----------------------
 
@@ -70,7 +69,7 @@ API 及用法
 此外，企业级 WPA3 还支持 **192 位最低强度安全模式 (Suite B)**，提供更高的加密强度。
 
 - 企业级 WPA3 的 192 位模式仅适用于支持 :c:macro:`SOC_WIFI_GCMP_SUPPORT` 的芯片。
-- 若需启用该模式，请配置 :ref:`CONFIG_ESP_WIFI_SUITE_B_192`。
+- 若需启用该模式，请配置 :menuitem:`CONFIG_ESP_WIFI_SUITE_B_192`。
 
 支持的 EAP 方法
 +++++++++++++++++++++
@@ -98,7 +97,7 @@ API 及用法
 
 - **EAP-FAST**
 
-  基于受保护访问凭证 (PAC) 的认证方法，需要身份标识和密码。使用 EAP-FAST 时需要 **禁用** :ref:`CONFIG_ESP_WIFI_MBEDTLS_TLS_CLIENT`。
+  基于受保护访问凭证 (PAC) 的认证方法，需要身份标识和密码。使用 EAP-FAST 时需要 **禁用** :menuitem:`CONFIG_ESP_WIFI_MBEDTLS_TLS_CLIENT`。
 
 示例
 ++++++++
@@ -129,7 +128,7 @@ API 及用法
 
  - **禁用过渡**：WPA3 为客户端定义了过渡模式。该模式下，即使网络中的某些 AP 不支持最强的安全模式，客户端也能正常接入网络。客户端通常会默认将网络配置文件配置为过渡模式。然而，这类客户端可能会遭受主动降级攻击，即攻击者会引导客户端使用强度较低的安全模式，以利用该模式的漏洞。为减轻这种攻击的影响，WPA3 引入了禁用过渡功能。当连接到某个网络时，若该网络已全面支持更高级的安全模式，则支持客户端从过渡模式切换到“纯粹”模式。请在 :cpp:type:`wifi_sta_config_t` 中启用 :cpp:type:`transition_disable`，为 {IDF_TARGET_NAME} 的 station 模式启用此功能。
 
- - **SAE 公钥 (PK)**：由于小型公共网络中的密码与多个用户共享，攻击者可能更容易破解密码，发动伪装双子攻击。为阻止这类攻击，个人级 WPA3 引入了 SAE-PK 扩展认证机制。SAE-PK 认证交换与常规 SAE 交换非常相似，唯一区别在于 AP 会向客户端发送数字签名。客户端基于密码指纹验证 AP 断言的公钥，并使用公钥验证签名。因此，即使攻击者知道密码，也不知道生成有效签名所需的私钥，避免客户端遭受伪装双子攻击。请启用 :ref:`CONFIG_ESP_WIFI_ENABLE_SAE_PK`，并在 :cpp:type:`wifi_sta_config_t` 中使用 :cpp:type:`sae_pk_mode` 进行相应配置，为 {IDF_TARGET_NAME} 的 station 模式添加 SAE PK 支持。
+ - **SAE 公钥 (PK)**：由于小型公共网络中的密码与多个用户共享，攻击者可能更容易破解密码，发动伪装双子攻击。为阻止这类攻击，个人级 WPA3 引入了 SAE-PK 扩展认证机制。SAE-PK 认证交换与常规 SAE 交换非常相似，唯一区别在于 AP 会向客户端发送数字签名。客户端基于密码指纹验证 AP 断言的公钥，并使用公钥验证签名。因此，即使攻击者知道密码，也不知道生成有效签名所需的私钥，避免客户端遭受伪装双子攻击。请启用 :menuitem:`CONFIG_ESP_WIFI_ENABLE_SAE_PK`，并在 :cpp:type:`wifi_sta_config_t` 中使用 :cpp:type:`sae_pk_mode` 进行相应配置，为 {IDF_TARGET_NAME} 的 station 模式添加 SAE PK 支持。
 
  - **SAE PWE Methods**: {IDF_TARGET_NAME} 的 station 和 SoftAP 模式都支持 SAE 密码元素的推导方法 `Hunting And Pecking` 和 `Hash to Element (H2E)`。H2E 所需迭代次数较少，因此计算效率更高，还可以减轻侧通道攻击的风险。这些方法可以分别在 station 模式和 SoftAP 中通过参数 :cpp:type:`sae_pwe_h2e` 配置，其中 :cpp:type:`wifi_sta_config_t` 用于 station 模式，:cpp:type:`wifi_ap_config_t` 用于 SoftAP 模式。请使用配置选项 :cpp:enumerator:`WPA3_SAE_PWE_BOTH` 启用 `Hunting And Pecking` 和 `H2E` 方法。
 
@@ -138,7 +137,7 @@ API 及用法
 在 {IDF_TARGET_NAME} 上设置 WPA3
 ++++++++++++++++++++++++++++++++++++++
 
-配置选项 :ref:`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE` 用于在 station 上启用或禁用 WPA3，该选项默认启用，如果禁用，则 {IDF_TARGET_NAME} 无法建立 WPA3 连接。Wi-Fi 组件中还提供了配置选项 :ref:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT`，用于在 SoftAP 上启用或禁用 WPA3。此外，由于 WPA3 协议强制使用 PMF，因此，station 和 SoftAP 的 PMF 模式均默认为可选 PMF。可以使用 Wi-Fi 配置选项将 PMF 模式配置为强制 PMF。WPA3 SoftAP 仅支持使用强制 PMF 模式，如无特别指定，则将在 NVS 中隐式配置并存储该模式。
+配置选项 :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE` 用于在 station 上启用或禁用 WPA3，该选项默认启用，如果禁用，则 {IDF_TARGET_NAME} 无法建立 WPA3 连接。Wi-Fi 组件中还提供了配置选项 :menuitem:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT`，用于在 SoftAP 上启用或禁用 WPA3。此外，由于 WPA3 协议强制使用 PMF，因此，station 和 SoftAP 的 PMF 模式均默认为可选 PMF。可以使用 Wi-Fi 配置选项将 PMF 模式配置为强制 PMF。WPA3 SoftAP 仅支持使用强制 PMF 模式，如无特别指定，则将在 NVS 中隐式配置并存储该模式。
 
 要了解如何设置 PMF 模式，请参阅 `受保护的管理帧 (PMF)`_。
 
@@ -146,7 +145,7 @@ API 及用法
 
 在为 WPA3-Personal 的 SoftAP 模式配置完所需设置后，应用程序开发人员必须在 :cpp:type:`wifi_ap_config_t` 中的 `authmode` 设置 ``WIFI_AUTH_WPA3_PSK``，启动以 WPA3 安全模式运行的 AP。也可将 SoftAP 配置为使用 ``WIFI_AUTH_WPA2_WPA3_PSK`` 的混合模式。
 
-注意，启用 :ref:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT` 时，二进制文件大小将增加约 6.5 千字节。
+注意，启用 :menuitem:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT` 时，二进制文件大小将增加约 6.5 千字节。
 
 增强型开放式™ Wi-Fi 安全协议
 ------------------------------
@@ -164,4 +163,94 @@ API 及用法
 在 {IDF_TARGET_NAME} 上设置 OWE
 ++++++++++++++++++++++++++++++++++++++
 
-配置选项 :ref:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA` 和 :cpp:type:`wifi_sta_config_t` 中的配置参数 :cpp:type:`owe_enabled` 可以为 station 模式启用 OWE 支持。除上述配置外，请将 :cpp:type:`wifi_scan_threshold_t` 中的 `authmode` 设置为 ``WIFI_AUTH_OPEN`` 以使用 OWE 过渡模式。
+station 模式：
+
+配置选项 :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA` 和 :cpp:type:`wifi_sta_config_t` 中的配置参数 :cpp:type:`owe_enabled` 可以为 station 模式启用 OWE 支持。除上述配置外，请将 :cpp:type:`wifi_scan_threshold_t` 中的 `authmode` 设置为 ``WIFI_AUTH_OPEN`` 以使用 OWE 过渡模式。
+
+
+SoftAP 模式：
+
+需通过 menuconfig 启用配置选项 :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_SOFTAP`，并将 :cpp:type:`wifi_ap_config_t` 中的配置参数 `authmode` 设置为 ``WIFI_AUTH_OWE``。SoftAP 不支持 OWE 过渡模式，请仅配置 ``WIFI_AUTH_OWE``。
+
+Wi-Fi 隐私增强
+--------------------------
+
+MAC 地址用于设备连接 Wi-Fi 网络。由于 MAC 地址具有唯一且静态的特点，并且在传输时未加密，因此可能会被捕获和追踪。{IDF_TARGET_NAME} 支持 Wi-Fi 隐私增强功能，包括 MAC 地址随机化、序列号随机化、GAS 对话令牌多样化和厂商自定义序列号管理。这些功能通过增强隐私保护，避免设备在扫描或连接网络时被持续追踪。
+
+要使用此功能，请在 menuconfig 中启用配置选项 :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED`。
+
+{IDF_TARGET_NAME} 还会在未连接网络时，定期自动重置随机 MAC 地址。重置周期通过 menuconfig 中的 :menuitem:`CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL` 选项配置（有效范围：1 至 24 小时，默认值为 12 小时）。
+
+.. note::
+
+   仅当 station 未连接到任何 AP 时，:menuitem:`CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL` 才会生成并设置新的随机 MAC 地址。如果 station 已连接到 AP，则不会中断连接，并会继续使用相同的随机 MAC 地址。如果定期自动重置定时器在 station 处于连接状态时超时，定时器将在下一次断开连接时被重新装载或触发。
+
+   在启用 Wi-Fi Mesh 或 ESP-NOW 时，不支持且无法使用 Wi-Fi 隐私增强功能。
+
+
+{IDF_TARGET_NAME} 在满足以下条件时支持扫描过程中的隐私增强：
+
+  - 在 menuconfig 中启用配置选项 :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED`
+  - 扫描类型为 :cpp:enumerator:`WIFI_SCAN_TYPE_ACTIVE`
+  - station 未连接到任何 AP
+
+{IDF_TARGET_NAME} 在满足以下条件时支持连接过程中的隐私增强：
+
+  - 在 menuconfig 中启用配置选项 :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED`
+  - 使用 :cpp:func:`esp_wifi_set_config` 设置新的 Wi-Fi 配置
+
+
+要获取 MAC 地址，请使用 API :cpp:func:`esp_wifi_get_mac`。
+
+
+.. only:: SOC_WIFI_NAN_SUPPORT
+
+    NAN（Wi-Fi Aware\ :sup:`TM`）安全
+    -------------------------------------
+
+    简介
+    ++++
+
+    Wi-Fi Aware\ :sup:`TM` （NAN，Neighbor Awareness Networking，邻居感知网络）让设备无需 AP 即可发现服务并建立 NAN 数据路径 (NDP)。默认情况下，NDP 以明文传输数据，与开放式 Wi-Fi 网络类似。NAN 安全在 NDP 握手期间为发布方与订阅方派生出成对密钥 (ND-PMK)，并加密随后的单播数据帧，从而保护 NDP。
+
+    {IDF_TARGET_NAME} 支持两种 NAN 安全机制。两者都会建立加密的 NDP，但密钥材料的配置方式不同：
+
+    - **基于密码短语/PMK (NCS-SK-128)** —— 双方通过带外方式共享密码短语（或原始的 32 字节 PMK）。协议栈据此派生 ND-PMK。这相当于 WPA2/WPA3-Personal 的预共享密钥，只是用于 NAN。
+    - **基于配对 (NCS-PK-PASN-128)** —— 双方事先不共享密钥，而是运行基于 PASN 的 NAN 配对协议来协商 NPK/NIK，协商时可以选择用引导方法（例如 PIN 码）进行认证。缓存的 NPK/NIK 可供后续 NDP 复用。
+
+    基于密码短语/PMK 的安全 (NCS-SK-128)
+    ++++++++++++++++++++++++++++++++++++++++++++
+
+    这是最简单的 NAN 安全模式，可在独立 ESP-IDF 中使用（无需外部组件）。双方在相互匹配的发布/订阅服务上配置同一密钥，可以是密码短语，也可以是原始的 32 字节 PMK。协议栈为每条凭据派生 ND-PMK 和 ND-PMKID，并在空口通告 SCID 列表；订阅方将发布方的 SCID 列表与本地已配置的凭据进行匹配。
+
+    安全按服务配置，相关字段位于 :cpp:type:`wifi_nan_publish_cfg_t`/:cpp:type:`wifi_nan_subscribe_cfg_t`：
+
+    - 将 ``security_reqd`` 设为 ``1``，将该服务标记为需要安全。
+    - 将 ``security_cfg`` 指向 :cpp:type:`wifi_nan_discovery_security_params_t`，并在其中填入一条或多条 :cpp:type:`wifi_nan_credential_t` （密码短语或 PMK，每条凭据通过 ``csid`` 绑定一个密码套件 ID）。
+    - 也可启用 ``group_data_prot`` （ND-GTK 组地址数据保护）。
+
+    单个服务最多可附加 :c:macro:`ESP_WIFI_NAN_MAX_CREDS_PER_SVC` 条凭据，因此同一服务可以使用不同的密码短语或 PMK，与多个对端共享。双方必须在对应服务上至少配置一条相互匹配的凭据，否则 NDP 协商会失败。
+
+    .. warning::
+
+      组管理帧保护 (BIP, IGTKSA/BIGTKSA) 是 **设备全局** 设置，而不是按服务设置。调用 :cpp:func:`esp_wifi_nan_sync_start` 启动 NAN 时，必须通过 :cpp:type:`wifi_nan_sync_config_t` 的 ``group_mgmt_prot`` 启用组管理帧保护。IGTK/BIGTK 的安装、CSIA 能力信息的构造以及 NDP 协商都取决于这一设备全局值。因此，如果应用程序只设置 :cpp:type:`wifi_nan_discovery_security_params_t` 中按服务的 ``group_mgmt_prot`` 位，设备会在未启用组管理帧保护的情况下继续运行，且不会提示错误。按服务的 ``group_mgmt_prot`` 位是保留位，本身不起作用。
+
+    .. note::
+
+      目前仅支持 ``WIFI_NAN_CSID_NCS_SK_128``。NAN 安全需要配置选项 :ref:`CONFIG_ESP_WIFI_NAN_SECURITY` 和 :ref:`CONFIG_ESP_WIFI_MBEDTLS_CRYPTO`。
+
+    基于配对的安全 (NCS-PK-PASN-128)
+    +++++++++++++++++++++++++++++++++++++++++
+
+    NAN 配对让两台设备在没有预共享密钥的情况下，借助 PIN 码等引导方法建立长期信任关系 (NPK/NIK)。协商得到的 NPK/NIK 可以缓存（并持久保存到 NVS），这样后续 NDP 无需重复配对握手即可受到保护。
+
+    配对按服务配置：:cpp:type:`wifi_nan_publish_cfg_t`/:cpp:type:`wifi_nan_subscribe_cfg_t` 的 ``pairing`` 字段指向 :cpp:type:`wifi_nan_pairing_cfg_t`，其中包括是否启用配对建立、是否启用配对验证、NPK/NIK 缓存、引导方法位图以及 comeback 延时。
+
+    .. note::
+
+      NAN 配对 (``WIFI_NAN_CSID_NCS_PK_PASN_128``) 需要配置选项 :ref:`CONFIG_ESP_WIFI_NAN_PAIRING`，以及 **Wi-Fi Aware** 外部组件 (``espressif/wifi_aware``)；它 **不能** 在独立 ESP-IDF 中使用。关于如何将该组件添加到工程中，请参阅 :doc:`/api-guides/wifi-driver/wifi-modes`。
+
+    应用示例
+    ++++++++
+
+    - :example:`wifi/wifi_aware/nan_console` 通过 ``publish`` 和 ``subscribe`` 控制台命令配置 NAN 安全。指定 ``-p``/``--passphrase`` 或 ``-k``/``--pmk`` 可使该服务启用安全；开放服务无需安全参数。完整命令说明请参阅该示例的 README。

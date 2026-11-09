@@ -7,9 +7,6 @@
  */
 
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
 #include <errno.h>
 
 #include "tmap_peripheral.h"
@@ -227,7 +224,7 @@ static void read_media_state_cb(esp_ble_conn_t *conn, int err, uint8_t state)
     }
 }
 
-static void send_cmd_cb(esp_ble_conn_t *conn, int err, const struct mpl_cmd *cmd)
+static void send_cmd_cb(esp_ble_conn_t *conn, int err, const esp_ble_audio_mpl_cmd_t *cmd)
 {
     if (err) {
         ESP_LOGE(TAG, "Send command failed, err %d, cmd %p", err, cmd);
@@ -237,7 +234,7 @@ static void send_cmd_cb(esp_ble_conn_t *conn, int err, const struct mpl_cmd *cmd
     ESP_LOGI(TAG, "Send command succeeded, cmd %p", cmd);
 }
 
-static void cmd_ntf_cb(esp_ble_conn_t *conn, int err, const struct mpl_cmd_ntf *ntf)
+static void cmd_ntf_cb(esp_ble_conn_t *conn, int err, const esp_ble_audio_mpl_cmd_ntf_t *ntf)
 {
     if (err) {
         ESP_LOGE(TAG, "Invalid command ntf received, err %d, ntf %p", err, ntf);
@@ -321,6 +318,9 @@ int mcp_discover_mcs(void)
         ESP_LOGE(TAG, "%s, not connected", __func__);
         return -ENOTCONN;
     }
+
+    /* New session — re-arm the initial read cascade. */
+    is_remote_read = false;
 
     err = esp_ble_audio_mcc_discover_mcs(conn_handle, true);
     if (err) {

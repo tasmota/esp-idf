@@ -12,6 +12,7 @@
 #include "esp_cache.h"
 #include "esp_memory_utils.h"
 #include "soc/dma2d_channel.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "ppa_srm";
 
@@ -114,7 +115,13 @@ bool ppa_srm_transaction_on_picked(uint32_t num_chans, const dma2d_trans_channel
 
     // Configure the block size to be received by the SRM engine, which is passed from the 2D-DMA TX channel (i.e. 2D-DMA dscr-port mode)
     uint32_t block_h = 0, block_v = 0;
-    ppa_ll_srm_get_dma_dscr_port_mode_block_size(platform->hal.dev, ppa_in_color_mode, ppa_ll_srm_get_mb_size(platform->hal.dev), &block_h, &block_v);
+    ppa_ll_srm_mb_size_t mb_size = ppa_ll_srm_get_mb_size(platform->hal.dev);
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
+    assert(mb_size == PPA_LL_SRM_MB_SIZE_16_16);
+#else
+    assert(mb_size == PPA_LL_SRM_MB_SIZE_32_32);
+#endif
+    ppa_ll_srm_get_dma_dscr_port_mode_block_size(platform->hal.dev, ppa_in_color_mode, mb_size, &block_h, &block_v);
     dma2d_dscr_port_mode_config_t dma_dscr_port_mode_config = {
         .block_h = block_h,
         .block_v = block_v,
@@ -153,24 +160,46 @@ bool ppa_srm_transaction_on_picked(uint32_t num_chans, const dma2d_trans_channel
     ppa_ll_srm_enable_mirror_x(platform->hal.dev, srm_trans_desc->mirror_x);
     ppa_ll_srm_enable_mirror_y(platform->hal.dev, srm_trans_desc->mirror_y);
 
+#if CONFIG_IDF_TARGET_ESP32P4
     // Hardware bug workaround (DIG-734)
-    uint32_t w_out = srm_trans_desc->in.block_w * srm_trans_desc->scale_x_int + srm_trans_desc->in.block_w * srm_trans_desc->scale_x_frag / PPA_LL_SRM_SCALING_FRAG_MAX;
+    // Leftover block data size less than DMA FIFO depth could cause DMA to miss the counting of such batch,
+    // so DMA never thinks it has received all the data, and will not raise EOF/DONE interrupt.
+    // The workaround is to bypass macro block order, so no such small leftover blocks.
+    uint32_t in_block_w, in_block_h;
+    uint32_t scale_x_int, scale_x_frag, scale_y_int, scale_y_frag;
+    if (srm_trans_desc->rotation_angle == PPA_SRM_ROTATION_ANGLE_90 || srm_trans_desc->rotation_angle == PPA_SRM_ROTATION_ANGLE_270) {
+        in_block_w = srm_trans_desc->in.block_h;
+        in_block_h = srm_trans_desc->in.block_w;
+        scale_x_int = srm_trans_desc->scale_y_int;
+        scale_x_frag = srm_trans_desc->scale_y_frag;
+        scale_y_int = srm_trans_desc->scale_x_int;
+        scale_y_frag = srm_trans_desc->scale_x_frag;
+    } else {
+        in_block_w = srm_trans_desc->in.block_w;
+        in_block_h = srm_trans_desc->in.block_h;
+        scale_x_int = srm_trans_desc->scale_x_int;
+        scale_x_frag = srm_trans_desc->scale_x_frag;
+        scale_y_int = srm_trans_desc->scale_y_int;
+        scale_y_frag = srm_trans_desc->scale_y_frag;
+    }
+    uint32_t w_out = in_block_w * scale_x_int + in_block_w * scale_x_frag / PPA_LL_SRM_SCALING_FRAG_MAX;
     uint32_t w_divisor = (ppa_out_color_mode == PPA_SRM_COLOR_MODE_ARGB8888 || ppa_out_color_mode == PPA_SRM_COLOR_MODE_RGB888) ? 32 : 64;
     uint32_t w_left = w_out % w_divisor;
     w_left = (w_left == 0) ? w_divisor : w_left;
-    uint32_t h_mb = (ppa_ll_srm_get_mb_size(platform->hal.dev) == PPA_LL_SRM_MB_SIZE_16_16) ? 16 : 32;
-    uint32_t h_in_left = srm_trans_desc->in.block_h % h_mb;
+    uint32_t h_mb = (mb_size == PPA_LL_SRM_MB_SIZE_16_16) ? 16 : 32;
+    uint32_t h_in_left = in_block_h % h_mb;
     h_in_left = (h_in_left == 0) ? h_mb : h_in_left;
-    uint32_t h_left = h_in_left * srm_trans_desc->scale_y_int + h_in_left * srm_trans_desc->scale_y_frag / PPA_LL_SRM_SCALING_FRAG_MAX;
+    uint32_t h_left = h_in_left * scale_y_int + h_in_left * scale_y_frag / PPA_LL_SRM_SCALING_FRAG_MAX;
     const uint32_t dma2d_fifo_depth_bits = 12 * 128;
     uint32_t out_pixel_depth = color_hal_pixel_format_fourcc_get_bit_depth((esp_color_fourcc_t)ppa_out_color_mode);
     bool bypass_mb_order = false;
-    if (((w_out > w_divisor) || (srm_trans_desc->in.block_h > h_mb)) && // will be cut into more than one trans unit
+    if (((w_out > w_divisor) || (in_block_h > h_mb)) && // will be cut into more than one trans unit
             ((w_left * h_left * out_pixel_depth) < dma2d_fifo_depth_bits)
        ) {
         bypass_mb_order = true;
     }
     ppa_ll_srm_bypass_mb_order(platform->hal.dev, bypass_mb_order);
+#endif
 
     ppa_ll_srm_start(platform->hal.dev);
 
@@ -183,11 +212,15 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
     ESP_RETURN_ON_FALSE(ppa_client && config, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(ppa_client->oper_type == PPA_OPERATION_SRM, ESP_ERR_INVALID_ARG, TAG, "client is not for SRM operations");
     ESP_RETURN_ON_FALSE(config->mode <= PPA_TRANS_MODE_NON_BLOCKING, ESP_ERR_INVALID_ARG, TAG, "invalid mode");
+    ESP_RETURN_ON_FALSE(config->mode != PPA_TRANS_MODE_BLOCKING || config->user_data == NULL, ESP_ERR_INVALID_ARG, TAG, "user_data must be NULL for blocking mode, `on_trans_done` callback won't be invoked upon completion");
     // in_buffer could be anywhere (ram, flash, psram), out_buffer ptr cannot in flash region
     ESP_RETURN_ON_FALSE(esp_ptr_internal(config->out.buffer) || esp_ptr_external_ram(config->out.buffer), ESP_ERR_INVALID_ARG, TAG, "invalid out.buffer addr");
     ESP_RETURN_ON_FALSE(ppa_ll_srm_is_color_mode_supported(config->in.srm_cm) &&
                         (ppa_ll_srm_is_color_mode_supported(config->out.srm_cm) && config->out.srm_cm != PPA_SRM_COLOR_MODE_YUV444),
                         ESP_ERR_INVALID_ARG, TAG, "unsupported color mode");
+    ESP_RETURN_ON_FALSE(config->in.pic_w <= DMA2D_LL_DESC_2D_FIELD_MAX && config->in.pic_h <= DMA2D_LL_DESC_2D_FIELD_MAX &&
+                        config->out.pic_w <= DMA2D_LL_DESC_2D_FIELD_MAX && config->out.pic_h <= DMA2D_LL_DESC_2D_FIELD_MAX,
+                        ESP_ERR_INVALID_ARG, TAG, "dimension exceeds DMA2D descriptor field limit");
     // For YUV420 input/output: in desc, ha/hb/va/vb/x/y must be even number
     // For YUV422 input/output: in desc, ha/hb/x must be even number
     if (config->in.srm_cm == PPA_SRM_COLOR_MODE_YUV420) {
@@ -207,11 +240,14 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
         ESP_RETURN_ON_FALSE(config->out.pic_w % 2 == 0 && config->out.block_offset_x % 2 == 0,
                             ESP_ERR_INVALID_ARG, TAG, "YUV422 output does not support odd w/offset_x");
     }
-    ESP_RETURN_ON_FALSE(config->in.block_w <= (config->in.pic_w - config->in.block_offset_x) &&
+    ESP_RETURN_ON_FALSE(config->in.block_w > 0 && config->in.block_h > 0 &&
+                        config->in.block_offset_x < config->in.pic_w &&
+                        config->in.block_w <= (config->in.pic_w - config->in.block_offset_x) &&
+                        config->in.block_offset_y < config->in.pic_h &&
                         config->in.block_h <= (config->in.pic_h - config->in.block_offset_y),
                         ESP_ERR_INVALID_ARG, TAG, "in.block_w/h + in.block_offset_x/y does not fit in the in pic");
     uint32_t out_pixel_depth = color_hal_pixel_format_fourcc_get_bit_depth((esp_color_fourcc_t)config->out.srm_cm); // bits
-    uint32_t out_pic_len = config->out.pic_w * config->out.pic_h * out_pixel_depth / 8;
+    uint32_t out_pic_len = (uint32_t)((uint64_t)config->out.pic_w * config->out.pic_h * out_pixel_depth / 8);
     ESP_RETURN_ON_FALSE(out_pic_len <= config->out.buffer_size, ESP_ERR_INVALID_ARG, TAG, "out.pic_w/h mismatch with out.buffer_size");
     ESP_RETURN_ON_FALSE(config->scale_x < PPA_LL_SRM_SCALING_INT_MAX && config->scale_x >= (1.0 / PPA_LL_SRM_SCALING_FRAG_MAX) &&
                         config->scale_y < PPA_LL_SRM_SCALING_INT_MAX && config->scale_y >= (1.0 / PPA_LL_SRM_SCALING_FRAG_MAX),
@@ -220,6 +256,18 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
     uint32_t scale_x_frag = (uint32_t)(config->scale_x * PPA_LL_SRM_SCALING_FRAG_MAX) & (PPA_LL_SRM_SCALING_FRAG_MAX - 1);
     uint32_t scale_y_int = (uint32_t)config->scale_y;
     uint32_t scale_y_frag = (uint32_t)(config->scale_y * PPA_LL_SRM_SCALING_FRAG_MAX) & (PPA_LL_SRM_SCALING_FRAG_MAX - 1);
+    // SRM processes in blocks. Block x/(y) (including leftover block) cannot be scaled to odd number when YUV422/YUV420 is the output color mode
+    // When block size is 16x16, odd number is possible, so needs to make them even
+    // When block size is 32x32, calculated frag values for full macro blocks are always even
+#if CONFIG_ESP32P4_SELECTS_REV_LESS_V3
+    // macro block size is 16x16, will do sanity check in ppa_srm_transaction_on_picked
+    if (config->out.srm_cm == PPA_SRM_COLOR_MODE_YUV420) {
+        scale_x_frag = scale_x_frag & ~1;
+        scale_y_frag = scale_y_frag & ~1;
+    } else if (PPA_IS_CM_YUV422(config->out.srm_cm)) {
+        scale_x_frag = scale_x_frag & ~1;
+    }
+#endif
     uint32_t new_block_w = 0;
     uint32_t new_block_h = 0;
     if (config->rotation_angle == PPA_SRM_ROTATION_ANGLE_0 || config->rotation_angle == PPA_SRM_ROTATION_ANGLE_180) {
@@ -229,9 +277,18 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
         new_block_w = (uint32_t)(scale_y_int * config->in.block_h + scale_y_frag * config->in.block_h / PPA_LL_SRM_SCALING_FRAG_MAX);
         new_block_h = (uint32_t)(scale_x_int * config->in.block_w + scale_x_frag * config->in.block_w / PPA_LL_SRM_SCALING_FRAG_MAX);
     }
-    ESP_RETURN_ON_FALSE(new_block_w <= (config->out.pic_w - config->out.block_offset_x) &&
+    ESP_RETURN_ON_FALSE(new_block_w > 0 && new_block_h > 0, ESP_ERR_INVALID_ARG, TAG, "scale makes block size to be 0");
+    ESP_RETURN_ON_FALSE(config->out.block_offset_x < config->out.pic_w &&
+                        new_block_w <= (config->out.pic_w - config->out.block_offset_x) &&
+                        config->out.block_offset_y < config->out.pic_h &&
                         new_block_h <= (config->out.pic_h - config->out.block_offset_y),
                         ESP_ERR_INVALID_ARG, TAG, "scale does not fit in the out pic");
+    // Check for the leftover block w/(h) to be even in YUV output color mode
+    if (config->out.srm_cm == PPA_SRM_COLOR_MODE_YUV420) {
+        ESP_RETURN_ON_FALSE(new_block_w % 2 == 0 && new_block_h % 2 == 0, ESP_ERR_INVALID_ARG, TAG, "YUV420 output does not support scaled block w/h to be odd");
+    } else if (PPA_IS_CM_YUV422(config->out.srm_cm)) {
+        ESP_RETURN_ON_FALSE(new_block_w % 2 == 0, ESP_ERR_INVALID_ARG, TAG, "YUV422 output does not support scaled block w to be odd");
+    }
 
     if (!ppa_check_buffer_alignment(ppa_client, &config->in, true, config->in.block_w) ||
             !ppa_check_buffer_alignment(ppa_client, &config->out, false, new_block_w)) {
@@ -256,17 +313,22 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
 
     // Write back and invalidate necessary data (note that the window content is not continuous in the buffer)
     // Write back in_buffer extended window (alignment not necessary on C2M direction)
-    uint32_t buf_alignment_size = (uint32_t)ppa_client->engine->platform->buf_alignment_size;
-    uint32_t in_pixel_depth = color_hal_pixel_format_fourcc_get_bit_depth((esp_color_fourcc_t)config->in.srm_cm); // bits
-    uint32_t in_ext_window = (uint32_t)config->in.buffer + config->in.block_offset_y * config->in.pic_w * in_pixel_depth / 8;
-    uint32_t in_ext_window_len = config->in.pic_w * config->in.block_h * in_pixel_depth / 8;
-    esp_cache_msync((void *)in_ext_window, in_ext_window_len, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+    size_t in_buf_alignment = esp_ptr_external_ram(config->in.buffer) ? ppa_client->engine->platform->ext_mem_align : ppa_client->engine->platform->int_mem_align;
+    if (in_buf_alignment > 0) {
+        uint32_t in_pixel_depth = color_hal_pixel_format_fourcc_get_bit_depth((esp_color_fourcc_t)config->in.srm_cm); // bits
+        uint32_t in_ext_window = (uint32_t)config->in.buffer + (uint32_t)((uint64_t)config->in.block_offset_y * config->in.pic_w * in_pixel_depth / 8);
+        uint32_t in_ext_window_len = (uint32_t)((uint64_t)config->in.pic_w * config->in.block_h * in_pixel_depth / 8);
+        esp_cache_msync((void *)in_ext_window, in_ext_window_len, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+    }
     // Invalidate out_buffer extended window (alignment strict on M2C direction)
-    uint32_t out_ext_window = (uint32_t)config->out.buffer + config->out.block_offset_y * config->out.pic_w * out_pixel_depth / 8;
-    uint32_t out_ext_window_aligned = PPA_ALIGN_DOWN(out_ext_window, buf_alignment_size);
-    uint32_t out_ext_window_len = config->out.pic_w * new_block_h * out_pixel_depth / 8; // actual ext_window_len must be less than or equal to this, since actual block_h <= new_block_h (may round down)
-    assert(out_ext_window + out_ext_window_len <= (uint32_t)config->out.buffer + config->out.buffer_size);
-    esp_cache_msync((void *)out_ext_window_aligned, PPA_ALIGN_UP(out_ext_window_len + (out_ext_window - out_ext_window_aligned), buf_alignment_size), ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    size_t out_buf_alignment = esp_ptr_external_ram(config->out.buffer) ? ppa_client->engine->platform->ext_mem_align : ppa_client->engine->platform->int_mem_align;
+    if (out_buf_alignment > 0) {
+        uint32_t out_ext_window = (uint32_t)config->out.buffer + (uint32_t)((uint64_t)config->out.block_offset_y * config->out.pic_w * out_pixel_depth / 8);
+        uint32_t out_ext_window_aligned = PPA_ALIGN_DOWN(out_ext_window, out_buf_alignment);
+        uint32_t out_ext_window_len = (uint32_t)((uint64_t)config->out.pic_w * new_block_h * out_pixel_depth / 8); // actual ext_window_len must be less than or equal to this, since actual block_h <= new_block_h (may round down)
+        assert(out_ext_window + out_ext_window_len <= (uint32_t)config->out.buffer + config->out.buffer_size);
+        esp_cache_msync((void *)out_ext_window_aligned, PPA_ALIGN_UP(out_ext_window_len + (out_ext_window - out_ext_window_aligned), out_buf_alignment), ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    }
 
     esp_err_t ret = ESP_OK;
     ppa_trans_t *trans_elm = NULL;
@@ -282,15 +344,6 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
         srm_trans_desc->scale_x_frag = scale_x_frag;
         srm_trans_desc->scale_y_int = scale_y_int;
         srm_trans_desc->scale_y_frag = scale_y_frag;
-        // SRM processes in blocks. Block x/(y) cannot be scaled to odd number when YUV422/YUV420 is the output color mode
-        // When block size is 16x16, odd number is possible, so needs to make them even
-        // When block size is 32x32, calculated frag values are always even
-        if (config->out.srm_cm == PPA_SRM_COLOR_MODE_YUV420) {
-            srm_trans_desc->scale_x_frag = srm_trans_desc->scale_x_frag & ~1;
-            srm_trans_desc->scale_y_frag = srm_trans_desc->scale_y_frag & ~1;
-        } else if (PPA_IS_CM_YUV422(config->out.srm_cm)) {
-            srm_trans_desc->scale_x_frag = srm_trans_desc->scale_x_frag & ~1;
-        }
         srm_trans_desc->alpha_value = new_alpha_value;
         srm_trans_desc->data_burst_length = ppa_client->data_burst_length;
 
@@ -308,7 +361,6 @@ esp_err_t ppa_do_scale_rotate_mirror(ppa_client_handle_t ppa_client, const ppa_s
 
         trans_elm->client = ppa_client;
         trans_elm->user_data = config->user_data;
-        xSemaphoreTake(trans_elm->sem, 0); // Ensure no transaction semaphore before transaction starts
 
         ret = ppa_do_operation(ppa_client, ppa_client->engine, trans_elm, config->mode);
         if (ret != ESP_OK) {

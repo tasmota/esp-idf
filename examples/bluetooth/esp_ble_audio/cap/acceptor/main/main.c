@@ -6,31 +6,21 @@
  */
 
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
-#include <errno.h>
 
 #include "nvs_flash.h"
-#include "esp_system.h"
-#include "esp_timer.h"
 
 #include "cap_acceptor.h"
-
-#define ADV_HANDLE          0x00
-#define ADV_SID             0
-#define ADV_TX_POWER        127
-#define ADV_ADDRESS         BLE_OWN_ADDR_PUBLIC
-#define ADV_PRIMARY_PHY     BLE_HCI_LE_PHY_1M
-#define ADV_SECONDARY_PHY   BLE_HCI_LE_PHY_2M
-#define ADV_INTERVAL        BLE_GAP_ADV_ITVL_MS(200)
 
 static uint8_t codec_data[] =
     ESP_BLE_AUDIO_CODEC_CAP_LC3_DATA(
         ESP_BLE_AUDIO_CODEC_CAP_FREQ_ANY,               /* Sampling frequency Any */
         ESP_BLE_AUDIO_CODEC_CAP_DURATION_7_5 | \
         ESP_BLE_AUDIO_CODEC_CAP_DURATION_10,            /* Frame duration 7.5ms/10ms */
-        ESP_BLE_AUDIO_CODEC_CAP_CHAN_COUNT_SUPPORT(2),  /* Supported channels 2 */
+        /* Bitfield, not a maximum: SUPPORT(1, 2) advertises both 1- and
+         * 2-channel configurations. A stereo Initiator may either configure two
+         * 1-channel streams (one per ASE) or a single 2-channel stream.
+         */
+        ESP_BLE_AUDIO_CODEC_CAP_CHAN_COUNT_SUPPORT(1, 2),
         30,                                             /* Minimum 30 octets per frame */
         155,                                            /* Maximum 155 octets per frame */
         2);                                             /* Maximum 2 codec frames per SDU */
@@ -49,18 +39,31 @@ static esp_ble_audio_pacs_cap_t source_cap = {
     .codec_cap = &codec_cap,
 };
 
-static struct peer_config peer = {
+struct peer_config peer = {
     .conn_handle = CONN_HANDLE_INIT,
 };
 
 static uint8_t ext_adv_data[] = {
     /* Flags */
     0x02, EXAMPLE_AD_TYPE_FLAGS, (EXAMPLE_AD_FLAGS_GENERAL | EXAMPLE_AD_FLAGS_NO_BREDR),
-    /* Incomplete List of 16-bit Service UUIDs */
-    0x05, EXAMPLE_AD_TYPE_UUID16_SOME, (ESP_BLE_AUDIO_UUID_ASCS_VAL & 0xFF),
-    ((ESP_BLE_AUDIO_UUID_ASCS_VAL >> 8) & 0xFF),
-    (ESP_BLE_AUDIO_UUID_CAS_VAL & 0xFF),
-    ((ESP_BLE_AUDIO_UUID_CAS_VAL >> 8) & 0xFF),
+    /* Incomplete List of 16-bit Service UUIDs:
+     *   CAS always; ASCS only when unicast role is built;
+     *   BASS only when broadcast role is built.
+     */
+#if CONFIG_EXAMPLE_UNICAST && CONFIG_EXAMPLE_BROADCAST
+    0x07, EXAMPLE_AD_TYPE_UUID16_SOME,
+    (ESP_BLE_AUDIO_UUID_ASCS_VAL & 0xFF), ((ESP_BLE_AUDIO_UUID_ASCS_VAL >> 8) & 0xFF),
+    (ESP_BLE_AUDIO_UUID_CAS_VAL  & 0xFF), ((ESP_BLE_AUDIO_UUID_CAS_VAL  >> 8) & 0xFF),
+    (ESP_BLE_AUDIO_UUID_BASS_VAL & 0xFF), ((ESP_BLE_AUDIO_UUID_BASS_VAL >> 8) & 0xFF),
+#elif CONFIG_EXAMPLE_UNICAST
+    0x05, EXAMPLE_AD_TYPE_UUID16_SOME,
+    (ESP_BLE_AUDIO_UUID_ASCS_VAL & 0xFF), ((ESP_BLE_AUDIO_UUID_ASCS_VAL >> 8) & 0xFF),
+    (ESP_BLE_AUDIO_UUID_CAS_VAL  & 0xFF), ((ESP_BLE_AUDIO_UUID_CAS_VAL  >> 8) & 0xFF),
+#elif CONFIG_EXAMPLE_BROADCAST
+    0x05, EXAMPLE_AD_TYPE_UUID16_SOME,
+    (ESP_BLE_AUDIO_UUID_CAS_VAL  & 0xFF), ((ESP_BLE_AUDIO_UUID_CAS_VAL  >> 8) & 0xFF),
+    (ESP_BLE_AUDIO_UUID_BASS_VAL & 0xFF), ((ESP_BLE_AUDIO_UUID_BASS_VAL >> 8) & 0xFF),
+#endif
     /* Service Data - 16-bit UUID */
     0x04, EXAMPLE_AD_TYPE_SERVICE_DATA16, (ESP_BLE_AUDIO_UUID_CAS_VAL & 0xFF),
     ((ESP_BLE_AUDIO_UUID_CAS_VAL >> 8) & 0xFF),
@@ -85,66 +88,29 @@ static uint8_t ext_adv_data[] = {
     0x0d, EXAMPLE_AD_TYPE_NAME_COMPLETE, 'c', 'a', 'p', '_', 'a', 'c', 'c', 'e', 'p', 't', 'o', 'r',
 };
 
-static void ext_adv_start(void)
-{
-    struct ble_gap_ext_adv_params ext_params = {0};
-    struct os_mbuf *data = NULL;
-    int err;
-
-    ext_params.connectable = 1;
-    ext_params.scannable = 0;
-    ext_params.legacy_pdu = 0;
-    ext_params.own_addr_type = ADV_ADDRESS;
-    ext_params.primary_phy = ADV_PRIMARY_PHY;
-    ext_params.secondary_phy = ADV_SECONDARY_PHY;
-    ext_params.tx_power = ADV_TX_POWER;
-    ext_params.sid = ADV_SID;
-    ext_params.itvl_min = ADV_INTERVAL;
-    ext_params.itvl_max = ADV_INTERVAL;
-
-    err = ble_gap_ext_adv_configure(ADV_HANDLE, &ext_params, NULL,
-                                    example_audio_gap_event_cb, NULL);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to configure ext adv params, err %d", err);
-        return;
-    }
-
-    data = os_msys_get_pkthdr(sizeof(ext_adv_data), 0);
-    if (data == NULL) {
-        ESP_LOGE(TAG, "Failed to get ext adv mbuf");
-        return;
-    }
-
-    err = os_mbuf_append(data, ext_adv_data, sizeof(ext_adv_data));
-    if (err) {
-        ESP_LOGE(TAG, "Failed to append ext adv data, err %d", err);
-        os_mbuf_free_chain(data);
-        return;
-    }
-
-    err = ble_gap_ext_adv_set_data(ADV_HANDLE, data);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to set ext adv data, err %d", err);
-        return;
-    }
-
-    err = ble_gap_ext_adv_start(ADV_HANDLE, 0, 0);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start ext advertising, err %d", err);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Extended adv instance %u started", ADV_HANDLE);
-}
-
 esp_ble_audio_cap_stream_t *stream_alloc(esp_ble_audio_dir_t dir)
 {
+    esp_ble_audio_cap_stream_t *pool;
+    size_t count;
+
     if (dir == ESP_BLE_AUDIO_DIR_SINK) {
-        return &peer.sink_stream;
+        pool = peer.sink_streams;
+        count = ARRAY_SIZE(peer.sink_streams);
+    } else if (dir == ESP_BLE_AUDIO_DIR_SOURCE) {
+        pool = peer.source_streams;
+        count = ARRAY_SIZE(peer.source_streams);
+    } else {
+        return NULL;
     }
 
-    if (dir == ESP_BLE_AUDIO_DIR_SOURCE) {
-        return &peer.source_stream;
+    /* A stream is free while no endpoint is attached to it: the stack attaches
+     * the endpoint right after the Config callback returns and detaches it on
+     * release, so the pool needs no separate in-use flag.
+     */
+    for (size_t i = 0; i < count; i++) {
+        if (pool[i].bap_stream.ep == NULL) {
+            return &pool[i];
+        }
     }
 
     return NULL;
@@ -152,10 +118,21 @@ esp_ble_audio_cap_stream_t *stream_alloc(esp_ble_audio_dir_t dir)
 
 void stream_released(const esp_ble_audio_cap_stream_t *cap_stream)
 {
-    if (cap_stream == &peer.source_stream) {
-        ESP_LOGI(TAG, "Source stream released");
-    } else if (cap_stream == &peer.sink_stream) {
-        ESP_LOGI(TAG, "Sink stream released");
+    /* Releasing detached the endpoint, which already returned the object to the
+     * pool (see stream_alloc), so there is nothing to book-keep here.
+     */
+    for (size_t i = 0; i < ARRAY_SIZE(peer.sink_streams); i++) {
+        if (cap_stream == &peer.sink_streams[i]) {
+            ESP_LOGI(TAG, "Sink stream #%zu released", i);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < ARRAY_SIZE(peer.source_streams); i++) {
+        if (cap_stream == &peer.source_streams[i]) {
+            ESP_LOGI(TAG, "Source stream #%zu released", i);
+            return;
+        }
     }
 }
 
@@ -240,6 +217,7 @@ static void pa_sync(esp_ble_audio_gap_app_event_t *event)
 {
     if (event->pa_sync.status) {
         ESP_LOGE(TAG, "PA sync failed, status %d", event->pa_sync.status);
+        broadcast_pa_sync_failed(event);
         return;
     }
 
@@ -248,39 +226,52 @@ static void pa_sync(esp_ble_audio_gap_app_event_t *event)
 
 static void pa_sync_lost(esp_ble_audio_gap_app_event_t *event)
 {
-    ESP_LOGI(TAG, "PA sync lost: sync_handle 0x%04x reason 0x%02x",
+    ESP_LOGI(TAG, "PA sync lost: sync_handle %u reason 0x%02x",
              event->pa_sync_lost.sync_handle, event->pa_sync_lost.reason);
 
-    broadcast_pa_lost(event);
+    broadcast_pa_lost(event->pa_sync_lost.sync_handle);
 }
 #endif /* CONFIG_EXAMPLE_BROADCAST */
 
 static void acl_connect(esp_ble_audio_gap_app_event_t *event)
 {
     if (event->acl_connect.status) {
-        ESP_LOGE(TAG, "connection failed, status %d", event->acl_connect.status);
+        ESP_LOGE(TAG, "Connection failed, status %d", event->acl_connect.status);
         return;
     }
 
-    ESP_LOGI(TAG, "Conn established:");
-    ESP_LOGI(TAG, "conn_handle 0x%04x status 0x%02x role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
-             event->acl_connect.conn_handle, event->acl_connect.status,
-             event->acl_connect.role, event->acl_connect.dst.val[5],
-             event->acl_connect.dst.val[4], event->acl_connect.dst.val[3],
-             event->acl_connect.dst.val[2], event->acl_connect.dst.val[1],
-             event->acl_connect.dst.val[0]);
+    ESP_LOGI(TAG, "Connected: handle %u role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
+             event->acl_connect.conn_handle, event->acl_connect.role,
+             EXAMPLE_BT_ADDR_PRINT_ARGS(event->acl_connect.dst.val));
 
     peer.conn_handle = event->acl_connect.conn_handle;
+    memcpy(peer.dst, event->acl_connect.dst.val, sizeof(peer.dst));
 }
 
 static void acl_disconnect(esp_ble_audio_gap_app_event_t *event)
 {
-    ESP_LOGI(TAG, "Conn terminated: conn_handle 0x%04x reason 0x%02x",
+    ESP_LOGI(TAG, "Disconnected: handle %u reason 0x%02x",
              event->acl_disconnect.conn_handle, event->acl_disconnect.reason);
 
     peer.conn_handle = CONN_HANDLE_INIT;
+    memset(peer.dst, 0, sizeof(peer.dst));
 
-    ext_adv_start();
+    ext_adv_start(ext_adv_data, sizeof(ext_adv_data));
+}
+
+static void security_change(esp_ble_audio_gap_app_event_t *event)
+{
+    if (event->security_change.status) {
+        ESP_LOGE(TAG, "Security failed: handle %u status %d",
+                 event->security_change.conn_handle,
+                 event->security_change.status);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Security: handle %u level %u bonded %u",
+             event->security_change.conn_handle,
+             event->security_change.sec_level,
+             event->security_change.bonded);
 }
 
 static void iso_gap_app_cb(esp_ble_audio_gap_app_event_t *event)
@@ -293,6 +284,7 @@ static void iso_gap_app_cb(esp_ble_audio_gap_app_event_t *event)
         break;
 #endif /* CONFIG_EXAMPLE_SCAN_SELF */
     case ESP_BLE_AUDIO_GAP_EVENT_PA_SYNC:
+    case ESP_BLE_AUDIO_GAP_EVENT_PA_SYNC_PAST:
         pa_sync(event);
         break;
     case ESP_BLE_AUDIO_GAP_EVENT_PA_SYNC_LOST:
@@ -305,6 +297,9 @@ static void iso_gap_app_cb(esp_ble_audio_gap_app_event_t *event)
     case ESP_BLE_AUDIO_GAP_EVENT_ACL_DISCONNECT:
         acl_disconnect(event);
         break;
+    case ESP_BLE_AUDIO_GAP_EVENT_SECURITY_CHANGE:
+        security_change(event);
+        break;
     default:
         break;
     }
@@ -312,10 +307,11 @@ static void iso_gap_app_cb(esp_ble_audio_gap_app_event_t *event)
 
 static void gatt_mtu_change(esp_ble_audio_gatt_app_event_t *event)
 {
+    uint16_t conn_handle = event->gatt_mtu_change.conn_handle;
     int err;
 
-    ESP_LOGI(TAG, "gatt mtu change, conn_handle %u, mtu %u",
-             event->gatt_mtu_change.conn_handle, event->gatt_mtu_change.mtu);
+    ESP_LOGI(TAG, "MTU updated: handle %u mtu %u",
+             conn_handle, event->gatt_mtu_change.mtu);
 
     if (event->gatt_mtu_change.mtu < ESP_BLE_AUDIO_ATT_MTU_MIN) {
         ESP_LOGW(TAG, "Invalid new mtu %u, shall be at least %u",
@@ -327,19 +323,19 @@ static void gatt_mtu_change(esp_ble_audio_gatt_app_event_t *event)
      * - The device is a Peripheral (Link Layer role);
      * - The device works as a GATT client.
      */
-    err = esp_ble_audio_gattc_disc_start(event->gatt_mtu_change.conn_handle);
+    err = esp_ble_audio_gattc_disc_start(conn_handle);
     if (err) {
         ESP_LOGE(TAG, "Failed to start svc disc, err %d", err);
         return;
     }
 
-    ESP_LOGI(TAG, "Start discovering gatt services");
+    ESP_LOGI(TAG, "Service discovery started: handle %u", conn_handle);
 }
 
 static void gattc_disc_cmpl(esp_ble_audio_gatt_app_event_t *event)
 {
-    ESP_LOGI(TAG, "gattc disc cmpl, status %u, conn_handle %u",
-             event->gattc_disc_cmpl.status, event->gattc_disc_cmpl.conn_handle);
+    ESP_LOGI(TAG, "Service discovery complete: handle %u",
+             event->gattc_disc_cmpl.conn_handle);
 }
 
 static void iso_gatt_app_cb(esp_ble_audio_gatt_app_event_t *event)
@@ -378,6 +374,12 @@ void app_main(void)
         return;
     }
 
+    err = app_host_init();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to init host, err %d", err);
+        return;
+    }
+
     err = esp_ble_audio_common_init(&info);
     if (err) {
         ESP_LOGE(TAG, "Failed to initialize audio, err %d", err);
@@ -409,7 +411,7 @@ void app_main(void)
         return;
     }
 
-    err = ble_svc_gap_device_name_set("CAP Acceptor");
+    err = set_device_name();
     if (err) {
         ESP_LOGE(TAG, "Failed to set device name, err %d", err);
         return;
@@ -425,5 +427,5 @@ void app_main(void)
     /* Advertising will be used by Unicast Server and
      * Broadcast Sink when self-scanning is disabled.
      */
-    ext_adv_start();
+    ext_adv_start(ext_adv_data, sizeof(ext_adv_data));
 }

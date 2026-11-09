@@ -12,6 +12,7 @@
 #include "soc/cnnt_sys_struct.h"
 #include "soc/hp_alive_sys_struct.h"
 #include "soc/hp_sys_clkrst_struct.h"
+#include "soc/lp_system_struct.h"
 #include "soc/reg_base.h"
 #include "soc/usb_utmi_struct.h"
 
@@ -38,6 +39,22 @@ FORCE_INLINE_ATTR void usb_utmi_ll_configure_ls(usb_utmi_dev_t *hw, bool paralle
 /* ----------------------------- RCC Functions  ----------------------------- */
 
 /**
+ * @brief Route UTMI PHY suspendm and PLL control to DWC2
+ *
+ * Clears the software force bits so DWC2 can drive PHY suspend/resume and PLL
+ * during port suspend and internal clock gating.
+ *
+ * @note reg_usb_otghs_phy_suspendm_force_en resets to 1 on ESP32-S31 and must be
+ *       cleared before automatic DWC-linked PHY suspend/resume works.
+ * @note reg_usb_otghs_phy_pll_force_en resets to 0 and is cleared here just for clarity
+ */
+FORCE_INLINE_ATTR void _usb_utmi_ll_enable_automatic_phy_control(void)
+{
+    HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_suspendm_force_en = 0;
+    HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_pll_force_en = 0;
+}
+
+/**
  * @brief Enable/disable bus clock for USB UTMI PHY and USB OTG HS controller
  *
  * @param[in] clk_en True to enable, false to disable
@@ -54,9 +71,9 @@ FORCE_INLINE_ATTR void _usb_utmi_ll_enable_bus_clock(bool clk_en)
     sys_usb_otg20_ctrl.sys_usb_otg20_phyref_clk_en = clk_en;
     USB_UTMI_LL_CNNT_SYS_REG->sys_usb_otg20_ctrl.val = sys_usb_otg20_ctrl.val;
 
-    // Enable/disable PHY PLL (must be force-enabled on ESP32-S31, as the default is off)
-    HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_pll_force_en = clk_en;
-    HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_pll_en = clk_en;
+    if (clk_en) {
+        _usb_utmi_ll_enable_automatic_phy_control();
+    }
 }
 
 // HP_SYS_CLKRST.usb_otghs_ctrl0 and sys_usb_otg20_ctrl only contain USB OTG fields, no atomic wrapper needed
@@ -128,7 +145,24 @@ FORCE_INLINE_ATTR void usb_utmi_ll_enable_data_pulldowns(bool enable)
 FORCE_INLINE_ATTR void usb_utmi_ll_enable_precise_detection(bool enable)
 {
     HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_otg_suspendm = enable;
-    HP_ALIVE_SYS.usb_otghs_ctrl.reg_usb_otghs_phy_suspendm = enable;
+}
+
+/**
+ * @brief Set USB OTG2.0 suspend state for PMU USB wakeup logic
+ *
+ * @param[in] in_suspend True if USB OTG2.0 is suspended
+ */
+FORCE_INLINE_ATTR void usb_utmi_ll_set_suspend_state(bool in_suspend)
+{
+    LP_SYS.usb_ctrl.usbotghs_in_suspend = in_suspend;
+}
+
+/**
+ * @brief Clear USB OTG2.0 wakeup status sent to PMU
+ */
+FORCE_INLINE_ATTR void usb_utmi_ll_clear_wakeup_status(void)
+{
+    LP_SYS.usb_ctrl.usbotghs_wakeup_clr = 1;
 }
 
 #ifdef __cplusplus

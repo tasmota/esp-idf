@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -142,6 +143,43 @@ TEST_CASE("Test TEE Secure Storage - Sign-verify (ecdsa_secp256r1)", "[sec_stora
 
         TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
     }
+}
+
+TEST_CASE("Test TEE Secure Storage - Signatures are non-deterministic (ecdsa_secp256r1)", "[sec_storage]")
+{
+    const size_t sig_len = 2 * ECDSA_SECP256R1_KEY_LEN;
+
+    uint8_t msg_digest[SHA256_DIGEST_SZ];
+    esp_fill_random(msg_digest, sizeof(msg_digest));
+
+    esp_tee_sec_storage_key_cfg_t key_cfg = {
+        .id = "ecdsa_nondet",
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1
+    };
+
+    esp_err_t err = esp_tee_sec_storage_clear_key(key_cfg.id);
+    TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_NOT_FOUND);
+    TEST_ESP_OK(esp_tee_sec_storage_gen_key(&key_cfg));
+
+    esp_tee_sec_storage_ecdsa_pubkey_t pubkey = {};
+    TEST_ESP_OK(esp_tee_sec_storage_ecdsa_get_pubkey(&key_cfg, &pubkey));
+
+    uint8_t signatures[MAX_SEC_STG_ITER][2 * ECDSA_SECP256R1_KEY_LEN];
+
+    for (unsigned int i = 0; i < MAX_SEC_STG_ITER; i++) {
+        esp_tee_sec_storage_ecdsa_sign_t sign = {};
+        TEST_ESP_OK(esp_tee_sec_storage_ecdsa_sign(&key_cfg, msg_digest, sizeof(msg_digest), &sign));
+
+        TEST_ESP_OK(verify_ecdsa_sign(key_cfg.type, msg_digest, sizeof(msg_digest), &pubkey, &sign));
+
+        for (unsigned int j = 0; j < i; j++) {
+            TEST_ASSERT_TRUE_MESSAGE(memcmp(sign.signature, signatures[j], sig_len) != 0,
+                                     "ECDSA signature repeated - deterministic signing detected");
+        }
+        memcpy(signatures[i], sign.signature, sig_len);
+    }
+
+    TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
 }
 
 #if CONFIG_SECURE_TEE_SEC_STG_SUPPORT_SECP384R1_SIGN
@@ -347,6 +385,19 @@ TEST_CASE("Test TEE Secure Storage - Null Pointer and Zero Length", "[sec_storag
     TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
     TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
 
+    const size_t oversized_len = MAX_AEAD_INPUT_LEN + 1;
+    uint8_t *oversized = heap_caps_malloc(oversized_len, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    TEST_ASSERT_NOT_NULL(oversized);
+
+    aead_ctx.input = oversized;
+    aead_ctx.input_len = oversized_len;
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), oversized));
+    TEST_ESP_ERR(ESP_ERR_INVALID_SIZE, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), oversized));
+
+    free(oversized);
+    aead_ctx.input = data;
+    aead_ctx.input_len = sizeof(data);
+
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_id));
 
     key_cfg.type = ESP_SEC_STG_KEY_ECDSA_SECP256R1;
@@ -362,6 +413,77 @@ TEST_CASE("Test TEE Secure Storage - Null Pointer and Zero Length", "[sec_storag
     TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_get_pubkey(&key_cfg, NULL));
 
     TEST_ESP_OK(esp_tee_sec_storage_clear_key(key_cfg.id));
+}
+
+#if CONFIG_SECURE_TEE_ATTESTATION
+TEST_CASE("Test TEE Secure Storage - Attestation key is not REE-accessible", "[sec_storage]")
+{
+    const char *att_key_id = CONFIG_SECURE_TEE_ATT_KEY_STR_ID;
+
+    esp_tee_sec_storage_key_cfg_t key_cfg = {
+        .id = att_key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1
+    };
+
+    uint8_t digest[SHA256_DIGEST_SZ];
+    esp_fill_random(digest, sizeof(digest));
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_gen_key(&key_cfg));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_clear_key(att_key_id));
+
+    esp_tee_sec_storage_ecdsa_sign_t sign = {};
+    esp_tee_sec_storage_ecdsa_pubkey_t pubkey = {};
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_sign(&key_cfg, digest, sizeof(digest), &sign));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_get_pubkey(&key_cfg, &pubkey));
+
+    uint8_t data[31], tag[12], iv[12];
+    esp_tee_sec_storage_aead_ctx_t aead_ctx = {
+        .key_id = att_key_id,
+        .input = data,
+        .input_len = sizeof(data),
+    };
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_encrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_aead_decrypt(&aead_ctx, iv, sizeof(iv), tag, sizeof(tag), data));
+}
+#endif
+
+TEST_CASE("Test TEE Secure Storage - Verify data encryption", "[sec_storage_encr]")
+{
+    ESP_LOGI(TAG, "Populating NVS-based TEE Secure Storage; encrypted with XTS-AES-512");
+    static const struct {
+        const char *id;
+        esp_tee_sec_storage_type_t type;
+        uint32_t flags;
+    } key_cfgs[] = {
+        { "aes256_key0",     ESP_SEC_STG_KEY_AES256,          SEC_STORAGE_FLAG_WRITE_ONCE },
+        { "aes256_key1",     ESP_SEC_STG_KEY_AES256,          SEC_STORAGE_FLAG_NONE       },
+        { "attest_key",      ESP_SEC_STG_KEY_ECDSA_SECP256R1, SEC_STORAGE_FLAG_WRITE_ONCE },
+        { "ecdsa_p256_key0", ESP_SEC_STG_KEY_ECDSA_SECP256R1, SEC_STORAGE_FLAG_NONE       },
+    };
+
+    for (size_t i = 0; i < sizeof(key_cfgs) / sizeof(key_cfgs[0]); i++) {
+        esp_tee_sec_storage_key_cfg_t cfg = {
+            .id    = key_cfgs[i].id,
+            .type  = key_cfgs[i].type,
+            .flags = key_cfgs[i].flags,
+        };
+        if ((cfg.flags & SEC_STORAGE_FLAG_WRITE_ONCE) == 0) {
+            esp_err_t err = esp_tee_sec_storage_clear_key(cfg.id);
+            TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_NOT_FOUND);
+        }
+        TEST_ESP_OK(esp_tee_sec_storage_gen_key(&cfg));
+    }
+
+    const size_t dump_sz = 4096;
+    uint8_t *buf = heap_caps_malloc(dump_sz, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    TEST_ASSERT_NOT_NULL(buf);
+
+    TEST_ESP_OK((esp_err_t)esp_tee_service_call(2, SS_ESP_TEE_TEST_READ_SEC_STG, buf));
+    printf("\nSEC_STG_DUMP_BEGIN\n");
+    ESP_LOG_BUFFER_HEX(TAG, buf, dump_sz);
+    printf("SEC_STG_DUMP_END\n");
+
+    free(buf);
 }
 
 TEST_CASE("Test TEE Secure Storage - WRITE_ONCE keys", "[sec_storage]")
@@ -381,6 +503,22 @@ TEST_CASE("Test TEE Secure Storage - WRITE_ONCE keys", "[sec_storage]")
     TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_gen_key(&key_cfg));
 
     TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_clear_key(key_cfg.id));
+}
+
+TEST_CASE("Test TEE Secure Storage - TEE_ONLY keys", "[sec_storage]")
+{
+    const char *key_id = "key_id_tee_only";
+    esp_tee_sec_storage_key_cfg_t key_cfg = {
+        .id = key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1,
+        .flags = SEC_STORAGE_FLAG_TEE_ONLY,
+    };
+
+    esp_err_t err = esp_tee_sec_storage_clear_key(key_cfg.id);
+    TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_NOT_FOUND);
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_gen_key(&key_cfg));
+    TEST_ESP_ERR(ESP_ERR_NOT_FOUND, esp_tee_sec_storage_clear_key(key_cfg.id));
 }
 
 static void test_aead_encrypt_decrypt(const char *key_id, const uint8_t *input, size_t len)
@@ -484,10 +622,19 @@ TEST_CASE("Test TEE Secure Storage - Host-generated keys", "[sec_storage_host_ke
     size_t token_len = 0;
     TEST_ESP_OK(psa_initial_attest_get_token(auth_challenge, challenge_size, token_buf, token_buf_size, &token_len));
     free(token_buf);
-
-    const char *attest_key_id  = "attest_key";
-    TEST_ESP_ERR(ESP_ERR_INVALID_STATE, esp_tee_sec_storage_clear_key(attest_key_id));
 #endif /* CONFIG_SECURE_TEE_ATTESTATION */
+
+    const char *attest_key_id = "attest_key";
+    esp_tee_sec_storage_key_cfg_t attest_cfg = {
+        .id   = attest_key_id,
+        .type = ESP_SEC_STG_KEY_ECDSA_SECP256R1,
+    };
+    esp_tee_sec_storage_ecdsa_sign_t attest_sign = {0};
+    esp_tee_sec_storage_ecdsa_pubkey_t attest_pubkey = {0};
+
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_sign(&attest_cfg, digest_buf, SHA256_DIGEST_SZ, &attest_sign));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_ecdsa_get_pubkey(&attest_cfg, &attest_pubkey));
+    TEST_ESP_ERR(ESP_ERR_INVALID_ARG, esp_tee_sec_storage_clear_key(attest_key_id));
 }
 
 #if CONFIG_MBEDTLS_TEE_SEC_STG_ECDSA_SIGN
@@ -588,21 +735,6 @@ static void test_ecdsa_sign(esp_ecdsa_curve_t curve)
 
     TEST_ASSERT_EQUAL_HEX32(PSA_SUCCESS, status);
     TEST_ASSERT_EQUAL(signature_len, 2 * key_len);
-
-#if CONFIG_MBEDTLS_ECDSA_DETERMINISTIC
-    uint8_t signature_det_verify[2 * ECDSA_SECP384R1_KEY_LEN];
-    size_t signature_det_verify_len = 0;
-
-    status = psa_sign_hash(priv_key_id,
-                           alg,
-                           sha, sha_len,
-                           signature_det_verify, 2 * key_len,
-                           &signature_det_verify_len);
-
-    TEST_ASSERT_EQUAL_HEX32(PSA_SUCCESS, status);
-    TEST_ASSERT_EQUAL(signature_det_verify_len, signature_len);
-    TEST_ASSERT_EQUAL_HEX8_ARRAY(signature, signature_det_verify, signature_len);
-#endif
 
     psa_set_key_type(&pub_key_attr, PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1));
     psa_set_key_bits(&pub_key_attr, key_len * 8);

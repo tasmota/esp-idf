@@ -173,7 +173,14 @@ typedef void (tBTM_VSC_CMPL_CB) (tBTM_VSC_CMPL *p1);
 */
 // typedef UINT8 (tBTM_FILTER_CB) (BD_ADDR bd_addr, DEV_CLASS dc);
 
-typedef void (tBTM_DTM_CMD_CMPL_CBACK) (void *p1);
+/*
+ * DTM (Direct Test Mode) command complete callback.
+ *
+ * The controller returns a variable-length parameter block depending on the
+ * specific LE test command. Propagate the parameter length so upper layers can
+ * validate before parsing and avoid OOB reads on malformed/truncated responses.
+ */
+typedef void (tBTM_DTM_CMD_CMPL_CBACK) (UINT8 *p, UINT16 len);
 
 typedef void (tBTM_SET_RAND_ADDR_CBACK) (UINT8 status);
 
@@ -899,14 +906,12 @@ typedef struct {
     UINT16      pkt_types;
 } tBTM_SET_ACL_PKT_TYPES_RESULTS;
 
-#if (ENC_KEY_SIZE_CTRL_MODE != ENC_KEY_SIZE_CTRL_MODE_NONE)
 /* Structure returned with set minimal encryption key size event (in tBTM_CMPL_CB callback function)
 ** in response to BTM_SetMinEncKeySize call.
 */
 typedef struct {
     UINT8 hci_status;
 } tBTM_SET_MIN_ENC_KEY_SIZE_RESULTS;
-#endif
 
 /* Structure returned with set BLE channels event (in tBTM_CMPL_CB callback function)
 ** in response to BTM_BleSetChannels call.
@@ -1109,6 +1114,7 @@ typedef UINT8 tBTM_SCO_ROUTE_TYPE;
 #define BTM_SCO_CODEC_NONE          0x0000
 #define BTM_SCO_CODEC_CVSD          0x0001
 #define BTM_SCO_CODEC_MSBC          0x0002
+#define BTM_SCO_CODEC_LC3           0x0004
 typedef UINT16 tBTM_SCO_CODEC_TYPE;
 
 
@@ -1586,7 +1592,7 @@ typedef UINT8 tBTM_IO_CAP;
 #define BTM_BLE_CSR_KEY_MASK    (1 << 2)
 #define BTM_BLE_LINK_KEY_MASK   (1 << 3)
 
-#if (CLASSIC_BT_INCLUDED == TRUE)
+#if (SMP_CTKD_INCLUDED == TRUE)
 #define BTM_BLE_INITIATOR_KEY_MASK  (BTM_BLE_ENC_KEY_MASK | BTM_BLE_ID_KEY_MASK | BTM_BLE_CSR_KEY_MASK | BTM_BLE_LINK_KEY_MASK)
 #define BTM_BLE_RESPONDER_KEY_MASK  (BTM_BLE_ENC_KEY_MASK | BTM_BLE_ID_KEY_MASK | BTM_BLE_CSR_KEY_MASK | BTM_BLE_LINK_KEY_MASK)
 #else
@@ -1810,6 +1816,9 @@ typedef struct {
     BOOLEAN is_pair_cancel;
     BOOLEAN smp_over_br;
     tSMP_AUTH_REQ auth_mode;
+    /* Mirrors tSMP_CMPL.keep_bond; layouts must stay identical because
+       btm_proc_smp_cback casts tSMP_EVT_DATA to tBTM_LE_EVT_DATA. */
+    BOOLEAN keep_bond;
 } tBTM_LE_COMPLT;
 #endif
 
@@ -1979,8 +1988,16 @@ typedef struct {
 /*************************************
 **  Power Manager Callback Functions
 **************************************/
+typedef struct {
+    UINT16 max_tx_lat;
+    UINT16 max_rx_lat;
+    UINT16 min_remote_to;
+    UINT16 min_local_to;
+} tBTM_SSR_PARAMS;
+
 typedef void (tBTM_PM_STATUS_CBACK) (BD_ADDR p_bda, tBTM_PM_STATUS status,
-                                     UINT16 value, UINT8 hci_status);
+                                     UINT16 value, UINT8 hci_status,
+                                     const tBTM_SSR_PARAMS *p_ssr);
 
 
 /************************
@@ -2352,14 +2369,14 @@ tBTM_STATUS BTM_SetAclPktTypes(BD_ADDR remote_bda, UINT16 pkt_types, tBTM_CMPL_C
 ** Description      Send HCI Set Minimum Encryption Key Size
 **
 ** Returns
-**      BTM_SUCCESS         Command sent.
-**      BTM_NO_RESOURCES    If out of resources to send the command.
+**      BTM_SUCCESS             Command sent.
+**      BTM_NO_RESOURCES        If out of resources to send the command.
+**      BTM_WRONG_MODE          If the controller is not ready.
+**      BTM_MODE_UNSUPPORTED    If neither standard HCI nor VSC is available.
 **
 *******************************************************************************/
 //extern
-#if (ENC_KEY_SIZE_CTRL_MODE != ENC_KEY_SIZE_CTRL_MODE_NONE)
 tBTM_STATUS BTM_SetMinEncKeySize(UINT8 key_size, tBTM_CMPL_CB *p_cb);
-#endif
 
 /*******************************************************************************
 **
@@ -4132,9 +4149,15 @@ tBTM_STATUS BTM_ReadPowerMode (BD_ADDR remote_bda,
 **                  connection if it is in ACTIVE mode.
 **
 ** Input Param      remote_bda - device address of desired ACL connection
-**                  max_lat    - maximum latency (in 0.625ms)(0-0xFFFE)
-**                  min_rmt_to - minimum remote timeout
-**                  min_loc_to - minimum local timeout
+**                  max_lat    - maximum latency (in 0.625ms)(0x0002-0xFFFE);
+**                               0 disables subrating.
+**                               ACTIVE, with no mode command queued on this
+**                               link: send latency 2 and clear the flag.
+**                               SNIFF: send the current interval, keep the flag.
+**                               Any other state: store until the next
+**                               ACTIVE or SNIFF.
+**                  min_rmt_to - minimum remote timeout (0x0000-0xFFFE)
+**                  min_loc_to - minimum local timeout (0x0000-0xFFFE)
 **
 **
 ** Returns          BTM_SUCCESS if the HCI command is issued successful,

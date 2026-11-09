@@ -27,7 +27,7 @@
  * fill and check memory region with given patterns in the heap
  * components.
  */
-#include "esp_rom_tlsf.h"
+#include "rom_patch_tlsf.h"
 #endif
 
 #ifdef MULTI_HEAP_POISONING
@@ -46,8 +46,6 @@
 #define HEAD_CANARY_PATTERN 0xABBA1234
 #define TAIL_CANARY_PATTERN 0xBAAD5678
 
-
-#define ALIGN_UP(num, align) (((num) + ((align) - 1)) & ~((align) - 1))
 
 typedef struct {
     uint32_t head_canary;
@@ -371,6 +369,7 @@ multi_heap_handle_t multi_heap_register(void *start, size_t size)
 #if CONFIG_HEAP_TLSF_USE_ROM_IMPL
     tlsf_poison_fill_pfunc_set(multi_heap_internal_poison_fill_region);
     tlsf_poison_check_pfunc_set(multi_heap_internal_check_block_poisoning);
+    tlsf_walk_pool_pfunc_set(multi_heap_internal_check_block_poisoning);
 #endif // CONFIG_HEAP_TLSF_USE_ROM_IMPL
     return multi_heap_register_impl(start, size);
 }

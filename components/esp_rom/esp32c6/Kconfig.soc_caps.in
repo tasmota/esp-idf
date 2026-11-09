@@ -75,6 +75,10 @@ config ESP_ROM_HAS_NEWLIB_NORMAL_FORMAT
     bool
     default y
 
+config ESP_ROM_HAS_LIBGCC
+    bool
+    default y
+
 config ESP_ROM_REV0_HAS_NO_ECDSA_INTERFACE
     bool
     default y
@@ -122,3 +126,7 @@ config ESP_ROM_HAS_SUBOPTIMAL_NEWLIB_ON_MISALIGNED_MEMORY
 config ESP_ROM_SUPPORT_SECURE_BOOT_FAST_WAKEUP
     bool
     default y
+
+config ESP_ROM_BOOTLOADER_OFFSET_FLASH
+    hex
+    default 0x0

@@ -13,7 +13,7 @@
 
     {IDF_TARGET_NAME} 支持蓝牙 5.0 (LE)，并且已经通过低功耗蓝牙 5.4 认证。
 
-.. only:: esp32c2 or esp32c6 or esp32h2 or esp32c5 or esp32c61
+.. only:: esp32c2 or esp32c6 or esp32h2 or esp32h21 or esp32c5 or esp32c61
 
     {IDF_TARGET_NAME} 支持蓝牙 5.0 (LE)，并且已经通过低功耗蓝牙 5.3 认证。
 
@@ -37,7 +37,7 @@ ESP-IDF 中的低功耗蓝牙协议栈是一个分层架构，可在 {IDF_TARGET
 
         {IDF_TARGET_NAME} 蓝牙协议栈架构
 
-.. only:: esp32h2
+.. only:: esp32h2 or esp32h21
 
     .. figure:: ../../../_static/bluetooth-architecture-no-blufi.png
         :align: center
@@ -227,6 +227,17 @@ ESP-NimBLE 仅支持低功耗蓝牙，不支持经典蓝牙。
 
   - :doc:`BluFi 文档 <blufi>`
   - :example:`应用示例 <bluetooth/blufi>`
+
+
+.. only:: SOC_BLE_AUDIO_SUPPORTED
+
+  ESP-BLE-AUDIO
+  ^^^^^^^^^^^^^
+
+  蓝牙低功耗音频是蓝牙核心规范 5.2 引入的音频架构。ESP-BLE-AUDIO 在 ESP-BLE-ISO 传输层之上提供通用音频框架 (Generic Audio Framework) 的规范和服务。两者均可运行在 ESP-Bluedroid 或 ESP-NimBLE 主机协议栈上。
+
+  - :doc:`ESP-IDF 低功耗音频文档 <../esp-ble-audio/ble-audio-index>`：标准概述、架构、功能支持状态等。
+  - :example:`应用示例 <bluetooth/esp_ble_audio>`
 
 
 应用

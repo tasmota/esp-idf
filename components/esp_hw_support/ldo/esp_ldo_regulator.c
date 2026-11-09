@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,6 +15,7 @@
 #include "hal/ldo_ll.h"
 #include "esp_ldo_regulator.h"
 #include "esp_private/critical_section.h"
+#include "esp_rom_sys.h"
 
 ESP_LOG_ATTR_TAG(TAG, "ldo");
 
@@ -33,8 +34,8 @@ static const uint32_t s_ldo_channel_adjustable_mask = LDO_LL_ADJUSTABLE_CHAN_MAS
 
 // Allocate LDO channel memory statically
 // LDO is a fundamental module and should be usable even without a heap allocator
-static ldo_regulator_channel_t s_ldo_channels[LDO_LL_NUM_UNITS] = {
-    [0 ... LDO_LL_NUM_UNITS - 1] = {
+static ldo_regulator_channel_t s_ldo_channels[SOC_GP_LDO_NUM_UNITS] = {
+    [0 ... SOC_GP_LDO_NUM_UNITS - 1] = {
         .chan_id = -1,
         .voltage_mv = 0,
         .ref_cnt = 0,
@@ -56,6 +57,7 @@ esp_err_t esp_ldo_acquire_channel(const esp_ldo_channel_config_t *config, esp_ld
 
     bool check_adjustable_constraint_valid = true;
     bool check_voltage_constraint_valid = true;
+    bool ldo_enabled = false;
     esp_os_enter_critical(&s_spinlock);
     if (config->flags.adjustable) {
         // the user wants to adjust it
@@ -87,6 +89,7 @@ esp_err_t esp_ldo_acquire_channel(const esp_ldo_channel_config_t *config, esp_ld
             uint8_t dref = 0;
             uint8_t mul = 0;
             bool use_rail_voltage = false;
+            ldo_ll_enable_current_limit(unit_id, true);
             // calculate the dref and mul
             ldo_ll_voltage_to_dref_mul(unit_id, config->voltage_mv, &dref, &mul, &use_rail_voltage);
             ldo_ll_adjust_voltage(unit_id, dref, mul, use_rail_voltage);
@@ -95,6 +98,8 @@ esp_err_t esp_ldo_acquire_channel(const esp_ldo_channel_config_t *config, esp_ld
             // suppress voltage ripple
             ldo_ll_enable_ripple_suppression(unit_id, true);
             ldo_ll_enable(unit_id, true);
+            ldo_ll_enable_current_limit(unit_id, false);
+            ldo_enabled = true;
         }
         // update the channel attributes
         channel->ref_cnt++;
@@ -109,6 +114,10 @@ esp_err_t esp_ldo_acquire_channel(const esp_ldo_channel_config_t *config, esp_ld
                         config->voltage_mv, channel->voltage_mv);
     ESP_RETURN_ON_FALSE(check_adjustable_constraint_valid, ESP_ERR_INVALID_ARG, TAG,
                         "can't acquire the channel, already in use by others or not adjustable");
+
+    if (ldo_enabled && config->voltage_stable_delay_us > 0) {
+        esp_rom_delay_us(config->voltage_stable_delay_us);
+    }
 
     if (out_handle) {
         *out_handle = channel;
@@ -146,7 +155,9 @@ esp_err_t esp_ldo_release_channel(esp_ldo_channel_handle_t chan)
 esp_err_t esp_ldo_channel_adjust_voltage(esp_ldo_channel_handle_t chan, int voltage_mv)
 {
     ESP_RETURN_ON_FALSE(chan, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    ESP_RETURN_ON_FALSE(chan->flags.adjustable, ESP_ERR_NOT_SUPPORTED, TAG, "LDO is not adjustable");
+    if (chan->voltage_mv != voltage_mv) {
+        ESP_RETURN_ON_FALSE(chan->flags.adjustable, ESP_ERR_NOT_SUPPORTED, TAG, "LDO is not adjustable");
+    }
     // check if the target voltage is within the recommended range
     if (!((voltage_mv == LDO_LL_RAIL_VOLTAGE_MV) ||
             (voltage_mv >= LDO_LL_RECOMMEND_MIN_VOLTAGE_MV && voltage_mv <= LDO_LL_RECOMMEND_MAX_VOLTAGE_MV))) {
@@ -174,7 +185,7 @@ esp_err_t esp_ldo_dump(FILE *stream)
     char line[100];
     fprintf(stream, "ESP LDO Channel State:\n");
     fprintf(stream, "%-5s %-5s %-10s %-12s %-5s\n", "Index", "ID", "ref_cnt", "voltage_mv", "adjustable");
-    for (int i = 0; i < LDO_LL_NUM_UNITS; i++) {
+    for (int i = 0; i < SOC_GP_LDO_NUM_UNITS; i++) {
         char *buf = line;
         size_t len = sizeof(line);
         memset(line, 0x0, len);

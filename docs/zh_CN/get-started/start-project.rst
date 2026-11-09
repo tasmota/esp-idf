@@ -1,6 +1,6 @@
-{IDF_TARGET_FEATURES:default="[NEEDS TO BE UPDATED]", esp32="WiFi/BT/BLE, silicon revision 1, 2 MB external flash", esp32s2="WiFi, silicon revision 0, 2 MB external flash", esp32s3="This is esp32s3 chip with 2 CPU core(s), WiFi/BLE, silicon revision 0, 2 MB external flash", esp32c2="WiFi/BLE, silicon revision 0, 2 MB embedded flash", esp32c3="WiFi/BLE, silicon revision 0, 2 MB external flash", esp32c6="WiFi/BLE, 802.15.4 (Zigbee/Thread), silicon revision v0.0, 2 MB external flash", esp32h2="BLE, 802.15.4 (Zigbee/Thread), silicon revision v0.1, 2 MB external flash", esp32p4="silicon revision v0.0, 2 MB external flash", esp32c5="WiFi/BLE, 802.15.4 (Zigbee/Thread), silicon revision v1.0, 2 MB external flash", esp32c61="WiFi/BLE, silicon revision v1.0, 2 MB external flash"}
+{IDF_TARGET_FEATURES:default="[NEEDS TO BE UPDATED]", esp32="WiFi/BT/BLE, silicon revision 1, 2 MB external flash", esp32s2="WiFi, silicon revision 0, 2 MB external flash", esp32s3="This is esp32s3 chip with 2 CPU core(s), WiFi/BLE, silicon revision 0, 2 MB external flash", esp32c2="WiFi/BLE, silicon revision 0, 2 MB embedded flash", esp32c3="WiFi/BLE, silicon revision 0, 2 MB external flash", esp32c6="WiFi/BLE, 802.15.4 (Zigbee/Thread), silicon revision v0.0, 2 MB external flash", esp32h2="BLE, 802.15.4 (Zigbee/Thread), silicon revision v0.1, 2 MB external flash", esp32p4="silicon revision v0.0, 2 MB external flash", esp32c5="WiFi/BLE, 802.15.4 (Zigbee/Thread), silicon revision v1.0, 2 MB external flash", esp32c61="WiFi/BLE, silicon revision v1.0, 2 MB external flash", esp32s31="WiFi/BT/BLE, 802.15.4 (Zigbee/Thread), silicon revision v0.0, 2 MB external flash"}
 
-{IDF_TARGET_HEAP_SIZE:default="[NEEDS TO BE UPDATED]", esp32="298968", esp32s2="253900", esp32s3="390684", esp32c2="203888", esp32c3="337332", esp32c6="473816", esp32h2="268256", esp32p4="618848", esp32c5="348724", esp32c61="272868"}
+{IDF_TARGET_HEAP_SIZE:default="[NEEDS TO BE UPDATED]", esp32="298968", esp32s2="253900", esp32s3="390684", esp32c2="203888", esp32c3="337332", esp32c6="473816", esp32h2="268256", esp32p4="618848", esp32c5="348724", esp32c61="272868", esp32s31="480544"}
 
 编译项目
 =========================
@@ -118,7 +118,7 @@
 
     1. 退出监视器。
     2. 返回 ``menuconfig``。
-    3. 进入 ``Component config`` --> ``Hardware Settings`` --> ``Main XTAL Config`` --> ``Main XTAL frequency`` 进行配置，将 :ref:`CONFIG_XTAL_FREQ` 设置为 26 MHz。
+    3. 将 :menuitem:`CONFIG_XTAL_FREQ` 设置为 26 MHz。
     4. 重新 ``编译和烧录`` 应用程序。
 
     在当前的 ESP-IDF 版本中，{IDF_TARGET_NAME} 支持的主晶振频率如下：
@@ -162,7 +162,7 @@
 兼容的 Python 版本
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-ESP-IDF 支持 Python 3.10 及以上版本，建议升级操作系统到最新版本从而更新 Python。也可选择从 `源码 <https://www.python.org/downloads/>`_ 安装最新版 Python，或使用 Python 管理系统如 `pyenv <https://github.com/pyenv/pyenv>`_ 对版本进行升级管理。
+ESP-IDF 支持 Python 3.11 及以上版本，建议升级操作系统到最新版本从而更新 Python。也可选择从 `源码 <https://www.python.org/downloads/>`_ 安装最新版 Python，或使用 Python 管理系统如 `pyenv <https://github.com/pyenv/pyenv>`_ 对版本进行升级管理。
 
 .. only:: esp32 or esp32s2 or esp32s3
 

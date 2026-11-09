@@ -14,6 +14,7 @@ from pytest_embedded_idf.utils import soc_filtered_targets
     ],
     indirect=True,
 )
+@pytest.mark.temp_skip_ci(targets=['esp32h21'], reason='cannot pass')  # TODO: IDF-16193
 @idf_parametrize(
     'target', soc_filtered_targets('SOC_GPSPI_SUPPORTED == 1 and IDF_TARGET not in ["esp32c5"]'), indirect=['target']
 )
@@ -57,6 +58,27 @@ def test_master_single_dev_esp32c5_rev1(case_tester) -> None:  # type: ignore
         case_tester.run_normal_case(case=case, reset=True)
 
 
+def get_runner_psram_marks(target: str) -> tuple[pytest.MarkDecorator, ...]:
+    if target == 'esp32s3':
+        return (pytest.mark.flash_encryption_f8r8,)
+    return (pytest.mark.flash_encryption,)
+
+
+@pytest.mark.parametrize(
+    'config, target',
+    [
+        pytest.param('flash_enc', target, marks=get_runner_psram_marks(target))
+        for target in soc_filtered_targets('SOC_PSRAM_DMA_CAPABLE == 1 and SOC_GPSPI_SUPPORTED == 1')
+    ],
+    indirect=True,
+)
+def test_spi_master_flash_encryption(case_tester) -> None:  # type: ignore
+    for case in case_tester.test_menu:
+        if 'test_env' in case.attributes:
+            continue  # If `test_env` is defined, should not run on generic runner
+        case_tester.run_normal_case(case=case, reset=True)
+
+
 # Job for test_env `external_flash` just for esp32 only
 @pytest.mark.flash_multi
 @pytest.mark.parametrize(
@@ -84,7 +106,7 @@ def test_master_esp_flash(case_tester) -> None:  # type: ignore
     ],
     indirect=True,
 )
+@pytest.mark.temp_skip_ci(targets=['esp32h21'], reason='lack of runner')  # TODO: IDF-16193
 @idf_parametrize('target', ['supported_targets'], indirect=['target'])
-@pytest.mark.temp_skip_ci(targets=['esp32s31'], reason='no runner')
 def test_master_multi_dev(case_tester) -> None:  # type: ignore
-    case_tester.run_all_multi_dev_cases(reset=True)
+    case_tester.run_all_multi_dev_cases(reset=True, timeout=30)

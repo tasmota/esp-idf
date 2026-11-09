@@ -3,7 +3,6 @@ set(srcs
     "test_atomic.c"
     "test_locks.c"
     "test_misc.c"
-    "test_memstream.c"
     "test_newlib.c"
     "test_printf.c"
     "test_setjmp.c"
@@ -22,5 +21,5 @@ if(CONFIG_LIBC_OPTIMIZED_MISALIGNED_ACCESS)
 endif()
 
 idf_component_register(SRCS "${srcs}"
-                       PRIV_REQUIRES unity vfs cmock esp_timer spi_flash test_utils pthread esp_psram
+                       PRIV_REQUIRES unity vfs cmock esp_timer esp_mspi esp_hal_cache test_utils pthread esp_psram
                        WHOLE_ARCHIVE)

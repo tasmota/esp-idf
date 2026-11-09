@@ -9,19 +9,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <esp_types.h>
+#include "sdkconfig.h"
+#include "soc/soc_caps.h"
 #include "soc/pmu_struct.h"
 #include "hal/pmu_hal.h"
+#include "soc/pmu_icg_mapping.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define HP_CALI_DBIAS_DEFAULT   24
-#define LP_CALI_DBIAS_DEFAULT   24
+#define HP_CALI_DBIAS_DEFAULT   26
+#define LP_CALI_DBIAS_DEFAULT   26
 #define HP_CALI_DBIAS_SLP_1V1   22
 #define LP_CALI_DBIAS_SLP_1V1   22
-
-#define HP_CALI_ACTIVE_DBIAS_DEFAULT        24 // For HP regulator
 
 // FOR  XTAL FORCE PU IN SLEEP
 #define PMU_PD_CUR_SLEEP_ON    0
@@ -112,6 +113,20 @@ typedef struct {
 
 const pmu_lp_system_analog_param_t* pmu_lp_system_analog_param_default(pmu_lp_mode_t mode);
 
+/* Enabled when this chip needs any pmu_sleep_data_t priv slot; conditions differ per chip. */
+#define PMU_SLEEP_PRIV_ENABLED (SOC_PM_SUPPORT_PMU_RETENTION_CLK_ICG)
+#if PMU_SLEEP_PRIV_ENABLED
+enum {
+#if SOC_PM_SUPPORT_PMU_RETENTION_CLK_ICG
+    PMU_SLEEP_PRIV_HW_RETENTION_ICG_CLK,
+#endif
+    PMU_SLEEP_PRIV_MAX,
+};
+
+typedef struct {
+    void *func[PMU_SLEEP_PRIV_MAX];
+} pmu_sleep_data_t;
+#endif
 
 /* Following software configuration instance type from pmu_struct.h used for the PMU state machine in sleep flow*/
 typedef union {
@@ -275,13 +290,13 @@ typedef struct {
 #define PMU_SLEEP_POWER_CONFIG_DEFAULT(sleep_flags) {                               \
     .hp_sys = {                                                                     \
         .dig_power = {                                                              \
-            .vdd_spi_pd_en      = ((sleep_flags) & PMU_SLEEP_PD_VDDSDIO) ? 1 : 0,   \
-            .pd_hp_alive_pd_en  = 0,                                                \
-            .pd_modem_top_pd_en = ((sleep_flags) & PMU_SLEEP_PD_MODEM) ? 1 : 0,     \
-            .pd_hp_cnnt_pd_en   = ((sleep_flags) & PMU_SLEEP_PD_CNNT) ? 1 : 0,      \
-            .pd_hp_cpu_pd_en    = ((sleep_flags) & PMU_SLEEP_PD_CPU) ? 1 : 0,       \
-            .pd_modem_pwr_pd_en = 0,                                                \
-            .pd_top_pd_en       = ((sleep_flags) & PMU_SLEEP_PD_TOP) ? 1 : 0,       \
+            .vdd_spi_pd_en      = ((sleep_flags) & PMU_SLEEP_PD_VDDSDIO)   ? 1 : 0, \
+            .pd_hp_alive_pd_en  = ((sleep_flags) & PMU_SLEEP_PD_MEM)       ? 1 : 0, \
+            .pd_modem_top_pd_en = ((sleep_flags) & PMU_SLEEP_PD_MODEM)     ? 1 : 0, \
+            .pd_hp_cnnt_pd_en   = ((sleep_flags) & PMU_SLEEP_PD_CNNT)      ? 1 : 0, \
+            .pd_hp_cpu_pd_en    = ((sleep_flags) & PMU_SLEEP_PD_CPU)       ? 1 : 0, \
+            .pd_modem_pwr_pd_en = ((sleep_flags) & PMU_SLEEP_PD_MEM)       ? 1 : 0, \
+            .pd_top_pd_en       = ((sleep_flags) & PMU_SLEEP_PD_TOP)       ? 1 : 0, \
             .pd_hp_mem_pd_en    = 0,                                                \
             .mem_dslp           = 0,                                                \
         },                                                                          \
@@ -326,6 +341,9 @@ typedef struct {
 
 typedef struct {
     pmu_hp_sys_cntl_reg_t   syscntl;
+    struct {
+        uint32_t clock[2];
+    } icg_func;
 } pmu_sleep_digital_config_t;
 
 
@@ -333,16 +351,24 @@ typedef struct {
     .syscntl = {                                                            \
         .dig_pad_slp_sel = 0,                                               \
         .lp_pad_hold_all = (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) ? 1 : 0,  \
+        .hp_pad_hold_all = 1,                                               \
+        .dig_pause_wdt = ((sleep_flags) & RTC_SLEEP_USE_RTC_WDT) ? 0 : 1,   \
         .c_channel       = (sleep_flags & PMU_SLEEP_PD_TOP) ? 0 : 1         \
-    }                                                                       \
+    },                                                                      \
+    .icg_func = { .clock = { 0, 0 } },                                      \
 }
 
-#define PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT(sleep_flags) {                \
+#define PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT(sleep_flags, clk_flags) {     \
     .syscntl = {                                                            \
-        .dig_pad_slp_sel = 0,                                               \
-        .lp_pad_hold_all = (sleep_flags & PMU_SLEEP_PD_LP_PERIPH) ? 1 : 0,  \
+        .dig_pad_slp_sel = ((sleep_flags) & PMU_SLEEP_PD_TOP) ? 0 : 1,      \
+        .lp_pad_hold_all = ((sleep_flags) & PMU_SLEEP_PD_LP_PERIPH) ? 1 : 0,\
+        .hp_pad_hold_all = ((sleep_flags) & PMU_SLEEP_PD_TOP) ? 1 : 0,      \
+        .dig_pause_wdt = ((sleep_flags) & RTC_SLEEP_USE_RTC_WDT) ? 0 : 1,   \
         .c_channel       = (sleep_flags & PMU_SLEEP_PD_TOP) ? 0 : 1         \
-    }                                                                       \
+    },                                                                      \
+    .icg_func = {                                                           \
+        .clock = { (clk_flags)[0], (clk_flags)[1] }                         \
+    },                                                                      \
 }
 
 typedef struct {
@@ -363,15 +389,6 @@ typedef struct {
             .xpd             = PMU_HP_XPD_LIGHTSLEEP,             \
             .dbg_atten       = PMU_DBG_ATTEN_LIGHTSLEEP_DEFAULT,  \
             .dbias           = PMU_HP_DBIAS_LIGHTSLEEP_0V6        \
-        }                                                         \
-    },                                                            \
-    .lp_sys[PMU_MODE_LP_ACTIVE] = {                               \
-        .analog = {                                               \
-            .slp_xpd         = 0,                                 \
-            .slp_dbias       = 0,                                 \
-            .xpd             = 1,                                 \
-            .dbias           = 29,                                \
-            .drv_b           = 0x0                                \
         }                                                         \
     },                                                            \
     .lp_sys[PMU_MODE_LP_SLEEP] = {                                \
@@ -395,15 +412,6 @@ typedef struct {
             .bias_sleep      = PMU_BIASSLP_SLEEP_DEFAULT,         \
             .xpd             = PMU_HP_XPD_DEEPSLEEP,              \
             .dbg_atten       = PMU_DBG_HP_DEEPSLEEP               \
-        }                                                         \
-    },                                                            \
-    .lp_sys[PMU_MODE_LP_ACTIVE] = {                               \
-        .analog = {                                               \
-            .xpd             = 1,                                 \
-            .dbias           = 0x1a,                              \
-            .slp_xpd         = 0,                                 \
-            .slp_dbias       = 0,                                 \
-            .drv_b           = 0x7                                \
         }                                                         \
     },                                                            \
     .lp_sys[PMU_MODE_LP_SLEEP] = {                                \
@@ -503,7 +511,7 @@ typedef struct pmu_sleep_machine_constant {
     },                                          \
     .hp = {                                     \
         .min_slp_time_us                = 450,  \
-        .clock_domain_sync_time_us      = 150,  \
+        .clock_domain_sync_time_us      = 2,    \
         .system_dfs_up_work_time_us     = 124,  \
         .analog_wait_time_us            = 154,  \
         .isolate_wait_time_us           = 1,    \
@@ -511,9 +519,9 @@ typedef struct pmu_sleep_machine_constant {
         .power_supply_wait_time_us      = 2,    \
         .power_up_wait_time_us          = 2,    \
         .regdma_s2m_work_time_us        = 172,  \
-        .regdma_s2a_work_time_us        = 685,  \
+        .regdma_s2a_work_time_us        = 750,  \
         .regdma_m2a_work_time_us        = 278,  \
-        .regdma_a2s_work_time_us        = 382,  \
+        .regdma_a2s_work_time_us        = 400,  \
         .regdma_rf_on_work_time_us      = 70,   \
         .regdma_rf_off_work_time_us     = 23,   \
         .xtal_wait_stable_time_us       = 250,  \

@@ -21,11 +21,13 @@
 #include "host/ble_gatt.h"
 #include "host/ble_hs_mbuf.h"
 
-#include "nimble/profiles/server.h"
+#include "nimble/server.h"
 
 #include "common/host.h"
 
 #include "../../../lib/include/audio.h"
+
+LOG_MODULE_REGISTER(LEA_TMAS, CONFIG_BT_ISO_LOG_LEVEL);
 
 static const struct ble_gatt_svc_def gatt_svc_tmas[] = {
     {
@@ -56,21 +58,25 @@ static const struct ble_gatt_svc_def gatt_svc_tmas[] = {
 int bt_le_nimble_tmas_attr_handle_set(void)
 {
     struct bt_gatt_service *tmas_svc;
-    uint16_t handle;
+    uint16_t handle = 0;
     int rc;
 
-    tmas_svc = lib_tmas_svc_get();
-    assert(tmas_svc);
-
-    LOG_DBG("[N]TmasAttrHdlSet[%u]", tmas_svc->attr_count);
-
+    /* App may not register this svc (e.g. CAP Acceptor single mode keeps
+     * unused capability built). Skip rather than fail audio_start.
+     */
     rc = ble_gatts_find_svc(BLE_UUID16_DECLARE(BT_UUID_TMAS_VAL), &handle);
     if (rc) {
-        LOG_ERR("[N]TmasNotFound[%d]", rc);
-        return rc;
+        LOG_DBG("[N]TmasNotInit");
+        return 0;
     }
 
-    LOG_DBG("[N]Hdl[%u]", handle);
+    tmas_svc = lib_tmas_svc_get();
+    if (!tmas_svc) {
+        LOG_ERR("[N]TmasSvcGetFail");
+        return -ENODEV;
+    }
+
+    LOG_DBG("[N]TmasAttrHdlSet[%u][%u]", handle, tmas_svc->attr_count);
 
     for (size_t i = 0; i < tmas_svc->attr_count; i++) {
         (tmas_svc->attrs + i)->handle = handle + i;
@@ -90,7 +96,10 @@ static int tmas_svc_check(void)
      */
 
     tmas_svc = lib_tmas_svc_get();
-    assert(tmas_svc);
+    if (!tmas_svc) {
+        LOG_ERR("[N]TmasSvcGetFail");
+        return -ENODEV;
+    }
 
     LOG_DBG("[N]TmasSvcCheck");
 
@@ -103,7 +112,7 @@ static int tmas_svc_check(void)
         for (size_t i = 0; i < tmas_svc->attr_count; i++) {
             uuid = (const struct bt_uuid_16 *)(tmas_svc->attrs + i)->uuid;
 
-            if (uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
+            if (uuid && uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
                     uuid->val == check->value) {
                 chr_found = true;
                 break;

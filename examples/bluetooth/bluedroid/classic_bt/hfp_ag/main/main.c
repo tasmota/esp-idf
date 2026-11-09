@@ -61,7 +61,8 @@ static void bt_hf_hdl_stack_evt(uint16_t event, void *p_param)
             esp_hf_ag_register_callback(bt_app_hf_cb);
 
             // init and register for HFP_AG functions
-            esp_hf_ag_init();
+            esp_hf_ag_cfg_t cfg = ESP_HF_AG_INIT_CONFIG_DEFAULT();
+            esp_hf_ag_init_with_cfg(&cfg);
 
             /*
             * Set default parameters for Legacy Pairing
@@ -121,11 +122,13 @@ void app_main(void)
     bt_app_task_start_up();
 
     /* Bluetooth device name, connection mode and profile set up */
-    bt_app_work_dispatch(bt_hf_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
+    bt_app_work_dispatch(bt_hf_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL, NULL);
 
-#if CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM
+#if CONFIG_EXAMPLE_HFP_PCM_GPIO_SUPPORTED && CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM
     /* configure the PCM interface and PINs used */
     app_gpio_pcm_io_cfg();
+#elif CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM
+    ESP_LOGW(BT_HF_TAG, "PCM GPIO is not supported on this chip; use HCI SCO data path");
 #endif
 
     /* configure external chip for acoustic echo cancellation */

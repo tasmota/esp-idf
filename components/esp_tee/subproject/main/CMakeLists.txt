@@ -1,5 +1,6 @@
 idf_build_get_property(target IDF_TARGET)
 idf_build_get_property(arch IDF_TARGET_ARCH)
+idf_build_get_property(idf_ver_def IDF_VER)
 idf_component_get_property(heap_dir heap COMPONENT_DIR)
 
 set(srcs)
@@ -27,7 +28,8 @@ list(APPEND srcs "soc/${target}/esp_tee_secure_sys_cfg.c"
                  "soc/${target}/esp_tee_pmp_pma_prot_cfg.c"
                  "soc/${target}/esp_tee_apm_prot_cfg.c")
 
-list(APPEND srcs "soc/common/esp_tee_apm_intr.c")
+list(APPEND srcs "soc/common/esp_tee_apm_intr.c"
+                 "soc/common/esp_tee_reset.c")
 
 if(CONFIG_SOC_AES_SUPPORTED)
     list(APPEND srcs "soc/common/esp_tee_aes_intr.c")
@@ -58,6 +60,7 @@ list(APPEND srcs "common/multi_heap.c")
 
 # TLSF implementation for heap
 list(APPEND include "${heap_dir}/tlsf")
+list(APPEND include "${heap_dir}/rom_patches/include")
 
 # esp_app_desc_t configuration structure for TEE
 list(APPEND srcs "common/esp_app_desc_tee.c")
@@ -65,8 +68,23 @@ list(APPEND srcs "common/esp_app_desc_tee.c")
 # Newlib syscalls stub implementation
 list(APPEND srcs "common/syscall_stubs.c")
 
+# cmakev2 links only the declared dependencies. cmakev1 appends every component
+# of the build to a main component that declares none (tools/cmake/project.cmake,
+# "Special treatment for 'main' component"). Keep that behaviour in cmakev1 so
+# that custom secure service components depending on main keep building.
+set(deps)
+if(IDF_BUILD_V2)
+    set(deps REQUIRES esp_tee
+             PRIV_REQUIRES bootloader_support efuse esp_app_format
+                           esp_hal_mspi esp_hal_pmu esp_hal_uart esp_hal_wdt
+                           esp_hal_security esp_security esp_system mbedtls nvs_flash
+                           esp_stdio attestation tee_flash_mgr tee_ota_ops tee_sec_storage
+                           ${CUSTOM_SECURE_SERVICE_COMPONENT})
+endif()
+
 idf_component_register(SRCS ${srcs}
-                       INCLUDE_DIRS ${include})
+                       INCLUDE_DIRS ${include}
+                       ${deps})
 
 # NOTE: The ESP32-H2 and C61 ROM does not have sprintf/snprintf implementation,
 # thus newlib-nano implementation from the toolchain has been used.
@@ -97,4 +115,4 @@ message(STATUS "App \"${PROJECT_NAME_CUT}\" version: ${PROJECT_VER_CUT}")
 set_source_files_properties(
     SOURCE "common/esp_app_desc_tee.c"
     PROPERTIES COMPILE_DEFINITIONS
-    "PROJECT_VER=\"${PROJECT_VER_CUT}\"; PROJECT_NAME=\"${PROJECT_NAME_CUT}\"")
+    "PROJECT_VER=\"${PROJECT_VER_CUT}\"; PROJECT_NAME=\"${PROJECT_NAME_CUT}\"; IDF_VER_DEF=\"${idf_ver_def}\"")

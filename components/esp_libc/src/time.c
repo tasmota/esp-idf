@@ -189,8 +189,15 @@ WEAK_UNLESS_TIMEFUNC_IMPL int adjtime(const struct timeval *delta, struct timeva
     struct timex tx = {0};
 
     if (delta != NULL) {
+        // Reject deltas that do not fit in the 32-bit struct timex.offset (µs) field,
+        // otherwise the value would be silently truncated and pass the range check.
+        int64_t offset_us = (int64_t)delta->tv_sec * 1000000LL + delta->tv_usec;
+        if (offset_us > LONG_MAX || offset_us < LONG_MIN) {
+            errno = EINVAL;
+            return -1;
+        }
         tx.modes = ADJ_OFFSET_SINGLESHOT;
-        tx.offset = delta->tv_sec * 1000000L + delta->tv_usec;
+        tx.offset = (long)offset_us;
     } else {
         tx.modes = ADJ_OFFSET_SS_READ;
     }
@@ -350,6 +357,34 @@ int usleep(useconds_t us)
 unsigned int sleep(unsigned int seconds)
 {
     usleep(seconds * 1000000UL);
+    return 0;
+}
+
+int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    /* FreeRTOS has no signals, so the sleep is never interrupted and rem is never updated */
+    (void) rem;
+
+    if (req == NULL || req->tv_sec < 0 || req->tv_nsec < 0 || req->tv_nsec >= 1000000000L) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    _Static_assert(sizeof(useconds_t) < sizeof(uint64_t), "useconds_t must widen into uint64_t");
+    uint64_t sec = (uint64_t) req->tv_sec;
+    const uint64_t max_sec = ((useconds_t) -1) / 1000000ULL;
+    /* Sleep in the largest whole-second chunks that fit in useconds_t. */
+    while (sec > 0) {
+        const uint64_t step = (sec > max_sec) ? max_sec : sec;
+        usleep((useconds_t)(step * 1000000ULL));
+        sec -= step;
+    }
+
+    /* Round the remaining nanoseconds up, so that less than the requested time is never slept */
+    useconds_t us = (req->tv_nsec + 999) / 1000;
+    if (us > 0) {
+        usleep(us);
+    }
     return 0;
 }
 

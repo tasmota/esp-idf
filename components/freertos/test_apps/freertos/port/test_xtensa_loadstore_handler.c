@@ -199,7 +199,7 @@ static void run_sw_isr_level(int int_level)
     TEST_ASSERT_EQUAL_UINT16(2, s_iram->b16);
     TEST_ASSERT_EQUAL_UINT32(0, s_iram->b32);
 
-    esp_intr_free(handle);
+    TEST_ESP_OK(esp_intr_free(handle));
 }
 
 TEST_CASE("LoadStore: 8/16-bit field access in IRAM from ISRs when pending interrupts are present", "[freertos]")

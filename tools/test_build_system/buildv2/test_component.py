@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
+import json
 import logging
 from pathlib import Path
 
@@ -120,6 +121,38 @@ def test_mixed_native_and_register_components(idf_py: IdfPyFunc) -> None:
         'main/CMakeLists.txt',
         '# placeholder_inside_idf_component_register',
         'REQUIRES native_mixed v1_mixed\n    # placeholder_inside_idf_component_register',
+    )
+
+    idf_py('build')
+    assert Path('build/build_test_app.elf').exists()
+
+
+@pytest.mark.usefixtures('test_app_copy')
+def test_legacy_component_compile_functions(idf_py: IdfPyFunc) -> None:
+    """component_compile_options() and component_compile_definitions() apply to COMPONENT_LIB."""
+    logging.info('Testing legacy component_compile_options and component_compile_definitions')
+
+    comp_dir = Path('components/legacy_flags_comp')
+    comp_dir.mkdir(parents=True, exist_ok=True)
+    (comp_dir / 'CMakeLists.txt').write_text(
+        'idf_component_register(SRCS "legacy_flags.c")\n'
+        'component_compile_options(-DLEGACY_OPTION_FLAG=1)\n'
+        'component_compile_definitions(LEGACY_DEFINITION_FLAG=1)\n'
+    )
+    (comp_dir / 'legacy_flags.c').write_text(
+        '#if !defined(LEGACY_OPTION_FLAG)\n'
+        '#error "component_compile_options() did not reach the component"\n'
+        '#endif\n'
+        '#if !defined(LEGACY_DEFINITION_FLAG)\n'
+        '#error "component_compile_definitions() did not reach the component"\n'
+        '#endif\n'
+        'void legacy_flags_func(void) {}\n'
+    )
+
+    replace_in_file(
+        'main/CMakeLists.txt',
+        '# placeholder_inside_idf_component_register',
+        'REQUIRES legacy_flags_comp\n    # placeholder_inside_idf_component_register',
     )
 
     idf_py('build')
@@ -297,3 +330,110 @@ def test_idf_component_set_get_property_apis(idf_py: IdfPyFunc) -> None:
     assert 'LIB=' in result and len(result.split('LIB=')[1].split('\n')[0]) > 0, (
         'idf_component_get_property should retrieve COMPONENT_LIB'
     )
+
+
+@pytest.mark.usefixtures('test_app_copy')
+def test_local_component_shadows_managed_dep_in_manifest(idf_py: IdfPyFunc) -> None:
+    """A component's manifest declares `<ns>/<name>` while the project has a
+    local `components/<name>` that shadows it. The dep must resolve to the
+    local short-named component rather than failing with
+    `Failed to resolve component '<ns>__<name>'`.
+
+    Regression test for the cmakev2 per-component injection path that lost
+    the project-wide context _choose_component needs to rewrite a manifest-
+    declared namespaced dep to its locally-shadowing short name. The fix
+    seeds the per-component requirements file with one entry per discovered
+    component so known_components matches what cmakev1's project-wide
+    injection produces.
+    """
+    logging.info('Testing local component shadows manifest-declared managed dep')
+
+    # Local shadow named `lvgl`.
+    (Path('components/lvgl')).mkdir(parents=True)
+    (Path('components/lvgl/CMakeLists.txt')).write_text('idf_component_register(SRCS "lvgl_stub.c" INCLUDE_DIRS ".")\n')
+    (Path('components/lvgl/lvgl_stub.c')).write_text('void lvgl_local_stub(void) {}\n')
+
+    # A second local component whose manifest declares the namespaced dep.
+    # override_path keeps the component manager offline by pointing the dep
+    # at the local lvgl directory.
+    (Path('components/consumer')).mkdir(parents=True)
+    (Path('components/consumer/CMakeLists.txt')).write_text(
+        'idf_component_register(SRCS "consumer.c" INCLUDE_DIRS ".")\n'
+    )
+    (Path('components/consumer/consumer.c')).write_text('void consumer_stub(void) {}\n')
+    (Path('components/consumer/idf_component.yml')).write_text(
+        'dependencies:\n  idf: ">=5.0"\n  lvgl/lvgl:\n    version: "*"\n    override_path: "../lvgl"\n'
+    )
+
+    # Force consumer into the build via main (cmakev2 only builds required components).
+    replace_in_file(
+        'main/CMakeLists.txt',
+        '# placeholder_inside_idf_component_register',
+        'PRIV_REQUIRES consumer',
+    )
+
+    # Without the fix this fails with "Failed to resolve component 'lvgl__lvgl'".
+    idf_py('reconfigure')
+
+    with open('build/project_description.json') as f:
+        data = json.load(f)
+    paths = data.get('build_component_paths', [])
+    assert any(p.endswith('/components/lvgl') for p in paths), f'local lvgl not in build_component_paths: {paths}'
+    assert not any('lvgl__lvgl' in p for p in paths), f'managed lvgl__lvgl should not be in build: {paths}'
+
+
+@pytest.mark.usefixtures('test_app_copy')
+def test_component_scope_isolation(idf_py: IdfPyFunc) -> None:
+    """A component does not see the variables and directory properties of the
+    component that requires it.
+
+    leak_src sets 'srcs', adds a compile definition and requires leak_dst.
+    leak_dst appends to 'srcs' without initializing it, like many cmakev1
+    components. Without the isolation leak_dst appends to the 'srcs' of
+    leak_src and the configuration fails.
+    """
+    logging.info('Testing scope isolation of a recursively evaluated component')
+
+    src_dir = Path('components/leak_src')
+    src_dir.mkdir(parents=True)
+    (src_dir / 'CMakeLists.txt').write_text(
+        'set(srcs "leak_src.c")\n'
+        'set(leak_marker "set by leak_src")\n'
+        'add_compile_definitions(LEAK_SRC_DIRECTORY)\n'
+        'idf_component_register(SRCS ${srcs} REQUIRES leak_dst)\n'
+    )
+    (src_dir / 'leak_src.c').write_text('void leak_src_func(void) {}\n')
+
+    dst_dir = Path('components/leak_dst')
+    dst_dir.mkdir(parents=True)
+    (dst_dir / 'CMakeLists.txt').write_text(
+        'list(APPEND srcs "leak_dst.c")\n'
+        'idf_component_register(SRCS ${srcs})\n'
+        # leak_marker is set by leak_src. ARG_REQUIRES and sources are local
+        # variables of the idf_component_register() call of leak_src.
+        'foreach(variable leak_marker ARG_REQUIRES sources)\n'
+        '    if(DEFINED ${variable})\n'
+        '        message(FATAL_ERROR "leak_dst sees ${variable}=${${variable}}")\n'
+        '    endif()\n'
+        'endforeach()\n'
+    )
+    (dst_dir / 'leak_dst.c').write_text('void leak_dst_func(void) {}\n')
+
+    replace_in_file(
+        'main/CMakeLists.txt',
+        '# placeholder_inside_idf_component_register',
+        'REQUIRES leak_src',
+    )
+
+    idf_py('reconfigure')
+
+    with open('build/compile_commands.json') as f:
+        commands = json.load(f)
+    defined = {Path(c['file']).name: '-DLEAK_SRC_DIRECTORY' in c['command'] for c in commands}
+    assert defined['leak_src.c'], 'definition missing on the component target'
+    assert not defined['leak_dst.c'], 'definition leaked into the required component'
+
+    # With the isolation disabled leak_dst sees the variables of leak_src.
+    ret = idf_py('-DIDF_COMPONENT_SCOPE_ISOLATION=NO', 'reconfigure', check=False)
+    assert ret.returncode != 0
+    assert 'leak_dst sees leak_marker=set by leak_src' in ret.stderr

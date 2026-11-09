@@ -44,8 +44,8 @@
 #include "soc/regdma.h"
 #include "bt_osi_mem.h"
 
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
 #include "esp_private/sleep_modem.h"
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
 #include "esp_private/sleep_retention.h"
 #include "esp_private/pm_impl.h"
 #endif // CONFIG_FREERTOS_USE_TICKLESS_IDLE
@@ -422,7 +422,7 @@ void esp_bt_read_ctrl_log_from_flash(bool output)
 
     print_len = 0;
     max_print_len = 4096;
-    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA, &mapped_ptr, &mmap_handle);
+    err = esp_partition_mmap(log_partition, 0, MAX_STORAGE_SIZE, ESP_PARTITION_MMAP_DATA | ESP_PARTITION_MMAP_BLOCKS_WRITE, &mapped_ptr, &mmap_handle);
     if (err != ESP_OK) {
         ESP_LOGE("FLASH", "Mmap failed: %s", esp_err_to_name(err));
         return;
@@ -737,20 +737,45 @@ static esp_err_t sleep_modem_ble_mac_modem_state_init(uint8_t extra)
     int retention_args = extra;
     sleep_retention_module_init_param_t init_param = {
         .cbs     = { .create = { .handle = sleep_modem_ble_mac_retention_init, .arg = &retention_args } },
-        .depends = RETENTION_MODULE_BITMAP_INIT(BT_BB)
+        .attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
+        .depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_MODEM)
     };
     esp_err_t err = sleep_retention_module_init(SLEEP_RETENTION_MODULE_BLE_MAC, &init_param);
-    if (err == ESP_OK) {
-        err = sleep_retention_module_allocate(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention init error");
+        return err;
+    }
+
+    err = sleep_retention_module_allocate(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention allocate error");
+        return err;
+    }
+
+    err = sleep_retention_module_attach(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention attach error");
     }
     return err;
 }
 
 static void sleep_modem_ble_mac_modem_state_deinit(void)
 {
-    esp_err_t err = sleep_retention_module_free(SLEEP_RETENTION_MODULE_BLE_MAC);
-    if (err == ESP_OK) {
-        err = sleep_retention_module_deinit(SLEEP_RETENTION_MODULE_BLE_MAC);
+    esp_err_t err = sleep_retention_module_detach(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention detach error");
+        assert(err == ESP_OK);
+    }
+
+    err = sleep_retention_module_free(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention free error");
+        assert(err == ESP_OK);
+    }
+
+    err = sleep_retention_module_deinit(SLEEP_RETENTION_MODULE_BLE_MAC);
+    if (err != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "BT sleep retention deinit error");
         assert(err == ESP_OK);
     }
 }
@@ -1011,18 +1036,12 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         goto free_mem;
     }
 
-#if CONFIG_BT_NIMBLE_ENABLED
-    /* ble_npl_eventq_init() needs to use npl functions in rom and
-     * must be called after esp_bt_controller_init().
-     */
-    ble_npl_eventq_init(nimble_port_get_dflt_eventq());
-#endif // CONFIG_BT_NIMBLE_ENABLED
     /* Enable BT-related clocks */
     modem_clock_module_enable(PERIPH_BT_MODULE);
     modem_clock_module_mac_reset(PERIPH_BT_MODULE);
     /* Select slow clock source for BT momdule */
     ble_rtc_clk_init(cfg);
-    esp_phy_modem_init();
+    esp_phy_modem_init(SLEEP_MODEM_BT);
 
     if (ble_osi_coex_funcs_register((struct osi_coex_funcs_t *)&s_osi_coex_funcs_ro) != 0) {
         ESP_LOGW(NIMBLE_PORT_LOG_TAG, "osi coex funcs reg failed");
@@ -1117,12 +1136,10 @@ modem_deint:
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     esp_bt_controller_log_deinit();
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-    esp_phy_modem_deinit();
-    // modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
+    esp_phy_modem_deinit(SLEEP_MODEM_BT);
+    modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
     modem_clock_module_disable(PERIPH_BT_MODULE);
-#if CONFIG_BT_NIMBLE_ENABLED
-    ble_npl_eventq_deinit(nimble_port_get_dflt_eventq());
-#endif // CONFIG_BT_NIMBLE_ENABLED
+
 free_mem:
     npl_freertos_mempool_deinit();
     esp_unregister_npl_funcs();
@@ -1144,8 +1161,8 @@ esp_err_t esp_bt_controller_deinit(void)
 
     os_msys_deinit();
 
-    esp_phy_modem_deinit();
-    // modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
+    esp_phy_modem_deinit(SLEEP_MODEM_BT);
+    modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE);
     modem_clock_module_disable(PERIPH_BT_MODULE);
 
     ble_stack_deinitEnv();
@@ -1154,11 +1171,6 @@ esp_err_t esp_bt_controller_deinit(void)
 #if CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
     esp_bt_controller_log_deinit();
 #endif // CONFIG_BT_LE_CONTROLLER_LOG_ENABLED
-
-#if CONFIG_BT_NIMBLE_ENABLED
-    /* De-initialize default event queue */
-    ble_npl_eventq_deinit(nimble_port_get_dflt_eventq());
-#endif // CONFIG_BT_NIMBLE_ENABLED
 
     esp_unregister_npl_funcs();
 

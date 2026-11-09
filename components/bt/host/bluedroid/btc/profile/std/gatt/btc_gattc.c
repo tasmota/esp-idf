@@ -203,7 +203,7 @@ static void btc_gattc_cback(tBTA_GATTC_EVT event, tBTA_GATTC *p_data)
 
 static void btc_gattc_app_register(btc_ble_gattc_args_t *arg)
 {
-    tBT_UUID app_uuid;
+    tBT_UUID app_uuid = {0};
     app_uuid.len = 2;
     app_uuid.uu.uuid16 = arg->app_reg.app_id;
     BTA_GATTC_AppRegister(&app_uuid, btc_gattc_cback);
@@ -985,14 +985,16 @@ void btc_gattc_cb_handler(btc_msg_t *msg)
         param.connect.conn_params.timeout = connect->conn_params.timeout;
         param.connect.ble_addr_type = connect->ble_addr_type;
         param.connect.conn_handle = connect->conn_handle;
+#if (BT_BLE_FEAT_PAWR_EN == TRUE)
+        param.connect.adv_handle = connect->adv_handle;
+        param.connect.sync_handle = connect->sync_handle;
+#endif // #if (BT_BLE_FEAT_PAWR_EN == TRUE)
         btc_gattc_cb_to_app(ESP_GATTC_CONNECT_EVT, gattc_if, &param);
         break;
     }
     case BTA_GATTC_CLOSE_EVT: {
         tBTA_GATTC_CLOSE *close = &arg->close;
 
-        // Free gattc clcb in BTC task to avoid race condition
-        bta_gattc_clcb_dealloc_by_conn_id(close->conn_id);
         gattc_if = close->client_if;
         param.close.status = close->status;
         param.close.conn_id = BTC_GATT_GET_CONN_ID(close->conn_id);

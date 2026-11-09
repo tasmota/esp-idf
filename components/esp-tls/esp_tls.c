@@ -84,6 +84,7 @@ static const char *TAG = "esp-tls";
 #define _esp_tls_get_global_ca_store        esp_mbedtls_get_global_ca_store
 #define _esp_tls_free_global_ca_store       esp_mbedtls_free_global_ca_store
 #define _esp_tls_get_ciphersuites_list      esp_mbedtls_get_ciphersuites_list
+#define _esp_tls_get_supported_groups_list  esp_mbedtls_get_supported_groups_list
 #elif CONFIG_ESP_TLS_CUSTOM_STACK
 #define _esp_create_ssl_handle              esp_tls_custom_stack_create_ssl_handle
 #define _esp_tls_handshake                  esp_tls_custom_stack_handshake
@@ -106,6 +107,7 @@ static const char *TAG = "esp-tls";
 #define _esp_tls_get_global_ca_store        esp_tls_custom_stack_get_global_ca_store
 #define _esp_tls_free_global_ca_store       esp_tls_custom_stack_free_global_ca_store
 #define _esp_tls_get_ciphersuites_list      esp_tls_custom_stack_get_ciphersuites_list
+#define _esp_tls_get_supported_groups_list  esp_tls_custom_stack_get_supported_groups_list
 #else
 #error "No TLS stack configured"
 #endif
@@ -188,7 +190,10 @@ int esp_tls_conn_destroy(esp_tls_t *tls)
         esp_tls_internal_event_tracker_destroy(tls->error_handle);
 #if CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
         if (tls->client_session) {
+            mbedtls_platform_zeroize(tls->client_session, tls->client_session_len);
             free(tls->client_session);
+            tls->client_session = NULL;
+            tls->client_session_len = 0;
         }
 #endif // CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
         free(tls);
@@ -316,6 +321,16 @@ static esp_err_t esp_tls_set_socket_options(int fd, const esp_tls_cfg_t *cfg)
             ESP_LOGE(TAG, "Fail to setsockopt SO_SNDTIMEO");
             return ESP_ERR_ESP_TLS_SOCKET_SETOPT_FAILED;
         }
+
+#if CONFIG_ESP_TLS_ENABLE_TCP_NODELAY
+        /* Disable Nagle's algorithm. Small control-plane writes (e.g. MQTT PUBLISH/PUBACK/PINGREQ)
+         * otherwise interact with the peer's delayed-ACK and stall ~40-200 ms until its timer fires.
+         * Non-fatal: a latency hint, not required for a correct connection (unlike the timeouts). */
+        int nodelay = 1;
+        if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) != 0) {
+            ESP_LOGW(TAG, "Fail to setsockopt TCP_NODELAY (non-fatal)");
+        }
+#endif
 
         if (cfg->keep_alive_cfg && cfg->keep_alive_cfg->keep_alive_enable) {
             int keep_alive_enable = 1;
@@ -572,7 +587,7 @@ static int esp_tls_low_level_conn(const char *hostname, int hostlen, int port, c
  */
 esp_err_t esp_tls_plain_tcp_connect(const char *host, int hostlen, int port, const esp_tls_cfg_t *cfg, esp_tls_error_handle_t error_handle, int *sockfd)
 {
-    if (sockfd == NULL || error_handle == NULL) {
+    if (sockfd == NULL || error_handle == NULL || host == NULL || hostlen < 0) {
         return ESP_ERR_INVALID_ARG;
     }
     return tcp_connect(host, hostlen, port, cfg, error_handle, sockfd);
@@ -654,6 +669,10 @@ int esp_tls_conn_http_new_sync(const char *url, const esp_tls_cfg_t *cfg, esp_tl
  */
 int esp_tls_conn_http_new_async(const char *url, const esp_tls_cfg_t *cfg, esp_tls_t *tls)
 {
+    if (!url || !cfg || !tls) {
+        return -1;
+    }
+
     /* Parse URI */
     struct http_parser_url u;
     http_parser_url_init(&u);
@@ -674,6 +693,11 @@ mbedtls_x509_crt *esp_tls_get_global_ca_store(void)
 const int *esp_tls_get_ciphersuites_list(void)
 {
     return _esp_tls_get_ciphersuites_list();
+}
+
+const uint16_t *esp_tls_get_supported_groups_list(void)
+{
+    return _esp_tls_get_supported_groups_list();
 }
 
 esp_err_t esp_tls_server_session_init(esp_tls_cfg_server_t *cfg, int sockfd, esp_tls_t *tls)

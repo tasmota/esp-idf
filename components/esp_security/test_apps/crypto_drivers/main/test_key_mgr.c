@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -19,7 +19,8 @@
 #include "esp_system.h"
 #include "unity_test_utils_memory.h"
 
-#if SOC_KEY_MANAGER_SUPPORTED
+// TODO: IDF-15703 re-enable Key Manager driver tests on esp32s31 once the TRNG support update lands
+#if SOC_KEY_MANAGER_SUPPORTED && !CONFIG_IDF_TARGET_ESP32S31
 #include "hal/key_mgr_ll.h"
 
 #if SOC_KEY_MANAGER_HMAC_KEY_DEPLOY
@@ -61,6 +62,14 @@ static const uint8_t k1_ds_encrypt[] = {
 
 static const char *TAG = "key_mgr_test";
 
+#define SKIP_IF_KEY_MGR_NOT_SUPPORTED()                                                   \
+    do {                                                                                  \
+        if (!key_mgr_ll_is_supported()) {                                                 \
+            TEST_IGNORE_MESSAGE("Key Manager not supported on this chip");                \
+        }                                                                                 \
+    } while (0)
+
+#if SOC_KEY_MANAGER_FE_KEY_DEPLOY
 #define ENCRYPTED_DATA_SIZE 128
 static const uint8_t plaintext_data[ENCRYPTED_DATA_SIZE] = {
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
@@ -83,6 +92,7 @@ static const uint8_t expected_ciphertext[ENCRYPTED_DATA_SIZE] = {
     0x85, 0xe2, 0x69, 0x26, 0xfb, 0x61, 0x7e, 0x15, 0x11, 0x26, 0x59, 0xf1, 0x4f, 0xeb, 0x4d, 0x25,
     0x8e, 0xc5, 0xb9, 0x64, 0xdf, 0xc7, 0x52, 0x87, 0x2d, 0xb, 0xd6, 0xdd, 0xb1, 0xb3, 0xfe, 0xaf,
 };
+#endif /* SOC_KEY_MANAGER_FE_KEY_DEPLOY */
 
 /* Big endian */
 static const uint8_t init_key[] = {
@@ -98,11 +108,13 @@ static const uint8_t k2_info[] = {
     0x88, 0x9d, 0x0b, 0x2b, 0x40, 0x87, 0x6e, 0x58, 0xf3, 0xf3, 0x63, 0x62, 0xd1, 0x5c, 0x9a, 0xe8
 };
 
+#if SOC_KEY_MANAGER_FE_KEY_DEPLOY
 /* Big endian */
 static const uint8_t k1_xts_aes_encrypt[] = {
     0x0a, 0x43, 0x2a, 0xee, 0xb5, 0xd0, 0x6b, 0x58, 0x34, 0x2d, 0x0d, 0xbf, 0xf7, 0x04, 0x60, 0x81,
     0x08, 0x79, 0x38, 0xb3, 0xb5, 0xdf, 0x25, 0xb4, 0x38, 0x8e, 0x93, 0x5d, 0xbf, 0xd1, 0x91, 0x6d,
 };
+#endif /* SOC_KEY_MANAGER_FE_KEY_DEPLOY */
 
 static const uint8_t k1_hmac_encrypt[] = {
     0x02, 0xf7, 0x05, 0x75, 0xfd, 0x12, 0x99, 0xc2, 0xb9, 0xc0, 0x2e, 0x40, 0xd0, 0x69, 0xb0, 0x83,
@@ -147,6 +159,8 @@ static esp_err_t test_xts_aes_key(bool verify)
 
 TEST_CASE("Key Manager AES mode: XTS-AES-128 key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_aes_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_aes_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -171,6 +185,8 @@ TEST_CASE("Key Manager AES mode: XTS-AES-128 key deployment", "[hw_crypto] [key_
 
 TEST_CASE("Key Manager ECDH0 mode: XTS-AES-128 key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_ecdh0_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh0_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -196,6 +212,8 @@ TEST_CASE("Key Manager ECDH0 mode: XTS-AES-128 key deployment", "[hw_crypto] [ke
 
 TEST_CASE("Key Manager Random mode: XTS-AES-128 key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_random_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_random_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -213,11 +231,43 @@ TEST_CASE("Key Manager Random mode: XTS-AES-128 key deployment", "[hw_crypto] [k
     free(key_config);
     free(key_recovery_info);
 }
+
+TEST_CASE("Key Manager ECDH1 mode: XTS-AES-128 key deployment", "[hw_crypto] [key_mgr]")
+{
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
+    esp_key_mgr_ecdh1_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh1_key_config_t));
+    TEST_ASSERT_NOT_NULL(key_config);
+
+    memcpy(key_config->k2_info, (uint8_t*) k2_info, KEY_MGR_K2_INFO_SIZE);
+    memcpy(key_config->k1_G[0], (uint8_t*) k1_G, KEY_MGR_ECDH0_INFO_SIZE);
+    memcpy(key_config->sw_init_key, (uint8_t*) init_key, KEY_MGR_SW_INIT_KEY_SIZE);
+    key_config->use_pre_generated_sw_init_key = 1;
+    key_config->key_type = ESP_KEY_MGR_FLASH_XTS_AES_KEY;
+    key_config->key_len = ESP_KEY_MGR_XTS_AES_LEN_128;
+
+    esp_key_mgr_key_recovery_info_t *key_recovery_info = calloc(1, sizeof(esp_key_mgr_key_recovery_info_t));
+    TEST_ASSERT_NOT_NULL(key_recovery_info);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deploy_key_in_ecdh1_mode(key_config, key_recovery_info));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_activate_key(key_recovery_info));
+    /* verify=false: same convention as the ECDH0 case above. The expected
+     * ciphertext IS derivable (k2 = AES_DEC(k2_info, init_key); deployed key
+     * = x(k1*k2*G)) but this app doesn't carry the off-device ECC code.
+     * Bitwise verification lives in the HAL crypto test app. */
+    TEST_ASSERT_EQUAL(ESP_OK, test_xts_aes_key(false));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deactivate_key(key_recovery_info->key_type));
+
+    free(key_config);
+    free(key_recovery_info);
+}
 #endif /* SOC_KEY_MANAGER_FE_KEY_DEPLOY */
 
 #if SOC_KEY_MANAGER_ECDSA_KEY_DEPLOY
 TEST_CASE("Key Manager random mode: ECDSA key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_random_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_random_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -249,6 +299,8 @@ static esp_err_t test_hmac_key(bool verify)
 
 TEST_CASE("Key Manager AES mode: HMAC key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_aes_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_aes_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -272,6 +324,8 @@ TEST_CASE("Key Manager AES mode: HMAC key deployment", "[hw_crypto] [key_mgr]")
 
 TEST_CASE("Key Manager ECDH0 mode: HMAC key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_ecdh0_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh0_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -296,6 +350,8 @@ TEST_CASE("Key Manager ECDH0 mode: HMAC key deployment", "[hw_crypto] [key_mgr]"
 
 TEST_CASE("Key Manager random mode: HMAC key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_random_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_random_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -305,6 +361,31 @@ TEST_CASE("Key Manager random mode: HMAC key deployment", "[hw_crypto] [key_mgr]
     TEST_ASSERT_NOT_NULL(key_recovery_info);
 
     TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deploy_key_in_random_mode(key_config, key_recovery_info));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_activate_key(key_recovery_info));
+    TEST_ASSERT_EQUAL(ESP_OK, test_hmac_key(false));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deactivate_key(key_recovery_info->key_type));
+
+    free(key_config);
+    free(key_recovery_info);
+}
+
+TEST_CASE("Key Manager ECDH1 mode: HMAC key deployment", "[hw_crypto] [key_mgr]")
+{
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
+    esp_key_mgr_ecdh1_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh1_key_config_t));
+    TEST_ASSERT_NOT_NULL(key_config);
+
+    memcpy(key_config->k2_info, (uint8_t*) k2_info, KEY_MGR_K2_INFO_SIZE);
+    memcpy(key_config->k1_G[0], (uint8_t*) k1_G, KEY_MGR_ECDH0_INFO_SIZE);
+    memcpy(key_config->sw_init_key, (uint8_t*) init_key, KEY_MGR_SW_INIT_KEY_SIZE);
+    key_config->use_pre_generated_sw_init_key = 1;
+    key_config->key_type = ESP_KEY_MGR_HMAC_KEY;
+
+    esp_key_mgr_key_recovery_info_t *key_recovery_info = calloc(1, sizeof(esp_key_mgr_key_recovery_info_t));
+    TEST_ASSERT_NOT_NULL(key_recovery_info);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deploy_key_in_ecdh1_mode(key_config, key_recovery_info));
     TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_activate_key(key_recovery_info));
     TEST_ASSERT_EQUAL(ESP_OK, test_hmac_key(false));
     TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deactivate_key(key_recovery_info->key_type));
@@ -344,6 +425,8 @@ static esp_err_t test_ds_key(void)
 
 TEST_CASE("Key Manager AES mode: DS key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_aes_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_aes_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -367,6 +450,8 @@ TEST_CASE("Key Manager AES mode: DS key deployment", "[hw_crypto] [key_mgr]")
 
 TEST_CASE("Key Manager ECDH0 mode: DS key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_ecdh0_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh0_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -391,6 +476,8 @@ TEST_CASE("Key Manager ECDH0 mode: DS key deployment", "[hw_crypto] [key_mgr]")
 
 TEST_CASE("Key Manager random mode: DS key deployment", "[hw_crypto] [key_mgr]")
 {
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
     esp_key_mgr_random_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_random_key_config_t));
     TEST_ASSERT_NOT_NULL(key_config);
 
@@ -407,5 +494,33 @@ TEST_CASE("Key Manager random mode: DS key deployment", "[hw_crypto] [key_mgr]")
     free(key_config);
     free(key_recovery_info);
 }
+
+TEST_CASE("Key Manager ECDH1 mode: DS key deployment", "[hw_crypto] [key_mgr]")
+{
+    SKIP_IF_KEY_MGR_NOT_SUPPORTED();
+
+    esp_key_mgr_ecdh1_key_config_t *key_config = calloc(1, sizeof(esp_key_mgr_ecdh1_key_config_t));
+    TEST_ASSERT_NOT_NULL(key_config);
+
+    memcpy(key_config->k2_info, (uint8_t*) k2_info, KEY_MGR_K2_INFO_SIZE);
+    memcpy(key_config->k1_G[0], (uint8_t*) k1_G, KEY_MGR_ECDH0_INFO_SIZE);
+    memcpy(key_config->sw_init_key, (uint8_t*) init_key, KEY_MGR_SW_INIT_KEY_SIZE);
+    key_config->use_pre_generated_sw_init_key = 1;
+    key_config->key_type = ESP_KEY_MGR_DS_KEY;
+
+    esp_key_mgr_key_recovery_info_t *key_recovery_info = calloc(1, sizeof(esp_key_mgr_key_recovery_info_t));
+    TEST_ASSERT_NOT_NULL(key_recovery_info);
+
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deploy_key_in_ecdh1_mode(key_config, key_recovery_info));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_activate_key(key_recovery_info));
+    // Deploy/activate path coverage only. The deployed AES-CBC key for DS
+    // is x(k1*k2*G); pre-generating the encrypted DS input params would
+    // require running that key derivation plus the DS-blob AES-CBC step
+    // off-device, neither of which this app carries.
+    TEST_ASSERT_EQUAL(ESP_OK, esp_key_mgr_deactivate_key(key_recovery_info->key_type));
+
+    free(key_config);
+    free(key_recovery_info);
+}
 #endif /* SOC_KEY_MANAGER_DS_KEY_DEPLOY */
-#endif /* SOC_KEY_MANAGER_SUPPORTED */
+#endif /* SOC_KEY_MANAGER_SUPPORTED && !CONFIG_IDF_TARGET_ESP32S31 */

@@ -476,12 +476,12 @@ void smp_generate_ltk(tSMP_CB *p_cb, tSMP_INT_DATA *p_data)
 
     BOOLEAN div_status;
     SMP_TRACE_DEBUG ("%s\n", __FUNCTION__);
-#if (CLASSIC_BT_INCLUDED == TRUE)
+#if (SMP_CTKD_INCLUDED == TRUE)
     if (smp_get_br_state() == SMP_BR_STATE_BOND_PENDING) {
         smp_br_process_link_key(p_cb, NULL);
         return;
     }
-#endif  ///CLASSIC_BT_INCLUDED == TRUE
+#endif  ///SMP_CTKD_INCLUDED == TRUE
     if (p_cb->le_secure_connections_mode_is_used) {
         smp_process_secure_connection_long_term_key();
         return;
@@ -1759,7 +1759,7 @@ UINT32 smp_calculate_g2(UINT8 *u, UINT8 *v, UINT8 *x, UINT8 *y)
     smp_debug_print_nbyte_little_endian (p_prnt, (const UINT8 *)"cmac mod 2**32 mod 10**6", 4);
 #endif
 
-    SMP_TRACE_ERROR("Value for numeric comparison = %d", vres);
+    SMP_TRACE_WARNING("Value for numeric comparison = %d", vres);
     return vres;
 }
 
@@ -2281,11 +2281,8 @@ BOOLEAN smp_calculate_link_key_from_long_term_key(tSMP_CB *p_cb)
         SMP_TRACE_ERROR("%s failed", __func__);
     } else {
         UINT8 link_key_type;
-        if (btm_cb.security_mode == BTM_SEC_MODE_SC) {
-            /* Secure Connections Only Mode */
-            link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
-        } else if (controller_get_interface()->supports_secure_connections()) {
-            /* both transports are SC capable */
+        if ((btm_cb.security_mode == BTM_SEC_MODE_SC) ||
+            (controller_get_interface()->supports_secure_connections())) {
             if (p_cb->sec_level == SMP_SEC_AUTHENTICATED) {
                 link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
             } else {

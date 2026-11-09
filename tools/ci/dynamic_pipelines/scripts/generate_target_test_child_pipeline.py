@@ -55,7 +55,7 @@ def main(output_filepath: str) -> None:
     exclude_runner_tags_matching = []
     for _tag in known_warnings_dict.get('no_runner_tags', []):
         if '*' not in _tag:
-            exclude_runner_tags_set.add(_tag)
+            exclude_runner_tags_set.add(frozenset(_tag.split(',')))
         else:
             if res := _process_match_group(_tag):
                 exclude_runner_tags_matching.append(res)

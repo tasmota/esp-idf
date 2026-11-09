@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 #include "soc/soc_caps.h"
+#include "soc/soc.h"
 #include "sdkconfig.h"
 
 /* Declarations used inside TEE binary, only */
@@ -20,6 +21,11 @@ extern "C" {
 #define TEE_SECURE_INUM    (31)
 #if SOC_INT_CLIC_SUPPORTED
 #define TEE_PASS_INUM      (30)
+/* CLIC: 3 effective priority bits (NLBITS=3), max priority = 7 */
+#define TEE_SECURE_INUM_PRIO    (7)
+#else
+/* PLIC: 4-bit priority field, max priority = 15 */
+#define TEE_SECURE_INUM_PRIO    (15)
 #endif
 
 #define ESP_TEE_M2U_SWITCH_MAGIC  0xfedef
@@ -50,6 +56,14 @@ extern "C" {
 
 #if ((CONFIG_SECURE_TEE_DROM_SIZE) % SOC_MMU_PAGE_SIZE)
 #error "CONFIG_SECURE_TEE_DROM_SIZE must be a multiple of SOC_MMU_PAGE_SIZE"
+#endif
+
+/* With HAL assertions disabled (level 0), a failed HAL_ASSERT() expands to
+ * __builtin_unreachable(): the compiler then optimizes assuming the asserted
+ * preconditions always hold, turning any unvalidated HAL input into undefined
+ * behavior. The TEE must never be built this way. */
+#if CONFIG_SECURE_ENABLE_TEE && (CONFIG_HAL_DEFAULT_ASSERTION_LEVEL < 1)
+#error "ESP-TEE requires HAL assertions (CONFIG_HAL_DEFAULT_ASSERTION_LEVEL >= 1)"
 #endif
 
 /* TEE Secure Storage partition label and NVS namespace */
@@ -111,6 +125,19 @@ void esp_tee_configure_region_protection(void);
  * @brief Configure APM protection for TEE
  */
 void esp_tee_configure_apm_protection(void);
+
+/**
+ * @brief Reset the crypto peripherals to a clean state.
+ *
+ * Mirrors esp_system_reset_modules_on_exit() in the non-TEE path.
+ * Called from esp_tee_system_reset() before the reset is triggered.
+ */
+void esp_tee_soc_reset_crypto_peripherals(void);
+
+/**
+ * @brief Reset the SoC, RTC domain included, and do not return.
+ */
+void esp_tee_system_reset(void) __attribute__((noreturn));
 
 /**
  * @brief Switch to the REE app after TEE initialization is complete

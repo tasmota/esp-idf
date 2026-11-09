@@ -10,14 +10,24 @@
 #include "esp_err.h"
 #include "esp_bt_defs.h"
 #include "esp_a2dp_legacy_api.h"
+#include "sdkconfig.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define ESP_A2D_MAX_SEPS        1               /*!< Maximum number of Stream Endpoint that supported */
+/**
+ * @brief Maximum number of Stream Endpoint that supported
+ */
+#ifdef CONFIG_BT_A2DP_SEP_NUM_MAX
+#define ESP_A2D_MAX_SEPS        CONFIG_BT_A2DP_SEP_NUM_MAX
+#else
+#define ESP_A2D_MAX_SEPS        1
+#endif
 
 typedef uint16_t esp_a2d_conn_hdl_t;            /*!< Connection handle, associate with specific device that connected */
+
+#define ESP_A2D_INVALID_CONN_HDL    (0)         /*!< Invalid A2DP connection handle */
 
 /* Media codec types supported by A2DP. */
 #define ESP_A2D_MCT_SBC         (0)             /*!< SBC */
@@ -59,6 +69,50 @@ typedef uint16_t esp_a2d_psc_t;                /*!< Protocol service capabilitie
 #define ESP_A2D_SBC_CIE_ALLOC_MTHD_SRN          _Pragma("GCC warning \"'ESP_A2D_SBC_CIE_ALLOC_MTHD_SRN' macro is deprecated, use 'ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR'\"") ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR
 #define ESP_A2D_SBC_CIE_ALLOC_MTHD_LOUDNESS     (0x1)       /*!< SBC allocation method Loudness */
 
+/* A2DP M24 (MPEG-2, 4 AAC) DRC bit mask in CIE */
+#define ESP_A2D_M24_CIE_DRC_SUPPORT             (0x1)       /*!< M24 MPEG-D DRC supported */
+#define ESP_A2D_M24_CIE_DRC_NS                  (0x0)       /*!< M24 MPEG-D DRC not supported */
+
+/* A2DP M24 object type bit mask in CIE */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_2_AAC_LC       (0x40)      /*!< M24 MPEG-2 AAC LC */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_AAC_LC       (0x20)      /*!< M24 MPEG-4 AAC LC */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_AAC_LTP      (0x10)      /*!< M24 MPEG-4 AAC LTP */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_AAC_SCALABLE (0x08)      /*!< M24 MPEG-4 AAC Scalable */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_HE_AAC       (0x04)      /*!< M24 MPEG-4 HE-AAC */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_HE_AAC_V2    (0x02)      /*!< M24 MPEG-4 HE-AAC v2 */
+#define ESP_A2D_M24_CIE_OBJ_TYPE_4_AAC_ELD_V2   (0x01)      /*!< M24 MPEG-4 AAC-ELD v2 */
+
+/* A2DP M24 sampling frequency part 1 bit mask in CIE */
+#define ESP_A2D_M24_CIE_SF1_8K                  (0x80)      /*!< M24 sampling frequency 8 kHz */
+#define ESP_A2D_M24_CIE_SF1_11K                 (0x40)      /*!< M24 sampling frequency 11.025 kHz */
+#define ESP_A2D_M24_CIE_SF1_12K                 (0x20)      /*!< M24 sampling frequency 12 kHz */
+#define ESP_A2D_M24_CIE_SF1_16K                 (0x10)      /*!< M24 sampling frequency 16 kHz */
+#define ESP_A2D_M24_CIE_SF1_22K                 (0x08)      /*!< M24 sampling frequency 22.05 kHz */
+#define ESP_A2D_M24_CIE_SF1_24K                 (0x04)      /*!< M24 sampling frequency 24 kHz */
+#define ESP_A2D_M24_CIE_SF1_32K                 (0x02)      /*!< M24 sampling frequency 32 kHz */
+#define ESP_A2D_M24_CIE_SF1_44K                 (0x01)      /*!< M24 sampling frequency 44.1 kHz */
+
+/* A2DP M24 sampling frequency part 2 bit mask in CIE */
+#define ESP_A2D_M24_CIE_SF2_48K                 (0x08)      /*!< M24 sampling frequency 48 kHz */
+#define ESP_A2D_M24_CIE_SF2_64K                 (0x04)      /*!< M24 sampling frequency 64 kHz */
+#define ESP_A2D_M24_CIE_SF2_88K                 (0x02)      /*!< M24 sampling frequency 88.2 kHz */
+#define ESP_A2D_M24_CIE_SF2_96K                 (0x01)      /*!< M24 sampling frequency 96 kHz */
+
+/* A2DP M24 channels bit mask in CIE */
+#define ESP_A2D_M24_CIE_CH_1                    (0x08)      /*!< M24 1 channel */
+#define ESP_A2D_M24_CIE_CH_2                    (0x04)      /*!< M24 2 channels */
+#define ESP_A2D_M24_CIE_CH_6                    (0x02)      /*!< M24 6 channels */
+#define ESP_A2D_M24_CIE_CH_8                    (0x01)      /*!< M24 8 channels */
+
+/* A2DP M24 VBR bit mask in CIE */
+#define ESP_A2D_M24_CIE_VBR_SUPPORT             (0x1)       /*!< M24 VBR supported */
+#define ESP_A2D_M24_CIE_VBR_NS                  (0x0)       /*!< M24 VBR not supported */
+
+/* A2DP M24 bit rate bit mask in CIE */
+#define ESP_A2D_M24_CIE_BR1_MSK                 (0x7F)      /*!< M24 bit rate part 1 mask */
+#define ESP_A2D_M24_CIE_BR2_MSK                 (0xFF)      /*!< M24 bit rate part 2 mask */
+#define ESP_A2D_M24_CIE_BR3_MSK                 (0xFF)      /*!< M24 bit rate part 3 mask */
+
 /**
  * @brief A2DP SBC media codec capabilities information struct
  */
@@ -88,7 +142,7 @@ typedef struct {
 } __attribute__((packed)) esp_a2d_cie_m12_t;
 
 /**
- * @brief A2DP MPEG-2, 4 media codec capabilities information struct (Not supported yet)
+ * @brief A2DP MPEG-2, 4 media codec capabilities information struct
  */
 typedef struct {
     uint8_t     drc             : 1;        /*!< Support of MPEG-D DRC */
@@ -135,6 +189,14 @@ typedef struct {
         esp_a2d_cie_atrac_t atrac_info;        /*!< ATRAC family codec capabilities */
     } cie;                                     /*!< A2DP codec information element */
 } __attribute__((packed)) esp_a2d_mcc_t;
+
+/**
+ * @brief A2DP SEP media codec capabilities
+ */
+typedef struct {
+    uint8_t       seid;         /*!< stream endpoint id */
+    esp_a2d_mcc_t mcc;          /*!< media codec capabilities */
+} esp_a2d_sep_mcc_t;
 
 /**
  * @brief Bluetooth A2DP connection states
@@ -197,6 +259,7 @@ typedef enum {
     ESP_A2D_SEP_REG_FAIL,                      /*!< A2DP stream endpoint register generic fail */
     ESP_A2D_SEP_REG_UNSUPPORTED,               /*!< A2DP stream endpoint register fail, unsupported codec type or param */
     ESP_A2D_SEP_REG_INVALID_STATE,             /*!< A2DP stream endpoint register fail, invalid state */
+    ESP_A2D_SEP_REG_SBC_REQUIRED,              /*!< A2DP stream endpoint register fail, at least one SBC SEP must remain */
 } esp_a2d_sep_reg_state_t;
 
 /**
@@ -230,8 +293,12 @@ typedef enum {
     ESP_A2D_SNK_SET_DELAY_VALUE_EVT,           /*!< indicate a2dp sink set delay report value complete,  only used for A2DP SINK */
     ESP_A2D_SNK_GET_DELAY_VALUE_EVT,           /*!< indicate a2dp sink get delay report value complete,  only used for A2DP SINK */
     ESP_A2D_REPORT_SNK_DELAY_VALUE_EVT,        /*!< report delay value,  only used for A2DP SRC */
-    ESP_A2D_REPORT_SNK_CODEC_CAPS_EVT,         /*!< report sink codec capabilities, only used for A2DP SRC */
+    ESP_A2D_REPORT_SNK_CODEC_CAPS_EVT,         /*!< report currently selected sink codec capabilities, only used for A2DP SRC */
     ESP_A2D_SRC_SET_PREF_MCC_EVT,              /*!< indicate a2dp source set preferred media codec configuration status, only used for A2DP SRC */
+    ESP_A2D_REPORT_SNK_ALL_CODEC_CAPS_EVT,     /*!< report all supported sink codec capabilities, only used for A2DP SRC */
+    ESP_A2D_SNK_ACTIVE_DEVICE_EVT,             /*!< rendered device changed while more than one source is connected,
+                                                    or the result of get/set active device, only used for A2DP SINK */
+    ESP_A2D_AUDIO_STATS_EVT,                   /*!< audio packet counters are ready. Reported only when CONFIG_BT_A2DP_AUDIO_STATS is enabled */
 } esp_a2d_cb_event_t;
 
 /**
@@ -244,6 +311,35 @@ typedef struct {
     uint16_t    data_len;                       /*!< audio data len */
     uint8_t    *data;                           /*!< pointer to audio data start */
 } esp_a2d_audio_buff_t;                         /*!< struct to store audio data */
+
+#ifdef CONFIG_BT_A2DP_AUDIO_STATS
+/**
+ * @brief A2DP audio packet counters for one stream.
+ *
+ * Cleared when the audio state becomes ESP_A2D_AUDIO_STATE_STARTED.
+ * esp_a2d_get_audio_stats() does not clear them. The counters are reported
+ * in ESP_A2D_AUDIO_STATS_EVT. After streaming stops, they stay readable
+ * until the next STARTED. The packet fields are counts. The application
+ * times the playback when it needs a duration.
+ *
+ * handled_pkts counts packets the host stack has handled.
+ *
+ * Source: packets placed on the TX queue. This includes packets later
+ * dropped, packets not yet taken by BTU, and packets discarded by a suspend
+ * or stop flush. lost_pkts is included in handled_pkts, so the loss rate is
+ * lost_pkts / handled_pkts.
+ *
+ * Sink: media packets received at BTC. Sequence gaps are only in lost_pkts,
+ * so the loss rate is lost_pkts / (handled_pkts + lost_pkts).
+ */
+typedef struct {
+    esp_a2d_conn_hdl_t conn_hdl;  /*!< Connection handle of this stream. */
+    uint32_t handled_pkts;        /*!< Packets handled by the host stack (source: queued for TX, sink: received at BTC). See the note above. */
+    uint32_t lost_pkts;           /*!< Source: packets dropped from the TX queue. Sink: packets missing from the sequence. */
+    uint32_t lost_pkts_burst_max; /*!< Largest number of packets lost in a single event. */
+    uint32_t glitch_count;        /*!< Number of glitches. One internal source queue drop or one sink forward sequence gap counts as one. */
+} esp_a2d_audio_stats_t;
+#endif /* CONFIG_BT_A2DP_AUDIO_STATS */
 
 /**
  * @brief A2DP state callback parameters
@@ -284,6 +380,7 @@ typedef union {
     struct media_ctrl_stat_param {
         esp_a2d_media_ctrl_t cmd;              /*!< media control commands to acknowledge */
         esp_a2d_media_ctrl_ack_t status;       /*!< acknowledgement to media control commands */
+        esp_a2d_conn_hdl_t conn_hdl;           /*!< connection handle */
     } media_ctrl_stat;                         /*!< status in acknowledgement to media control commands */
 
     /**
@@ -336,7 +433,7 @@ typedef union {
     struct a2d_report_snk_codec_caps_param {
         esp_a2d_conn_hdl_t conn_hdl;           /*!< connection handle */
         esp_a2d_mcc_t mcc;                     /*!< A2DP sink media codec capability information */
-    } a2d_report_snk_codec_caps_stat;         /*!< A2DP source received sink codec capabilities */
+    } a2d_report_snk_codec_caps_stat;          /*!< A2DP source received sink codec capabilities */
 
     /**
      * @brief ESP_A2D_SRC_SET_PREF_MCC_EVT
@@ -347,6 +444,49 @@ typedef union {
                                                               ESP_BT_STATUS_NOT_READY, ESP_BT_STATUS_BUSY, ESP_BT_STATUS_UNSUPPORTED. */
         esp_a2d_conn_hdl_t conn_hdl;               /*!< connection handle */
     } a2d_set_pref_mcc_stat;                       /*!< A2DP source set preferred media codec configuration */
+
+    /**
+     * @brief ESP_A2D_REPORT_SNK_ALL_CODEC_CAPS_EVT
+     */
+    struct a2d_report_snk_all_codec_caps_param {
+        esp_a2d_conn_hdl_t conn_hdl;            /*!< connection handle */
+        esp_a2d_sep_mcc_t *sep_mcc;             /*!< A2DP sink SEP information
+                                                     @note The memory will be released after the callback function ends */
+        uint8_t sep_num;                        /*!< number of A2DP sink SEP information */
+    } a2d_report_snk_all_codec_caps_stat;       /*!< A2DP source received all sink codec capabilities */
+
+    /**
+     * @brief ESP_A2D_SNK_ACTIVE_DEVICE_EVT
+     *
+     * Reported when the rendered device changes and at least two sources are
+     * connected, and as the result of esp_a2d_sink_get_active_device() or
+     * esp_a2d_sink_set_active_device(). A single connection does not emit this
+     * event on stream start or stop. A get that finds no selection reports
+     * active = false and status = ESP_BT_STATUS_SUCCESS.
+     */
+    struct a2d_snk_active_device_param {
+        bool active;                            /*!< false when no connected device is selected,
+                                                     in which case remote_bda and conn_hdl are meaningless.
+                                                     Ignored when status is not ESP_BT_STATUS_SUCCESS */
+        esp_bd_addr_t remote_bda;               /*!< selected device when the connection handle is known */
+        esp_a2d_conn_hdl_t conn_hdl;            /*!< connection handle of the selected device, or of a failed
+                                                     esp_a2d_sink_set_active_device() request */
+        esp_bt_status_t status;                 /*!< ESP_BT_STATUS_SUCCESS, or the reason set-active failed.
+                                                     A non-success status is only an acknowledgement of
+                                                     esp_a2d_sink_set_active_device() and does not change
+                                                     the current selection */
+    } a2d_snk_active_device;                    /*!< A2DP sink active device information */
+
+#ifdef CONFIG_BT_A2DP_AUDIO_STATS
+    /**
+     * @brief ESP_A2D_AUDIO_STATS_EVT
+     */
+    struct a2d_audio_stats_param {
+        esp_err_t status;                      /*!< ESP_OK, ESP_ERR_INVALID_ARG when conn_hdl has no counters,
+                                                    or ESP_ERR_NOT_SUPPORTED for an external-codec source */
+        esp_a2d_audio_stats_t stats;           /*!< packet counters. Valid when status is ESP_OK */
+    } audio_stats;                             /*!< A2DP audio packet counters */
+#endif
 
 } esp_a2d_cb_param_t;
 
@@ -406,7 +546,7 @@ esp_err_t esp_a2d_register_callback(esp_a2d_cb_t callback);
 /**
  * @brief           Register A2DP sink audio data output function, the output format is undecoded audio data
  *                  frame in esp_a2d_audio_buff_t, user shall call esp_a2d_audio_buff_free to free the buff
- *                  when the data is consumed.
+ *                  when the data is consumed. It is necessary to set BT_A2DP_USE_EXTERNAL_CODEC to y.
  *
  * @param[in]       callback: A2DP sink audio data callback function
  *
@@ -438,10 +578,18 @@ esp_err_t esp_a2d_sink_init(void);
  * @brief           Register a a2dp sink Stream Endpoint (SEP) with specific codec capability, shall register
  *                  SEP after a2dp sink initializing and before a2dp connection establishing. Register the same
  *                  SEP index repeatedly will overwrite the old one.
+ *                  It is necessary to set BT_A2DP_USE_EXTERNAL_CODEC to y.
+ *
+ * @note            After A2DP sink init, every SEID is pre-registered with the mandatory default SBC SEP.
+ *                  Calling this API overwrites that SEID. A2DP requires at least one SBC SEP; registering a
+ *                  non-SBC codec that would overwrite the last SBC SEP fails with ESP_A2D_SEP_REG_SBC_REQUIRED.
+ *                  Therefore using AAC (or other non-SBC codecs) requires ESP_A2D_MAX_SEPS >= 2.
+ *                  The SEID determines the priority of negotiating the configuration with the peer for initiator.
+ *                  The lower the SEID, the higher the priority of the codec capability.
  *
  * @param[in]       seid: local SEP identifier, start from 0, less than ESP_A2D_MAX_SEPS
  *
- * @param[in]       mcc: codec capability, currently only supports SBC
+ * @param[in]       mcc: codec capability, currently supports SBC and AAC
  *
  * @return
  *                  - ESP_OK: success
@@ -457,6 +605,13 @@ esp_err_t esp_a2d_sink_register_stream_endpoint(uint8_t seid, const esp_a2d_mcc_
  * @brief           De-initialize for A2DP sink module. This function
  *                  should be called only after esp_bluedroid_enable() completes successfully,
  *                  and ESP_A2D_PROF_STATE_EVT with ESP_A2D_DEINIT_SUCCESS will reported to APP layer.
+ *
+ * @note            If an A2DP connection exists when this function is called, reporting of
+ *                  ESP_A2D_CONNECTION_STATE_EVT with ESP_A2D_CONNECTION_STATE_DISCONNECTED is not
+ *                  guaranteed. When this function returns ESP_OK, ESP_A2D_PROF_STATE_EVT with
+ *                  ESP_A2D_DEINIT_SUCCESS is reported.
+ *                  After that deinitialization event is reported, the protocol stack resources are released,
+ *                  and the disconnection event will not be reported afterwards.
  *
  * @return
  *                  - ESP_OK: if the deinitialization request is sent successfully
@@ -493,8 +648,28 @@ esp_err_t esp_a2d_sink_connect(esp_bd_addr_t remote_bda);
  *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
  *                  - ESP_FAIL: others
  *
+ * @deprecated      Please use esp_a2d_sink_disconnect_by_handle() instead.
  */
-esp_err_t esp_a2d_sink_disconnect(esp_bd_addr_t remote_bda);
+esp_err_t esp_a2d_sink_disconnect(esp_bd_addr_t remote_bda)
+__attribute__((deprecated("Please use esp_a2d_sink_disconnect_by_handle() instead")));
+
+/**
+ *
+ * @brief           Disconnect from the remote A2DP source device identified by connection handle.
+ *                  This API must be called after esp_a2d_sink_init() and before esp_a2d_sink_deinit().
+ *
+ * @param[in]       conn_hdl: connection handle, reported in ESP_A2D_CONNECTION_STATE_EVT
+ *
+ * @note            If @p conn_hdl does not match a connected A2DP peer, the request is ignored.
+ *
+ * @return
+ *                  - ESP_OK: disconnect request is sent to lower layer successfully
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - ESP_ERR_INVALID_ARG: invalid connection handle
+ *                  - ESP_FAIL: others
+ *
+ */
+esp_err_t esp_a2d_sink_disconnect_by_handle(esp_a2d_conn_hdl_t conn_hdl);
 
 /**
  *
@@ -528,6 +703,51 @@ esp_err_t esp_a2d_sink_get_delay_value(void);
 
 /**
  *
+ * @brief           Get the device selected for rendering. When several source devices
+ *                  are connected, only one of them is rendered at a time, media packets of the others
+ *                  are discarded. The selected device may still be idle (connected, not streaming)
+ *                  after esp_a2d_sink_set_active_device(). The result is reported asynchronously in
+ *                  ESP_A2D_SNK_ACTIVE_DEVICE_EVT (param->a2d_snk_active_device). This API must be
+ *                  called after esp_a2d_sink_init() and before esp_a2d_sink_deinit().
+ *
+ * @return
+ *                  - ESP_OK: if the request is sent successfully
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - ESP_FAIL: others
+ *
+ */
+esp_err_t esp_a2d_sink_get_active_device(void);
+
+/**
+ *
+ * @brief           Choose which connected device gets rendered. The device only has to be
+ *                  connected; it does not have to be streaming. Any previously rendered stream is
+ *                  suspended. If the target is idle, AVRCP Play is sent so it can start.
+ *                  ESP_A2D_SNK_ACTIVE_DEVICE_EVT is reported on both success and failure:
+ *                  check param->a2d_snk_active_device.status. This API must be called
+ *                  after esp_a2d_sink_init() and before esp_a2d_sink_deinit().
+ *
+ * @param[in]       conn_hdl: connection handle of the device to render, reported in
+ *                  ESP_A2D_CONNECTION_STATE_EVT
+ *
+ * @note            With more than one source connected, this API uses AVRCP Controller
+ *                  passthrough commands (Pause on the previously rendered device, Play on an
+ *                  idle target) so the phones stop and start their players. Initialize AVRCP
+ *                  with esp_avrc_ct_init()  before esp_a2d_sink_init(). If AVRCP is not initialized,
+ *                  those commands are silently skipped and only a local A2DP Suspend is sent;
+ *                  the previously streaming phone may looks like still playing.
+ *
+ * @return
+ *                  - ESP_OK: if the request is sent successfully
+ *                  - ESP_ERR_INVALID_ARG: invalid connection handle
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - ESP_FAIL: others
+ *
+ */
+esp_err_t esp_a2d_sink_set_active_device(esp_a2d_conn_hdl_t conn_hdl);
+
+/**
+ *
  * @brief           Media control commands. This API can be used for both A2DP sink and source
  *                  and must be called after esp_a2d_sink_init() and before esp_a2d_sink_deinit().
  *
@@ -538,8 +758,31 @@ esp_err_t esp_a2d_sink_get_delay_value(void);
  *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
  *                  - ESP_FAIL: others
  *
+ * @deprecated      Please use esp_a2d_media_ctrl_by_handle() instead.
  */
-esp_err_t esp_a2d_media_ctrl(esp_a2d_media_ctrl_t ctrl);
+esp_err_t esp_a2d_media_ctrl(esp_a2d_media_ctrl_t ctrl)
+__attribute__((deprecated("Please use esp_a2d_media_ctrl_by_handle() instead")));
+
+/**
+ *
+ * @brief           Media control commands for the A2DP connection identified by connection handle.
+ *                  This API can be used for both A2DP sink and source and must be called after
+ *                  esp_a2d_sink_init() or esp_a2d_source_init(), and before the corresponding deinit.
+ *
+ * @param[in]       conn_hdl: connection handle, reported in ESP_A2D_CONNECTION_STATE_EVT
+ * @param[in]       ctrl: control commands for A2DP data channel
+ *
+ * @note            If @p conn_hdl does not match a connected A2DP peer, the command is
+ *                  rejected with ESP_A2D_MEDIA_CTRL_ACK_FAILURE.
+ *
+ * @return
+ *                  - ESP_OK: control command is sent to lower layer successfully
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - ESP_ERR_INVALID_ARG: invalid connection handle or control command
+ *                  - ESP_FAIL: others
+ *
+ */
+esp_err_t esp_a2d_media_ctrl_by_handle(esp_a2d_conn_hdl_t conn_hdl, esp_a2d_media_ctrl_t ctrl);
 
 /**
  * @brief       This function is used to get the status of A2DP
@@ -590,10 +833,18 @@ esp_err_t esp_a2d_source_set_pref_mcc(esp_a2d_conn_hdl_t conn_hdl, const esp_a2d
  * @brief           Register a a2dp source Stream Endpoint (SEP) with specific codec capability, shall register
  *                  SEP after a2dp source initializing and before a2dp connection establishing. Register the same
  *                  SEP index repeatedly will overwrite the old one.
+ *                  It is necessary to set BT_A2DP_USE_EXTERNAL_CODEC to y.
+ *
+ * @note            After A2DP source init, every SEID is pre-registered with the mandatory default SBC SEP.
+ *                  Calling this API overwrites that SEID. A2DP requires at least one SBC SEP; registering a
+ *                  non-SBC codec that would overwrite the last SBC SEP fails with ESP_A2D_SEP_REG_SBC_REQUIRED.
+ *                  Therefore using AAC (or other non-SBC codecs) requires ESP_A2D_MAX_SEPS >= 2.
+ *                  The SEID determines the priority of negotiating the configuration with the peer for initiator.
+ *                  The lower the SEID, the higher the priority of the codec capability.
  *
  * @param[in]       seid: local SEP identifier, start from 0, less than ESP_A2D_MAX_SEPS
  *
- * @param[in]       mcc: codec capability, currently, only SBC supported
+ * @param[in]       mcc: codec capability, currently, SBC/AAC supported
  *
  * @return
  *                  - ESP_OK: success
@@ -610,6 +861,13 @@ esp_err_t esp_a2d_source_register_stream_endpoint(uint8_t seid, const esp_a2d_mc
  *                  should be called only after esp_bluedroid_enable() completes successfully,
  *                  and ESP_A2D_PROF_STATE_EVT with ESP_A2D_DEINIT_SUCCESS will reported to APP layer.
  *
+ * @note            If an A2DP connection exists when this function is called, reporting of
+ *                  ESP_A2D_CONNECTION_STATE_EVT with ESP_A2D_CONNECTION_STATE_DISCONNECTED is not
+ *                  guaranteed. When this function returns ESP_OK, ESP_A2D_PROF_STATE_EVT with
+ *                  ESP_A2D_DEINIT_SUCCESS is reported.
+ *                  After that deinitialization event is reported, the protocol stack resources are released,
+ *                  and the disconnection event will not be reported afterwards.
+ *
  * @return
  *                  - ESP_OK: success
  *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
@@ -622,6 +880,9 @@ esp_err_t esp_a2d_source_deinit(void);
  * @brief           Send an audio buffer with encoded audio data to sink. The audio data length shall not be bigger than
  *                  audio connection mtu (retrieved from ESP_A2D_CONNECTION_STATE_EVT). if the return value is
  *                  ESP_OK, then the audio buff is consumed, otherwise, audio buff can be reused by user.
+ *
+ * @note            If use AAC codec, the raw AAC data length shall not be bigger than (mtu - 20).
+ *                  20 is the reserved length for encapsulating LATM.
  *
  * @param[in]       conn_hdl: connection handle
  *
@@ -663,8 +924,49 @@ esp_err_t esp_a2d_source_connect(esp_bd_addr_t remote_bda);
  *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
  *                  - ESP_FAIL: others
  *
+ * @deprecated      Please use esp_a2d_source_disconnect_by_handle() instead.
  */
-esp_err_t esp_a2d_source_disconnect(esp_bd_addr_t remote_bda);
+esp_err_t esp_a2d_source_disconnect(esp_bd_addr_t remote_bda)
+__attribute__((deprecated("Please use esp_a2d_source_disconnect_by_handle() instead")));
+
+/**
+ *
+ * @brief           Disconnect from the remote A2DP sink device identified by connection handle.
+ *                  This API must be called after esp_a2d_source_init() and before esp_a2d_source_deinit().
+ *
+ * @param[in]       conn_hdl: connection handle, reported in ESP_A2D_CONNECTION_STATE_EVT
+ *
+ * @note            If @p conn_hdl does not match a connected A2DP peer, the request is ignored.
+ *
+ * @return
+ *                  - ESP_OK: disconnect request is sent to lower layer
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - ESP_ERR_INVALID_ARG: invalid connection handle
+ *                  - ESP_FAIL: others
+ *
+ */
+esp_err_t esp_a2d_source_disconnect_by_handle(esp_a2d_conn_hdl_t conn_hdl);
+
+/**
+ * @brief           Request A2DP audio packet counters for one source or sink stream.
+ *                  This call does not clear the counters. The result is reported in
+ *                  ESP_A2D_AUDIO_STATS_EVT from the BTC task.
+ *
+ * @note            Counting is performed only when CONFIG_BT_A2DP_AUDIO_STATS is enabled.
+ *                  An external-codec source is not counted: the callback status is
+ *                  ESP_ERR_NOT_SUPPORTED. After streaming stops or the link closes, the
+ *                  counters remain available until the next ESP_A2D_AUDIO_STATE_STARTED.
+ *
+ * @param[in]       conn_hdl: connection handle reported by the A2DP connection or audio-state callback
+ *
+ * @return
+ *                  - ESP_OK: request is sent. The callback carries the counters or an error status
+ *                  - ESP_ERR_INVALID_STATE: Bluetooth stack is not enabled
+ *                  - ESP_ERR_INVALID_ARG: conn_hdl is 0
+ *                  - ESP_ERR_NOT_SUPPORTED: CONFIG_BT_A2DP_AUDIO_STATS is disabled
+ *                  - ESP_FAIL: request could not be sent
+ */
+esp_err_t esp_a2d_get_audio_stats(esp_a2d_conn_hdl_t conn_hdl);
 
 #ifdef __cplusplus
 }

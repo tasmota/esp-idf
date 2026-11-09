@@ -5,6 +5,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <esp_types.h>
 #include "sdkconfig.h"
@@ -13,11 +14,18 @@
 #include "soc/soc.h"
 #include "soc/pmu_struct.h"
 #include "hal/efuse_hal.h"
+#include "hal/efuse_ll.h"
+#include "hal/gpio_ll.h"
+#include "hal/gpio_types.h"
 #include "hal/pmu_hal.h"
 #include "pmu_param.h"
 #include "esp_private/esp_pmu.h"
 #include "esp_hw_log.h"
 #include "hal/regi2c_ctrl_ll.h"
+#include "soc/rtc.h"
+#include "soc/reset_reasons.h"
+#include "esp_rom_sys.h"
+#include "esp_private/ocode_init.h"
 
 ESP_HW_LOG_ATTR_TAG(TAG, "pmu_init");
 
@@ -38,9 +46,26 @@ pmu_context_t * __attribute__((weak)) IRAM_ATTR PMU_instance(void)
 {
     /* It should be explicitly defined in the internal RAM, because this
      * instance will be used in pmu_sleep.c */
-    static DRAM_ATTR pmu_hal_context_t pmu_hal = { .dev = &PMU };
+    static DRAM_ATTR pmu_hal_context_t pmu_hal = { .dev = NULL };
     static DRAM_ATTR pmu_sleep_machine_constant_t pmu_mc = PMU_SLEEP_MC_DEFAULT();
-    static DRAM_ATTR pmu_context_t pmu_context = { .hal = &pmu_hal, .mc = (void *)&pmu_mc };
+#if PMU_SLEEP_PRIV_ENABLED
+    static DRAM_ATTR pmu_sleep_data_t pmu_data = { 0 };
+#endif
+    static DRAM_ATTR pmu_context_t pmu_context = {
+        .hal = &pmu_hal,
+        .mc = (void *)&pmu_mc,
+#if PMU_SLEEP_PRIV_ENABLED
+        .priv = &pmu_data,
+#endif
+    };
+
+    if (pmu_hal.dev == NULL) {
+        pmu_hal.dev = &PMU;
+        const uint32_t sel = efuse_ll_get_flash_power_sel();
+        const uint32_t en = efuse_ll_get_flash_power_sel_en();
+        const int g36 = gpio_ll_get_level(GPIO_LL_GET_HW(0), (uint32_t)GPIO_NUM_36);
+        pmu_context.flash_ldo_volt_1v8 = (sel == 0 && g36 == 0) || (sel == 1 && en == 0);
+    }
     return &pmu_context;
 }
 
@@ -55,7 +80,13 @@ void pmu_hp_system_init(pmu_context_t *ctx, pmu_hp_mode_t mode, pmu_hp_system_pa
     assert(ctx->hal);
     /* Default configuration of hp-system power in active, modem and sleep modes */
     pmu_ll_hp_set_dig_power(ctx->hal->dev, mode, power->dig_power.val);
-    pmu_ll_hp_set_clk_power(ctx->hal->dev, mode, power->clk_power.val);
+    if (mode == PMU_MODE_HP_ACTIVE) {
+        // In active mode the root clock circuit power (BBPLL/CPLL/MPLL/APLL/XTALx2, etc.) is owned by esp_clk_tree.
+        // The analog i2c master is shared by all the PLLs and is not refcounted there, so it is still configured here.
+        pmu_ll_hp_set_ana_i2c_power(ctx->hal->dev, mode, power->clk_power.xpd_bb_i2c, power->clk_power.i2c_iso_en, power->clk_power.i2c_retention);
+    } else {
+        pmu_ll_hp_set_clk_power(ctx->hal->dev, mode, power->clk_power.val);
+    }
     pmu_ll_hp_set_xtal_xpd (ctx->hal->dev, mode, power->xtal.xpd_xtal);
 
     /* Default configuration of hp-system clock in active, modem and sleep modes */
@@ -82,22 +113,21 @@ void pmu_hp_system_init(pmu_context_t *ctx, pmu_hp_mode_t mode, pmu_hp_system_pa
      * sleep modes */
     pmu_ll_hp_set_bias_xpd                    (ctx->hal->dev, mode, anlg->bias.xpd_bias);
     pmu_ll_hp_set_dbg_atten                   (ctx->hal->dev, mode, anlg->bias.dbg_atten);
-    pmu_ll_hp_set_current_power_off           (ctx->hal->dev, mode, anlg->bias.pd_cur);
-    pmu_ll_hp_set_bias_sleep_enable           (ctx->hal->dev, mode, anlg->bias.bias_sleep);
+    pmu_ll_hp_set_pd_cur_bias_sleep(ctx->hal->dev, mode, anlg->bias.pd_cur, anlg->bias.bias_sleep);
     if (mode == PMU_MODE_HP_ACTIVE) {
         pmu_ll_hp_set_regulator_lp_dbias_voltage(ctx->hal->dev, mode, anlg->regulator0.lp_dbias_vol);
         pmu_ll_hp_set_regulator_hp_dbias_voltage(ctx->hal->dev, mode, anlg->regulator0.hp_dbias_vol);
         pmu_ll_hp_set_regulator_dbias_select    (ctx->hal->dev, mode, anlg->regulator0.dbias_sel);
         pmu_ll_hp_set_regulator_dbias_init      (ctx->hal->dev, mode, anlg->regulator0.dig_dbias_init);
     }
-    pmu_ll_hp_set_regulator_sleep_memory_xpd  (ctx->hal->dev, mode, anlg->regulator0.slp_mem_xpd);
-    pmu_ll_hp_set_regulator_sleep_memory_dbias(ctx->hal->dev, mode, anlg->regulator0.slp_mem_dbias);
-    pmu_ll_hp_set_regulator_sleep_logic_xpd   (ctx->hal->dev, mode, anlg->regulator0.slp_logic_xpd);
-    pmu_ll_hp_set_regulator_sleep_logic_dbias (ctx->hal->dev, mode, anlg->regulator0.slp_logic_dbias);
-    pmu_ll_hp_set_regulator_dbias             (ctx->hal->dev, mode, anlg->regulator0.dbias);
-    pmu_ll_hp_set_regulator_xpd               (ctx->hal->dev, mode, anlg->regulator0.xpd);
+    pmu_ll_hp_set_regulator_sleep_memory_xpd    (ctx->hal->dev, mode, anlg->regulator0.slp_mem_xpd);
+    pmu_ll_hp_set_regulator_sleep_memory_dbias  (ctx->hal->dev, mode, anlg->regulator0.slp_mem_dbias);
+    pmu_ll_hp_set_regulator_sleep_logic_xpd     (ctx->hal->dev, mode, anlg->regulator0.slp_logic_xpd);
+    pmu_ll_hp_set_regulator_sleep_logic_dbias   (ctx->hal->dev, mode, anlg->regulator0.slp_logic_dbias);
+    pmu_ll_hp_set_regulator_dbias               (ctx->hal->dev, mode, anlg->regulator0.dbias);
+    pmu_ll_hp_set_regulator_xpd                 (ctx->hal->dev, mode, anlg->regulator0.xpd);
     pmu_ll_hp_set_regulator_sleep_connect_enable(ctx->hal->dev, mode, anlg->regulator0.slp_connect_en);
-    pmu_ll_hp_set_regulator_driver_bar        (ctx->hal->dev, mode, anlg->regulator1.drv_b);
+    pmu_ll_hp_set_regulator_driver_bar          (ctx->hal->dev, mode, anlg->regulator1.drv_b);
 
     /* Default configuration of hp-system retention sub-system in active, modem
      * and sleep modes */
@@ -124,10 +154,11 @@ void pmu_lp_system_init(pmu_context_t *ctx, pmu_lp_mode_t mode, pmu_lp_system_pa
 
     /* Default configuration of lp-system analog sub-system in active and
      * sleep modes */
-    pmu_ll_lp_set_bias_xpd             (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.xpd_bias);
-    pmu_ll_lp_set_dbg_atten            (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.dbg_atten);
-    pmu_ll_lp_set_current_power_off    (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.pd_cur);
-    pmu_ll_lp_set_bias_sleep_enable    (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.bias_sleep);
+    if (mode == PMU_MODE_LP_SLEEP) {
+        pmu_ll_lp_set_bias_xpd             (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.xpd_bias);
+        pmu_ll_lp_set_dbg_atten            (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.dbg_atten);
+        pmu_ll_lp_set_pd_cur_bias_sleep    (ctx->hal->dev, PMU_MODE_LP_SLEEP, anlg->bias.pd_cur, anlg->bias.bias_sleep);
+    }
     pmu_ll_lp_set_regulator_xpd        (ctx->hal->dev, mode, anlg->regulator0.xpd);
     pmu_ll_lp_set_regulator_dbias      (ctx->hal->dev, mode, anlg->regulator0.dbias);
     pmu_ll_lp_set_regulator_slp_xpd    (ctx->hal->dev, mode, anlg->regulator0.slp_xpd);
@@ -158,6 +189,8 @@ static inline void pmu_power_domain_force_default(pmu_context_t *ctx)
     }
     /* Isolate all memory banks while sleeping, avoid memory leakage current */
     pmu_ll_hp_set_memory_no_isolate     (ctx->hal->dev, 0);
+    /* Disable memory force pu for memory pd during deep sleep */
+    pmu_ll_hp_set_memory_power_up       (ctx->hal->dev, 0);
 
     pmu_ll_lp_set_power_force_power_up  (ctx->hal->dev, false);
     pmu_ll_lp_set_power_force_no_reset  (ctx->hal->dev, false);
@@ -211,5 +244,21 @@ void pmu_init(void)
     pmu_lp_system_init_default(PMU_instance());
     pmu_power_domain_force_default(PMU_instance());
 
-    WRITE_PERI_REG(PMU_POWER_PD_MEM_CNTL_REG, 0);
+#if !CONFIG_IDF_ENV_FPGA
+    if (esp_rom_get_reset_reason(0) == RESET_REASON_CHIP_POWER_ON) {
+        esp_ocode_calib_init();
+    }
+#endif
+
+#if CONFIG_ESP_ENABLE_PVT
+    /*setup pvt function*/
+    uint32_t blk_version = efuse_hal_blk_version();
+    if (blk_version >= 1) {
+        pvt_auto_dbias_enable(true);
+        esp_rom_delay_us(1000);
+    }
+    else {
+        ESP_HW_LOGW(TAG, "blk_version is less than 1, pvt function not supported in efuse.");
+    }
+#endif
 }

@@ -7,41 +7,137 @@
  */
 
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "nvs_flash.h"
-#include "esp_system.h"
-#include "esp_timer.h"
-
-#include "host/ble_hs.h"
-#include "services/gap/ble_svc_gap.h"
 
 #include "tmap_central.h"
 
-#include "ble_audio_example_init.h"
-#include "ble_audio_example_utils.h"
+/* Encryption, MTU exchange and service discovery complete independently, so all
+ * are tracked. set_discovered is per member rather than a count, so a member that
+ * keeps its link while another one is replaced does not have to be discovered again. */
+struct set_member {
+    uint16_t handle;
+    uint8_t  dst[6];
+    bool     sec_done;
+    bool     mtu_exchanged;
+    bool     disc_completed;
+    bool     set_discovered;
+};
 
-#define SCAN_INTERVAL       160     /* 100ms */
-#define SCAN_WINDOW         160     /* 100ms */
+static struct set_member members[TMAP_CEN_PEER_COUNT];
+static size_t member_count;
 
-#define INIT_SCAN_INTERVAL  16      /* 10ms */
-#define INIT_SCAN_WINDOW    16      /* 10ms */
-#define CONN_INTERVAL       64      /* 64 * 1.25 = 80ms */
-#define CONN_LATENCY        0
-#define CONN_TIMEOUT        500     /* 500 * 10ms = 5s */
-#define CONN_MAX_CE_LEN     0xFFFF
-#define CONN_MIN_CE_LEN     0xFFFF
-#define CONN_DURATION       10000   /* 10s */
+static void member_discover_profiles(struct set_member *member);
 
-static uint16_t default_conn_handle = CONN_HANDLE_INIT;
-static bool disc_completed;
-static bool disc_cancelled;
-static bool mtu_exchanged;
+/* One connect at a time. members[] only learns a peer at acl_connect, and
+ * ext_scan_stop() does not discard reports already queued for us, so without
+ * this a second report starts an overlapping conn_create that the stack
+ * rejects ("L2CAP - LE - cannot start new connection at conn st: 1"). */
+static bool conn_pending;
 
-uint16_t default_conn_handle_get(void)
+/* Lock state: pending until the callback, held until stream setup completes. */
+static bool lock_pending;
+static bool set_locked;
+
+size_t set_member_count(void)
 {
-    return default_conn_handle;
+    return member_count;
+}
+
+uint16_t set_member_handle(size_t index)
+{
+    return (index < member_count) ? members[index].handle : CONN_HANDLE_INIT;
+}
+
+const uint8_t *set_member_addr(uint16_t conn_handle)
+{
+    for (size_t i = 0; i < member_count; i++) {
+        if (members[i].handle == conn_handle) {
+            return members[i].dst;
+        }
+    }
+
+    return NULL;
+}
+
+static struct set_member *member_by_handle(uint16_t handle)
+{
+    for (size_t i = 0; i < member_count; i++) {
+        if (members[i].handle == handle) {
+            return &members[i];
+        }
+    }
+
+    return NULL;
+}
+
+static void member_remove(uint16_t handle)
+{
+    for (size_t i = 0; i < member_count; i++) {
+        if (members[i].handle != handle) {
+            continue;
+        }
+
+        for (size_t j = i + 1; j < member_count; j++) {
+            members[j - 1] = members[j];
+        }
+
+        member_count--;
+        memset(&members[member_count], 0, sizeof(members[member_count]));
+
+        return;
+    }
+}
+
+static bool member_is_known(const uint8_t addr[6])
+{
+    for (size_t i = 0; i < member_count; i++) {
+        if (memcmp(members[i].dst, addr, sizeof(members[i].dst)) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* The library looks members up by handle, not by slot. */
+static const uint16_t *lock_handles(void)
+{
+    static uint16_t handles[TMAP_CEN_PEER_COUNT];
+
+    for (size_t i = 0; i < member_count; i++) {
+        handles[i] = members[i].handle;
+    }
+
+    return handles;
+}
+
+/* Index 0 must be the rank 1 device; unranked members keep connection order. */
+static void set_members_sort_by_rank(void)
+{
+    for (size_t i = 1; i < member_count; i++) {
+        struct set_member tmp = members[i];
+        uint8_t rank = csip_member_rank_get(tmp.handle);
+        size_t j = i;
+
+        if (rank == 0) {
+            continue;
+        }
+
+        while (j > 0) {
+            uint8_t prev = csip_member_rank_get(members[j - 1].handle);
+
+            if (prev != 0 && prev <= rank) {
+                break;
+            }
+
+            members[j] = members[j - 1];
+            j--;
+        }
+
+        members[j] = tmp;
+    }
 }
 
 static void tmap_discovery_complete(esp_ble_audio_tmap_role_t role,
@@ -52,102 +148,41 @@ static void tmap_discovery_complete(esp_ble_audio_tmap_role_t role,
         return;
     }
 
-    if (conn->handle != default_conn_handle) {
+    if (member_by_handle(conn->handle) == NULL) {
         return;
     }
 
-    ESP_LOGI(TAG, "TMAP discovery done");
-
-    err = cap_initiator_setup();
-    if (err) {
-        return;
-    }
+    /* Audio setup waits for set_lock_complete(). */
+    ESP_LOGI(TAG, "TMAP discovery done: handle %u", conn->handle);
 }
 
 static esp_ble_audio_tmap_cb_t tmap_callbacks = {
     .discovery_complete = tmap_discovery_complete,
 };
 
-static void ext_scan_start(void)
-{
-    struct ble_gap_disc_params params = {0};
-    uint8_t own_addr_type;
-    int err;
+/* TMAP role and set identity are separate AD elements; decide after parsing. */
+struct adv_match {
+    bool tmap_umr;
+    bool rsi_present;
+    bool rsi_ours;
+};
 
-    err = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to determine own addr type, err %d", err);
-        return;
-    }
-
-    params.passive = 1;
-    params.itvl = SCAN_INTERVAL;
-    params.window = SCAN_WINDOW;
-
-    err = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &params,
-                       example_audio_gap_event_cb, NULL);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to start scanning, err %d", err);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Extended scan started");
-}
-
-static int conn_create(ble_addr_t *dst)
-{
-    struct ble_gap_conn_params params = {0};
-    uint8_t own_addr_type = 0;
-    int err;
-
-    err = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to determine address type, err %d", err);
-        return err;
-    }
-
-    err = ble_gap_disc_cancel();
-    if (err) {
-        ESP_LOGE(TAG, "Failed to stop scanning, err %d", err);
-        return err;
-    }
-
-    disc_cancelled = true;
-
-    params.scan_itvl = INIT_SCAN_INTERVAL;
-    params.scan_window = INIT_SCAN_WINDOW;
-    params.itvl_min = CONN_INTERVAL;
-    params.itvl_max = CONN_INTERVAL;
-    params.latency = CONN_LATENCY;
-    params.supervision_timeout = CONN_TIMEOUT;
-    params.max_ce_len = CONN_MAX_CE_LEN;
-    params.min_ce_len = CONN_MIN_CE_LEN;
-
-    return ble_gap_connect(own_addr_type, dst, CONN_DURATION, &params,
-                           example_audio_gap_event_cb, NULL);
-}
-
-static int pairing_start(uint16_t conn_handle)
-{
-    return ble_gap_security_initiate(conn_handle);
-}
-
-static int exchange_mtu(uint16_t conn_handle)
-{
-    return ble_gattc_exchange_mtu(conn_handle, NULL, NULL);
-}
-
-static bool check_and_connect(uint8_t type, const uint8_t *data,
+static bool collect_adv_match(uint8_t type, const uint8_t *data,
                               uint8_t data_len, void *user_data)
 {
-    esp_ble_audio_gap_app_event_t *event;
-    ble_addr_t dst = {0};
+    struct adv_match *match;
     uint16_t tmap_role;
     uint16_t uuid_val;
-    int err;
 
-    event = user_data;
-    assert(event);
+    match = user_data;
+    assert(match);
+
+    if (type == EXAMPLE_AD_TYPE_CSIS_RSI) {
+        /* Resolves the advertised RSI against our SIRK. */
+        match->rsi_present = true;
+        match->rsi_ours = csip_adv_is_set_member(type, data, data_len);
+        return true;    /* Continue parsing to next AD data type */
+    }
 
     if (type != EXAMPLE_AD_TYPE_SERVICE_DATA16) {
         return true;    /* Continue parsing to next AD data type */
@@ -165,109 +200,170 @@ static bool check_and_connect(uint8_t type, const uint8_t *data,
         return true;    /* Continue parsing to next AD data type */
     }
 
-    ESP_LOGI(TAG, "Found TMAS in peer adv data!");
-
     if (data_len < sizeof(uuid_val) + sizeof(tmap_role)) {
         ESP_LOGW(TAG, "Invalid ad size %u (tmap role)", data_len);
-        return false;   /* Stop parsing */
+        return true;    /* Continue parsing to next AD data type */
     }
 
     tmap_role = sys_get_le16(data + sizeof(uuid_val));
+    match->tmap_umr = (tmap_role & ESP_BLE_AUDIO_TMAP_ROLE_UMR) != 0;
 
-    if ((tmap_role & ESP_BLE_AUDIO_TMAP_ROLE_UMR) == 0) {
-        ESP_LOGW(TAG, "No TMAS UMR support!");
-        return false;   /* Stop parsing */
-    }
-
-    dst.type = event->ext_scan_recv.addr.type;
-    memcpy(dst.val, event->ext_scan_recv.addr.val, sizeof(dst.val));
-
-    err = conn_create(&dst);
-    if (err) {
-        ESP_LOGE(TAG, "Failed to create conn, err %d", err);
-
-        if (disc_cancelled) {
-            disc_cancelled = false;
-            ext_scan_start();
-        }
-    }
-
-    return false;   /* Stop parsing */
+    return true;    /* Continue parsing to next AD data type */
 }
 
 static void ext_scan_recv(esp_ble_audio_gap_app_event_t *event)
 {
-    if (default_conn_handle != CONN_HANDLE_INIT) {
+    struct adv_match match = {0};
+    int err;
+
+    if (member_count >= ARRAY_SIZE(members) || conn_pending) {
         return;
     }
 
-    /* Check if the advertising is connectable and if TMAS is supported */
-    if (event->ext_scan_recv.event_type & EXAMPLE_ADV_PROP_CONNECTABLE) {
-        esp_ble_audio_data_parse(event->ext_scan_recv.data,
-                                 event->ext_scan_recv.data_len,
-                                 check_and_connect, (void *)event);
+    if ((event->ext_scan_recv.event_type & EXAMPLE_ADV_PROP_CONNECTABLE) == 0) {
+        return;
     }
+
+    if (member_is_known(event->ext_scan_recv.addr.val)) {
+        return;
+    }
+
+    esp_ble_audio_data_parse(event->ext_scan_recv.data,
+                             event->ext_scan_recv.data_len,
+                             collect_adv_match, &match);
+
+    if (!match.tmap_umr) {
+        return;
+    }
+
+    /* A coordinated set build only accepts members carrying our SIRK. */
+    if (TMAP_CEN_PEER_COUNT > 1 && !(match.rsi_present && match.rsi_ours)) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Found peer %zu/%u (TMAS UMR%s)", member_count + 1, TMAP_CEN_PEER_COUNT,
+             match.rsi_present ? ", set member" : "");
+
+    err = ext_scan_stop();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to stop scanning, err %d", err);
+        return;
+    }
+
+    err = conn_create(event->ext_scan_recv.addr.type,
+                      event->ext_scan_recv.addr.val);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to create conn, err %d", err);
+        ext_scan_start();
+        return;
+    }
+
+    conn_pending = true;
 }
 
 static void acl_connect(esp_ble_audio_gap_app_event_t *event)
 {
     int err;
 
+    conn_pending = false;
+
     if (event->acl_connect.status) {
-        ESP_LOGE(TAG, "connection failed, status %d", event->acl_connect.status);
+        ESP_LOGE(TAG, "Connection failed, status %d", event->acl_connect.status);
+        ext_scan_start();
         return;
     }
 
-    ESP_LOGI(TAG, "Conn established:");
-    ESP_LOGI(TAG, "conn_handle 0x%04x status 0x%02x role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
-             event->acl_connect.conn_handle, event->acl_connect.status,
-             event->acl_connect.role, event->acl_connect.dst.val[5],
-             event->acl_connect.dst.val[4], event->acl_connect.dst.val[3],
-             event->acl_connect.dst.val[2], event->acl_connect.dst.val[1],
-             event->acl_connect.dst.val[0]);
+    ESP_LOGI(TAG, "Connected: handle %u role %u peer %02x:%02x:%02x:%02x:%02x:%02x",
+             event->acl_connect.conn_handle, event->acl_connect.role,
+             EXAMPLE_BT_ADDR_PRINT_ARGS(event->acl_connect.dst.val));
+
+    if (member_count >= ARRAY_SIZE(members)) {
+        ESP_LOGE(TAG, "Set member table full");
+        return;
+    }
+
+    memset(&members[member_count], 0, sizeof(members[member_count]));
+    members[member_count].handle = event->acl_connect.conn_handle;
+    memcpy(members[member_count].dst, event->acl_connect.dst.val,
+           sizeof(members[member_count].dst));
+    member_count++;
 
     err = pairing_start(event->acl_connect.conn_handle);
     if (err) {
         ESP_LOGE(TAG, "Failed to initiate security, err %d", err);
         return;
     }
+}
 
-    default_conn_handle = event->acl_connect.conn_handle;
+/* Nothing is connected any more: forget the whole session. */
+static void set_teardown_finish(void)
+{
+    lock_pending = false;
+    set_locked = false;
+
+    cap_initiator_reset();
+
+    vcp_vol_ctlr_reset();
+
+    ext_scan_start();
 }
 
 static void acl_disconnect(esp_ble_audio_gap_app_event_t *event)
 {
-    ESP_LOGI(TAG, "Conn terminated: conn_handle 0x%04x reason 0x%02x",
+    ESP_LOGI(TAG, "Disconnected: handle %u reason 0x%02x",
              event->acl_disconnect.conn_handle, event->acl_disconnect.reason);
 
-    default_conn_handle = CONN_HANDLE_INIT;
-    disc_completed = false;
-    disc_cancelled = false;
-    mtu_exchanged = false;
+    if (member_by_handle(event->acl_disconnect.conn_handle) == NULL) {
+        return;
+    }
 
-    unicast_group_delete();
+    member_remove(event->acl_disconnect.conn_handle);
+    peer_forget(event->acl_disconnect.conn_handle);
+    vcp_vol_ctlr_forget(event->acl_disconnect.conn_handle);
+
+    /* An incomplete set is no longer something to drive as one. */
+    vcp_vol_ctlr_streams_stopped();
+
+    /* Give the lock back on whatever is still connected, and drop a lock that
+     * is still in flight: the set it was taken for no longer exists. */
+    set_release_lock();
+    lock_pending = false;
+
+    if (member_count == 0) {
+        set_teardown_finish();
+        return;
+    }
+
+    /* Nothing else to undo: the members that are left keep their links and
+     * keep streaming. Only the departed member's own streams were released,
+     * by the stack, and its slot in the CIG stays reserved for whatever comes
+     * back to fill it. */
+    ESP_LOGI(TAG, "Lost a member; %zu left, scanning for the other", member_count);
 
     ext_scan_start();
 }
 
 static void security_change(esp_ble_iso_gap_app_event_t *event)
 {
+    struct set_member *member;
     int err;
 
     if (event->security_change.status) {
-        ESP_LOGE(TAG, "security change failed, status %d", event->security_change.status);
+        security_failed_recover(event->security_change.conn_handle,
+                                event->security_change.status);
         return;
     }
 
-    ESP_LOGI(TAG, "Security change:");
-    ESP_LOGI(TAG, "conn_handle 0x%04x status 0x%02x role %u sec_level %u bonded %u "
-             "peer %02x:%02x:%02x:%02x:%02x:%02x",
-             event->security_change.conn_handle, event->security_change.status,
-             event->security_change.role, event->security_change.sec_level,
-             event->security_change.bonded, event->security_change.dst.val[5],
-             event->security_change.dst.val[4], event->security_change.dst.val[3],
-             event->security_change.dst.val[2], event->security_change.dst.val[1],
-             event->security_change.dst.val[0]);
+    ESP_LOGI(TAG, "Security: handle %u level %u bonded %u",
+             event->security_change.conn_handle,
+             event->security_change.sec_level,
+             event->security_change.bonded);
+
+    member = member_by_handle(event->security_change.conn_handle);
+    if (member && !member->sec_done) {
+        member->sec_done = true;
+        member_discover_profiles(member);
+    }
 
     err = exchange_mtu(event->security_change.conn_handle);
     if (err) {
@@ -296,68 +392,203 @@ static void iso_gap_app_cb(esp_ble_audio_gap_app_event_t *event)
     }
 }
 
-static void gatt_mtu_change(esp_ble_audio_gatt_app_event_t *event)
+/* Encryption, MTU exchange and service discovery complete in any order. Wait for
+ * encryption too: a cached peer DB completes discovery at once, before a bonded
+ * link is re-encrypted, and the profiles then read encrypted characteristics. */
+static void member_discover_profiles(struct set_member *member)
 {
     esp_err_t err;
 
-    ESP_LOGI(TAG, "gatt mtu change, conn_handle %u, mtu %u",
+    if (!member->sec_done || !member->mtu_exchanged || !member->disc_completed) {
+        return;
+    }
+
+    err = esp_ble_audio_tmap_discover(member->handle, &tmap_callbacks);
+    if (err) {
+        ESP_LOGE(TAG, "Failed to discover tmap, err %d", err);
+        return;
+    }
+
+    /* The CAP commander needs a volume controller on every member. */
+    vcp_vol_ctlr_discover(member->handle);
+
+    /* Look for the remaining members while this one is discovered. */
+    if (member_count < ARRAY_SIZE(members)) {
+        ESP_LOGI(TAG, "Peer %zu/%u connected, scanning for the rest",
+                 member_count, TMAP_CEN_PEER_COUNT);
+        ext_scan_start();
+    }
+
+    /* Rank before endpoints, so members can be ordered. No CSIS, no callback. */
+    if (csip_discover_start(member->handle) != 0) {
+        set_member_discovered(member->handle, -ENOTSUP);
+    }
+}
+
+static void gatt_mtu_change(esp_ble_audio_gatt_app_event_t *event)
+{
+    struct set_member *member;
+    esp_err_t err;
+
+    ESP_LOGI(TAG, "MTU updated: handle %u mtu %u",
              event->gatt_mtu_change.conn_handle, event->gatt_mtu_change.mtu);
 
     if (event->gatt_mtu_change.mtu < ESP_BLE_AUDIO_ATT_MTU_MIN) {
-        ESP_LOGW(TAG, "Invalid new mtu %u, shall be at least %u",
+        ESP_LOGW(TAG, "MTU %u below minimum %u",
                  event->gatt_mtu_change.mtu, ESP_BLE_AUDIO_ATT_MTU_MIN);
+        return;
+    }
+
+    member = member_by_handle(event->gatt_mtu_change.conn_handle);
+    if (member == NULL) {
         return;
     }
 
     err = esp_ble_audio_gattc_disc_start(event->gatt_mtu_change.conn_handle);
     if (err) {
-        ESP_LOGE(TAG, "Failed to start svc disc, err %d", err);
+        ESP_LOGE(TAG, "Failed to start service discovery, err %d", err);
         return;
     }
 
-    ESP_LOGI(TAG, "Start discovering gatt services");
+    ESP_LOGI(TAG, "Service discovery started: handle %u",
+             event->gatt_mtu_change.conn_handle);
 
-    /* Note:
-     * MTU exchanged event may arrived after discover completed event.
-     */
-    mtu_exchanged = true;
+    member->mtu_exchanged = true;
 
-    if (disc_completed) {
-        err = esp_ble_audio_tmap_discover(default_conn_handle, &tmap_callbacks);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to discover tmap, err %d", err);
-            return;
-        }
-
-        vcp_vol_ctlr_discover();
-    }
+    member_discover_profiles(member);
 }
 
 static void gattc_disc_cmpl(esp_ble_audio_gatt_app_event_t *event)
 {
-    esp_err_t err;
+    struct set_member *member;
 
-    ESP_LOGI(TAG, "gattc disc cmpl, status %u, conn_handle %u",
-             event->gattc_disc_cmpl.status, event->gattc_disc_cmpl.conn_handle);
+    ESP_LOGI(TAG, "Service discovery complete: handle %u status %u",
+             event->gattc_disc_cmpl.conn_handle,
+             event->gattc_disc_cmpl.status);
 
     if (event->gattc_disc_cmpl.status) {
-        ESP_LOGE(TAG, "gattc disc failed, status %u", event->gattc_disc_cmpl.status);
         return;
     }
 
-    /* Note:
-     * Discover completed event may arrived before MTU exchanged event.
-     */
-    disc_completed = true;
+    member = member_by_handle(event->gattc_disc_cmpl.conn_handle);
+    if (member == NULL) {
+        return;
+    }
 
-    if (mtu_exchanged) {
-        err = esp_ble_audio_tmap_discover(default_conn_handle, &tmap_callbacks);
-        if (err) {
-            ESP_LOGE(TAG, "Failed to discover tmap, err %d", err);
-            return;
+    member->disc_completed = true;
+
+    member_discover_profiles(member);
+}
+
+/* Ordered access needs all ranks 0 or all unique: a duplicate locks one member
+ * twice and skips the other. */
+static bool set_ranks_are_valid(void)
+{
+    size_t unranked = 0;
+
+    for (size_t i = 0; i < member_count; i++) {
+        uint8_t rank = csip_member_rank_get(members[i].handle);
+
+        if (rank == 0) {
+            unranked++;
+            continue;
         }
 
-        vcp_vol_ctlr_discover();
+        for (size_t j = i + 1; j < member_count; j++) {
+            if (csip_member_rank_get(members[j].handle) == rank) {
+                ESP_LOGE(TAG, "Handle %u and handle %u both report rank %u; flash the "
+                         "peripherals for different ears so their ranks differ",
+                         members[i].handle, members[j].handle, rank);
+                return false;
+            }
+        }
+    }
+
+    if (unranked != 0 && unranked != member_count) {
+        ESP_LOGE(TAG, "Set mixes %zu ranked and %zu unranked member(s)",
+                 member_count - unranked, unranked);
+        return false;
+    }
+
+    return true;
+}
+
+/* One peripheral finished set discovery, or has no CSIS at all. */
+void set_member_discovered(uint16_t conn_handle, int err)
+{
+    struct set_member *member = member_by_handle(conn_handle);
+
+    /* A standalone headset exposes no CSIS; keep going with what is connected. */
+    if (err) {
+        ESP_LOGI(TAG, "Handle %u is not a coordinated set member (err %d)", conn_handle, err);
+    }
+
+    if (member == NULL) {
+        return;
+    }
+
+    member->set_discovered = true;
+
+    if (member_count < ARRAY_SIZE(members)) {
+        return;
+    }
+
+    for (size_t i = 0; i < member_count; i++) {
+        if (!members[i].set_discovered) {
+            return;
+        }
+    }
+
+    ESP_LOGI(TAG, "All %zu peer(s) ready", member_count);
+
+    set_members_sort_by_rank();
+
+    /* Streams still work unlocked, so report and carry on. */
+    if (!set_ranks_are_valid()) {
+        set_lock_complete(-EINVAL);
+        return;
+    }
+
+    /* Nothing to lock: go straight to audio setup. */
+    if (csip_lock_set(lock_handles(), member_count) != 0) {
+        set_lock_complete(-ENOTSUP);
+        return;
+    }
+
+    lock_pending = true;
+}
+
+void set_lock_complete(int err)
+{
+    /* A set that cannot be locked may still be operated on. */
+    if (err && lock_pending) {
+        ESP_LOGW(TAG, "Proceeding without the set lock, err %d", err);
+    }
+
+    set_locked = (err == 0) && lock_pending;
+    lock_pending = false;
+
+    /* A member may have gone while the lock was in flight; the set that is left
+     * is not the one to set up. */
+    if (member_count < ARRAY_SIZE(members)) {
+        set_release_lock();
+        return;
+    }
+
+    if (cap_initiator_setup() != 0) {
+        set_release_lock();
+    }
+}
+
+/* Give the lock back once stream setup is done. Called from cap_initiator.c. */
+void set_release_lock(void)
+{
+    if (!set_locked) {
+        return;
+    }
+
+    if (csip_release_set(lock_handles(), member_count) == 0) {
+        set_locked = false;
     }
 }
 
@@ -398,6 +629,12 @@ void app_main(void)
         return;
     }
 
+    err = app_host_init();
+    if (err) {
+        ESP_LOGE(TAG, "Failed to init host, err %d", err);
+        return;
+    }
+
     err = esp_ble_audio_common_init(&init_info);
     if (err) {
         ESP_LOGE(TAG, "Failed to initialize audio, err %d", err);
@@ -411,6 +648,11 @@ void app_main(void)
     }
 
     err = cap_initiator_init();
+    if (err) {
+        return;
+    }
+
+    err = csip_set_coordinator_init();
     if (err) {
         return;
     }
@@ -436,7 +678,7 @@ void app_main(void)
         return;
     }
 
-    err = ble_svc_gap_device_name_set("TMAP Central");
+    err = set_device_name();
     if (err) {
         ESP_LOGE(TAG, "Failed to set device name, err %d", err);
         return;

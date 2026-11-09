@@ -21,9 +21,15 @@
 #define TWAI_LL_TSEG1_MIN               0
 #define TWAI_LL_TSEG2_MIN               1
 #define TWAI_LL_BRP_MAX                 TWAIFD_BRP
+#define TWAI_LL_PROP_MAX                TWAIFD_PROP
 #define TWAI_LL_TSEG1_MAX               TWAIFD_PH1
 #define TWAI_LL_TSEG2_MAX               TWAIFD_PH2
 #define TWAI_LL_SJW_MAX                 TWAIFD_SJW
+#define TWAI_LL_BRP_MAX_FD              TWAIFD_BRP_FD
+#define TWAI_LL_PROP_MAX_FD             TWAIFD_PROP_FD
+#define TWAI_LL_TSEG1_MAX_FD            TWAIFD_PH1_FD
+#define TWAI_LL_TSEG2_MAX_FD            TWAIFD_PH2_FD
+#define TWAI_LL_SJW_MAX_FD              TWAIFD_SJW_FD
 #define TWAI_LL_TIMER_DIV_MAX           TWAIFD_TIMER_STEP
 
 #define TWAIFD_IDENTIFIER_BASE_S        18      // Start bit of std_id in IDENTIFIER_W of TX buffer or RX buffer
@@ -41,6 +47,10 @@
 #define TWAIFD_LL_TX_CMD_EMPTY          TWAIFD_TXCE     // Set tx buffer to "Empty" state
 #define TWAIFD_LL_TX_CMD_READY          TWAIFD_TXCR     // Set tx buffer to "Ready" state
 #define TWAIFD_LL_TX_CMD_ABORT          TWAIFD_TXCA     // Set tx buffer to "Aborted" state
+
+#define TWAIFD_LL_TX_STATUS_SUCCESS     0x4     // TX buffer transmitted successfully
+#define TWAIFD_LL_TX_STATUS_FAILED      0x6     // TX buffer transmission failed
+#define TWAIFD_LL_TX_STATUS_ABORTED     0x7     // TX buffer transmission aborted
 
 #define TWAIFD_LL_HW_CMD_RST_ERR_CNT    TWAIFD_ERCRST   // Error Counters Reset
 #define TWAIFD_LL_HW_CMD_RST_RX_CNT     TWAIFD_RXFCRST  // Clear RX bus traffic counter
@@ -309,17 +319,6 @@ static inline void twaifd_ll_clr_intr_status(twaifd_dev_t *hw, uint32_t intr_mas
 }
 
 /* ------------------------ Bus Timing Registers --------------------------- */
-/**
- * @brief Check if the brp value valid
- *
- * @param brp Bit rate prescaler value
- * @return true or False
- */
-static inline bool twaifd_ll_check_brp_validation(uint32_t brp)
-{
-    return (brp >= TWAI_LL_BRP_MIN) && (brp <= TWAI_LL_BRP_MAX);
-}
-
 /**
  * @brief Set bus timing nominal bit rate
  *
@@ -669,11 +668,10 @@ static inline uint32_t twaifd_ll_get_tx_buffer_total(twaifd_dev_t *hw)
  * @param buffer_idx Index of the TX buffer (0-7).
  * @return The status of the selected TX buffer.
  */
+__attribute__((always_inline))
 static inline uint32_t twaifd_ll_get_tx_buffer_status(twaifd_dev_t *hw, uint8_t buffer_idx)
 {
-    HAL_ASSERT(buffer_idx < twaifd_ll_get_tx_buffer_total(hw));  // Ensure buffer index is valid
-    uint32_t reg_val = hw->tx_status.val;
-    return reg_val & (TWAIFD_TX2S_V << (TWAIFD_TX2S_S * buffer_idx));  // Get status for buffer
+    return (hw->tx_status.val >> (TWAIFD_TX2S_S * buffer_idx)) & TWAIFD_TX2S_V;
 }
 
 /**
@@ -704,7 +702,6 @@ static inline void twaifd_ll_set_tx_buffer_cmd(twaifd_dev_t *hw, uint8_t buffer_
  */
 static inline void twaifd_ll_set_tx_buffer_priority(twaifd_dev_t *hw, uint8_t buffer_idx, uint32_t priority)
 {
-    HAL_ASSERT(buffer_idx < twaifd_ll_get_tx_buffer_total(hw));  // Ensure buffer index is valid
     uint32_t reg_val = hw->tx_priority.val;
     reg_val &= ~(TWAIFD_TXT1P_V << (TWAIFD_TXT2P_S * buffer_idx));  // Clear old priority
     reg_val |= priority << (TWAIFD_TXT2P_S * buffer_idx);           // Set new priority

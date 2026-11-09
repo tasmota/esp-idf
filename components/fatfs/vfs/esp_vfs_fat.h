@@ -136,6 +136,14 @@ typedef struct {
      * may be different.
      */
     bool use_one_fat;
+    /**
+     * Mount the filesystem in read-only mode.
+     * When set to true, all write operations (open for write, mkdir, unlink,
+     * rename, etc.) will fail with errno set to EROFS.
+     * This flag is independent of the underlying storage — it can be used
+     * with wear-levelled, raw, BDL, or SD card partitions.
+     */
+    bool read_only;
 } esp_vfs_fat_mount_config_t;
 
 #define VFS_FAT_MOUNT_DEFAULT_CONFIG() \
@@ -145,6 +153,7 @@ typedef struct {
         .allocation_unit_size = 0, \
         .disk_status_check_enable = false, \
         .use_one_fat = false, \
+        .read_only = false, \
     }
 
 // Compatibility definition
@@ -476,6 +485,7 @@ esp_err_t esp_vfs_fat_info(const char* base_path, uint64_t* out_total_bytes, uin
  *      - ESP_OK on success
  *      - ESP_ERR_INVALID_ARG if invalid arguments (e.g. any of arguments are NULL or size lower or equal to 0)
  *      - ESP_ERR_INVALID_STATE if partition not found
+ *      - ESP_ERR_NO_MEM if memory allocation failed
  *      - ESP_FAIL if another FRESULT error (saved in errno)
  */
 esp_err_t esp_vfs_fat_create_contiguous_file(const char* base_path, const char* full_path, uint64_t size, bool alloc_now);
@@ -490,6 +500,7 @@ esp_err_t esp_vfs_fat_create_contiguous_file(const char* base_path, const char* 
  *      - ESP_OK on success
  *      - ESP_ERR_INVALID_ARG if invalid arguments (e.g. any of arguments are NULL)
  *      - ESP_ERR_INVALID_STATE if partition not found
+ *      - ESP_ERR_NO_MEM if memory allocation failed
  *      - ESP_FAIL if another FRESULT error (saved in errno)
  */
 esp_err_t esp_vfs_fat_test_contiguous_file(const char* base_path, const char* full_path, bool* is_contiguous);

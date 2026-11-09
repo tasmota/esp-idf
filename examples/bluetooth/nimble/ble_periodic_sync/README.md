@@ -1,5 +1,5 @@
-| Supported Targets | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
-| ----------------- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | --------- |
+| Supported Targets | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-S3 | ESP32-S31 |
+| ----------------- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | --------- |
 
 # BLE Periodic Sync Example
 
@@ -52,14 +52,15 @@ I (...) NimBLE_BLE_PERIODIC_SYNC: BLE Host Task Started
 I (...) NimBLE: GAP procedure initiated: extended discovery;
 
 I (...) main_task: Returned from app_main()
+I (...) NimBLE_BLE_PERIODIC_SYNC: Create sync
 I (...) NimBLE: Periodic sync event :
+I (...) NimBLE_BLE_PERIODIC_SYNC: Periodic Sync Established
 
 I (...) NimBLE: status : 0
 periodic_sync_handle : 0
 sid : 2
 
-I (...) NimBLE: adv addr :
-I (...) NimBLE: xx xx xx xx xx xx
+I (...) NimBLE_BLE_PERIODIC_SYNC: Adv Addr: xx:xx:xx:xx:xx:xx
 I (...) NimBLE: adv_phy : 2m
 
 I (...) NimBLE: per_adv_ival : 192

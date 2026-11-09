@@ -112,10 +112,19 @@ function(_add_flags_to_files files flags)
         endforeach()
 
         foreach(flag ${flags})
-            # Skip flags that contain IDF_TOOLCHAIN_BUILD_DIR substring
-            # to avoid recursion
-            string(FIND "${flag}" "${IDF_TOOLCHAIN_BUILD_DIR}" found_pos)
-            if(found_pos EQUAL -1)
+            # Skip @response-file refs into IDF_TOOLCHAIN_BUILD_DIR (avoid recursion).
+            # IDF emits @"path", but @path and @'path' are also acceptable.
+            set(_skip_flag FALSE)
+            if(flag MATCHES "^@")
+                # Drop leading @ so remaining token is a path (possibly quoted).
+                string(SUBSTRING "${flag}" 1 -1 _resp_path)
+                # Unwrap "..." / '...' (shell rules); leave bare paths unchanged.
+                separate_arguments(_resp_path UNIX_COMMAND "${_resp_path}")
+                # Paranoid: flag already should use IDF_TOOLCHAIN_BUILD_DIR spelling.
+                file(REAL_PATH "${_resp_path}" _resp_path)
+                cmake_path(IS_PREFIX IDF_TOOLCHAIN_BUILD_DIR "${_resp_path}" _skip_flag)
+            endif()
+            if(NOT _skip_flag)
                 file(APPEND "${file_path}" "${flag}\n")
             endif()
         endforeach()
@@ -154,6 +163,63 @@ endfunction()
 
 function(idf_toolchain_remove_flags)
     _process_toolchain_flag_options()
+endfunction()
+
+# __idf_gcc_specs_option(output_var specs_name)
+#
+# @brief Return one -specs= compile option.
+#
+# ccache < 4.12 opens a relative -specs= name from the working directory and
+# fails. If CMAKE_C_COMPILER_LAUNCHER contains such a ccache, return the
+# compiler's canonical path as one quoted option:
+#
+#     "-specs=/absolute/path"
+#
+# Otherwise return:
+#
+#     -specs=<specs_name>
+function(__idf_gcc_specs_option output_var specs_name)
+    # Bare name unless an old ccache forces an absolute path below.
+    set(${output_var} "-specs=${specs_name}" PARENT_SCOPE)
+
+    set(_ccache_bin "")
+    foreach(_launcher IN LISTS CMAKE_C_COMPILER_LAUNCHER)
+        if(_launcher MATCHES "ccache")
+            set(_ccache_bin "${_launcher}")
+            break()
+        endif()
+    endforeach()
+    if(NOT _ccache_bin)
+        return()
+    endif()
+
+    execute_process(
+        COMMAND "${_ccache_bin}" --version
+        OUTPUT_VARIABLE _ccache_version_output
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _ccache_version_result)
+    if(NOT _ccache_version_result EQUAL 0)
+        return()
+    endif()
+    if(NOT _ccache_version_output MATCHES "ccache version ([0-9.]+)")
+        return()
+    endif()
+    if(NOT CMAKE_MATCH_1 VERSION_LESS "4.12")
+        return()
+    endif()
+
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}" -print-file-name=${specs_name}
+        OUTPUT_VARIABLE _specs_path
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _specs_result)
+    if(NOT _specs_result EQUAL 0 OR NOT IS_ABSOLUTE "${_specs_path}")
+        return()
+    endif()
+
+    file(REAL_PATH "${_specs_path}" _specs_path)
+    # Quotes keep "-specs=/path with spaces" one response-file token.
+    set(${output_var} "\"-specs=${_specs_path}\"" PARENT_SCOPE)
 endfunction()
 
 # Workaround: Re-run CMake compiler ABI detection after ABI flags are set.

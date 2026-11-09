@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -153,7 +153,7 @@ static inline void ecdsa_ll_clear_intr(ecdsa_ll_intr_type_t type)
 {
     switch (type) {
     case ECDSA_INT_CALC_DONE:
-        REG_SET_FIELD(ECDSA_INT_ENA_REG, ECDSA_PREP_DONE_INT_CLR, 1);
+        REG_SET_FIELD(ECDSA_INT_CLR_REG, ECDSA_PREP_DONE_INT_CLR, 1);
         break;
     case ECDSA_INT_SHA_RELEASE:
         REG_SET_FIELD(ECDSA_INT_CLR_REG, ECDSA_SHA_RELEASE_INT_CLR, 1);
@@ -443,6 +443,14 @@ __attribute__((always_inline)) static inline void ecdsa_ll_set_ecdsa_key_blk(ecd
         HAL_ASSERT(false && "Unsupported curve");
         break;
     }
+}
+
+/**
+ * @brief Check if the ECDSA peripheral uses MPI module's memory
+ */
+static inline bool ecdsa_ll_is_mpi_required(void)
+{
+    return false;
 }
 
 /**

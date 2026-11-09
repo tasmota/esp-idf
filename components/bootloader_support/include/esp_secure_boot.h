@@ -32,11 +32,7 @@ extern "C" {
    Can be compiled as part of app or bootloader code.
 */
 
-#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
-#define ESP_SECURE_BOOT_DIGEST_LEN 48
-#else /* !CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS */
-#define ESP_SECURE_BOOT_DIGEST_LEN 32
-#endif /* CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS */
+#define ESP_SECURE_BOOT_DIGEST_LEN CONFIG_SECURE_BOOT_IMAGE_DIGEST_LEN
 
 /* SHA-256 length of the public key digest */
 #define ESP_SECURE_BOOT_KEY_DIGEST_SHA_256_LEN 32
@@ -70,11 +66,9 @@ typedef enum {
 #define ESP_SECURE_BOOT_SCHEME ESP_SECURE_BOOT_V2_ECDSA
 #endif
 
-/* Expected ECDSA curve ID from menuconfig "ECDSA key size" (matches ECDSA_CURVE_P192/P256/P384 in ROM) */
+/* Expected ECDSA curve ID from menuconfig "ECDSA key size" (matches ECDSA_CURVE_P256/P384 in ROM) */
 #if CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
-#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_192_BITS
-#define ESP_SECURE_BOOT_ECDSA_CURVE_ID  ECDSA_CURVE_P192
-#elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS
+#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS
 #define ESP_SECURE_BOOT_ECDSA_CURVE_ID  ECDSA_CURVE_P256
 #elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
 #define ESP_SECURE_BOOT_ECDSA_CURVE_ID  ECDSA_CURVE_P384
@@ -317,6 +311,16 @@ typedef struct {
  * - Correct any insecure secure boot settings
  */
 void esp_secure_boot_init_checks(void);
+
+/**
+ * @brief Run the on-update signature-block check for app-side secure boot.
+ *
+ * @important This function is invoked by esp_secure_boot_init_checks() during app
+ * startup when CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT is configured with
+ * V2 RSA or ECDSA schemes. It verifies that the running app's signature blocks
+ * are intact so future OTA updates can be verified.
+ */
+void esp_secure_boot_check_signature_on_update(void);
 
 #if !BOOTLOADER_BUILD && (CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME || CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME)
 

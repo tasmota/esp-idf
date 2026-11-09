@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -57,6 +57,9 @@ typedef enum {
     BTC_PID_AVRC_CT,
     BTC_PID_AVRC_TG,
     BTC_PID_SPP,
+#if (BTC_PAN_INCLUDED == TRUE)
+    BTC_PID_PAN,
+#endif /* BTC_PAN_INCLUDED */
     BTC_PID_HD,
     BTC_PID_HH,
     BTC_PID_L2CAP,
@@ -70,6 +73,14 @@ typedef enum {
 #if (BTC_PBA_CLIENT_INCLUDED == TRUE)
     BTC_PID_PBA_CLIENT,
 #endif /* BTC_PBA_CLIENT_INCLUDED */
+#if (BTC_OPP_INCLUDED == TRUE)
+#if (BTC_OPP_SERVER_INCLUDED == TRUE)
+    BTC_PID_OPP_SERVER,
+#endif /* BTC_OPP_SERVER_INCLUDED */
+#if (BTC_OPP_CLIENT_INCLUDED == TRUE)
+    BTC_PID_OPP_CLIENT,
+#endif /* BTC_OPP_CLIENT_INCLUDED */
+#endif /* BTC_OPP_INCLUDED */
 #endif  /* CLASSIC_BT_INCLUDED */
 #if CONFIG_BLE_MESH
     BTC_PID_PROV,
@@ -120,6 +131,9 @@ typedef enum {
 #if (BLE_FEAT_CTE_EN == TRUE)
     BTC_PID_BLE_CTE,
 #endif // #if (BLE_FEAT_CTE_EN == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
+    BTC_PID_BLE_L2CAP,
+#endif // #if (BLE_L2CAP_COC_INCLUDED == TRUE)
     BTC_PID_NUM,
 } btc_pid_t; //btc profile id
 

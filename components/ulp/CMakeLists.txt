@@ -4,6 +4,11 @@ if(${target} STREQUAL "linux")
     return() # This component is not supported by the POSIX/Linux simulator
 endif()
 
+if(IDF_BUILD_V2)
+    include(${CMAKE_CURRENT_LIST_DIR}/CMakeLists_v2.txt)
+    return()
+endif()
+
 set(srcs "")
 set(includes "")
 
@@ -100,4 +105,7 @@ idf_component_register(
     INCLUDE_DIRS ${includes}
     REQUIRES esp_adc esp_driver_gpio esp_driver_uart esp_driver_i2s
              esp_hal_i2c esp_hal_touch_sens esp_hal_gpspi esp_hal_pmu esp_hal_rtc_timer esp_hal_clock
+    PRIV_REQUIRES bootloader_support esp_mm
 )
+
+idf_define_esp_err_codes(HEADERS ulp_fsm/include/ulp_fsm_common.h)

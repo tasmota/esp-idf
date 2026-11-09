@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -37,13 +37,16 @@ extern "C" {
 #define ESP_ATT_HDR_JSON_MAX_SZ     (128)
 
 #define ESP_ATT_EAT_DEV_ID_SZ       (32)
-#define ESP_ATT_CLAIM_JSON_MAX_SZ   (448)
-#define ESP_ATT_EAT_JSON_MAX_SZ     (1344)
+#define ESP_ATT_EAT_UEID_MAC_SZ     (6)   /* eFuse MAC */
+#define ESP_ATT_EAT_UEID_OPT_ID_SZ  (16)  /* eFuse OPTIONAL_UNIQUE_ID */
+#define ESP_ATT_CLAIM_JSON_MAX_SZ   (576)
+#define ESP_ATT_EAT_JSON_MAX_SZ     (1728)
 
 #define ESP_ATT_PUBKEY_JSON_MAX_SZ  (128)
 #define ESP_ATT_SIGN_JSON_MAX_SZ    (192)
 
-#define ESP_ATT_TK_MIN_SIZE         (ESP_ATT_HDR_JSON_MAX_SZ + ESP_ATT_EAT_JSON_MAX_SZ + ESP_ATT_PUBKEY_JSON_MAX_SZ + ESP_ATT_SIGN_JSON_MAX_SZ)
+#define ESP_ATT_TK_FRAMING_SZ       (64)  /* {"header":..,"eat":..,"public_key":..,"sign":..} */
+#define ESP_ATT_TK_MIN_SIZE         (ESP_ATT_HDR_JSON_MAX_SZ + ESP_ATT_EAT_JSON_MAX_SZ + ESP_ATT_PUBKEY_JSON_MAX_SZ + ESP_ATT_SIGN_JSON_MAX_SZ + ESP_ATT_TK_FRAMING_SZ)
 #if ESP_ATT_TK_MIN_SIZE > PSA_INITIAL_ATTEST_MAX_TOKEN_SIZE
 #error "Attestation token size may exceed the bounds set by the PSA interface"
 #endif
@@ -83,6 +86,8 @@ typedef struct {
     bool digest_validated;               /**< Flag indicating if digest is validated */
     bool sign_verified;                  /**< Flag indicating if signature is verified */
     bool secure_padding;                 /**< Flag indicating if secure padding is present */
+    uint8_t calc_code_hash[MAX_DIGEST_SZ]; /**< Calculated code hash (TEE only; packaging bytes masked) */
+    uint8_t code_hash_ver;             /**< Mask-definition version of the code hash (0 = not present) */
 } esp_att_part_digest_info_t;
 
 /**
@@ -101,6 +106,7 @@ typedef struct {
     char ver[32];                            /**< Version string */
     char idf_ver[32];                        /**< ESP-IDF version string */
     uint32_t secure_ver;                     /**< Secure version number */
+    uint32_t secure_ver_efuse;               /**< Secure version recorded in eFuse (UINT32_MAX if not applicable) */
     esp_att_part_chip_rev_t part_chip_rev;   /**< Chip revision information */
     esp_att_part_digest_info_t part_digest;  /**< Digest information */
 } esp_att_part_metadata_t;
@@ -119,14 +125,17 @@ typedef struct {
  * @brief Structure to hold the Entity Attestation Token initial configuration
  */
 typedef struct {
-    uint8_t *auth_challenge;               /**< Authentication challenge */
-    size_t challenge_size;                 /**< Challenge size */
-    uint32_t client_id;                    /**< Client identifier (Attestation relying party) */
-    uint32_t device_ver;                   /**< Device version */
-    uint8_t device_id[SHA256_DIGEST_SZ];   /**< Device identifier */
-    uint8_t instance_id[SHA256_DIGEST_SZ]; /**< Instance identifier */
-    char psa_cert_ref[32];                 /**< PSA certificate reference */
-    uint8_t device_stat;                   /**< Flags indicating device status */
+    uint8_t *auth_challenge;                         /**< Authentication challenge */
+    size_t challenge_size;                           /**< Challenge size */
+    uint32_t client_id;                              /**< Client identifier (Attestation relying party) */
+    uint32_t chip_id;                                /**< Chip identifier */
+    uint32_t device_ver;                             /**< Device version */
+    uint8_t ueid_mac[ESP_ATT_EAT_UEID_MAC_SZ];       /**< Device UEID: MAC from eFuse*/
+    uint8_t ueid_opt_id[ESP_ATT_EAT_UEID_OPT_ID_SZ]; /**< Device UEID: OPTIONAL_UNIQUE_ID from eFuse*/
+    uint8_t device_id[SHA256_DIGEST_SZ];             /**< Device identifier (SHA-256 of MAC) */
+    uint8_t instance_id[SHA256_DIGEST_SZ];           /**< Instance identifier */
+    char psa_cert_ref[32];                           /**< PSA certificate reference */
+    uint8_t device_stat;                             /**< Flags indicating device status */
 } esp_att_token_cfg_t;
 
 /**

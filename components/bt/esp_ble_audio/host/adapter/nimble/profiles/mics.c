@@ -23,16 +23,19 @@
 #include "host/ble_gatt.h"
 #include "host/ble_hs_mbuf.h"
 
-#include "nimble/profiles/server.h"
+#include "nimble/server.h"
 
 #include "common/host.h"
+#include "common/audio_attr.h"
 
 #include "../../../lib/include/audio.h"
+
+LOG_MODULE_REGISTER(LEA_MICS, CONFIG_BT_ISO_LOG_LEVEL);
 
 #define INC_AICS_CHR_COUNT  (6 + 1)
 
 #define INC_AICS_CHR_FLAGS_STATE \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC)
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC)
 
 #define INC_AICS_CHR_FLAGS_GAIN \
     (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
@@ -41,18 +44,18 @@
     (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC)
 
 #define INC_AICS_CHR_FLAGS_STATUS \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC)
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC)
 
 #define INC_AICS_CHR_FLAGS_CONTROL \
     (BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC)
 
 #define INC_AICS_CHR_FLAGS_DESCRIPTION \
-    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_WRITE_NO_RSP | \
+    (BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_WRITE_NO_RSP | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC | \
      BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_WRITE_ENC)
 
-static uint8_t inc_aics_svc_count;
+static BT_AUDIO_EXT_RAM_BSS_ATTR uint8_t inc_aics_svc_count;
 
-static struct inc_aics_inst {
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct inc_aics_inst {
     struct bt_gatt_service *svc_p;
     uint16_t state_handle;
     uint16_t gain_handle;
@@ -62,7 +65,7 @@ static struct inc_aics_inst {
     uint16_t description_handle;
 } *inc_aics_insts;
 
-static struct ble_gatt_svc_def *gatt_svc_inc_aics;
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct ble_gatt_svc_def *gatt_svc_inc_aics;
 
 static const ble_uuid16_t inc_aics_uuid_svc = BLE_UUID16_INIT(BT_UUID_AICS_VAL);
 static const ble_uuid16_t inc_aics_uuid_state = BLE_UUID16_INIT(BT_UUID_AICS_STATE_VAL);
@@ -72,9 +75,9 @@ static const ble_uuid16_t inc_aics_uuid_status = BLE_UUID16_INIT(BT_UUID_AICS_IN
 static const ble_uuid16_t inc_aics_uuid_control = BLE_UUID16_INIT(BT_UUID_AICS_CONTROL_VAL);
 static const ble_uuid16_t inc_aics_uuid_description = BLE_UUID16_INIT(BT_UUID_AICS_DESCRIPTION_VAL);
 
-static struct ble_gatt_svc_def **mics_inc_svcs;
+static BT_AUDIO_EXT_RAM_BSS_ATTR struct ble_gatt_svc_def **mics_inc_svcs;
 
-static uint16_t mics_mute_handle;
+static BT_AUDIO_EXT_RAM_BSS_ATTR uint16_t mics_mute_handle;
 
 static struct ble_gatt_svc_def gatt_svc_mics[] = {
     {
@@ -89,7 +92,7 @@ static struct ble_gatt_svc_def gatt_svc_mics[] = {
                 .access_cb = bt_le_nimble_gatts_access_cb_safe,
                 .arg = NULL,
                 .descriptors = NULL,    /* NULL if no descriptors. Do not include CCCD */
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | \
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC | \
                          BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_READ_ENC | \
                          BLE_GATT_CHR_F_WRITE_ENC,
                 .min_key_size = 16,
@@ -113,8 +116,8 @@ static int inc_aics_svc_check(void)
      * the service exist in the service defined by Zephyr.
      */
 
-    assert(gatt_svc_inc_aics);
-    assert(inc_aics_insts);
+    BT_LE_ASSERT(gatt_svc_inc_aics);
+    BT_LE_ASSERT(inc_aics_insts);
 
     LOG_DBG("[N]IncAicsSvcCheck[%u]", inc_aics_svc_count);
 
@@ -122,7 +125,7 @@ static int inc_aics_svc_check(void)
         struct ble_gatt_svc_def *aics = &gatt_svc_inc_aics[i];
         struct bt_gatt_service *svc = inc_aics_insts[i].svc_p;
 
-        assert(svc);
+        BT_LE_ASSERT(svc);
 
         for (const struct ble_gatt_chr_def *chr = aics->characteristics;
                 chr && chr->uuid; chr++) {
@@ -133,7 +136,7 @@ static int inc_aics_svc_check(void)
             for (size_t j = 0; j < svc->attr_count; j++) {
                 uuid = (const struct bt_uuid_16 *)(svc->attrs + j)->uuid;
 
-                if (uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
+                if (uuid && uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
                         uuid->val == check->value) {
                     chr_found = true;
                     break;
@@ -157,7 +160,10 @@ static int mics_svc_check(void)
     bool chr_found;
 
     mics_svc = lib_mics_svc_get();
-    assert(mics_svc);
+    if (!mics_svc) {
+        LOG_ERR("[N]MicsSvcGetFail");
+        return -ENODEV;
+    }
 
     LOG_DBG("[N]MicsSvcCheck");
 
@@ -170,7 +176,7 @@ static int mics_svc_check(void)
         for (size_t i = 0; i < mics_svc->attr_count; i++) {
             uuid = (const struct bt_uuid_16 *)(mics_svc->attrs + i)->uuid;
 
-            if (uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
+            if (uuid && uuid->uuid.type == BT_LE_NIMBLE_GATT_UUID_TO_Z(check->u.type) &&
                     uuid->val == check->value) {
                 chr_found = true;
                 break;
@@ -192,14 +198,14 @@ static int inc_aics_attr_handle_set(void)
     uint16_t start_handle;
     uint16_t end_handle;
 
-    assert(inc_aics_insts);
+    BT_LE_ASSERT(inc_aics_insts);
 
     LOG_DBG("[N]IncAicsAttrHdlSet[%u]", inc_aics_svc_count);
 
     for (size_t i = 0; i < inc_aics_svc_count; i++) {
-        assert(inc_aics_insts[i].svc_p);
+        BT_LE_ASSERT(inc_aics_insts[i].svc_p);
 
-        assert(inc_aics_insts[i].state_handle >= 2);
+        BT_LE_ASSERT(inc_aics_insts[i].state_handle >= 2);
         start_handle = inc_aics_insts[i].state_handle - 2;      /* server attr handle & char def handle */
         end_handle = inc_aics_insts[i].description_handle + 1;  /* cccd for chr Audio Input Description */
 
@@ -232,20 +238,25 @@ int bt_le_nimble_mics_attr_handle_set(void)
     uint16_t end_handle = 0;
     int rc;
 
-    mics_svc = lib_mics_svc_get();
-    assert(mics_svc);
-
-    LOG_DBG("[N]MicsAttrHdlSet[%u]", mics_svc->attr_count);
-
+    /* App may not register this svc (e.g. CAP Acceptor single mode keeps
+     * unused capability built). Skip rather than fail audio_start.
+     */
     rc = ble_gatts_find_svc(BLE_UUID16_DECLARE(BT_UUID_MICS_VAL), &start_handle);
     if (rc) {
-        LOG_ERR("[N]MicsNotFound[%d]", rc);
-        return rc;
+        LOG_DBG("[N]MicsNotInit");
+        return 0;
+    }
+
+    mics_svc = lib_mics_svc_get();
+    if (!mics_svc) {
+        LOG_ERR("[N]MicsSvcGetFail");
+        return -ENODEV;
     }
 
     end_handle = start_handle + mics_svc->attr_count - 1;
 
-    LOG_DBG("[N]Hdl[%u][%u]", start_handle, end_handle);
+    LOG_DBG("[N]MicsAttrHdlSet[%u][%u][%u]",
+            start_handle, end_handle, mics_svc->attr_count);
 
     for (size_t i = 0; i < mics_svc->attr_count; i++) {
         (mics_svc->attrs + i)->handle = start_handle + i;
@@ -295,8 +306,8 @@ static void inc_aics_svc_init(struct inc_aics_inst *inst,
     svc->uuid = &inc_aics_uuid_svc.u;
     svc->includes = NULL;
 
-    svc->characteristics = calloc(INC_AICS_CHR_COUNT, sizeof(struct ble_gatt_chr_def));
-    assert(svc->characteristics);
+    svc->characteristics = bt_le_ext_calloc(INC_AICS_CHR_COUNT, sizeof(struct ble_gatt_chr_def));
+    BT_LE_ASSERT(svc->characteristics);
 
     /* Characteristic - Audio Input State */
     inc_aics_chr_init((void *)&svc->characteristics[0],
@@ -335,9 +346,15 @@ static void inc_aics_svc_init(struct inc_aics_inst *inst,
                       INC_AICS_CHR_FLAGS_DESCRIPTION);
 }
 
+void bt_le_nimble_mics_state_reset(void)
+{
+    inc_aics_svc_count = 0;
+}
+
 int bt_le_nimble_mics_init(void *micp_inc)
 {
     struct bt_micp_included *micp_included;
+    bool inc_aics_added = false;
     uint8_t inc_count;
     int rc;
 
@@ -359,22 +376,27 @@ int bt_le_nimble_mics_init(void *micp_inc)
         /* Extra one for terminating the included service array with NULL */
         inc_count = inc_aics_svc_count + 1;
 
-        mics_inc_svcs = calloc(inc_count, sizeof(struct ble_gatt_svc_def *));
-        assert(mics_inc_svcs);
+        mics_inc_svcs = bt_le_ext_calloc(inc_count, sizeof(struct ble_gatt_svc_def *));
+        BT_LE_ASSERT(mics_inc_svcs);
 
         /* MICS may include zero or more instances of AICS */
         if (inc_aics_svc_count) {
-            inc_aics_insts = calloc(inc_aics_svc_count, sizeof(struct inc_aics_inst));
-            assert(inc_aics_insts);
+            inc_aics_insts = bt_le_ext_calloc(inc_aics_svc_count, sizeof(struct inc_aics_inst));
+            BT_LE_ASSERT(inc_aics_insts);
 
             /* Extra one for terminating the AICS service array */
-            gatt_svc_inc_aics = calloc(inc_aics_svc_count + 1, sizeof(struct ble_gatt_svc_def));
-            assert(gatt_svc_inc_aics);
+            gatt_svc_inc_aics = bt_le_ext_calloc(inc_aics_svc_count + 1, sizeof(struct ble_gatt_svc_def));
+            BT_LE_ASSERT(gatt_svc_inc_aics);
 
             for (size_t i = 0; i < inc_aics_svc_count; i++) {
                 inc_aics_svc_init(&inc_aics_insts[i], &gatt_svc_inc_aics[i]);
 
                 inc_aics_insts[i].svc_p = lib_aics_svc_get(micp_included->aics[i]);
+                if (!inc_aics_insts[i].svc_p) {
+                    LOG_ERR("[N]AicsSvcGetFail[%u]", i);
+                    rc = -ENODEV;
+                    goto free;
+                }
 
                 mics_inc_svcs[i] = &gatt_svc_inc_aics[i];
             }
@@ -390,6 +412,7 @@ int bt_le_nimble_mics_init(void *micp_inc)
                 LOG_ERR("[N]IncAicsAddSvcsFail[%d]", rc);
                 goto free;
             }
+            inc_aics_added = true;
 
             rc = inc_aics_svc_check();
             if (rc) {
@@ -423,21 +446,27 @@ int bt_le_nimble_mics_init(void *micp_inc)
     return 0;
 
 free:
+    /* Once ble_gatts_add_svcs() succeeds NimBLE keeps the svc_def pointer and
+     * offers no per-service unregister, so an added service must be leaked
+     * rather than freed into a dangling entry of its global list. That covers
+     * inc_aics_insts too: the registered chr_defs point at its handle fields. */
     if (micp_included) {
         free(mics_inc_svcs);
         mics_inc_svcs = NULL;
 
         if (inc_aics_svc_count) {
-            free(inc_aics_insts);
-            inc_aics_insts = NULL;
+            if (!inc_aics_added) {
+                free(inc_aics_insts);
+                inc_aics_insts = NULL;
 
-            for (size_t i = 0; i < inc_aics_svc_count; i++) {
-                free((void *)gatt_svc_inc_aics[i].characteristics);
-                gatt_svc_inc_aics[i].characteristics = NULL;
+                for (size_t i = 0; i < inc_aics_svc_count; i++) {
+                    free((void *)gatt_svc_inc_aics[i].characteristics);
+                    gatt_svc_inc_aics[i].characteristics = NULL;
+                }
+
+                free(gatt_svc_inc_aics);
+                gatt_svc_inc_aics = NULL;
             }
-
-            free(gatt_svc_inc_aics);
-            gatt_svc_inc_aics = NULL;
 
             inc_aics_svc_count = 0;
         }

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "soc/soc_caps.h"
+#include "hal/adc_ll.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "adc_cali_interface.h"
 #include "esp_private/adc_share_hw_ctrl.h"
@@ -64,6 +65,7 @@ static esp_err_t check_valid(const adc_cali_curve_fitting_config_t *config);
 
 /* ------------------------ Interface Functions --------------------------- */
 static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage);
+static esp_err_t delete_cali_ctx(void *arg);
 
 /* ------------------------- Public API ------------------------------------- */
 esp_err_t adc_cali_create_scheme_curve_fitting(const adc_cali_curve_fitting_config_t *config, adc_cali_handle_t *ret_handle)
@@ -79,14 +81,8 @@ esp_err_t adc_cali_create_scheme_curve_fitting(const adc_cali_curve_fitting_conf
     ESP_RETURN_ON_FALSE((adc_encoding_version >= ESP_EFUSE_ADC_CALIB_VER_MIN) &&
                         (adc_encoding_version <= ESP_EFUSE_ADC_CALIB_VER_MAX), ESP_ERR_NOT_SUPPORTED, TAG, "Calibration required eFuse bits not burnt");
 
-    adc_cali_scheme_t *scheme = (adc_cali_scheme_t *)heap_caps_calloc(1, sizeof(adc_cali_scheme_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_RETURN_ON_FALSE(scheme, ESP_ERR_NO_MEM, TAG, "no mem for adc calibration scheme");
-
     cali_chars_curve_fitting_t *chars = (cali_chars_curve_fitting_t *)heap_caps_calloc(1, sizeof(cali_chars_curve_fitting_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_GOTO_ON_FALSE(chars, ESP_ERR_NO_MEM, err, TAG, "no memory for the calibration characteristics");
-
-    scheme->raw_to_voltage = cali_raw_to_voltage;
-    scheme->ctx = chars;
+    ESP_RETURN_ON_FALSE(chars, ESP_ERR_NO_MEM, TAG, "no memory for the calibration characteristics");
 
     //Prepare calibration characteristics
     adc_calib_info_t calib_info = {0};
@@ -99,31 +95,25 @@ esp_err_t adc_cali_create_scheme_curve_fitting(const adc_cali_curve_fitting_conf
     chars->chan = config->chan;
     chars->atten = config->atten;
 
-    *ret_handle = scheme;
-
-    return ESP_OK;
-
-err:
-    if (scheme) {
-        free(scheme);
+    ret = adc_cali_new_scheme(cali_raw_to_voltage, NULL, delete_cali_ctx, chars, ret_handle);
+    if (ret != ESP_OK) {
+        free(chars);
     }
     return ret;
 }
 
 esp_err_t adc_cali_delete_scheme_curve_fitting(adc_cali_handle_t handle)
 {
-    ESP_RETURN_ON_FALSE(handle, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
-
-    free(handle->ctx);
-    handle->ctx = NULL;
-
-    free(handle);
-    handle = NULL;
-
-    return ESP_OK;
+    return adc_cali_delete_scheme(handle);
 }
 
 /* ------------------------ Interface Functions --------------------------- */
+static esp_err_t delete_cali_ctx(void *arg)
+{
+    free(arg);
+    return ESP_OK;
+}
+
 static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage)
 {
     //pointers are checked in the upper layer
@@ -134,7 +124,7 @@ static esp_err_t cali_raw_to_voltage(void *arg, int raw, int *voltage)
     int chan_compensation = adc_get_hw_calibration_chan_compens(ctx->unit_id, ctx->chan, ctx->atten);
     raw -= chan_compensation;
     /* Limit the range */
-    int max_val = (1L << SOC_ADC_RTC_MAX_BITWIDTH) - 1;
+    int max_val = (1L << ADC_LL_RTC_MAX_BITWIDTH) - 1;
     raw = raw <= 0 ? 0 :
           raw > max_val ? max_val : raw;
 #endif  // SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED
@@ -221,8 +211,9 @@ static esp_err_t check_valid(const adc_cali_curve_fitting_config_t *config)
 {
     ESP_RETURN_ON_FALSE(config->unit_id < SOC_ADC_PERIPH_NUM, ESP_ERR_INVALID_ARG, TAG, "invalid ADC unit");
     ESP_RETURN_ON_FALSE(config->atten < SOC_ADC_ATTEN_NUM, ESP_ERR_INVALID_ARG, TAG, "invalid ADC attenuation");
+    ESP_RETURN_ON_FALSE(config->chan < ADC_LL_CHANNEL_NUM(config->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid ADC channel");
 
-    bool available_oneshot_bitwidth = (config->bitwidth >= SOC_ADC_RTC_MIN_BITWIDTH && config->bitwidth <= SOC_ADC_RTC_MAX_BITWIDTH);
+    bool available_oneshot_bitwidth = (config->bitwidth >= ADC_LL_RTC_MIN_BITWIDTH && config->bitwidth <= ADC_LL_RTC_MAX_BITWIDTH);
     bool available_dma_bitwidth = (config->bitwidth >= SOC_ADC_DIGI_MIN_BITWIDTH && config->bitwidth <= SOC_ADC_DIGI_MAX_BITWIDTH);
     bool default_bitwidth_mark = (config->bitwidth == ADC_BITWIDTH_DEFAULT);
     bool available_bitwidth = (available_oneshot_bitwidth || available_dma_bitwidth || default_bitwidth_mark);

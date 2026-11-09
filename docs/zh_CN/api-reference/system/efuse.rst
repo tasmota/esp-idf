@@ -75,7 +75,7 @@ eFuse 字段通过 CSV 文件中特定格式的表格进行定义。通过这种
 
 一般情况下，每个记录在定义表格中占据一行，每行包含以下值（也就是列）：
 
-{IDF_TARGET_MAX_EFUSE_BLK:default = "EFUSE_BLK10", esp32 = "EFUSE_BLK3", esp32c2 = "EFUSE_BLK3"}
+{IDF_TARGET_MAX_EFUSE_BLK:default = "EFUSE_BLK10", esp32 = "EFUSE_BLK3", esp32c2 = "EFUSE_BLK3", esp32s31 = "EFUSE_BLK9"}
 
 .. code-block:: none
 
@@ -111,7 +111,7 @@ eFuse 字段通过 CSV 文件中特定格式的表格进行定义。通过这种
         .. only:: esp32
 
             - ``MAX_BLK_LEN`` 考虑了 eFuse 的编码方案。
-            - 根据 :ref:`CONFIG_EFUSE_CODE_SCHEME_SELECTOR` 选择的编码方案，``MAX_BLK_LEN`` 可能是 256("None")、192 ("3/4") 或 128 ("REPEAT") 位。
+            - 根据 :menuitem:`CONFIG_EFUSE_CODE_SCHEME_SELECTOR` 选择的编码方案，``MAX_BLK_LEN`` 可能是 256("None")、192 ("3/4") 或 128 ("REPEAT") 位。
 
 - ``comment``
 
@@ -256,7 +256,7 @@ eFuse 支持各种编码方式，能够检测或纠正错误，保护 eFuse 数�
     * 在烧录期间从 ``esptool`` 应用程序日志中查看。
     * 在应用程序中调用 :cpp:func:`esp_efuse_get_coding_scheme` 函数查看 EFUSE_BLK3 块的编码方式。
 
-    CSV 文件中指定的 eFuse 字段必须始终符合芯片使用的 eFuse 编码方案。可以通过 :ref:`CONFIG_EFUSE_CODE_SCHEME_SELECTOR` 选择 CSV 文件使用的编码方案。生成源文件时，如果 CSV 文件中的内容不符合编码方案，则会显示错误信息。在这种情况下，必须调整错误行的 ``bit_start`` 和 ``bit_count``，以满足所选编码方案的限制。
+    CSV 文件中指定的 eFuse 字段必须始终符合芯片使用的 eFuse 编码方案。可以通过 :menuitem:`CONFIG_EFUSE_CODE_SCHEME_SELECTOR` 选择 CSV 文件使用的编码方案。生成源文件时，如果 CSV 文件中的内容不符合编码方案，则会显示错误信息。在这种情况下，必须调整错误行的 ``bit_start`` 和 ``bit_count``，以满足所选编码方案的限制。
 
     .. note::
 
@@ -278,9 +278,9 @@ eFuse 支持各种编码方式，能够检测或纠正错误，保护 eFuse 数�
 
     由于采用批量写入模式，一个编码单元只能写入一次，禁止在同一编码单元重复写入。这意味着，在运行时写入的编码单元中只能包含一个 eFuse 字段。但是，如果事先通过 CSV 文件指定了编码单元的 eFuse 字段，或通过 :cpp:func:`esp_efuse_write_block` 写入编码单元的 eFuse 字段，那么一个编码单元中仍可包含多个 eFuse 字段。
 
-
     ``重复编码`` 方式
     ^^^^^^^^^^^^^^^^^^^^^^^^
+
     ``重复编码`` 方式只是简单重复每个 eFuse 位，不会像 ``3/4 编码`` 方式那样受到批量写入模式的限制。不过，这样做会产生很大的开销，每个 eFuse 块中只有 128 个位可用。
 
 .. only:: not esp32
@@ -356,6 +356,8 @@ eFuse API
 * :cpp:func:`esp_efuse_get_keypurpose_dis_write` - 返回 eFuse 密钥块的密钥用途字段的写保护状态（对于 esp32 始终为 true）。
 * :cpp:func:`esp_efuse_key_block_unused` - 如果密钥块未使用，则返回 true，否则返回 false。
 * :cpp:func:`esp_efuse_destroy_block` - 销毁此 eFuse 块中的数据。该函数有两个作用：(1) 如果未开启写保护，则将不为 1 的位都烧写为 1；(2) 如果未开启读保护，则开启读保护。
+* :cpp:func:`esp_efuse_token_dump` - 生成紧凑的单行 eFuse 令牌（``EFSR``、``EFSW`` 或 ``EFSRW``），可从设备日志中复制，并在主机端通过 ``espefuse --token ...`` 进行解码（适用于无法直接访问 eFuse 的场景）。
+* :cpp:func:`esp_efuse_token_burn` - 通过烧录暂存且已编码至令牌中的 eFuse 写入数据，在设备上应用 ``EFSW`` 令牌（其他类型的令牌将被拒绝）。
 
 经常使用的字段有专门的函数可供使用，例如 :cpp:func:`esp_efuse_get_pkg_ver`。
 
@@ -538,11 +540,11 @@ eFuse 位序采取小字节序（参见下方示例），这说明 eFuse 位按�
 虚拟 eFuse
 ^^^^^^^^^^^^^^
 
-Kconfig 选项 :ref:`CONFIG_EFUSE_VIRTUAL` 在 eFuse 管理器中虚拟了 eFuse 值，因此写入操作是仿真操作，不会永久更改 eFuse 值。这对于应用程序调试和单元测试很有用处。
+Kconfig 选项 :menuitem:`CONFIG_EFUSE_VIRTUAL` 在 eFuse 管理器中虚拟了 eFuse 值，因此写入操作是仿真操作，不会永久更改 eFuse 值。这对于应用程序调试和单元测试很有用处。
 
 在启动时，eFuses 被复制到 RAM 中。此时，所有的 eFuse 操作（读和写）都是通过 RAM 执行，而不是通过实际的 eFuse 寄存器执行的。
 
-除了 :ref:`CONFIG_EFUSE_VIRTUAL` 选项外，还有 :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项，该选项可将 eFuse 保留在 flash 内存中。要使用此模式，partition_table 在  ``partition.csv`` 中包含名为 ``efuse`` 的分区：
+除了 :menuitem:`CONFIG_EFUSE_VIRTUAL` 选项外，还有 :menuitem:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项，该选项可将 eFuse 保留在 flash 内存中。要使用此模式，partition_table 在  ``partition.csv`` 中包含名为 ``efuse`` 的分区：
 
 .. code-block:: none
 
@@ -553,9 +555,9 @@ Kconfig 选项 :ref:`CONFIG_EFUSE_VIRTUAL` 在 eFuse 管理器中虚拟了 eFuse
 flash 加密测试
 """"""""""""""
 
-flash 加密是一项硬件功能，需要物理烧录 eFuse ``key`` 和 ``FLASH_CRYPT_CNT``。如果 flash 加密实际未启用，那么启用 :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项只是提供了测试的可能性，而不会加密 flash 中的任何内容，即使日志中显示了加密操作。
+flash 加密是一项硬件功能，需要物理烧录 eFuse ``key`` 和 ``FLASH_CRYPT_CNT``。如果 flash 加密实际未启用，那么启用 :menuitem:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项只是提供了测试的可能性，而不会加密 flash 中的任何内容，即使日志中显示了加密操作。
 
-为此，可使用 :cpp:func:`bootloader_flash_write` 函数。但是，如果运行应用程序时芯片已启用 flash 加密，或者以 :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项创建了引导加载程序，则 flash 加密/解密操作会正常进行。这意味着数据写入加密 flash 分区时被加密，从加密分区读取时被解密。
+为此，可使用 :cpp:func:`bootloader_flash_write` 函数。但是，如果运行应用程序时芯片已启用 flash 加密，或者以 :menuitem:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` 选项创建了引导加载程序，则 flash 加密/解密操作会正常进行。这意味着数据写入加密 flash 分区时被加密，从加密分区读取时被解密。
 
 ``espefuse``
 ^^^^^^^^^^^^
@@ -569,6 +571,219 @@ esptool 中包含一个用于读取/写入 {IDF_TARGET_NAME} eFuse 位的有用�
 获取所有 eFuse 寄存器的转储数据。
 
 .. include:: inc/espefuse_summary_{IDF_TARGET_NAME}_dump.rst
+
+延迟烧写 WR_DIS
+-----------------------
+
+``WR_DIS`` （写禁用）是一个特殊的 eFuse 字段，用于实现永久写保护。``WR_DIS`` 中的每个位用于禁止进一步烧写一个（或多个）关联的 eFuse 字段。一旦完成烧写，将无法再修改受影响的 eFuse 字段。
+
+烧写 BLOCK0 中的暂存数据时，``WR_DIS`` 的各个位会在所有其他 BLOCK0 数据烧写完成后单独烧写，以确保在出现编码错误时，烧写函数能够通过重试机制进行恢复。这种方式保证了仅在其他 BLOCK0 数据成功烧写后，才对其施加写保护。
+
+Token Dump
+----------
+
+*eFuse Token 转储* 功能提供了一种紧凑的、单行的 eFuse 状态表示，可以从设备日志中复制并在主机上稍后解码。这适用于无法或不便直接使用主机工具读取 eFuse 的情况（例如，UART 下载被禁用、安全下载已启用、安全启动/flash 加密已部署或设备在远程位置）。
+
+.. code-block:: none
+
+    EFSR:esp32c3:004:AAGAAAEAAAAAAAAEAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAA:AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA::::::::::epNVBg
+
+Token 可以表示：
+
+* 当前烧写的 eFuse（读快照，``EFSR``），
+* 暂存（尚未烧写）的写入集（写快照，``EFSW``）— 在批量写入模式下，可以在调用 :cpp:func:`esp_efuse_batch_write_commit` 之前转储待写入的数据，
+* 单个 token 中同时包含已烧写的 eFuse 和暂存写入的综合快照（``EFSRW``）。
+
+Token 包括一个 CRC32 校验和，用于检测截断和意外修改。
+
+典型用例
+^^^^^^^^^^^^^^^^^
+
+* **生产/现场诊断：** 从锁定的设备导出 eFuse 状态并离线解码。
+* **烧写后验证：** 确认生产步骤后的安全配置和密钥目的。
+* **编码错误调查：** 捕获和共享编码错误寄存器快照以及块数据。
+* **审计和可追溯性：** 将 token 作为配置工件存储以供后续审查。
+* **暂存写入转移：** 在固件（或主机）中生成 ``EFSW`` token，稍后使用受控工作流应用。
+
+支持的工作流
+^^^^^^^^^^^^^^^^^^
+
+* 在设备上：
+
+    * :cpp:func:`esp_efuse_token_dump()` — 始终支持生成 ``EFSR`` token；``EFSW`` 和 ``EFSRW`` 需要启用 :menuitem:`CONFIG_EFUSE_ENABLE_STAGED_TOKEN_API`，因为它们会暴露尚未烧写、也尚未受读保护的暂存值。
+    * :cpp:func:`esp_efuse_token_burn()` — 接受 ``EFSW`` token 并在设备上应用暂存写入。
+
+* 在主机上：
+
+  * ``espefuse --token EFS... summary`` — 解码 token 并显示 eFuse 摘要，无需连接到设备。
+  * ``espefuse dump --format EFSR`` — 从已连接芯片生成 ``EFSR`` token 用于共享/备份。
+  * ``espefuse burn-efuse ... --show-token`` — 生成表示暂存写入的 ``EFSW`` token。
+
+安全注意事项
+^^^^^^^^^^^^^^^^^^
+
+.. important::
+
+    Token 未加密。将 token 视为敏感数据：
+
+    * Token 可能包含 **唯一标识符** （例如 MAC/UUID 类字段）和 **安全相关配置位** （安全启动、flash 加密、JTAG/UART 禁用、密钥用途）。
+    * ``EFSW`` token 代表 **暂存写入** 。由于暂存视图展示的是尚未烧写、也尚未受 eFuse 读保护位保护的值，它们可能包含 **明文只写密钥数据** （例如 flash 加密密钥或其他在烧写后会被读保护的密钥）。这会在永久锁定前泄露配置意图和秘密材料。
+    * ``EFSRW`` token 包含同样的暂存部分，因此也具有相同的明文密钥暴露风险。
+    * 即使某些 eFuse 在目标上受读保护，token 仍可能携带 **操作敏感值** 。
+
+    如果固件暴露用于在控制台、远程端点或其他运行时 API 中打印 eFuse token 的接口，固件必须在生成 token 前对该请求进行身份认证和授权。
+
+建议：
+
+* 仅与信任方通过信任渠道共享 token（避免公开问题跟踪器）。
+* 像存储其他生产/配置工件那样存储 token（限制访问、限制保留期）。
+* 优先使用 ``EFSR`` token 进行诊断和审计；仅当明确需要转移暂存写入状态时才使用 ``EFSW`` token。
+
+Token 格式
+^^^^^^^^^^
+
+Token 是一个冒号分隔的序列：
+
+.. code-block:: none
+
+    <token_name>:<chip>:<ver>:<b64_block0>:...:<b64_blockN>:<b64_cerr>:<b64_crc32>
+
+字段说明：
+
+* ``token_name`` — ``EFSR``、``EFSW`` 或 ``EFSRW`` 之一。
+* ``chip`` — 芯片名称（小写，不含破折号），例如 ``esp32c3``。
+* ``ver`` — 芯片版本为三位十进制数字（前导零），例如 ``004``。由主版本和次版本字段使用公式 ``ver = major * 100 + minor`` 构造，其中主版本占据第一位数字，次版本占据最后两位数字。
+* ``b64_block0 ... b64_blockN`` — Base64URL 编码的按块数据。每个块是 32 位字的连接（小端序）。块数不在格式中显式编码，而是从芯片类型派生的。块数可通过计数 token 中的冒号分隔符（``:``）来确定。空块表示为连续冒号（``::``）。
+* ``b64_cerr`` — 可选的 Base64URL 编码编码错误寄存器快照。如果没有错误，可能为空。
+* ``b64_crc32`` — Base64URL 编码的 CRC32，覆盖整个 token ``"<token_name>:<chip>:<ver>:<b64_block0>:...:<b64_blockN>:<b64_cerr>:"``. CRC32 以小端序存储并编码为无填充 Base64URL。
+
+Token 只能在使用与其创建目标相同的目标进行处理时才能正确解码和解释。ESP-IDF API 和 ``espefuse`` 验证并依赖于以下字段：芯片名称、芯片版本和块布局，以及 CRC32 完整性。如果这些不符合目标芯片，可能会导致解码错误或丢失字段。
+
+Base64URL 使用与 Base64 相同的字母表，但将 ``+`` 替换为 ``-``，将 ``/`` 替换为 ``_``，并省略填充（``=``）。
+
+在设备上生成 Token
+^^^^^^^^^^^^^^^^^^
+
+使用 :cpp:func:`esp_efuse_token_dump()` 在缓冲区中创建 token 或将其打印到日志：
+
+.. code-block:: c
+
+    char token[1024]; /* 大小取决于目标和 eFuse */
+    esp_efuse_token_type_t token_type = ESP_EFUSE_TOKEN_FROM_READ;
+    ESP_ERROR_CHECK(esp_efuse_token_dump(token_type, token, sizeof(token)));
+    ESP_LOGI(TAG, "IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY %s", token);
+
+Token 类型值：
+
+* ``ESP_EFUSE_TOKEN_FROM_READ`` — 已烧写的 eFuse 的 token（以 ``EFSR`` 开头）。
+* ``ESP_EFUSE_TOKEN_FROM_STAGED`` — 暂存写入的 token（以 ``EFSW`` 开头）。它会显示尚未烧写、也尚未受读保护的值，因此可能以明文暴露密钥。需要启用 :menuitem:`CONFIG_EFUSE_ENABLE_STAGED_TOKEN_API`。仅此类型可被烧写回。
+* ``ESP_EFUSE_TOKEN_FROM_READ_STAGED`` — 组合 token（以 ``EFSRW`` 开头）。它包含同样的暂存部分，因此也具有相同的明文密钥暴露风险。需要启用 :menuitem:`CONFIG_EFUSE_ENABLE_STAGED_TOKEN_API`。
+
+如果 ``buf == NULL``，token 将打印到控制台（INFO 级别），不包含颜色、标签或时间戳。
+
+在设备上烧写 Token
+^^^^^^^^^^^^^^^^^^
+
+使用 :cpp:func:`esp_efuse_token_burn()` 在设备上应用 ``EFSW`` token，通过烧写 token 中编码的暂存 eFuse 写入。该函数验证 token 完整性（CRC32）并使用芯片名称和版本检查兼容性。如果 **主要** wafer 版本与目标芯片不匹配，token 将被拒绝。要绕过版本检查，请使用忽略参数。烧写 token 的示例：
+
+.. code-block:: c
+
+    esp_efuse_batch_write_begin();
+    esp_efuse_token_burn(token, false);  // 设置为 true 以忽略主版本不匹配
+    esp_efuse_batch_write_commit();
+
+仅当您知道 token 是为相同 eFuse 布局生成的（例如相同目标，仅 wafer 次版本不同）时，才可跳过主版本检查；在这种情况下，token 版本可能仅在最后两位数字上不同，而第一位数字（主版本）必须正常匹配。
+
+ESP-IDF 监视器集成
+^^^^^^^^^^^^^^^^^^
+
+运行 ``idf.py monitor`` 时，如果日志行以以下标记之一开头，主机可以自动解码目标打印的 eFuse token 并以内联方式显示结果：
+
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY`` → ``espefuse --token {ARGS} summary --active``
+* ``IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP`` → ``espefuse --token <TOKEN> dump``
+
+``{ARGS}`` 必须包含 eFuse token（``EFSR/EFSW/EFSRW``），并可能包含 ``--extend-efuse-table <csv>`` 以加载自定义 eFuse 定义。
+
+示例：以下显示使用 ``--active`` 执行 summary 命令，仅显示非零 eFuse 字段以减少输出大小。``--extend-efuse-table`` 选项加载自定义 eFuse 表定义：
+
+.. code-block:: text
+
+   I (441) example: IDF_MONITOR_EXECUTE_ESPEFUSE_SUMMARY EFSR:esp32c3:100:AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAA:zIH3-VVgAAAAAAAAAAAAS8kmEVKwQgYB:ZSd8yloMSAJssOWmfZQw8lFbphuTZH574QcV3ggAAAA:AAAAAAAAAAEayAcAAAAAAAAAAAAAAAAAAAAAAAAAAAA:::::::::ydrNkQ --extend-efuse-table main/esp_efuse_custom_table.csv
+
+    --- Executing monitor command: espefuse --token EFSR:esp32c3:100:AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAA:zIH3-VVgAAAAAAAAAAAAS8kmEVKwQgYB:ZSd8yloMSAJssOWmfZQw8lFbphuTZH574QcV3ggAAAA:AAAAAAAAAAEayAcAAAAAAAAAAAAAAAAAAAAAAAAAAAA:::::::::ydrNkQ --extend-efuse-table main/esp_efuse_custom_table.csv summary --active
+    espefuse v5.1.0
+
+    === Run "summary" command ===
+    EFUSE_NAME (Block) Description  = [Meaningful Value] [Readable/Writeable] (Hex Value)
+    ————————————————————————————————————————————————————————————————————————————————————————
+    Calibration fuses:
+    K_RTC_LDO (BLOCK1)                                 BLOCK1 K_RTC_LDO                                   = 77 R/W (0b1001101)
+    K_DIG_LDO (BLOCK1)                                 BLOCK1 K_DIG_LDO                                   = 68 R/W (0b1000100)
+    V_RTC_DBIAS20 (BLOCK1)                             BLOCK1 voltage of rtc dbias20                      = 144 R/W (0x90)
+    V_DIG_DBIAS20 (BLOCK1)                             BLOCK1 voltage of digital dbias20                  = 130 R/W (0x82)
+    DIG_DBIAS_HVT (BLOCK1)                             BLOCK1 digital dbias when hvt                      = 21 R/W (0b10101)
+    THRES_HVT (BLOCK1)                                 BLOCK1 pvt threshold when hvt                      = 400 R/W (0b0110010000)
+    TEMP_CALIB (BLOCK2)                                Temperature calibration data                       = -10.600000000000001 R/W (0b101101010)
+    OCODE (BLOCK2)                                     ADC OCode                                          = 101 R/W (0x65)
+    ADC1_INIT_CODE_ATTEN0 (BLOCK2)                     ADC1 init code at atten0                           = 442 R/W (0b0110111010)
+    ADC1_INIT_CODE_ATTEN1 (BLOCK2)                     ADC1 init code at atten1                           = 588 R/W (0b1001001100)
+    ADC1_INIT_CODE_ATTEN2 (BLOCK2)                     ADC1 init code at atten2                           = 612 R/W (0b1001100100)
+    ADC1_INIT_CODE_ATTEN3 (BLOCK2)                     ADC1 init code at atten3                           = 735 R/W (0b1011011111)
+    ADC1_CAL_VOL_ATTEN0 (BLOCK2)                       ADC1 calibration voltage at atten0                 = 535 R/W (0b1000010111)
+    ADC1_CAL_VOL_ATTEN1 (BLOCK2)                       ADC1 calibration voltage at atten1                 = 31 R/W (0b0000011111)
+    ADC1_CAL_VOL_ATTEN2 (BLOCK2)                       ADC1 calibration voltage at atten2                 = 533 R/W (0b1000010101)
+    ADC1_CAL_VOL_ATTEN3 (BLOCK2)                       ADC1 calibration voltage at atten3                 = 567 R/W (0b1000110111)
+
+    Config fuses:
+    ERR_RST_ENABLE (BLOCK0)                            Use BLOCK0 to check error record registers         = with check R/W (0b1)
+    BLOCK_USR_DATA (BLOCK3)                            User data
+    = 00 00 00 00 00 00 00 01 1a c8 07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 R/W
+
+    Flash fuses:
+    FLASH_CAP (BLOCK1)                                 Flash capacity                                     = 4M R/W (0b001)
+    FLASH_TEMP (BLOCK1)                                Flash temperature                                  = 105C R/W (0b01)
+    FLASH_VENDOR (BLOCK1)                              Flash vendor                                       = XMC R/W (0b001)
+
+    Identity fuses:
+    BLK_VERSION_MINOR (BLOCK1)                         BLK_VERSION_MINOR                                  = 3 R/W (0b011)
+    WAFER_VERSION_MAJOR (BLOCK1)                       WAFER_VERSION_MAJOR                                = 1 R/W (0b01)
+    OPTIONAL_UNIQUE_ID (BLOCK2)                        Optional unique 128-bit ID
+    = 65 27 7c ca 5a 0c 48 02 6c b0 e5 a6 7d 94 30 f2 R/W
+    BLK_VERSION_MAJOR (BLOCK2)                         BLK_VERSION_MAJOR of BLOCK2                        = With calibration R/W (0b01)
+
+    Mac fuses:
+    MAC (BLOCK1)                                       MAC address
+    = 60:55:f9:f7:81:cc (OK) R/W
+
+    User fuses:
+    MODULE_VERSION (BLOCK3)                            Module version (56-63)                             = 1 R/W (0x01)
+    DEVICE_ROLE (BLOCK3)                               Device role (64-66)                                = 2 R/W (0b010)
+    SETTING_1 (BLOCK3)                                 Setting 1 (67-72)                                  = 3 R/W (0b000011)
+    SETTING_2 (BLOCK3)                                 Setting 2 (73-77)                                  = 4 R/W (0b00100)
+    CUSTOM_SECURE_VERSION (BLOCK3)                     Custom secure version (78-93)                      = 31 R/W (0x001f)
+    ...
+
+dump 示例：
+
+.. code-block:: text
+
+    I (441) example: IDF_MONITOR_EXECUTE_ESPEFUSE_DUMP EFSR:esp32c3:100:AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAA:zIH3-VVgAAAAAAAAAAAAS8kmEVKwQgYB:ZSd8yloMSAJssOWmfZQw8lFbphuTZH574QcV3ggAAAA:AAAAAAAAAAEayAcAAAAAAAAAAAAAAAAAAAAAAAAAAAA:::::::::ydrNkQ
+
+    --- Executing monitor command: espefuse --token EFSR:esp32c3:100:AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAA:zIH3-VVgAAAAAAAAAAAAS8kmEVKwQgYB:ZSd8yloMSAJssOWmfZQw8lFbphuTZH574QcV3ggAAAA:AAAAAAAAAAEayAcAAAAAAAAAAAAAAAAAAAAAAAAAAAA:::::::::ydrNkQ dump
+    espefuse v5.1.0
+
+    === Run "dump" command ===
+    BLOCK0          (                ) [0 ] dump: 00000000 00000000 00000000 00000000 80000000 00000000
+    MAC_SPI_8M_0    (BLOCK1          ) [1 ] dump: f9f781cc 00006055 00000000 4b000000 521126c9 010642b0
+    BLOCK_SYS_DATA  (BLOCK2          ) [2 ] dump: ca7c2765 02480c5a a6e5b06c f230947d 1ba65b51 7b7e6493 de1507e1 00000008
+    BLOCK_USR_DATA  (BLOCK3          ) [3 ] dump: 00000000 01000000 0007c81a 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY0      (BLOCK4          ) [4 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY1      (BLOCK5          ) [5 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY2      (BLOCK6          ) [6 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY3      (BLOCK7          ) [7 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY4      (BLOCK8          ) [8 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_KEY5      (BLOCK9          ) [9 ] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+    BLOCK_SYS_DATA2 (BLOCK10         ) [10] dump: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
 
 应用示例
 -----------------

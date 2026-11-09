@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -89,7 +89,7 @@ esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *init_config, a
      * We only check this on ESP32C3, because other adc units are no longer supported on later chips
      * If CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3 is enabled, we jump this check
      */
-    ESP_GOTO_ON_FALSE(SOC_ADC_DIG_SUPPORTED_UNIT(init_config->unit_id), ESP_ERR_INVALID_ARG, err, TAG, "adc unit not supported");
+    ESP_GOTO_ON_FALSE(ADC_LL_DIG_SUPPORTED_UNIT(init_config->unit_id), ESP_ERR_INVALID_ARG, err, TAG, "adc unit not supported");
 #endif
 
     unit = heap_caps_calloc(1, sizeof(adc_oneshot_unit_ctx_t), ADC_MEM_ALLOC_CAPS);
@@ -159,9 +159,12 @@ esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *init_config, a
 
     if (init_config->ulp_mode == ADC_ULP_MODE_DISABLE) {
         sar_periph_ctrl_adc_oneshot_power_acquire();
+#if ADC_LL_SW_WEIGHT_CALIBRATION_SUPPORTED
+        adc_cal_sw_weight(init_config->unit_id, clk_src);
+#endif
     } else {
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-        ESP_GOTO_ON_ERROR(esp_clk_tree_enable_src((soc_module_clk_t)(unit->hal.clk_src), true), err, TAG, "clock source enable failed");
+        ESP_GOTO_ON_ERROR(esp_clk_tree_acquire_src((soc_module_clk_t)(unit->hal.clk_src), NULL), err, TAG, "clock source enable failed");
 #endif
 #if SOC_LIGHT_SLEEP_SUPPORTED || SOC_DEEP_SLEEP_SUPPORTED
         esp_sleep_sub_mode_config(ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE, true);
@@ -197,15 +200,15 @@ esp_err_t adc_oneshot_config_channel(adc_oneshot_unit_handle_t handle, adc_chann
 {
     ESP_RETURN_ON_FALSE(handle && config, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
     ESP_RETURN_ON_FALSE(config->atten < SOC_ADC_ATTEN_NUM, ESP_ERR_INVALID_ARG, TAG, "invalid attenuation");
-    ESP_RETURN_ON_FALSE(((config->bitwidth >= SOC_ADC_RTC_MIN_BITWIDTH && config->bitwidth <= SOC_ADC_RTC_MAX_BITWIDTH) || config->bitwidth == ADC_BITWIDTH_DEFAULT), ESP_ERR_INVALID_ARG, TAG, "invalid bitwidth");
-    ESP_RETURN_ON_FALSE(channel < SOC_ADC_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
+    ESP_RETURN_ON_FALSE(((config->bitwidth >= ADC_LL_RTC_MIN_BITWIDTH && config->bitwidth <= ADC_LL_RTC_MAX_BITWIDTH) || config->bitwidth == ADC_BITWIDTH_DEFAULT), ESP_ERR_INVALID_ARG, TAG, "invalid bitwidth");
+    ESP_RETURN_ON_FALSE(channel < ADC_LL_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
 
-    s_adc_io_init(handle->unit_id, channel);
+    ESP_RETURN_ON_ERROR(s_adc_io_init(handle->unit_id, channel), TAG, "adc io init failed");
 
     adc_oneshot_hal_ctx_t *hal = &(handle->hal);
     adc_oneshot_hal_chan_cfg_t cfg = {
         .atten = config->atten,
-        .bitwidth = (config->bitwidth == ADC_BITWIDTH_DEFAULT) ? SOC_ADC_RTC_MAX_BITWIDTH : config->bitwidth,
+        .bitwidth = (config->bitwidth == ADC_BITWIDTH_DEFAULT) ? ADC_LL_RTC_MAX_BITWIDTH : config->bitwidth,
     };
     portENTER_CRITICAL(&rtc_spinlock);
     adc_oneshot_hal_channel_config(hal, &cfg, channel);
@@ -220,7 +223,7 @@ esp_err_t adc_oneshot_config_channel(adc_oneshot_unit_handle_t handle, adc_chann
 esp_err_t adc_oneshot_read(adc_oneshot_unit_handle_t handle, adc_channel_t chan, int *out_raw)
 {
     ESP_RETURN_ON_FALSE(handle && out_raw, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
-    ESP_RETURN_ON_FALSE(chan < SOC_ADC_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
+    ESP_RETURN_ON_FALSE(chan < ADC_LL_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
 
     if (adc_lock_try_acquire(handle->unit_id) != ESP_OK) {
         return ESP_ERR_TIMEOUT;
@@ -228,10 +231,18 @@ esp_err_t adc_oneshot_read(adc_oneshot_unit_handle_t handle, adc_channel_t chan,
     portENTER_CRITICAL(&rtc_spinlock);
 
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)(handle->hal.clk_src), true));
+    ESP_ERROR_CHECK(esp_clk_tree_acquire_src((soc_module_clk_t)(handle->hal.clk_src), NULL));
 #endif
     ANALOG_CLOCK_ENABLE();
     adc_oneshot_hal_setup(&(handle->hal), chan);
+#if ADC_LL_SW_WEIGHT_CALIBRATION_SUPPORTED
+    /* Data path, not a cal step: bypass the HW weight accumulator so the
+     * result is the 17-bit comparator vector that software applies weights
+     * to. Other chips have no such mux; their conversion result is already
+     * the raw code. S31 default analog path is the accumulated code. */
+    adc_ll_weight_accumulator_bypass(handle->unit_id, true);
+    adc_ll_set_cal_done(handle->unit_id, true);
+#endif
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
     adc_atten_t atten = adc_ll_get_atten(handle->unit_id, chan);
     adc_hal_calibration_init(handle->unit_id);
@@ -241,7 +252,7 @@ esp_err_t adc_oneshot_read(adc_oneshot_unit_handle_t handle, adc_channel_t chan,
     valid = adc_oneshot_hal_convert(&(handle->hal), out_raw);
     ANALOG_CLOCK_DISABLE();
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)(handle->hal.clk_src), false));
+    ESP_ERROR_CHECK(esp_clk_tree_release_src((soc_module_clk_t)(handle->hal.clk_src)));
 #endif
 
     portEXIT_CRITICAL(&rtc_spinlock);
@@ -254,29 +265,34 @@ esp_err_t adc_oneshot_read_isr(adc_oneshot_unit_handle_t handle, adc_channel_t c
 {
     ESP_RETURN_ON_FALSE_ISR(handle && out_raw, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
     ESP_RETURN_ON_FALSE_ISR(out_raw, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
-    ESP_RETURN_ON_FALSE_ISR(chan < SOC_ADC_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
+    ESP_RETURN_ON_FALSE_ISR(chan < ADC_LL_CHANNEL_NUM(handle->unit_id), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
 
     portENTER_CRITICAL_SAFE(&rtc_spinlock);
 
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)(handle->hal.clk_src), true));
+    ESP_ERROR_CHECK(esp_clk_tree_acquire_src((soc_module_clk_t)(handle->hal.clk_src), NULL));
 #endif
     ANALOG_CLOCK_ENABLE();
     adc_oneshot_hal_setup(&(handle->hal), chan);
+#if ADC_LL_SW_WEIGHT_CALIBRATION_SUPPORTED
+    /* Same data-path mux as adc_oneshot_read(): 17-bit comparator vector. */
+    adc_ll_weight_accumulator_bypass(handle->unit_id, true);
+    adc_ll_set_cal_done(handle->unit_id, true);
+#endif
 #if SOC_ADC_CALIBRATION_V1_SUPPORTED
     adc_atten_t atten = adc_ll_get_atten(handle->unit_id, chan);
     adc_hal_calibration_init(handle->unit_id);
     adc_set_hw_calibration_code(handle->unit_id, atten);
 #endif
-    adc_oneshot_hal_convert(&(handle->hal), out_raw);
+    bool valid = adc_oneshot_hal_convert(&(handle->hal), out_raw);
     ANALOG_CLOCK_DISABLE();
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-    ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)(handle->hal.clk_src), false));
+    ESP_ERROR_CHECK(esp_clk_tree_release_src((soc_module_clk_t)(handle->hal.clk_src)));
 #endif
 
     portEXIT_CRITICAL_SAFE(&rtc_spinlock);
 
-    return ESP_OK;
+    return valid ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 esp_err_t adc_oneshot_del_unit(adc_oneshot_unit_handle_t handle)
@@ -302,7 +318,7 @@ esp_err_t adc_oneshot_del_unit(adc_oneshot_unit_handle_t handle)
 #if SOC_LIGHT_SLEEP_SUPPORTED || SOC_DEEP_SLEEP_SUPPORTED
         esp_sleep_sub_mode_config(ESP_SLEEP_USE_ADC_TSEN_MONITOR_MODE, false);
 #endif
-        ESP_ERROR_CHECK(esp_clk_tree_enable_src((soc_module_clk_t)(handle->hal.clk_src), false));
+        ESP_ERROR_CHECK(esp_clk_tree_release_src((soc_module_clk_t)(handle->hal.clk_src)));
     }
 
     if (ADC_LL_NEED_APB_PERIPH_CLAIM(handle->unit_id)) {
@@ -335,7 +351,7 @@ esp_err_t adc_oneshot_get_calibrated_result(adc_oneshot_unit_handle_t handle, ad
     int raw = 0;
     ESP_RETURN_ON_ERROR(adc_oneshot_read(handle, chan, &raw), TAG, "adc oneshot read fail");
     ESP_LOGD(TAG, "raw: 0d%d", raw);
-    ESP_RETURN_ON_ERROR(adc_cali_raw_to_voltage(cali_handle, raw, cali_result), TAG, "adc calibration fail");
+    ESP_RETURN_ON_ERROR(adc_cali_chan_raw_to_voltage(cali_handle, chan, raw, cali_result), TAG, "adc calibration fail");
 
     return ESP_OK;
 }
@@ -344,7 +360,7 @@ esp_err_t adc_oneshot_get_calibrated_result(adc_oneshot_unit_handle_t handle, ad
 
 static esp_err_t s_adc_io_init(adc_unit_t unit, adc_channel_t channel)
 {
-    ESP_RETURN_ON_FALSE(channel < SOC_ADC_CHANNEL_NUM(unit), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
+    ESP_RETURN_ON_FALSE(channel < ADC_LL_CHANNEL_NUM(unit), ESP_ERR_INVALID_ARG, TAG, "invalid channel");
     return gpio_config_as_analog(ADC_GET_IO_NUM(unit, channel));
 }
 

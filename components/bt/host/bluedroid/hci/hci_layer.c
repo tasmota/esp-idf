@@ -40,16 +40,21 @@
 #include "osi/mutex.h"
 #include "osi/fixed_queue.h"
 #include "osi/fixed_pkt_queue.h"
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+#include "stack/c2h_credit.h"
+#include "stack/hcimsgs.h"
+#endif
 
 #define HCI_HOST_TASK_PINNED_TO_CORE    (TASK_PINNED_TO_CORE)
 #define HCI_HOST_TASK_STACK_SIZE        (2048 + BT_TASK_EXTRA_STACK_SIZE)
 #define HCI_HOST_TASK_PRIO              (BT_TASK_MAX_PRIORITIES - 3)
 #define HCI_HOST_TASK_NAME              "hciT"
 #define HCI_HOST_TASK_WORKQUEUE_NUM     (2)
-#define HCI_HOST_TASK_WORKQUEUE0_LEN    (1) // for downstream datapath
+#define HCI_HOST_TASK_WORKQUEUE0_LEN    (3) // for downstream datapath + c2h_flush + flush_reassemble
 #define HCI_HOST_TASK_WORKQUEUE1_LEN    (1) // for upstream datapath
 
 #define HCI_DOWNSTREAM_DATA_QUEUE_IDX   (0)
+#define HCI_UPSTREAM_DATA_QUEUE_IDX     (1)
 
 #ifndef MIN
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -68,7 +73,6 @@ typedef struct {
     fixed_queue_t *packet_queue;
     struct osi_event *downstream_data_ready;
     command_waiting_response_t cmd_waiting_q;
-
     /*
       non_repeating_timer_t *command_response_timer;
       list_t *commands_pending_response;
@@ -105,6 +109,11 @@ static serial_data_type_t event_to_data_type(uint16_t event);
 static pkt_linked_item_t *get_waiting_command(command_opcode_t opcode);
 static void dispatch_reassembled(BT_HDR *packet);
 static void dispatch_adv_report(pkt_linked_item_t *linked_pkt);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+static void dispatch_c2h_credit(uint16_t handle, uint16_t num);
+static void dispatch_hci_c2h_credit_flush(void);
+static void flush_reassembly_work(void *context);
+#endif
 
 // Module lifecycle functions
 int hci_start_up(void)
@@ -114,8 +123,13 @@ int hci_start_up(void)
     }
 
     const size_t workqueue_len[] = {HCI_HOST_TASK_WORKQUEUE0_LEN, HCI_HOST_TASK_WORKQUEUE1_LEN};
+#if (!CONFIG_BT_BLUEDROID_HCI_TASK_STACK_IN_EXT_MEM)
     hci_host_thread = osi_thread_create(HCI_HOST_TASK_NAME, HCI_HOST_TASK_STACK_SIZE, HCI_HOST_TASK_PRIO, HCI_HOST_TASK_PINNED_TO_CORE,
-                                        HCI_HOST_TASK_WORKQUEUE_NUM, workqueue_len);
+                                        HCI_HOST_TASK_WORKQUEUE_NUM, workqueue_len, false);
+#else
+    hci_host_thread = osi_thread_create(HCI_HOST_TASK_NAME, HCI_HOST_TASK_STACK_SIZE, HCI_HOST_TASK_PRIO, HCI_HOST_TASK_PINNED_TO_CORE,
+                                        HCI_HOST_TASK_WORKQUEUE_NUM, workqueue_len, true);
+#endif
     if (hci_host_thread == NULL) {
         goto error;
     }
@@ -127,6 +141,12 @@ int hci_start_up(void)
         goto error;
     }
 
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    if (!hci_c2h_credit_init()) {
+        goto error;
+    }
+#endif
+
     hci_host_startup_flag = true;
     return 0;
 error:
@@ -134,9 +154,51 @@ error:
     return -1;
 }
 
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+static void flush_reassembly_work(void *context)
+{
+    uint16_t handle = (uint16_t)(uintptr_t)context;
+
+    if (packet_fragmenter != NULL && packet_fragmenter->flush_reassembly != NULL) {
+        packet_fragmenter->flush_reassembly(handle);
+    }
+}
+#endif
+
+void hci_drop_inbound_acl_reassembly(uint16_t handle)
+{
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    handle &= 0x0FFF;
+
+    if (packet_fragmenter == NULL || packet_fragmenter->flush_reassembly == NULL) {
+        return;
+    }
+
+    /* No HCI thread yet / already torn down: flush inline. */
+    if (hci_host_thread == NULL) {
+        packet_fragmenter->flush_reassembly(handle);
+        return;
+    }
+
+    /* BTU must not touch partial_packets; run flush_reassembly on HCI thread. */
+    if (!osi_thread_post(hci_host_thread, flush_reassembly_work, (void *)(uintptr_t)handle,
+                         HCI_DOWNSTREAM_DATA_QUEUE_IDX, OSI_THREAD_MAX_TIMEOUT)) {
+        HCI_TRACE_WARNING("%s post flush_reassembly failed handle=0x%x", __func__, handle);
+        assert(0);
+    }
+#else
+    UNUSED(handle);
+#endif
+}
+
 void hci_shut_down(void)
 {
     hci_host_startup_flag  = false;
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    /* Flush/close HCI credit while HAL + HCI thread are still usable. */
+    hci_c2h_credit_close();
+#endif
 
     /* Close HAL and cleanup before freeing thread: hal->open() and osi_event_bind()
      * stored references to hci_host_thread; they must not use it after osi_thread_free(). */
@@ -148,15 +210,34 @@ void hci_shut_down(void)
 
     osi_thread_free(hci_host_thread);
     hci_host_thread = NULL;
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    hci_c2h_credit_deinit();
+#endif
+}
+
+osi_thread_t *hci_get_current_thread(void)
+{
+    return hci_host_thread;
 }
 
 bool hci_downstream_data_post(uint32_t timeout)
 {
+    bool ret;
+
     if (hci_host_env.downstream_data_ready == NULL) {
         HCI_TRACE_WARNING("%s downstream_data_ready event not created", __func__);
         return false;
     }
-    return osi_thread_post_event(hci_host_env.downstream_data_ready, timeout);
+
+    ret = osi_thread_post_event(hci_host_env.downstream_data_ready, timeout);
+    if (!ret) {
+        HCI_TRACE_DEBUG("%s post fail credits=%d cmdq=%u pktq=%u",
+                        __func__, hci_host_env.command_credits,
+                        (unsigned)fixed_pkt_queue_length(hci_host_env.command_queue),
+                        (unsigned)fixed_queue_length(hci_host_env.packet_queue));
+    }
+    return ret;
 }
 
 static int hci_layer_init_env(void)
@@ -217,14 +298,18 @@ static void hci_layer_deinit_env(void)
 
     if (hci_host_env.command_queue) {
         fixed_pkt_queue_free(hci_host_env.command_queue, (fixed_pkt_queue_free_cb)osi_free_func);
+        hci_host_env.command_queue = NULL;
     }
     if (hci_host_env.packet_queue) {
         fixed_queue_free(hci_host_env.packet_queue, osi_free_func);
+        hci_host_env.packet_queue = NULL;
     }
 
     cmd_wait_q = &hci_host_env.cmd_waiting_q;
     list_free(cmd_wait_q->commands_pending_response);
+    cmd_wait_q->commands_pending_response = NULL;
     osi_mutex_free(&cmd_wait_q->commands_pending_response_lock);
+    cmd_wait_q->commands_pending_response_lock = NULL;
     osi_alarm_free(cmd_wait_q->command_response_timer);
     cmd_wait_q->command_response_timer = NULL;
 #if ((BLE_50_FEATURE_SUPPORT == TRUE) || (BLE_42_FEATURE_SUPPORT == TRUE))
@@ -242,6 +327,8 @@ static void hci_downstream_data_handler(void *arg)
      * All packets will be directly copied to single queue in driver layer with
      * H4 type header added (1 byte).
      */
+    UNUSED(arg);
+
     while (hci_host_check_send_available()) {
         /*Now Target only allowed one packet per TX*/
         BT_HDR *pkt = packet_fragmenter->fragment_current_packet();
@@ -257,6 +344,11 @@ static void hci_downstream_data_handler(void *arg)
             break;
         }
     }
+
+    HCI_TRACE_DEBUG("%s done credits=%d cmdq=%u pktq=%u",
+                    __func__, hci_host_env.command_credits,
+                    (unsigned)fixed_pkt_queue_length(hci_host_env.command_queue),
+                    (unsigned)fixed_queue_length(hci_host_env.packet_queue));
 }
 
 static void transmit_command(
@@ -407,10 +499,16 @@ static void command_timed_out(void *context)
 {
     command_waiting_response_t *cmd_wait_q = (command_waiting_response_t *)context;
     pkt_linked_item_t *wait_entry;
+    uint16_t opcode = 0;
 
     osi_mutex_lock(&cmd_wait_q->commands_pending_response_lock, OSI_MUTEX_MAX_TIMEOUT);
     wait_entry = (list_is_empty(cmd_wait_q->commands_pending_response) ?
                   NULL : list_front(cmd_wait_q->commands_pending_response));
+    if (wait_entry != NULL) {
+        hci_cmd_metadata_t *metadata = (hci_cmd_metadata_t *)(wait_entry->data);
+        opcode = metadata->opcode;
+        UNUSED(opcode);
+    }
     osi_mutex_unlock(&cmd_wait_q->commands_pending_response_lock);
 
     if (wait_entry == NULL) {
@@ -419,9 +517,7 @@ static void command_timed_out(void *context)
         // We shouldn't try to recover the stack from this command timeout.
         // If it's caused by a software bug, fix it. If it's a hardware bug, fix it.
     {
-        hci_cmd_metadata_t *metadata = (hci_cmd_metadata_t *)(wait_entry->data);
-        HCI_TRACE_ERROR("%s hci layer timeout waiting for response to a command. opcode: 0x%x", __func__, metadata->opcode);
-        UNUSED(metadata);
+        HCI_TRACE_ERROR("%s hci layer timeout waiting for response to a command. opcode: 0x%x", __func__, opcode);
     }
 }
 
@@ -520,6 +616,18 @@ static bool filter_incoming_event(BT_HDR *packet)
         metadata = (hci_cmd_metadata_t *)(wait_entry->data);
         if (metadata->command_status_cb) {
             metadata->command_status_cb(status, &metadata->command, metadata->context);
+#if ((BLE_50_FEATURE_SUPPORT == TRUE) || (BLE_42_FEATURE_SUPPORT == TRUE))
+            /* No Command Complete follows a failed Command Status (Core Spec Vol 4 Part E). */
+            if (status != HCI_SUCCESS) {
+                BlE_SYNC *sync_info = btsnd_hcic_ble_get_sync_info();
+                if (!sync_info) {
+                    HCI_TRACE_WARNING("%s sync_info is NULL. opcode = 0x%x", __func__, opcode);
+                } else if (sync_info->sync_sem && sync_info->opcode == opcode) {
+                    osi_sem_give(&sync_info->sync_sem);
+                    sync_info->opcode = 0;
+                }
+            }
+#endif // #if ((BLE_50_FEATURE_SUPPORT == TRUE) || (BLE_42_FEATURE_SUPPORT == TRUE))
         }
 
         goto intercepted;
@@ -558,11 +666,46 @@ intercepted:
 static void dispatch_reassembled(BT_HDR *packet)
 {
     // Events should already have been dispatched before this point
-    //Tell Up-layer received packet.
-    if (btu_task_post(SIG_BTU_HCI_MSG, packet, OSI_THREAD_MAX_TIMEOUT) == false) {
+    // Tell Up-layer received packet.
+    do {
+        if ((packet->event & BT_EVT_MASK) == BT_EVT_TO_BTU_HCI_ACL) {
+            if (btu_hci_acl_data_post(packet)) {
+                packet = NULL;
+            }
+            break;
+        }
+
+        if (btu_task_post(SIG_BTU_HCI_MSG, packet, OSI_THREAD_MAX_TIMEOUT)) {
+            packet = NULL;
+            break;
+        }
+    } while (0);
+
+    if (packet != NULL) {
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        if ((packet->event & BT_EVT_MASK) == BT_EVT_TO_BTU_HCI_ACL &&
+                packet->len >= HCI_ACL_PREAMBLE_SIZE) {
+            uint8_t *stream = packet->data + packet->offset;
+            uint16_t handle;
+            STREAM_TO_UINT16(handle, stream);
+            dispatch_c2h_credit(handle & HCI_DATA_HANDLE_MASK, 1);
+        }
+#endif
         osi_free(packet);
     }
 }
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+static void dispatch_c2h_credit(uint16_t handle, uint16_t num)
+{
+    hci_c2h_credit_account(handle, num);
+}
+
+static void dispatch_hci_c2h_credit_flush(void)
+{
+    hci_c2h_credit_flush();
+}
+#endif
 
 static void dispatch_adv_report(pkt_linked_item_t *linked_pkt)
 {
@@ -631,12 +774,19 @@ static void init_layer_interface(void)
 static const hci_hal_callbacks_t hal_callbacks = {
     hal_says_packet_ready,
     hal_says_adv_rpt_ready,
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    dispatch_c2h_credit,
+    dispatch_hci_c2h_credit_flush,
+#endif
 };
 
 static const packet_fragmenter_callbacks_t packet_fragmenter_callbacks = {
     transmit_fragment,
     dispatch_reassembled,
-    fragmenter_transmit_finished
+    fragmenter_transmit_finished,
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    dispatch_c2h_credit,
+#endif
 };
 
 const hci_t *hci_layer_get_interface(void)
@@ -732,11 +882,7 @@ const char *hci_status_code_to_string(uint8_t status)
         case HCI_ERR_CONN_TOUT_DUE_TO_MIC_FAILURE:   return "MIC Failure";           /* 0x3D */
         case HCI_ERR_CONN_FAILED_ESTABLISHMENT:      return "Conn Failed";           /* 0x3E */
         case HCI_ERR_MAC_CONNECTION_FAILED:          return "Previously Used";       /* 0x3F */
-        default: {
-            static char buf[24];
-            snprintf(buf, sizeof(buf), "Unknown Status (0x%02X)", status);
-            return buf;
-        }
+        default:                                     return "Unknown Status";
     }
 }
 #endif

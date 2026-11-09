@@ -1,61 +1,124 @@
-| Supported Targets | ESP32-H4 |
-| ----------------- | -------- |
+| Supported Targets | ESP32-H4 | ESP32-S31 |
+| ----------------- | -------- | --------- |
 
 # BAP Broadcast Source Example
 
 (See the README.md file in the upper level `examples` directory for more information about examples.)
 
-This example demonstrates the **Basic Audio Profile (BAP) Broadcast Source** functionality. It starts extended advertising with the Broadcast Audio service data (UUID and Broadcast ID) and device name, periodic advertising with the Broadcast Audio Source Endpoint (BASE), then starts the BAP Broadcast Source so that BIGInfo and (mock) audio data are sent over the BIG. Sinks such as the [broadcast_sink](../broadcast_sink) example can discover this source, establish periodic sync, and synchronize to the BIG to receive the streams.
+## Overview
 
-The implementation uses the NimBLE host stack with ISO and BAP support, ESP-BLE-ISO, and ESP-BLE-AUDIO APIs (BAP broadcast source create/start, stream send, LC3 presets). It is intended for chips that support BLE 5.2 ISO and LE Audio (e.g. ESP32-H4). The source is configured with the LC3 16_2_1 broadcast preset, a hardcoded broadcast ID (`0x123456`), and a hardcoded broadcast code (`1234`) for encrypted broadcasts. These values can be changed by editing the source code constants.
+This example acts as a **BAP Broadcast Source**. It creates a BAP broadcast source from the LC3 `16_2_1` broadcast preset, encodes the BASE into the periodic advertising payload, places the Broadcast Audio Announcement Service UUID and a fixed 24-bit Broadcast ID (`0x123456`) in the extended advertising payload, and then starts the BIG so that BIS streams transmit synthetic SDU data on a fixed cadence.
+
+The build runs on top of the selected BLE host stack (Bluedroid by default; NimBLE via the `sdkconfig.defaults.nimble` overlay) and the ESP BLE Audio component set. Source-side APIs used: `esp_ble_audio_common_init` / `esp_ble_audio_common_start` (common layer), `esp_ble_audio_bap_broadcast_source_create` / `_get_base` / `_start` (BAP), `esp_ble_audio_bap_broadcast_adv_add` (BAP/ISO glue), and the BAP stream callbacks (`started`, `stopped`, `sent`, `disconnected`). PACS, GAP scanner, and the scan delegator are **not** used on this side. Encryption is enabled because the broadcast code `"1234"` is non-empty; packing is `ESP_BLE_ISO_PACKING_SEQUENTIAL`. Channel allocation per stream is hard-coded as `FRONT_LEFT` for stream 0 and `FRONT_RIGHT` for stream 1.
+
+The TX scheduler is built on `example_audio_tx_scheduler_*` helpers; the source comment notes that ESP timer resolution is not accurate enough for the SDU interval, so a `k_work_delayable`-based scheduler is used instead.
 
 ## Requirements
 
-* A board with Bluetooth LE 5.2, ISO, and LE Audio support (e.g. ESP32-H4)
-* Optionally, a device running the [broadcast_sink](../broadcast_sink) example to receive and play the broadcast streams
+* A board with Bluetooth LE 5.2, ISO, and LE Audio support (e.g. ESP32-H4, ESP32-S31)
+* A peer running the [broadcast_sink](../broadcast_sink) example to receive and decode the BIS streams
 
-## How to Use Example
+## Configuration
 
-Before project configuration and build, set the correct chip target:
+Open menuconfig:
 
 ```bash
-idf.py set-target esp32h4
+idf.py menuconfig
 ```
 
-### Build and Flash
+Apart from the option below, runtime defaults are baked into source. The device name (`"BAP Broadcast Source"`), broadcast ID (`0x123456`), broadcast code (`"1234"`), advertising/periodic intervals, stream and subgroup counts (via `CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT` / `_SUBGROUP_COUNT` from the BAP component), and LC3 preset (`16_2_1`) are compile-time constants in `main.c`.
 
-Run the following to build, flash and monitor:
+Under **Example: Common Audio Utilities**, enable **Synchronize multi-stream TX with
+timestamps** (`CONFIG_EXAMPLE_AUDIO_TX_TIMESTAMP`, disabled by default) to give the
+SDUs of all BIS streams of the BIG the same timestamps, so that the SDUs of
+one frame (e.g. the left and right audio) go in one event:
+
+- One TX scheduler for the BIG sends one frame per SDU interval: one SDU on
+  each started stream, all with the same timestamp.
+- At the start only the first stream sends, without timestamps, and reads
+  **LE Read ISO TX Sync** (`esp_ble_audio_bap_stream_get_tx_sync()`) after each
+  send until it finds the SDU at the start of an event; the timestamps go on from
+  that event's anchor. The read is a blocking HCI command of about 2.5 ms, so it
+  comes after the send.
+- A stream started later joins at the next frame, with the same timestamp.
+- The best lead (how long before its reference time an SDU is handled) of every
+  50 SDUs follows the clock difference between the timer and the controller:
+  below 200 us the scheduler adds one frame, above two SDU intervals more it
+  skips one. A stall lowers only some SDUs and changes nothing; a best lead
+  below minus one SDU interval is a stall or a backlog, and no frame is added.
+
+In this mode the first 4 bytes of each SDU carry its timestamp (0 without one),
+and unframed data is required. With the option disabled, the same scheduler sends
+one SDU per stream per interval without timestamps. Logs on anomalies:
+
+```
+I BAP_BSRC: [SRC #<n>] TX: <N> packets, <k> late
+W BAP_BSRC: [SRC #<n>] Send failed, err <e>
+E BAP_BSRC: [SRC #<n>] Timestamp TX start failed, err <e>
+W AUDIO_TX_SYNC: Framed data is not supported yet
+```
+
+### Security & Pairing
+
+The example inherits a Just-Works pairing model (LE Secure Connections, no MITM, no I/O capability) with bonding enabled from the shared init at `../common_components/example_init/ble_audio_example_init.c`; change pairing/IO-cap there if needed.
+
+## Build & Flash
+
+The base `sdkconfig.defaults` defaults to the **Bluedroid** host; idf.py automatically merges the per-target overlay (`sdkconfig.defaults.$IDF_TARGET`). To build with **NimBLE** host instead, layer `sdkconfig.defaults.nimble` on top via `-DSDKCONFIG_DEFAULTS` in a separate build directory with its own `sdkconfig`, because an existing `sdkconfig` takes precedence over the defaults.
+
+### Bluedroid host (default)
 
 ```bash
+idf.py --preview set-target esp32h4
 idf.py -p PORT flash monitor
 ```
 
-(To exit the serial monitor, type ``Ctrl-]``.)
+### NimBLE host
 
-See the [Getting Started Guide](https://idf.espressif.com/) for full steps to configure and use ESP-IDF.
+```bash
+idf.py --preview -B build_nimble_esp32h4 -DSDKCONFIG=build_nimble_esp32h4/sdkconfig -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.nimble" set-target esp32h4
+idf.py -B build_nimble_esp32h4 -DSDKCONFIG=build_nimble_esp32h4/sdkconfig -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.nimble" -p PORT flash monitor
+```
+
+For `esp32s31`, replace `esp32h4` with `esp32s31` in the commands above.
+
+(Exit serial monitor with `Ctrl-]`.)
 
 ## Example Flow
 
-1. **Initialization**: NVS, Bluetooth stack, and LE Audio common layer (`esp_ble_audio_common_init`). No PACS or GAP callback needed for the source role.
-2. **Broadcast source setup**: Register broadcast source callbacks (started/stopped). Configure subgroups and streams using the selected LC3 preset (codec config, QoS, channel allocation). Create the BAP Broadcast Source (`esp_ble_audio_bap_broadcast_source_create`) with optional encryption and sequential packing. Register stream callbacks (started, stopped, sent) for each stream.
-3. **Extended and periodic advertising**: Set extended advertising data: Broadcast Audio UUID + Broadcast ID (static or random) + complete device name. Set periodic advertising data: Broadcast Audio UUID + encoded BASE from the broadcast source. Start periodic advertising then extended advertising.
-4. **Start BIG**: Add the advertising set for BIG and start the BAP Broadcast Source (`esp_ble_audio_bap_broadcast_source_start`) with the same adv handle. BIGInfo is sent in the periodic advertising; BIS streams are created.
-5. **Stream and send**: When each BIS stream starts, the stream started callback allocates an SDU buffer and starts a periodic TX scheduler based on `k_work_delayable`. The scheduler posts work items to the ISO task at the stream QoS interval to send mock audio data; sent and drift are reported in the stream sent callback. When a stream stops, resources are freed and the scheduler is stopped. Note that the scheduler timer resolution is in milliseconds, which may not match the exact SDU interval for all configurations.
+1. `app_main` initializes NVS, calls `bluetooth_init()`, and calls `esp_ble_audio_common_init(NULL)` (no GAP callback for this role).
+2. `broadcast_source_setup()` registers `source_started` / `source_stopped` callbacks, populates per-stream channel-allocation BIS metadata (left/right), registers `stream_ops` on each stream, and calls `esp_ble_audio_bap_broadcast_source_create()` with the encrypted preset.
+3. `esp_ble_audio_common_start(NULL)` starts the audio stack; one `example_audio_tx_scheduler_init()` for the BIG is wired with `tx_scheduler_cb`.
+4. `adv_init()` performs host-specific GAP setup (Bluedroid: registers the GAP callback for `*_COMPLETE_EVT` semaphore signalling; NimBLE: no-op — adv-instance callback is passed at configure time). `ext_adv_start()` builds the extended (Broadcast Audio Service Data + Broadcast ID + complete name) and periodic (BASE from `esp_ble_audio_bap_broadcast_source_get_base()`) payloads in host-agnostic bytes, then calls `adv_start(ext_data, ext_len, per_data, per_len)`. The host-specific implementation in `main/bluedroid/adv.c` or `main/nimble/adv.c` configures non-connectable extended adv (1M primary / 2M secondary, 200 ms interval), configures periodic adv (100 ms), writes both payloads, and starts periodic and extended advertising.
+5. `broadcast_start()` calls `esp_ble_audio_bap_broadcast_adv_add()` and `esp_ble_audio_bap_broadcast_source_start()` on the same `ADV_HANDLE`, which kicks off BIGInfo + BIS creation.
+6. When each BIS stream goes streaming, `stream_started_cb` allocates an SDU-sized buffer; the first one starts the scheduler at `preset_active.qos.interval`. Each tick sends one SDU on every started stream: without timestamps `broadcast_source_tx()` fills the buffer with the low byte of `seq_num` and calls `esp_ble_audio_bap_stream_send()`; in timestamp mode `example_audio_tx_sync_send_next()` sends them with `esp_ble_audio_bap_stream_send_ts()`.
+7. `stream_sent_cb` forwards completions to `example_audio_tx_scheduler_on_sent()` for drift accounting; `stream_stopped_cb` and `stream_disconnected_cb` stop that stream's TX, and the scheduler stops with the last one; `source_stopped_cb` frees all per-stream buffers.
 
-## Example Output
-
-```
-I (xxx) BAP_BSRC: Creating broadcast source with 1 subgroups & 2 streams per subgroup
-I (xxx) BAP_BSRC: Extended adv instance 0 started
-I (xxx) BAP_BSRC: Broadcast source 0x... started
-I (xxx) BAP_BSRC: Stream 0x... started
-I (xxx) BAP_BSRC: Transmitted 1000 ISO data packets (stream 0x...)
-...
-```
-
-If the broadcast source stops (e.g. stream stopped):
+## Expected Log
 
 ```
-I (xxx) BAP_BSRC: Stream 0x... stopped, reason 0x...
-I (xxx) BAP_BSRC: Broadcast source 0x... stopped, reason 0x...
+I (xxx) BAP_BSRC: Creating broadcast source: ... subgroup(s), ... stream(s)/subgroup
+I (xxx) BAP_BSRC: Advertising started (handle 0)
+I (xxx) BAP_BSRC: Broadcast source started
+I (xxx) BAP_BSRC: [SRC #0] Stream started
+I (xxx) BAP_BSRC: [SRC #1] Stream started
 ```
+
+Periodic TX accounting (emitted by `example_audio_tx_scheduler_on_sent` under the `BAP_BSRC` tag, name `SRC #<idx>`) follows. On teardown:
+
+```
+I (xxx) BAP_BSRC: [SRC #0] Stream stopped, reason 0x...
+I (xxx) BAP_BSRC: [SRC #0] ISO disconnected, reason 0x...
+I (xxx) BAP_BSRC: Broadcast source stopped, reason 0x...
+```
+
+## Peer Pairing
+
+Run [broadcast_sink](../broadcast_sink/) on a second board. Expected interaction sequence:
+
+1. Source advertises extended PDU containing the Broadcast Audio Announcement Service UUID, Broadcast ID `0x123456`, and complete name `"BAP Broadcast Source"`; sink scans and matches by name + UUID.
+2. Source's periodic advertising carries the encoded BASE; sink establishes PA sync and parses the BASE to recover subgroup count and BIS index bitfield.
+3. Source's BIGInfo advertises the BIG as encrypted (broadcast code `"1234"`); sink reports `BIG encrypted`.
+4. Source starts the BIG and the two BIS streams (`FRONT_LEFT`, `FRONT_RIGHT`); sink calls `esp_ble_audio_bap_broadcast_sink_sync()` with the chosen BIS bitfield and the matching broadcast code.
+5. Source's TX scheduler keeps pushing SDUs at `preset_active.qos.interval`; sink stream `recv` callbacks deliver the data and update RX metrics.
+6. Stopping the source (or losing PA sync) triggers `stream_stopped_cb` on the sink, which deletes the broadcast sink and resumes scanning.

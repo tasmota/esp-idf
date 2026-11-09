@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,6 +17,7 @@
 /* ----------------------------- Macros & Types ----------------------------- */
 
 #define USB_WRAP_LL_EXT_PHY_SUPPORTED           1   // Can route to an external FSLS PHY
+#define USB_WRAP_LL_DEPENDS_ON_BBPLL            1   // USB PHY depends on BBPLL
 
 #ifdef __cplusplus
 extern "C" {
@@ -207,6 +208,20 @@ FORCE_INLINE_ATTR void usb_wrap_ll_phy_test_mode_set_signals(usb_wrap_dev_t *hw,
     test_conf.test_rx_dm = vals->rx_dm;
 
     hw->test_conf.val = test_conf.val;
+}
+
+/**
+ * @brief Route internal FSLS PHY AHB/PHY clock gating to DWC2
+ *
+ * Clears clock force-on bits so DWC2 can gate the internal PHY clocks during
+ * port suspend and internal clock gating.
+ *
+ * @param hw Start address of the USB Wrap registers
+ */
+FORCE_INLINE_ATTR void usb_wrap_ll_enable_automatic_phy_control(usb_wrap_dev_t *hw)
+{
+    hw->otg_conf.ahb_clk_force_on = 0;
+    hw->otg_conf.phy_clk_force_on = 0;
 }
 
 /* ----------------------------- RCC Functions  ----------------------------- */

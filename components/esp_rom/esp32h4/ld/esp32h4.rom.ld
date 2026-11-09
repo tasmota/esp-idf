@@ -1,14 +1,14 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 /* ROM function interface esp32h4.rom.ld for esp32h4
  *
  *
- * Generated from ../../rom/target/esp32h4/interface-esp32h4.yml md5sum bb9ee317148d3c5b10610936a3675a65
+ * Generated from ../../rom/target/esp32h4/interface-esp32h4.yml md5sum 5996da6c5ce799e55c4cf85b5d2ae712
  *
- * Compatible with ROM where ECO version equal or greater to 0.
+ * Compatible with ROM where ECO version equal or greater to 2.
  *
  * THIS FILE WAS AUTOMATICALLY GENERATED. DO NOT EDIT.
  */
@@ -182,12 +182,12 @@ Cache_Sync_Items = 0x400005b8;
 Cache_Op_Addr = 0x400005bc;
 Cache_Invalidate_Addr = 0x400005c0;
 Cache_Clean_Addr = 0x400005c4;
-Cache_WriteBack_Addr = 0x400005c8;
-Cache_WriteBack_Invalidate_Addr = 0x400005cc;
+PROVIDE( Cache_WriteBack_Addr = 0x400005c8 );
+PROVIDE( Cache_WriteBack_Invalidate_Addr = 0x400005cc );
 Cache_Invalidate_All = 0x400005d0;
 Cache_Clean_All = 0x400005d4;
-Cache_WriteBack_All = 0x400005d8;
-Cache_WriteBack_Invalidate_All = 0x400005dc;
+PROVIDE( Cache_WriteBack_All = 0x400005d8 );
+PROVIDE( Cache_WriteBack_Invalidate_All = 0x400005dc );
 Cache_Mask_All = 0x400005e0;
 Cache_UnMask_Dram0 = 0x400005e4;
 Cache_Suspend_Autoload = 0x400005e8;
@@ -397,7 +397,7 @@ ets_secure_boot_revoke_public_key_digest = 0x400007e0;
  ***************************************/
 
 /* Functions */
-usb_serial_device_rx_one_char = 0x40000910;
-usb_serial_device_rx_one_char_block = 0x40000914;
-usb_serial_device_tx_flush = 0x40000918;
-usb_serial_device_tx_one_char = 0x4000091c;
+usb_serial_device_rx_one_char = 0x400007e4;
+usb_serial_device_rx_one_char_block = 0x400007e8;
+usb_serial_device_tx_flush = 0x400007ec;
+usb_serial_device_tx_one_char = 0x400007f0;

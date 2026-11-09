@@ -101,7 +101,7 @@ If the configurations in :cpp:type:`i2c_master_bus_config_t` is specified, then 
 I2C master device requires the configuration that specified by :cpp:type:`i2c_device_config_t`:
 
 - :cpp:member:`i2c_device_config_t::dev_addr_length` configure the address bit length of the slave device. It can be chosen from enumerator :cpp:enumerator:`I2C_ADDR_BIT_LEN_7` or :cpp:enumerator:`I2C_ADDR_BIT_LEN_10` (if supported).
-- :cpp:member:`i2c_device_config_t::device_address` sets the I2C device raw address. Please parse the device address to this member directly. For example, the device address is 0x28, then parse 0x28 to :cpp:member:`i2c_device_config_t::device_address`, don't carry a write or read bit.
+- :cpp:member:`i2c_device_config_t::device_address` sets the raw I2C device address. Pass the device address directly to this member. For devices with a 7-bit address, use the **7-bit** address instead of an 8-bit address that includes the read/write bit.
 - :cpp:member:`i2c_device_config_t::scl_speed_hz` sets the SCL line frequency of this device.
 - :cpp:member:`i2c_device_config_t::scl_wait_us` sets the SCL await time (in μs). Usually this value should not be very small because slave stretch will happen in pretty long time (It's possible even stretch for 12 ms). Set ``0`` means use default register value.
 
@@ -625,7 +625,7 @@ Power Management
 
 .. only:: SOC_I2C_SUPPORT_APB
 
-    When the power management is enabled (i.e. :ref:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the source clock of I2C FIFO before going into Light-sleep mode, thus potentially changing the I2C signals and leading to transmitting or receiving invalid data.
+    When the power management is enabled (i.e. :menuitem:`CONFIG_PM_ENABLE` is on), the system will adjust or stop the source clock of I2C FIFO before going into Light-sleep mode, thus potentially changing the I2C signals and leading to transmitting or receiving invalid data.
 
     However, the driver can prevent the system from changing APB frequency by acquiring a power management lock of type :cpp:enumerator:`ESP_PM_APB_FREQ_MAX`. Whenever user creates an I2C bus that has selected :cpp:enumerator:`I2C_CLK_SRC_APB` as the clock source, the driver will guarantee that the power management lock is acquired when I2C operations begin and the lock will be released automatically when I2C operations finish.
 
@@ -644,7 +644,7 @@ IRAM Safe
 
 By default, the I2C interrupt will be deferred when the cache is disabled for reasons like writing or erasing flash. Thus the event callback functions will not get executed in time, which is not expected in a real-time application.
 
-There's a Kconfig option :ref:`CONFIG_I2C_ISR_IRAM_SAFE` that will:
+There's a Kconfig option :menuitem:`CONFIG_I2C_ISR_IRAM_SAFE` that will:
 
 1. Enable the interrupt being serviced even when cache is disabled.
 2. Place all functions that used by the ISR into IRAM.
@@ -678,8 +678,8 @@ Other functions are not guaranteed to be thread-safe. Thus, you should avoid cal
 Kconfig Options
 ^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_I2C_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see also :ref:`i2c-iram-safe` for more information.
-- :ref:`CONFIG_I2C_ENABLE_DEBUG_LOG` is used to enable the debug log at the cost of increased firmware binary size.
+- :menuitem:`CONFIG_I2C_ISR_IRAM_SAFE` controls whether the default ISR handler can work when cache is disabled, see also :ref:`i2c-iram-safe` for more information.
+- :menuitem:`CONFIG_I2C_ENABLE_DEBUG_LOG` is used to enable the debug log at the cost of increased firmware binary size.
 
 Application Examples
 --------------------

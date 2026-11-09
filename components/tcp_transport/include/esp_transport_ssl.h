@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -207,13 +207,31 @@ void esp_transport_ssl_set_common_name(esp_transport_handle_t t, const char *com
 void esp_transport_ssl_set_ciphersuites_list(esp_transport_handle_t t, const int *ciphersuites_list);
 
 /**
+ * @brief      Set the list of supported groups for the TLS connection
+ *
+ * @note       This function stores a pointer to the data rather than making a copy.
+ *             Therefore, the data must remain valid until the connection is cleaned up.
+ *             The `groups_list` is a pointer to a zero-terminated array of IANA identifiers
+ *             of TLS supported groups, the named groups that are used for key exchange.
+ *             You can verify the validity of the list using the `esp_tls_get_supported_groups_list()` API.
+ *
+ * @param      t            SSL transport
+ * @param[in]  groups_list  A pointer to a zero-terminated array of IANA identifiers of TLS supported groups
+ */
+void esp_transport_ssl_set_groups_list(esp_transport_handle_t t, const uint16_t *groups_list);
+
+/**
  * @brief      Set the ssl context to use secure element (atecc608a) for client(device) private key and certificate
  *
- * @note       Recommended to be used with ESP32 series interfaced to ATECC608A based secure element
+ * @deprecated No longer functional; the TLS connection will fail with ESP_ERR_NOT_SUPPORTED when
+ *             this option is set. Use esp_transport_ssl_set_client_key_config() (esp_key_config_t)
+ *             together with CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED instead. Kept only for
+ *             source compatibility; will be removed in the next major release.
  *
  * @param      t     ssl transport
  */
-void esp_transport_ssl_use_secure_element(esp_transport_handle_t t);
+void esp_transport_ssl_use_secure_element(esp_transport_handle_t t)
+__attribute__((deprecated("Use esp_transport_ssl_set_client_key_config() with CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED instead")));
 
 /**
  * @brief      Set the ds_data handle in ssl context.(used for the digital signature operation)
@@ -222,6 +240,26 @@ void esp_transport_ssl_use_secure_element(esp_transport_handle_t t);
  *             ds_data  the handle for ds data params
  */
 void esp_transport_ssl_set_ds_data(esp_transport_handle_t t, void *ds_data);
+
+/**
+ * @brief      Set unified client key configuration for mutual authentication
+ *
+ *             This function provides a unified way to configure client private keys
+ *             from various sources (buffer, ECDSA peripheral, secure element, etc.)
+ *             using the esp_key_config_t structure.
+ *
+ * @note       This function stores the pointer to config, rather than making a copy.
+ *             So the config must remain valid until after the connection is cleaned up.
+ *
+ * @note       When client_key is set, it takes precedence over legacy key configuration
+ *             functions (set_client_key_data, set_client_key_ecdsa_peripheral, etc.)
+ *
+ * @param      t            ssl transport
+ * @param[in]  client_key   Pointer to the unified key configuration
+ *
+ * @see        esp_key_config_t for configuration options
+ */
+void esp_transport_ssl_set_client_key_config(esp_transport_handle_t t, const esp_key_config_t *client_key);
 
 /**
  * @brief      Set PSK key and hint for PSK server/client verification in esp-tls component.

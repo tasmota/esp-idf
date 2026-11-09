@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,10 +16,46 @@
 #include "soc/pmu_struct.h"
 #include "hal/pmu_types.h"
 #include "hal/misc.h"
+#include "soc/efuse_struct.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_active_hp_dbias(void)
+{
+    return (EFUSE0.rd_mac_sys3.active_hp_dbias_1 << 3) | EFUSE0.rd_mac_sys2.active_hp_dbias;
+}
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_active_lp_dbias(void)
+{
+    return EFUSE0.rd_mac_sys3.active_lp_dbias;
+}
+
+__attribute__((always_inline)) static inline int32_t pmu_ll_get_dbias_vol_gap(void)
+{
+    return EFUSE0.rd_mac_sys3.lp_hp_dbias_vol_gap;
+}
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_lslp_dbg(void)
+{
+    return EFUSE0.rd_mac_sys3.lslp_hp_dbg;
+}
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_dslp_dbg(void)
+{
+    return EFUSE0.rd_mac_sys3.dslp_lp_dbg;
+}
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_lslp_hp_dbias(void)
+{
+    return EFUSE0.rd_mac_sys3.lslp_hp_dbias;
+}
+
+__attribute__((always_inline)) static inline uint32_t pmu_ll_get_dslp_lp_dbias(void)
+{
+    return EFUSE0.rd_mac_sys3.dslp_lp_dbias;
+}
 
 /**
  * @brief Set the power domain that needs to be powered down in the digital power
@@ -117,6 +153,19 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_current_power_off(pmu_dev_t *hw, pmu_hp_mod
 FORCE_INLINE_ATTR void pmu_ll_hp_set_bias_sleep_enable(pmu_dev_t *hw, pmu_hp_mode_t mode, bool en)
 {
     hw->hp_sys[mode].bias.bias_sleep = en;
+}
+
+/**
+ * Update pd_cur and bias_sleep in one register write.
+ * Hardware must not observe pd_cur=1 with bias_sleep=0.
+ */
+FORCE_INLINE_ATTR void pmu_ll_hp_set_pd_cur_bias_sleep(pmu_dev_t *hw, pmu_hp_mode_t mode, bool pd_cur, bool bias_sleep)
+{
+    HAL_ASSERT(!pd_cur || bias_sleep);
+    pmu_hp_bias_reg_t bias = {.val = hw->hp_sys[mode].bias.val};
+    bias.pd_cur = pd_cur;
+    bias.bias_sleep = bias_sleep;
+    hw->hp_sys[mode].bias.val = bias.val;
 }
 
 FORCE_INLINE_ATTR void pmu_ll_hp_set_retention_param(pmu_dev_t *hw, pmu_hp_mode_t mode, uint32_t param)
@@ -234,6 +283,12 @@ FORCE_INLINE_ATTR void pmu_ll_hp_set_regulator_dbias(pmu_dev_t *hw, pmu_hp_mode_
     hw->hp_sys[mode].regulator0.dbias = dbias;
 }
 
+FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_regulator_hp_dbias_voltage(pmu_dev_t *hw, pmu_hp_mode_t mode)
+{
+    HAL_ASSERT(mode == PMU_MODE_HP_ACTIVE);
+    return hw->hp_sys[mode].regulator0.hp_dbias_vol;
+}
+
 FORCE_INLINE_ATTR void pmu_ll_hp_set_regulator_driver_bar(pmu_dev_t *hw, pmu_hp_mode_t mode, uint32_t drv_b)
 {
     hw->hp_sys[mode].regulator1.drv_b = drv_b;
@@ -307,6 +362,20 @@ FORCE_INLINE_ATTR void pmu_ll_lp_set_bias_sleep_enable(pmu_dev_t *hw, pmu_lp_mod
 {
     HAL_ASSERT(mode == PMU_MODE_LP_SLEEP);
     hw->lp_sys[mode].bias.bias_sleep = en;
+}
+
+/**
+ * Update pd_cur and bias_sleep in one register write.
+ * Hardware must not observe pd_cur=1 with bias_sleep=0.
+ */
+FORCE_INLINE_ATTR void pmu_ll_lp_set_pd_cur_bias_sleep(pmu_dev_t *hw, pmu_lp_mode_t mode, bool pd_cur, bool bias_sleep)
+{
+    HAL_ASSERT(mode == PMU_MODE_LP_SLEEP);
+    HAL_ASSERT(!pd_cur || bias_sleep);
+    pmu_lp_bias_reg_t bias = {.val = hw->lp_sys[mode].bias.val};
+    bias.pd_cur = pd_cur;
+    bias.bias_sleep = bias_sleep;
+    hw->lp_sys[mode].bias.val = bias.val;
 }
 
 /****/
@@ -517,6 +586,11 @@ FORCE_INLINE_ATTR void pmu_ll_hp_clear_wakeup_intr_status(pmu_dev_t *hw)
 FORCE_INLINE_ATTR void pmu_ll_hp_clear_reject_intr_status(pmu_dev_t *hw)
 {
     hw->hp_ext.int_clr.reject = 1;
+}
+
+FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_wakeup_enable(pmu_dev_t *hw)
+{
+    return hw->wakeup.cntl2;
 }
 
 FORCE_INLINE_ATTR uint32_t pmu_ll_hp_get_wakeup_cause(pmu_dev_t *hw)

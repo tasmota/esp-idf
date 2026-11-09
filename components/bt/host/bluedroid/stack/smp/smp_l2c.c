@@ -41,11 +41,11 @@ static void smp_connect_callback(UINT16 channel, BD_ADDR bd_addr, BOOLEAN connec
                                  tBT_TRANSPORT transport);
 static void smp_data_received(UINT16 channel, BD_ADDR bd_addr, BT_HDR *p_buf);
 #endif  ///BLE_INCLUDED == TRUE
-#if (CLASSIC_BT_INCLUDED == TRUE)
+#if (SMP_CTKD_INCLUDED == TRUE)
 static void smp_br_connect_callback(UINT16 channel, BD_ADDR bd_addr, BOOLEAN connected, UINT16 reason,
                                     tBT_TRANSPORT transport);
 static void smp_br_data_received(UINT16 channel, BD_ADDR bd_addr, BT_HDR *p_buf);
-#endif  ///CLASSIC_BT_INCLUDED == TRUE
+#endif  ///SMP_CTKD_INCLUDED == TRUE
 
 /*******************************************************************************
 **
@@ -81,12 +81,14 @@ void smp_l2cap_if_init (void)
     L2CA_RegisterFixedChannel (L2CAP_SMP_CID, &fixed_reg);
 #endif  ///BLE_INCLUDED == TRUE
 
-#if (CLASSIC_BT_INCLUDED == TRUE)
+#if (SMP_CTKD_INCLUDED == TRUE)
     fixed_reg.pL2CA_FixedConn_Cb = smp_br_connect_callback;
     fixed_reg.pL2CA_FixedData_Cb = smp_br_data_received;
 
     L2CA_RegisterFixedChannel (L2CAP_SMP_BR_CID, &fixed_reg);
-#endif  ///CLASSIC_BT_INCLUDED == TRUE
+#else
+    UNUSED(fixed_reg);
+#endif  ///SMP_CTKD_INCLUDED == TRUE
 }
 
 #if (BLE_INCLUDED == TRUE)
@@ -262,7 +264,7 @@ static void smp_tx_complete_callback (UINT16 cid, UINT16 num_pkt)
 **                      connected (conn = TRUE)/disconnected (conn = FALSE).
 **
 *******************************************************************************/
-#if (CLASSIC_BT_INCLUDED == TRUE)
+#if (SMP_CTKD_INCLUDED == TRUE)
 static void smp_br_connect_callback(UINT16 channel, BD_ADDR bd_addr, BOOLEAN connected,
                                     UINT16 reason, tBT_TRANSPORT transport)
 {
@@ -335,13 +337,15 @@ static void smp_br_data_received(UINT16 channel, BD_ADDR bd_addr, BT_HDR *p_buf)
         return;
     }
 
+    /* Validate command length to prevent out-of-bounds read in handler functions */
+    if (p_buf->len != smp_cmd_size_per_spec[cmd]) {
+        SMP_TRACE_WARNING( "Ignore received command 0x%02x with invalid length %d", cmd, p_buf->len);
+        osi_free(p_buf);
+        return;
+    }
+
     /* reject the pairing request if there is an on-going SMP pairing */
     if (SMP_OPCODE_PAIRING_REQ == cmd) {
-        if (p_buf->len != smp_cmd_size_per_spec[cmd]) {
-            SMP_TRACE_WARNING( "Ignore received command 0x%02x with invalid length %d", cmd, p_buf->len);
-            osi_free(p_buf);
-            return;
-        }
         if ((p_cb->state == SMP_STATE_IDLE) && (p_cb->br_state == SMP_BR_STATE_IDLE)) {
             p_cb->role = HCI_ROLE_SLAVE;
             p_cb->smp_over_br = TRUE;
@@ -366,6 +370,6 @@ static void smp_br_data_received(UINT16 channel, BD_ADDR bd_addr, BT_HDR *p_buf)
 
     osi_free (p_buf);
 }
-#endif  /* CLASSIC_BT_INCLUDED == TRUE */
+#endif  /* SMP_CTKD_INCLUDED == TRUE */
 
 #endif /* SMP_INCLUDED == TRUE */

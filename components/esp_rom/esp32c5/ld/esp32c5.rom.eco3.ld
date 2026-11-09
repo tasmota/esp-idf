@@ -7,7 +7,7 @@
  eco3 fixed
  ***************************************/
 
-coex_core_timer_idx_get = 0x40000aec;
+/* coex_core_timer_idx_get = 0x40000aec; */
 coex_status_get = 0x40000b0c;
 ets_delay_us = 0x4000003c;
 Cache_Set_IDROM_MMU_Size = 0x400006c4;
@@ -39,7 +39,7 @@ pm_mac_disable_tsf_tbtt_soc_wakeup = 0x40000e10;
 pm_mac_enable_tsf_tbtt_soc_wakeup = 0x40000e18;
 //pm_mac_enable_tsf_tbtt_modem_wakeup = 0x40000e1c;
 //pm_mac_modem_params_rt_update = 0x40000e20;
-ppMapTxQueue = 0x40000e64;
+//ppMapTxQueue = 0x40000e64;
 //ppProcTxSecFrame = 0x40000e68;
 //ppProcessTxQ = 0x40000e70;
 ppRxPkt = 0x40000e8c;

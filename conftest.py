@@ -36,6 +36,7 @@ from _pytest.config import Config
 from _pytest.fixtures import FixtureRequest
 from idf_ci import PytestCase
 from idf_ci.idf_pytest import IDF_CI_PYTEST_CASE_KEY
+from idf_ci_utils import APP_EXTRA_S3_ARTIFACT_TYPE
 from idf_ci_utils import IDF_PATH
 from idf_ci_utils import idf_relpath
 from idf_pytest.constants import DEFAULT_LOGDIR
@@ -86,7 +87,7 @@ def test_case_name(request: FixtureRequest, target: str, config: str) -> str:
 
     filtered_params = {}
     for k, v in params.items():
-        if k not in request.session._fixturemanager._arg2fixturedefs:  # type: ignore
+        if request.session._fixturemanager.getfixturedefs(k, request.node) is None:  # type: ignore
             filtered_params[k] = v  # not fixture ones
 
     return format_case_id(target, config, request.node.originalname, is_qemu=is_qemu, params=filtered_params)  # type: ignore
@@ -158,8 +159,40 @@ class AppDownloader:
         if result.stderr:
             logging.info(result.stderr)
 
+    def download_app_extra(self, app_dir: str) -> None:
+        """Download app-dir artifacts defined under app_extra in .idf_ci.toml."""
+        args = [
+            'idf-ci',
+            'gitlab',
+            'download-artifacts',
+            '--commit-sha',
+            self.commit_sha,
+            '--type',
+            APP_EXTRA_S3_ARTIFACT_TYPE,
+            app_dir,
+        ]
+        if self.pipeline_id:
+            args.extend(['--pipeline-id', self.pipeline_id])
+
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            cwd=IDF_PATH,
+        )
+        logging.info(result.stdout)
+        if result.stderr:
+            logging.info(result.stderr)
+        if result.returncode != 0:
+            raise RuntimeError(f'Failed to download {APP_EXTRA_S3_ARTIFACT_TYPE} artifacts for {app_dir}')
+
 
 class OpenOCD:
+    # Characters around a command echo. A log line redraws the prompt as '\n> ', the prompt after
+    # command output is '\r>'.
+    PROMPT_CHARS = ' >\x08\r'
+    CMD_PROMPT = '\r>'
+
     def __init__(self, dut: 'IdfDut'):
         self.MAX_RETRIES = 3
         self.RETRY_DELAY = 1
@@ -200,7 +233,7 @@ class OpenOCD:
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
                 self.proc = pexpect.spawn(
-                    command='openocd',
+                    command=os.getenv('OPENOCD_BIN', 'openocd'),
                     args=['-s', openocd_scripts] + debug_args.split(),
                     timeout=5,
                     encoding='utf-8',
@@ -243,11 +276,39 @@ class OpenOCD:
             return ''
         return to_str(resp)
 
+    def write_cmd(self, cmd: str, expect: str | None = None, timeout: int = 10) -> str:
+        """Runs cmd and returns only its own output. Log lines also start with a prompt, so read past them."""
+        end = time.time() + timeout
+        out = t.cast(str, self.write(cmd, timeout=timeout))
+        if not out:
+            raise pexpect.TIMEOUT(f'No reply to "{cmd}"')
+        while True:
+            lines = out.split('\n')
+            echoes = [i for i, line in enumerate(lines) if line.strip(self.PROMPT_CHARS) == cmd]
+            reply = '\n'.join(lines[echoes[-1] + 1 :]) if echoes else ''
+            if echoes and reply.endswith(self.CMD_PROMPT):
+                break
+            if self.telnet is None or time.time() > end:
+                raise pexpect.TIMEOUT(f'No complete reply to "{cmd}":\n{out}')
+            out += self.telnet.read_until(b'>', timeout=1).decode(errors='ignore')
+        reply = reply[: -len(self.CMD_PROMPT)]
+        if expect is not None and expect not in reply:
+            raise AssertionError(f'"{expect}" not in reply to "{cmd}":\n{reply}')
+        return reply
+
+    def consume_output(self, duration: float) -> None:
+        if self.telnet is None:
+            return
+        end = time.time() + duration
+        while time.time() < end:
+            self.telnet.read_very_eager()
+            time.sleep(0.05)
+
     def apptrace_wait_stop(self, timeout: int = 30) -> None:
         stopped = False
         end_before = time.time() + timeout
         while not stopped:
-            cmd_out = self.write('esp apptrace status')
+            cmd_out = self.write_cmd('esp apptrace status')
             for line in cmd_out.splitlines():
                 if line.startswith('Tracing is STOPPED.'):
                     stopped = True
@@ -260,7 +321,7 @@ class OpenOCD:
         cmd = 'esp gcov'
         if not on_the_fly:
             cmd += ' dump'
-        cmd_out = self.write(cmd)
+        cmd_out = self.write_cmd(cmd, timeout=30)
         if 'Targets connected.' not in cmd_out:
             raise pexpect.TIMEOUT('Failed to start gcov dump!')
         if 'Targets disconnected.' not in cmd_out:
@@ -301,6 +362,18 @@ def app_downloader(
     logging.debug('pipeline commit sha of pipeline %s is %s', pipeline_id, commit_sha)
 
     return AppDownloader(commit_sha, pipeline_id)
+
+
+@pytest.fixture
+def download_app_extra(app_downloader: AppDownloader | None) -> t.Callable[[str], None]:
+    """Download app_extra S3 artifacts for the given app path (no-op outside CI)."""
+
+    def _download_app_extra(app_path: str) -> None:
+        if app_downloader is None:
+            return
+        app_downloader.download_app_extra(idf_relpath(app_path))
+
+    return _download_app_extra
 
 
 @pytest.fixture

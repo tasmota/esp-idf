@@ -7,12 +7,14 @@
 setuptools
 packaging
 click
+rich-click
 pyserial
 cryptography
 pyparsing
 pyelftools
 idf-component-manager>=2.2
 esp-coredump
+esp-pylib[cli]
 esptool
 esp-idf-kconfig
 esp-idf-monitor
@@ -32,3 +34,4 @@ tree_sitter_c
 
 # gdb extensions dependencies
 freertos_gdb
+idf_drivers_gdb

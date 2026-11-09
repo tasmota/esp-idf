@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -8,6 +8,7 @@
 #include <string.h>
 #include "sys/lock.h"
 #include "esp_log.h"
+#include "esp_a2dp_api.h"
 #include "esp_avrc_api.h"
 #include "avrcp_abs_vol_service.h"
 
@@ -26,18 +27,30 @@ typedef struct {
 
 /* AVRCP absolute volume service control block */
 static avrc_abs_vol_srv_cb_t s_avrc_abs_vol_srv_cb;
+static esp_a2d_conn_hdl_t s_conn_hdl = ESP_A2D_INVALID_CONN_HDL;
 
 /********************************
  * EXTERNAL FUNCTION DEFINITIONS
  *******************************/
 
+void avrc_abs_vol_srv_set_conn_hdl(esp_a2d_conn_hdl_t conn_hdl)
+{
+    s_conn_hdl = conn_hdl;
+}
+
 void avrc_abs_vol_srv_open(void)
 {
-    memset(&s_avrc_abs_vol_srv_cb, 0, sizeof(avrc_abs_vol_srv_cb_t));
+    if (s_avrc_abs_vol_srv_cb.volume_lock) {
+        _lock_close(&s_avrc_abs_vol_srv_cb.volume_lock);
+    }
+    _lock_init(&s_avrc_abs_vol_srv_cb.volume_lock);
+    s_avrc_abs_vol_srv_cb.volume = 0;
+    s_avrc_abs_vol_srv_cb.volume_notify = false;
 }
 
 void avrc_abs_vol_srv_close(void)
 {
+    _lock_close(&s_avrc_abs_vol_srv_cb.volume_lock);
     memset(&s_avrc_abs_vol_srv_cb, 0, sizeof(avrc_abs_vol_srv_cb_t));
 }
 
@@ -68,7 +81,7 @@ void avrc_abs_vol_srv_set_volume(avrc_volume_set_t vol_set_t, uint8_t volume)
         if (s_avrc_abs_vol_srv_cb.volume_notify) {
             esp_avrc_rn_param_t rn_param;
             rn_param.volume = s_avrc_abs_vol_srv_cb.volume;
-            esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_CHANGED, &rn_param);
+            esp_avrc_tg_send_rn_rsp_by_handle(s_conn_hdl, ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_CHANGED, &rn_param);
             s_avrc_abs_vol_srv_cb.volume_notify = false;
         }
         break;
@@ -84,5 +97,5 @@ void avrc_abs_vol_srv_rn_volume_change(void)
     s_avrc_abs_vol_srv_cb.volume_notify = true;
     esp_avrc_rn_param_t rn_param;
     rn_param.volume = s_avrc_abs_vol_srv_cb.volume;
-    esp_avrc_tg_send_rn_rsp(ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &rn_param);
+    esp_avrc_tg_send_rn_rsp_by_handle(s_conn_hdl, ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &rn_param);
 }

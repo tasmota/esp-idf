@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -86,6 +86,18 @@ static esp_err_t set_duplex(esp_eth_phy_t *phy, eth_duplex_t duplex)
 {
     phy_802_3_t *phy_802_3 = esp_eth_phy_into_phy_802_3(phy);
     return esp_eth_phy_802_3_set_duplex(phy_802_3, duplex);
+}
+
+static esp_err_t set_master_mode(esp_eth_phy_t *phy, bool master)
+{
+    phy_802_3_t *phy_802_3 = esp_eth_phy_into_phy_802_3(phy);
+    return esp_eth_phy_802_3_set_master_mode(phy_802_3, master);
+}
+
+static esp_err_t get_master_mode(esp_eth_phy_t *phy, bool *master)
+{
+    phy_802_3_t *phy_802_3 = esp_eth_phy_into_phy_802_3(phy);
+    return esp_eth_phy_802_3_get_master_mode(phy_802_3, master);
 }
 
 static esp_err_t set_link(esp_eth_phy_t *phy, eth_link_t link)
@@ -226,6 +238,8 @@ esp_err_t esp_eth_phy_802_3_updt_link_dup_spd(phy_802_3_t *phy_802_3)
     bmsr_reg_t bmsr;
     anar_reg_t anar;
     anlpar_reg_t anlpar;
+    gbcr_reg_t gbcr;
+    gbsr_reg_t gbsr;
 
     ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, addr, ETH_PHY_BMSR_REG_ADDR, &(bmsr.val)), err, TAG, "read BMSR failed");
     eth_link_t link = bmsr.link_status ? ETH_LINK_UP : ETH_LINK_DOWN;
@@ -237,26 +251,53 @@ esp_err_t esp_eth_phy_802_3_updt_link_dup_spd(phy_802_3_t *phy_802_3)
             ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, addr, ETH_PHY_ANAR_REG_ADDR, &(anar.val)), err, TAG, "read ANAR failed");
             ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, addr, ETH_PHY_ANLPAR_REG_ADDR, &(anlpar.val)), err, TAG, "read ANLPAR failed");
             if (bmcr.en_auto_nego) {
-                if (anar.base100_tx_fd && anlpar.base100_tx_fd) {
-                    speed = ETH_SPEED_100M;
-                    duplex = ETH_DUPLEX_FULL;
-                } else if (anar.base100_tx && anlpar.base100_tx) {
-                    speed = ETH_SPEED_100M;
-                    duplex = ETH_DUPLEX_HALF;
-                } else if (anar.base10_t_fd && anlpar.base10_t_fd) {
-                    speed = ETH_SPEED_10M;
-                    duplex = ETH_DUPLEX_FULL;
-                } else if (anar.base10_t && anlpar.base10_t) {
-                    speed = ETH_SPEED_10M;
-                    duplex = ETH_DUPLEX_HALF;
-                } else {
-                    ESP_GOTO_ON_FALSE(false, ESP_FAIL, err, TAG, "invalid auto-nego speed/duplex advertising");
+                bool need_anar_mode = false;
+                if (bmsr.ext_status) {
+                    exsr_reg_t exsr;
+                    ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, addr, ETH_PHY_EXSR_REG_ADDR, &(exsr.val)), err, TAG, "read EXSR failed");
+                    if (exsr.base1000_t || exsr.base1000_t_fd) {
+                        if (eth->phy_reg_read(eth, addr, ETH_PHY_GBCR_REG_ADDR, &(gbcr.val)) == ESP_OK &&
+                            eth->phy_reg_read(eth, addr, ETH_PHY_GBSR_REG_ADDR, &(gbsr.val)) == ESP_OK) {
+                            if (gbcr.base1000_t_fd && gbsr.lp_base1000_t_fd) {
+                                speed = ETH_SPEED_1000M;
+                                duplex = ETH_DUPLEX_FULL;
+                            } else if (gbcr.base1000_t && gbsr.lp_base1000_t) {
+                                speed = ETH_SPEED_1000M;
+                                duplex = ETH_DUPLEX_HALF;
+                            } else {
+                                need_anar_mode = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!bmsr.ext_status || need_anar_mode) {
+                    bool mode_valid = true;
+                    if (anar.base100_tx_fd && anlpar.base100_tx_fd) {
+                        speed = ETH_SPEED_100M;
+                        duplex = ETH_DUPLEX_FULL;
+                    } else if (anar.base100_tx && anlpar.base100_tx) {
+                        speed = ETH_SPEED_100M;
+                        duplex = ETH_DUPLEX_HALF;
+                    } else if (anar.base10_t_fd && anlpar.base10_t_fd) {
+                        speed = ETH_SPEED_10M;
+                        duplex = ETH_DUPLEX_FULL;
+                    } else if (anar.base10_t && anlpar.base10_t) {
+                        speed = ETH_SPEED_10M;
+                        duplex = ETH_DUPLEX_HALF;
+                    } else {
+                        mode_valid = false;
+                    }
+                    ESP_GOTO_ON_FALSE(mode_valid, ESP_FAIL, err, TAG, "invalid auto-nego speed/duplex advertising");
                 }
             } else {
-                speed = bmcr.speed_select ? ETH_SPEED_100M : ETH_SPEED_10M;
+                if (bmcr.speed_1000) {
+                    speed = ETH_SPEED_1000M;
+                } else {
+                    speed = bmcr.speed_select ? ETH_SPEED_100M : ETH_SPEED_10M;
+                }
                 duplex = bmcr.duplex_mode ? ETH_DUPLEX_FULL : ETH_DUPLEX_HALF;
             }
-
             ESP_GOTO_ON_ERROR(eth->on_state_changed(eth, ETH_STATE_SPEED, (void *)speed), err, TAG, "change speed failed");
             ESP_GOTO_ON_ERROR(eth->on_state_changed(eth, ETH_STATE_DUPLEX, (void *)duplex), err, TAG, "change duplex failed");
             /* if we're in duplex mode, and peer has the flow control ability */
@@ -364,6 +405,33 @@ err:
 
 }
 
+/**
+ * @brief Check whether the PHY supports 1000BASE-T
+ *
+ * @param[in] phy_802_3 IEEE 802.3 PHY object
+ * @param[out] is_1000_capable set to true if PHY supports 1000BASE-T
+ * @return
+ *      - ESP_OK: capability checked successfully
+ *      - ESP_FAIL: failed to read PHY registers
+ */
+static esp_err_t phy_802_3_is_1000_capable(phy_802_3_t *phy_802_3, bool *is_1000_capable)
+{
+    esp_err_t ret = ESP_OK;
+    esp_eth_mediator_t *eth = phy_802_3->eth;
+
+    *is_1000_capable = false;
+    bmsr_reg_t bmsr;
+    ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_BMSR_REG_ADDR, &(bmsr.val)), err, TAG, "read BMSR failed");
+    if (bmsr.ext_status) {
+        exsr_reg_t exsr;
+        ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_EXSR_REG_ADDR, &(exsr.val)), err, TAG, "read EXSR failed");
+        *is_1000_capable = exsr.base1000_t || exsr.base1000_t_fd;
+    }
+    return ESP_OK;
+err:
+    return ret;
+}
+
 esp_err_t esp_eth_phy_802_3_set_speed(phy_802_3_t *phy_802_3, eth_speed_t speed)
 {
     esp_err_t ret = ESP_OK;
@@ -375,7 +443,18 @@ esp_err_t esp_eth_phy_802_3_set_speed(phy_802_3_t *phy_802_3, eth_speed_t speed)
     /* Set speed */
     bmcr_reg_t bmcr;
     ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_BMCR_REG_ADDR, &(bmcr.val)), err, TAG, "read BMCR failed");
-    bmcr.speed_select = speed == ETH_SPEED_100M ? 1 : 0;
+    bool is_1000_capable = false;
+    ESP_GOTO_ON_ERROR(phy_802_3_is_1000_capable(phy_802_3, &is_1000_capable), err, TAG, "check 1000BASE-T capability failed");
+    if (speed == ETH_SPEED_1000M) {
+        ESP_GOTO_ON_FALSE(is_1000_capable, ESP_ERR_NOT_SUPPORTED, err, TAG, "PHY does not support 1000BASE-T");
+        bmcr.speed_1000 = 1;
+        bmcr.speed_select = 0;
+    } else {
+        if (is_1000_capable) {
+            bmcr.speed_1000 = 0;
+        }
+        bmcr.speed_select = speed == ETH_SPEED_100M ? 1 : 0;
+    }
     ESP_GOTO_ON_ERROR(eth->phy_reg_write(eth, phy_802_3->addr, ETH_PHY_BMCR_REG_ADDR, bmcr.val), err, TAG, "write BMCR failed");
 
     return ESP_OK;
@@ -399,6 +478,47 @@ esp_err_t esp_eth_phy_802_3_set_duplex(phy_802_3_t *phy_802_3, eth_duplex_t dupl
     }
     bmcr.duplex_mode = duplex;
     ESP_GOTO_ON_ERROR(eth->phy_reg_write(eth, phy_802_3->addr, ETH_PHY_BMCR_REG_ADDR, bmcr.val), err, TAG, "write BMCR failed");
+
+    return ESP_OK;
+err:
+    return ret;
+}
+
+esp_err_t esp_eth_phy_802_3_set_master_mode(phy_802_3_t *phy_802_3, bool master)
+{
+    esp_err_t ret = ESP_OK;
+    esp_eth_mediator_t *eth = phy_802_3->eth;
+
+    bool is_1000_capable = false;
+    ESP_GOTO_ON_ERROR(phy_802_3_is_1000_capable(phy_802_3, &is_1000_capable), err, TAG, "check 1000BASE-T capability failed");
+    ESP_GOTO_ON_FALSE(is_1000_capable, ESP_ERR_NOT_SUPPORTED, err, TAG, "PHY does not support 1000BASE-T");
+
+    /* Configure master/slave mode in 1000BASE-T Control register (IEEE 802.3 Clause 40) */
+    gbcr_reg_t gbcr;
+    ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_GBCR_REG_ADDR, &(gbcr.val)), err, TAG, "read GBCR failed");
+    gbcr.master_slave_manual = 1;
+    gbcr.master_slave_cfg = master ? 1 : 0;
+    ESP_GOTO_ON_ERROR(eth->phy_reg_write(eth, phy_802_3->addr, ETH_PHY_GBCR_REG_ADDR, gbcr.val), err, TAG, "write GBCR failed");
+
+    return ESP_OK;
+err:
+    return ret;
+}
+
+esp_err_t esp_eth_phy_802_3_get_master_mode(phy_802_3_t *phy_802_3, bool *master)
+{
+    esp_err_t ret = ESP_OK;
+    esp_eth_mediator_t *eth = phy_802_3->eth;
+
+    ESP_GOTO_ON_FALSE(master, ESP_ERR_INVALID_ARG, err, TAG, "master can't be null");
+
+    bool is_1000_capable = false;
+    ESP_GOTO_ON_ERROR(phy_802_3_is_1000_capable(phy_802_3, &is_1000_capable), err, TAG, "check 1000BASE-T capability failed");
+    ESP_GOTO_ON_FALSE(is_1000_capable, ESP_ERR_NOT_SUPPORTED, err, TAG, "PHY does not support 1000BASE-T");
+
+    gbcr_reg_t gbcr;
+    ESP_GOTO_ON_ERROR(eth->phy_reg_read(eth, phy_802_3->addr, ETH_PHY_GBCR_REG_ADDR, &(gbcr.val)), err, TAG, "read GBCR failed");
+    *master = gbcr.master_slave_cfg;
 
     return ESP_OK;
 err:
@@ -435,6 +555,20 @@ esp_err_t esp_eth_phy_802_3_del(phy_802_3_t *phy_802_3)
     return ESP_OK;
 }
 
+/* Delays for at least delay_us. Anything shorter than a FreeRTOS tick has to be busy waited since
+   the scheduler cannot express it. Longer delays are slept off by a single vTaskDelay which returns
+   after n-1 to n tick periods, because the call is placed somewhere inside an already running tick,
+   hence one extra tick is requested to not undershoot the delay. */
+static void phy_802_3_delay_us(uint32_t delay_us)
+{
+    uint32_t tick_period_us = portTICK_PERIOD_MS * 1000;
+    if (delay_us < tick_period_us) {
+        esp_rom_delay_us(delay_us);
+    } else {
+        vTaskDelay((delay_us + tick_period_us - 1) / tick_period_us + 1);
+    }
+}
+
 esp_err_t esp_eth_phy_802_3_reset_hw(phy_802_3_t *phy_802_3)
 {
     esp_err_t ret = ESP_OK;
@@ -442,14 +576,10 @@ esp_err_t esp_eth_phy_802_3_reset_hw(phy_802_3_t *phy_802_3)
         gpio_func_sel(phy_802_3->reset_gpio_num, PIN_FUNC_GPIO);
         gpio_set_level(phy_802_3->reset_gpio_num, 0);
         gpio_output_enable(phy_802_3->reset_gpio_num);
-        if (phy_802_3->hw_reset_assert_time_us < 10000) {
-            esp_rom_delay_us(phy_802_3->hw_reset_assert_time_us);
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(phy_802_3->hw_reset_assert_time_us/1000));
-        }
+        phy_802_3_delay_us(phy_802_3->hw_reset_assert_time_us);
         gpio_set_level(phy_802_3->reset_gpio_num, 1);
         if (phy_802_3->post_hw_reset_delay_ms > 0) {
-            vTaskDelay(pdMS_TO_TICKS(phy_802_3->post_hw_reset_delay_ms));
+            phy_802_3_delay_us((uint32_t)phy_802_3->post_hw_reset_delay_ms * 1000);
         }
         return ESP_OK;
     }
@@ -686,6 +816,8 @@ esp_err_t esp_eth_phy_802_3_obj_config_init(phy_802_3_t *phy_802_3, const eth_ph
     phy_802_3->parent.loopback = loopback;
     phy_802_3->parent.set_speed = set_speed;
     phy_802_3->parent.set_duplex = set_duplex;
+    phy_802_3->parent.set_master_mode = set_master_mode;
+    phy_802_3->parent.get_master_mode = get_master_mode;
     phy_802_3->parent.del = del;
     phy_802_3->parent.set_link = set_link;
     phy_802_3->parent.get_link = get_link;

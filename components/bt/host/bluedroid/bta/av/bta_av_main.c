@@ -206,6 +206,81 @@ tBTA_AV_CB  *bta_av_cb_ptr;
 
 /*******************************************************************************
 **
+** Function         bta_av_cback_registered
+**
+** Description      Check whether events may still be reported to the upper
+**                  layer. The callback is detached right before
+**                  BTA_AV_DISABLE_EVT is sent, which is the very last event:
+**                  the upper layer is then free to release its control block.
+**
+** Returns          TRUE if the upper layer callback can be invoked
+**
+*******************************************************************************/
+BOOLEAN bta_av_cback_registered(void)
+{
+    return (bta_av_cb.p_cback != NULL) ? TRUE : FALSE;
+}
+
+/*******************************************************************************
+**
+** Function         bta_av_free_dropped_cback_data
+**
+** Description      Release callback payloads whose ownership would otherwise
+**                  move to the upper layer. btc_av_event_deep_copy only
+**                  duplicates BTA_AV_META_MSG_EVT, and those source pointers
+**                  alias the BTU message freed after the caller returns, so
+**                  they must not be freed here. BTA_AV_CA_DATA_EVT hands p_hdr
+**                  to the upper layer, which frees it after delivery.
+**
+** Returns          void
+**
+*******************************************************************************/
+static void bta_av_free_dropped_cback_data(tBTA_AV_EVT event, tBTA_AV *p_data)
+{
+    if (p_data == NULL) {
+        return;
+    }
+
+    switch (event) {
+#if BTA_AV_CA_INCLUDED
+    case BTA_AV_CA_DATA_EVT:
+        if (p_data->ca_data.p_hdr != NULL) {
+            osi_free(p_data->ca_data.p_hdr);
+            p_data->ca_data.p_hdr = NULL;
+            p_data->ca_data.p_data = NULL;
+        }
+        break;
+#endif
+    default:
+        break;
+    }
+}
+
+/*******************************************************************************
+**
+** Function         bta_av_safe_cback
+**
+** Description      Report an event to the upper layer, dropping it once AV has
+**                  been disabled and the upper layer has detached.
+**
+** Returns          void
+**
+*******************************************************************************/
+void bta_av_safe_cback(tBTA_AV_EVT event, tBTA_AV *p_data)
+{
+    tBTA_AV_CBACK *p_cback = bta_av_cb.p_cback;
+
+    if (p_cback == NULL) {
+        APPL_TRACE_WARNING("%s: drop event %d, AV is disabled", __func__, event);
+        bta_av_free_dropped_cback_data(event, p_data);
+        return;
+    }
+
+    p_cback(event, p_data);
+}
+
+/*******************************************************************************
+**
 ** Function         bta_av_timer_cback
 **
 ** Description      forward the event to stream state machine
@@ -274,7 +349,7 @@ static void bta_av_api_enable(tBTA_AV_DATA *p_data)
     }
 
     /* call callback with enable event */
-    (*bta_av_cb.p_cback)(BTA_AV_ENABLE_EVT, (tBTA_AV *)&enable);
+    bta_av_safe_cback(BTA_AV_ENABLE_EVT, (tBTA_AV *)&enable);
 }
 
 /*******************************************************************************
@@ -482,8 +557,7 @@ static void bta_av_api_sink_enable(tBTA_AV_DATA *p_data)
     activate_sink = p_data->hdr.layer_specific;
     APPL_TRACE_DEBUG("bta_av_api_sink_enable %d \n", activate_sink)
     char p_service_name[BTA_SERVICE_NAME_LEN + 1];
-    BCM_STRNCPY_S(p_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN);
-    p_service_name[BTA_SERVICE_NAME_LEN] = '\0';
+    BCM_STRLCPY_S(p_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN + 1);
 
     if (activate_sink) {
         AVDT_SINK_Activate();
@@ -521,7 +595,7 @@ static void bta_av_api_get_delay_value(tBTA_AV_DATA *p_data)
     delay.delay_value = AVDT_GetDelayValue();
 
     /* call callback with get delay value event */
-    (*bta_av_cb.p_cback)(BTA_AV_GET_DELAY_VALUE_EVT, (tBTA_AV *)&delay);
+    bta_av_safe_cback(BTA_AV_GET_DELAY_VALUE_EVT, (tBTA_AV *)&delay);
 }
 #endif
 /*******************************************************************************
@@ -543,13 +617,10 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
     tAVDT_CS        cs;
     char            *p_service_name;
     tBTA_UTL_COD    cod;
-#if (BTA_AV_EXT_CODEC == FALSE)
     tBTA_AV_CODEC   codec_type;
     UINT8           index = 0;
-#endif
     char p_avk_service_name[BTA_SERVICE_NAME_LEN + 1];
-    BCM_STRNCPY_S(p_avk_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN);
-    p_avk_service_name[BTA_SERVICE_NAME_LEN] = '\0';
+    BCM_STRLCPY_S(p_avk_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN + 1);
 
     memset(&cs, 0, sizeof(tAVDT_CS));
 
@@ -669,10 +740,25 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
 
             /* keep the configuration in the stream control block */
             memcpy(&p_scb->cfg, &cs.cfg, sizeof(tAVDT_CFG));
-#if (BTA_AV_EXT_CODEC == FALSE)
-            while (index < BTA_AV_MAX_SEPS &&
-                    (p_scb->p_cos->init)(&codec_type, cs.cfg.codec_info,
-                                         &cs.cfg.num_protect, cs.cfg.protect_info, p_data->api_reg.tsep) == TRUE) {
+            /*
+             * Create local SEPs:
+             * - Internal codec: init() supplies SBC (typically one SEP).
+             * - External codec: A2DP mandates SBC, so pre-fill every SEID with
+             *   the default SBC SEP; app register_stream_endpoint() may overwrite.
+             */
+            while (index < BTA_AV_MAX_SEPS) {
+#if (BTA_AV_EXT_CODEC == TRUE)
+                if (bta_av_co_audio_build_sbc_default(p_data->api_reg.tsep, &codec_type,
+                                                      cs.cfg.codec_info) != TRUE) {
+                    APPL_TRACE_ERROR("failed to build default SBC SEP for seid %d", index);
+                    break;
+                }
+#endif
+                if ((p_scb->p_cos->init)(index, &codec_type, cs.cfg.codec_info,
+                                         &cs.cfg.num_protect, cs.cfg.protect_info,
+                                         p_data->api_reg.tsep) != TRUE) {
+                    break;
+                }
 
 #if (BTA_AV_SINK_INCLUDED == TRUE)
                 if (p_data->api_reg.tsep == AVDT_TSEP_SNK) {
@@ -700,7 +786,6 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
                     break;
                 }
             }
-#endif
 
             if (!bta_av_cb.reg_audio) {
                 if (p_data->api_reg.tsep == AVDT_TSEP_SRC) {
@@ -755,7 +840,7 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
     } while (0);
 
     /* call callback with register event */
-    (*bta_av_cb.p_cback)(BTA_AV_REGISTER_EVT, (tBTA_AV *)&registr);
+    bta_av_safe_cback(BTA_AV_REGISTER_EVT, (tBTA_AV *)&registr);
 }
 
 static void bta_av_api_reg_sep(tBTA_AV_DATA *p_data)
@@ -771,7 +856,7 @@ static void bta_av_api_reg_sep(tBTA_AV_DATA *p_data)
     sep_reg.reg_state = BTA_AV_FAIL;
 
     if (index >= BTA_AV_MAX_SEPS || p_data->hdr.layer_specific != BTA_AV_CHNL_AUDIO) {
-        (*bta_av_cb.p_cback)(BTA_AV_SEP_REG_EVT, (tBTA_AV *)&sep_reg);
+        bta_av_safe_cback(BTA_AV_SEP_REG_EVT, (tBTA_AV *)&sep_reg);
         APPL_TRACE_WARNING("%s invalid parameter: seid %d, ch %d", __FUNCTION__, index, p_data->hdr.layer_specific);
         return;
     }
@@ -807,7 +892,7 @@ static void bta_av_api_reg_sep(tBTA_AV_DATA *p_data)
 
             codec_type = p_data->api_reg_sep.codec_type;
             memcpy(cs.cfg.codec_info, p_data->api_reg_sep.codec_info, AVDT_CODEC_SIZE);
-            if ((p_scb->p_cos->init)(&codec_type, cs.cfg.codec_info,
+            if ((p_scb->p_cos->init)(index, &codec_type, cs.cfg.codec_info,
                                      &cs.cfg.num_protect, cs.cfg.protect_info, p_data->api_reg_sep.tsep) == TRUE) {
 
 #if (BTA_AV_SINK_INCLUDED == TRUE)
@@ -821,7 +906,7 @@ static void bta_av_api_reg_sep(tBTA_AV_DATA *p_data)
                 if (AVDT_CreateStream(&p_scb->seps[index].av_handle, &cs) == AVDT_SUCCESS) {
                     p_scb->seps[index].codec_type = codec_type;
                     p_scb->seps[index].tsep = cs.tsep;
-                    p_scb->seps[index].p_app_data_cback = p_data->api_reg_sep.p_data_cback;
+                    p_scb->seps[index].p_app_data_cback = p_data->api_reg_sep.p_data_cback[p_scb->hdi];
                     sep_reg.reg_state = BTA_AV_SUCCESS;
                 } else {
                     APPL_TRACE_WARNING("%s fail to create sep", __FUNCTION__);
@@ -834,7 +919,7 @@ static void bta_av_api_reg_sep(tBTA_AV_DATA *p_data)
         }
     }
 
-    (*bta_av_cb.p_cback)(BTA_AV_SEP_REG_EVT, (tBTA_AV *)&sep_reg);
+    bta_av_safe_cback(BTA_AV_SEP_REG_EVT, (tBTA_AV *)&sep_reg);
 #endif
 }
 
@@ -905,7 +990,9 @@ static void bta_av_rpc_conn(tBTA_AV_DATA *p_data)
 **
 ** Function         bta_av_api_to_ssm
 **
-** Description      forward the API request to stream state machine
+** Description      forward the API request to stream state machine. When
+**                  hdr.layer_specific carries a stream handle, only that stream
+**                  is addressed, otherwise the request goes to every stream.
 **
 **
 ** Returns          void
@@ -915,8 +1002,13 @@ static void bta_av_api_to_ssm(tBTA_AV_DATA *p_data)
 {
     int xx;
     UINT16 event = p_data->hdr.event - BTA_AV_FIRST_A2S_API_EVT + BTA_AV_FIRST_A2S_SSM_EVT;
+    tBTA_AV_HNDL hndl = (tBTA_AV_HNDL)p_data->hdr.layer_specific;
 
     for (xx = 0; xx < BTA_AV_NUM_STRS; xx++) {
+        if (hndl != 0 &&
+                (bta_av_cb.p_scb[xx] == NULL || bta_av_cb.p_scb[xx]->hndl != hndl)) {
+            continue;
+        }
         bta_av_ssm_execute(bta_av_cb.p_scb[xx], event, p_data);
     }
 }
@@ -937,7 +1029,7 @@ BOOLEAN bta_av_chk_start(tBTA_AV_SCB *p_scb)
     tBTA_AV_SCB *p_scbi;
     int i;
 
-    if (p_scb->chnl == BTA_AV_CHNL_AUDIO) {
+    if (p_scb->chnl == BTA_AV_CHNL_AUDIO && BTA_AV_LOCAL_IS_SRC(p_scb)) {
         if ((bta_av_cb.audio_open_cnt >= 2) &&
                 ((0 == (p_scb->role & BTA_AV_ROLE_AD_ACP)) ||       /* Outgoing connection or   */
                  (bta_av_cb.features & BTA_AV_FEAT_ACP_START))) {   /* auto-starting option     */

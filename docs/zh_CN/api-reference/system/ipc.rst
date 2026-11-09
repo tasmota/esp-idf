@@ -28,10 +28,10 @@ IPC 功能允许一个特定的内核（下文称“调用内核”）触发另�
 - IPC 回调应该尽可能简短。 **IPC 回调决不能阻塞或让出**。
 - IPC 任务是以尽可能高的优先级创建的（即 ``configMAX_PRIORITIES - 1``）。
 
-    - 如果启用了 :ref:`CONFIG_ESP_IPC_USES_CALLERS_PRIORITY`，执行回调前会降低目标内核的 IPC 任务优先级，使其等于调用内核的优先级。
-    - 如果禁用了 :ref:`CONFIG_ESP_IPC_USES_CALLERS_PRIORITY`，目标内核将始终以尽可能高的优先级执行回调。
+    - 如果启用了 :menuitem:`CONFIG_ESP_IPC_USES_CALLERS_PRIORITY`，执行回调前会降低目标内核的 IPC 任务优先级，使其等于调用内核的优先级。
+    - 如果禁用了 :menuitem:`CONFIG_ESP_IPC_USES_CALLERS_PRIORITY`，目标内核将始终以尽可能高的优先级执行回调。
 
-- 如果回调较为复杂，用户可能需要通过 :ref:`CONFIG_ESP_IPC_TASK_STACK_SIZE` 来配置 IPC 任务的堆栈大小。
+- 如果回调较为复杂，用户可能需要通过 :menuitem:`CONFIG_ESP_IPC_TASK_STACK_SIZE` 来配置 IPC 任务的堆栈大小。
 - IPC 功能受内部互斥锁保护。因此，如果同时收到来自两个或多个调用内核的 IPC 请求，将按照“先到先得”的原则按顺序处理。
 
 API 用法
@@ -62,15 +62,15 @@ IPC 功能提供了以下 API，用于在目标内核的任务上下文中执行
 .. list::
 
     :CONFIG_IDF_TARGET_ARCH_XTENSA: - 由于回调是在高优先级中断上下文中执行的，因此，回调必须完全用汇编语言编写。如需了解更多关于用汇编语言编写回调的内容，请参阅下文的 API 使用介绍。
-    - 保留的高优先级中断的优先级取决于 :ref:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL` 选项。
+    - 保留的高优先级中断的优先级取决于 :menuitem:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL` 选项。
 
 当回调执行时，需考虑以下几点：
 
 .. list::
 
     - 调用内核会禁用 3 级及以下优先级的中断。
-    :CONFIG_IDF_TARGET_ARCH_XTENSA: - 虽然保留中断的优先级取决于 :ref:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL`，但是在执行 IPC ISR 回调期间，无论 :ref:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL` 如何设置，目标内核都会禁用 5 级及以下优先级的中断。
-    :CONFIG_IDF_TARGET_ARCH_RISCV: - 虽然保留中断的优先级取决于 :ref:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL`，但是在执行 IPC ISR 回调期间，目标内核会禁用所有的中断。
+    :CONFIG_IDF_TARGET_ARCH_XTENSA: - 虽然保留中断的优先级取决于 :menuitem:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL`，但是在执行 IPC ISR 回调期间，无论 :menuitem:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL` 如何设置，目标内核都会禁用 5 级及以下优先级的中断。
+    :CONFIG_IDF_TARGET_ARCH_RISCV: - 虽然保留中断的优先级取决于 :menuitem:`CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL`，但是在执行 IPC ISR 回调期间，目标内核会禁用所有的中断。
 
 API 用法
 ^^^^^^^^^
@@ -97,6 +97,11 @@ IPC 功能提供了下列 API，以在高优先级中断的上下文中执行回
 - :cpp:func:`esp_ipc_isr_call` 能够在目标内核上触发一个 IPC 调用。在目标内核 **开始** 执行回调前，此函数将一直处于忙等待。
 - :cpp:func:`esp_ipc_isr_call_blocking` 能够在目标内核上触发一个 IPC 调用。在目标内核 **完成** 回调执行前，此函数将一直处于忙等待。
 
+这些函数会中断另一 CPU，并在高优先级中断的上下文中执行回调。常见用法有两种：
+
+- 对于不会进入与另一 CPU 共享的临界区的简单回调，可以直接调用 :cpp:func:`esp_ipc_isr_call` 或 :cpp:func:`esp_ipc_isr_call_blocking`。
+- 如果调用 CPU 可能进入另一 CPU 使用的临界区，或者需要在另一 CPU 保持停止时执行多个回调，则应先使用 :cpp:func:`esp_ipc_isr_stall_other_cpu` 或 :cpp:func:`esp_ipc_isr_stall_other_cpu_safe` 暂停另一 CPU。然后使用 :cpp:func:`esp_ipc_isr_call` 或 :cpp:func:`esp_ipc_isr_call_blocking` 执行回调。操作完成后，使用 :cpp:func:`esp_ipc_isr_release_other_cpu` 释放另一 CPU。
+
 .. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
     以下示例代码用汇编语言编写了一个高优先级中断 IPC 回调，该回调的作用为读取目标内核的周期计数：
@@ -117,10 +122,23 @@ IPC 功能提供了下列 API，以在高优先级中断的上下文中执行回
         s32i    a3, a2, 0
         ret
 
+    如果不会因为共享临界区而发生死锁，可以直接调用该回调：
+
     .. code-block:: c
 
-        unit32_t cycle_count;
-        esp_ipc_isr_call_blocking(esp_test_ipc_isr_get_cycle_count_other_cpu, (void *)cycle_count);
+        uint32_t cycle_count;
+        esp_ipc_isr_call_blocking(esp_test_ipc_isr_get_cycle_count_other_cpu, (void *)&cycle_count);
+
+    或者，也可以在进行一次或多次 IPC 调用之前，安全地暂停另一 CPU：
+
+    .. code-block:: c
+
+        while (esp_ipc_isr_stall_other_cpu_safe() != ESP_OK) {
+            // 在生产代码中，可按需添加超时或 yield，以避免无限循环。
+        }
+        uint32_t cycle_count;
+        esp_ipc_isr_call_blocking(esp_test_ipc_isr_get_cycle_count_other_cpu, (void *)&cycle_count);
+        esp_ipc_isr_release_other_cpu();
 
     .. note::
 
@@ -144,6 +162,7 @@ IPC 功能提供了下列 API，以在高优先级中断的上下文中执行回
 
     :CONFIG_IDF_TARGET_ARCH_RISCV: - :cpp:func:`esp_ipc_isr_stall_other_cpu`：暂停目标内核。调用内核禁用 3 级及以下级别的中断，而目标内核将在所有中断被禁用的情况下进入忙等待。在调用 :cpp:func:`esp_ipc_isr_release_other_cpu` 前，目标内核会保持忙等待。
     :CONFIG_IDF_TARGET_ARCH_XTENSA: - :cpp:func:`esp_ipc_isr_stall_other_cpu`：暂停目标内核。调用内核禁用 3 级及以下级别的中断，而目标内核将在 5 级及以下的中断被禁用的情况下进入忙等待。在调用 :cpp:func:`esp_ipc_isr_release_other_cpu` 前，目标内核会保持忙等待。
+    - :cpp:func:`esp_ipc_isr_stall_other_cpu_safe`：仅当另一内核不在临界区或 ISR 上下文中时，才尝试暂停该内核。如果另一内核处于此类状态，则认为暂停不安全，会释放该内核并返回错误。
     - :cpp:func:`esp_ipc_isr_release_other_cpu`：恢复目标内核。
 
 应用示例

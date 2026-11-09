@@ -101,7 +101,7 @@ static void udp_recv_task(void *ctx)
 {
     udp_recv_task_t *task = (udp_recv_task_t *)ctx;
 
-    otMessageInfo message_info;
+    otMessageInfo message_info = {0};
     otMessage *message = NULL;
     otMessageSettings msg_settings = { .mLinkSecurityEnabled = false, .mPriority = OT_MESSAGE_PRIORITY_NORMAL };
     struct pbuf *recv_buf = task->recv_buf;
@@ -112,6 +112,7 @@ static void udp_recv_task(void *ctx)
     memset(&message_info.mSockAddr, 0, sizeof(message_info.mSockAddr));
     message_info.mHopLimit = task->hop_limit;
     message_info.mPeerPort = task->port;
+    message_info.mIsHostInterface = task->is_host_interface;
 #if CONFIG_LWIP_IPV4
     if (task->addr.type == IPADDR_TYPE_V4) {
         ip4_2_ipv4_mapped_ipv6(ip_2_ip6(&task->addr), ip_2_ip4(&task->addr));
@@ -120,7 +121,7 @@ static void udp_recv_task(void *ctx)
     memcpy(&message_info.mPeerAddr, ip_2_ip6(&task->addr)->addr, sizeof(message_info.mPeerAddr));
 
     if (recv_buf->next != NULL) {
-        data_buf = (uint8_t *)malloc(recv_buf->tot_len);
+        data_buf = (uint8_t *)calloc(1, recv_buf->tot_len);
         if (data_buf != NULL) {
             data_buf_to_free = data_buf;
             pbuf_copy_partial(recv_buf, data_buf, recv_buf->tot_len, 0);
@@ -151,7 +152,7 @@ exit:
 
 static void handle_udp_recv(void *ctx, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, uint16_t port)
 {
-    udp_recv_task_t *task = (udp_recv_task_t *)malloc(sizeof(udp_recv_task_t));
+    udp_recv_task_t *task = (udp_recv_task_t *)calloc(1, sizeof(udp_recv_task_t));
     const struct ip6_hdr *ip6_hdr = ip6_current_header();
 #if CONFIG_LWIP_IPV4
     const struct ip_hdr *ip4_hdr = ip4_current_header();
@@ -175,7 +176,7 @@ static void handle_udp_recv(void *ctx, struct udp_pcb *pcb, struct pbuf *p, cons
     task->is_host_interface =
         (netif_get_index(source_netif) == esp_netif_get_netif_impl_index(esp_openthread_get_backbone_netif()));
 
-    if (esp_openthread_task_queue_post(udp_recv_task, task) != ESP_OK) {
+    if (esp_openthread_task_queue_post(udp_recv_task, task, ESP_OPENTHREAD_TASK_QUEUE_TYPE_NORMAL) != ESP_OK) {
         free(task);
     }
 }
@@ -389,7 +390,7 @@ static inline bool is_addr_ip6_any(const ip_addr_t *addr)
 
 otError otPlatUdpSend(otUdpSocket *udp_socket, otMessage *message, const otMessageInfo *message_info)
 {
-    udp_send_task_t *task = (udp_send_task_t *)malloc(sizeof(udp_send_task_t));
+    udp_send_task_t *task = (udp_send_task_t *)calloc(1, sizeof(udp_send_task_t));
     otError error = OT_ERROR_NONE;
     VerifyOrExit(task != NULL, error = OT_ERROR_NO_BUFS);
     task->pcb = (struct udp_pcb *)udp_socket->mHandle;
@@ -448,7 +449,7 @@ static void udp_multicast_join_leave_task(void *ctx)
 otError otPlatUdpJoinMulticastGroup(otUdpSocket *socket, otNetifIdentifier netif_id, const otIp6Address *addr)
 {
     udp_multicast_join_leave_task_t *task =
-        (udp_multicast_join_leave_task_t *)malloc(sizeof(udp_multicast_join_leave_task_t));
+        (udp_multicast_join_leave_task_t *)calloc(1, sizeof(udp_multicast_join_leave_task_t));
     otError error = OT_ERROR_NONE;
 
     VerifyOrExit(task != NULL, error = OT_ERROR_NO_BUFS);
@@ -467,7 +468,7 @@ exit:
 otError otPlatUdpLeaveMulticastGroup(otUdpSocket *socket, otNetifIdentifier netif_id, const otIp6Address *addr)
 {
     udp_multicast_join_leave_task_t *task =
-        (udp_multicast_join_leave_task_t *)malloc(sizeof(udp_multicast_join_leave_task_t));
+        (udp_multicast_join_leave_task_t *)calloc(1, sizeof(udp_multicast_join_leave_task_t));
     otError error = OT_ERROR_NONE;
 
     VerifyOrExit(task != NULL, error = OT_ERROR_NO_BUFS);

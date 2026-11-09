@@ -3,8 +3,9 @@
     - esp_mm  # for cache
     - esp_driver_spi
     - esp_driver_gpio
-    - esp_hal_spi
+    - esp_hal_gpspi
     - esp_hw_support
+    - esp_sleep
     - soc
   depends_filepatterns:
     - components/driver/test_apps/components/test_driver_utils/**/*
@@ -12,6 +13,10 @@
 components/esp_driver_spi/test_apps/master:
   disable:
     - if: SOC_GPSPI_SUPPORTED != 1
+  disable_test:
+    - if: IDF_TARGET == "esp32h21" # TODO: IDF-16193
+      temporary: true
+      reason: cannot pass
   <<: *spi_depends_default
 
 components/esp_driver_spi/test_apps/param:
@@ -28,4 +33,8 @@ components/esp_driver_spi/test_apps/slave_hd:
   disable:
     - if: SOC_GPSPI_SUPPORTED != 1
     - if: SOC_SPI_SUPPORT_SLAVE_HD_VER2 != 1
+  disable_test:
+    - if: IDF_TARGET == "esp32h21" # TODO: IDF-16193
+      temporary: true
+      reason: cannot pass
   <<: *spi_depends_default

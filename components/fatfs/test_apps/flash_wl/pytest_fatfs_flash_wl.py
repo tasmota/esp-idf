@@ -6,6 +6,7 @@ from pytest_embedded_idf.utils import idf_parametrize
 
 
 @pytest.mark.generic
+@pytest.mark.flaky(reruns=2, reruns_delay=5)
 @pytest.mark.parametrize(
     'config',
     [
@@ -14,8 +15,24 @@ from pytest_embedded_idf.utils import idf_parametrize
         'fastseek',
         'auto_fsync',
         'dyn_buffers',
+        'posix_rename',
+        'self_nesting',
     ],
 )
 @idf_parametrize('target', ['esp32', 'esp32c3'], indirect=['target'])
 def test_fatfs_flash_wl_generic(dut: Dut) -> None:
     dut.run_all_single_board_cases(timeout=240)
+
+
+@pytest.mark.generic
+@pytest.mark.flaky(reruns=2, reruns_delay=5)
+@pytest.mark.psram
+@pytest.mark.parametrize(
+    'config',
+    [
+        'psram',
+    ],
+)
+@idf_parametrize('target', ['esp32'], indirect=['target'])
+def test_fatfs_flash_wl_psram(dut: Dut) -> None:
+    dut.run_all_single_board_cases(timeout=180)

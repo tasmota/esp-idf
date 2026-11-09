@@ -69,7 +69,7 @@ WPA2-Enterprise and WPA3-Enterprise
 WPA3-Enterprise also introduces an additional secure mode using **192-bit minimum-strength security protocols** (“Suite B”). This mode ensures a consistent baseline of cryptographic strength.
 
 - WPA3-Enterprise 192-bit mode is supported only on modules that have :c:macro:`SOC_WIFI_GCMP_SUPPORT`.
-- To enable WPA3-Enterprise 192-bit mode, configure :ref:`CONFIG_ESP_WIFI_SUITE_B_192`.
+- To enable WPA3-Enterprise 192-bit mode, configure :menuitem:`CONFIG_ESP_WIFI_SUITE_B_192`.
 
 Supported EAP Methods
 +++++++++++++++++++++++++
@@ -97,7 +97,7 @@ The following EAP methods are supported:
 
 - **EAP-FAST**
 
-  An authentication method based on Protected Access Credentials (PAC), requiring an identity and password. To use EAP-FAST, :ref:`CONFIG_ESP_WIFI_MBEDTLS_TLS_CLIENT` must be **disabled**.
+  An authentication method based on Protected Access Credentials (PAC), requiring an identity and password. To use EAP-FAST, :menuitem:`CONFIG_ESP_WIFI_MBEDTLS_TLS_CLIENT` must be **disabled**.
 
 Examples
 ++++++++++
@@ -128,7 +128,7 @@ Wi-Fi Protected Access-3 (WPA3) is a set of enhancements to Wi-Fi access securit
 
  - **Transition Disable** : WPA3 defines transition modes for client devices so that they can connect to a network even when some of the APs in that network do not support the strongest security mode. Client device implementations typically configure network profiles in a transition mode by default. However, such a client device could be subject to an active downgrade attack in which the attacker causes the client device to use a lower security mode in order to exploit a vulnerability with that mode. WPA3 has introduced the Transition Disable feature to mitigate such attacks, by enabling client devices to change from a transition mode to an "only" mode when connecting to a network, once that network indicates it fully supports the higher security mode. Enable :cpp:type:`transition_disable` in :cpp:type:`wifi_sta_config_t` to enable this feature for {IDF_TARGET_NAME} station.
 
- - **SAE PUBLIC-KEY (PK)** : As the password at small public networks is shared with multiple users, it may be relatively easy for an attacker to find out the password, which is sufficient to launch an evil twin attack. Such attacks are prevented by an extension to WPA3-Personal called SAE-PK. The SAE-PK authentication exchange is very similar to the regular SAE exchange, with the addition of a digital signature sent by the AP to the client device. The client device validates the public key asserted by the AP based on the password fingerprint and verifies the signature using the public key. So even if the attacker knows the password, it does not know the private key to generate a valid signature, and therefore the client device is protected against an evil twin attack. Enable :ref:`CONFIG_ESP_WIFI_ENABLE_SAE_PK` and :cpp:type:`sae_pk_mode` in :cpp:type:`wifi_sta_config_t` to add support of SAE PK for {IDF_TARGET_NAME} station.
+ - **SAE PUBLIC-KEY (PK)** : As the password at small public networks is shared with multiple users, it may be relatively easy for an attacker to find out the password, which is sufficient to launch an evil twin attack. Such attacks are prevented by an extension to WPA3-Personal called SAE-PK. The SAE-PK authentication exchange is very similar to the regular SAE exchange, with the addition of a digital signature sent by the AP to the client device. The client device validates the public key asserted by the AP based on the password fingerprint and verifies the signature using the public key. So even if the attacker knows the password, it does not know the private key to generate a valid signature, and therefore the client device is protected against an evil twin attack. Enable :menuitem:`CONFIG_ESP_WIFI_ENABLE_SAE_PK` and :cpp:type:`sae_pk_mode` in :cpp:type:`wifi_sta_config_t` to add support of SAE PK for {IDF_TARGET_NAME} station.
 
  - **SAE PWE Methods**: {IDF_TARGET_NAME} station as well as SoftAP supports SAE Password Element derivation method `Hunting And Pecking` and `Hash to Element (H2E)`. H2E is computationally efficient as it uses fewer iterations than Hunt and Peck, and also it mitigates side-channel attacks. These can be configured using the parameter :cpp:type:`sae_pwe_h2e` from :cpp:type:`wifi_sta_config_t` and :cpp:type:`wifi_ap_config_t` for station and SoftAP respectively. Hunt and peck, H2E both can be enabled by using :cpp:enumerator:`WPA3_SAE_PWE_BOTH` configuration.
 
@@ -137,7 +137,7 @@ Please refer to the `Security <https://www.wi-fi.org/discover-wi-fi/security>`_ 
 Setting up WPA3 Personal with {IDF_TARGET_NAME}
 +++++++++++++++++++++++++++++++++++++++++++++++
 
-A configuration option :ref:`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE` is provided to enable/disable WPA3 for the station. By default, it is kept enabled. If disabled, {IDF_TARGET_NAME} will not be able to establish a WPA3 connection. Also under the Wi-Fi component, a configuration option :ref:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT` is provided to enable/disable WPA3 for SoftAP. Additionally, since PMF is mandated by WPA3 protocol, PMF Optional is set by default for station and SoftAP. PMF Required can be configured using Wi-Fi configuration. For WPA3 SoftAP, PMF Required is mandatory and will be configured and stored in NVS implicitly if not specified by the user.
+A configuration option :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE` is provided to enable/disable WPA3 for the station. By default, it is kept enabled. If disabled, {IDF_TARGET_NAME} will not be able to establish a WPA3 connection. Also under the Wi-Fi component, a configuration option :menuitem:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT` is provided to enable/disable WPA3 for SoftAP. Additionally, since PMF is mandated by WPA3 protocol, PMF Optional is set by default for station and SoftAP. PMF Required can be configured using Wi-Fi configuration. For WPA3 SoftAP, PMF Required is mandatory and will be configured and stored in NVS implicitly if not specified by the user.
 
 Refer to `Protected Management Frames (PMF)`_ on how to set this mode.
 
@@ -145,7 +145,7 @@ After configuring all required settings for the WPA3-Personal station, applicati
 
 After configuring all required setting for WPA3-Personal SoftAP, application developers have to set ``WIFI_AUTH_WPA3_PSK`` for `authmode` in :cpp:type:`wifi_ap_config_t` to start AP in WPA3 security. SoftAP can be also configured to use ``WIFI_AUTH_WPA2_WPA3_PSK`` mixed mode.
 
-Note that binary size will be increased by about 6.5 kilobytes after enabling :ref:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT`.
+Note that binary size will be increased by about 6.5 kilobytes after enabling :menuitem:`CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT`.
 
 Wi-Fi Enhanced Open™
 --------------------
@@ -157,10 +157,100 @@ Enhanced Open™ is used for providing security and privacy to users connecting 
 
 .. note::
 
-  {IDF_TARGET_NAME} supports Wi-Fi Enhanced Open™ only in station mode.
+  {IDF_TARGET_NAME} supports Wi-Fi Enhanced Open™ in station mode for both OWE Transition Mode and OWE-only networks. In SoftAP mode, only **OWE-only** operation is supported; **OWE Transition Mode is not supported**.
 
 
 Setting up OWE with {IDF_TARGET_NAME}
 ++++++++++++++++++++++++++++++++++++++
 
-A configuration option :ref:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA` and configuration parameter :cpp:type:`owe_enabled` in :cpp:type:`wifi_sta_config_t` is provided to enable OWE support for the station. To use OWE transition mode, along with the configuration provided above, `authmode` from :cpp:type:`wifi_scan_threshold_t` should be set to ``WIFI_AUTH_OPEN``.
+For station mode:
+
+A configuration option :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA` and configuration parameter :cpp:type:`owe_enabled` in :cpp:type:`wifi_sta_config_t` is provided to enable OWE support for the station. To use OWE transition mode, along with the configuration provided above, `authmode` from :cpp:type:`wifi_scan_threshold_t` should be set to ``WIFI_AUTH_OPEN``.
+
+
+For SoftAP mode:
+
+A configuration option :menuitem:`CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_SOFTAP` from menuconfig should be enabled and configuration parameter `authmode` from :cpp:type:`wifi_ap_config_t` should be set to ``WIFI_AUTH_OWE``. SoftAP does not support OWE Transition Mode; configure ``WIFI_AUTH_OWE`` only.
+
+WiFi Privacy Enhancements
+--------------------------
+
+MAC addresses, used by devices to connect to Wi-Fi networks, can be captured and tracked because they are transmitted without encryption and due to their unique and static nature. {IDF_TARGET_NAME} supports the WiFi Privacy Enhancements feature which includes MAC randomization, sequence number randomization, diversity in GAS dialogue tokens and vendor sequence numbers. This prevents devices from being consistently tracked when scanning or connecting to networks.
+
+To use this feature, enable configuration option :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED` from menuconfig.
+
+{IDF_TARGET_NAME} also rotates the STA random MAC periodically while not connected, using menuconfig option :menuitem:`CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL` (valid range: 1 to 24 hours, default 12).
+
+.. note::
+
+   The :menuitem:`CONFIG_ESP_WIFI_RMAC_AUTO_RESET_INTERVAL` will only generate and set new random mac address when station is not connected to any AP. If the station is connected to any AP, the connection will not be interrupted and same random mac will be used. If the periodic auto-reset timer expires while the station is in the connected state, the timer will be armed/triggered at the next disconnect.
+
+   WiFi privacy enhancements are not supported and will not work when Wi-Fi Mesh or ESP-NOW is enabled.
+
+
+{IDF_TARGET_NAME} supports privacy enhancements while scanning when
+
+  - enable configuration option :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED` from menuconfig
+  - scan_type is :cpp:enumerator:`WIFI_SCAN_TYPE_ACTIVE`
+  - station is not connected to any Access Point
+
+{IDF_TARGET_NAME} supports privacy enhancements while connecting when
+
+  - enable configuration option :menuitem:`CONFIG_ESP_WIFI_PRIVACY_ENHANCEMENTS_ENABLED` from menuconfig
+  - new wifi configuration is set using :cpp:func:`esp_wifi_set_config`
+
+
+To get the MAC address, please use API :cpp:func:`esp_wifi_get_mac`.
+
+
+.. only:: SOC_WIFI_NAN_SUPPORT
+
+    NAN (Wi-Fi Aware\ :sup:`TM`) Security
+    -------------------------------------
+
+    Introduction
+    ++++++++++++
+
+    Wi-Fi Aware\ :sup:`TM` (NAN, Neighbor Awareness Networking) lets devices discover services and set up a NAN Data Path (NDP) without an AP. By default, an NDP carries data in the clear, like an open Wi-Fi network. NAN Security protects the NDP by deriving a pairwise key (ND-PMK) between the Publisher and Subscriber during the NDP handshake and encrypting the subsequent unicast data frames.
+
+    {IDF_TARGET_NAME} supports two NAN Security mechanisms. Both produce an encrypted NDP, but they provision the key material differently:
+
+    - **Passphrase/PMK-based (NCS-SK-128)** — both peers share a passphrase (or a raw 32-byte PMK) out of band. The stack derives the ND-PMK from it. This is the equivalent of a WPA2/WPA3-Personal pre-shared key, but for NAN.
+    - **Pairing-based (NCS-PK-PASN-128)** — peers do not share a secret up front. They run the NAN Pairing protocol (based on PASN) to negotiate an NPK/NIK, optionally authenticated by a bootstrapping method (for example, a PIN code). Cached NPK/NIK can be reused for subsequent NDPs.
+
+    Passphrase/PMK-based Security (NCS-SK-128)
+    ++++++++++++++++++++++++++++++++++++++++++++
+
+    This is the simplest NAN Security mode and is available with stand-alone ESP-IDF (no external component required). Both peers provision the same secret — either a passphrase or a raw 32-byte PMK — on the matching Publish/Subscribe service. The stack derives the ND-PMK and ND-PMKID per credential and advertises the SCID list on air; the subscriber matches the publisher's SCID list against its locally-provisioned credentials.
+
+    Security is configured per service through :cpp:type:`wifi_nan_publish_cfg_t`/:cpp:type:`wifi_nan_subscribe_cfg_t`:
+
+    - Set ``security_reqd = 1`` to mark the service as secured.
+    - Point ``security_cfg`` to a :cpp:type:`wifi_nan_discovery_security_params_t` populated with one or more :cpp:type:`wifi_nan_credential_t` entries (passphrase or PMK, each bound to a cipher suite ID via ``csid``).
+    - Optionally enable ``group_data_prot`` (ND-GTK group-data protection).
+
+    Up to :c:macro:`ESP_WIFI_NAN_MAX_CREDS_PER_SVC` credentials may be attached to a single service, so a service can be shared with several peers using different passphrases/PMKs. Both peers must configure at least one matching credential on the corresponding service, otherwise NDP negotiation fails.
+
+    .. warning::
+
+      Group-management frame protection (BIP, IGTKSA/BIGTKSA) is **device-global**, not per-service. It must be enabled through the ``group_mgmt_prot`` field of :cpp:type:`wifi_nan_sync_config_t` when starting NAN with :cpp:func:`esp_wifi_nan_sync_start`. IGTK/BIGTK installation, CSIA capability construction, and NDP negotiation all depend on that device-global value, so an application that only sets the per-service ``group_mgmt_prot`` bit in :cpp:type:`wifi_nan_discovery_security_params_t` will silently run without group-management frame protection. The per-service ``group_mgmt_prot`` bit is therefore reserved and has no independent effect.
+
+    .. note::
+
+      Only ``WIFI_NAN_CSID_NCS_SK_128`` is currently supported. NAN Security requires :ref:`CONFIG_ESP_WIFI_NAN_SECURITY` and :ref:`CONFIG_ESP_WIFI_MBEDTLS_CRYPTO`.
+
+    Pairing-based Security (NCS-PK-PASN-128)
+    +++++++++++++++++++++++++++++++++++++++++
+
+    NAN Pairing lets two devices establish a long-term trust relationship (NPK/NIK) without a pre-shared secret, using a bootstrapping method such as a PIN code. The negotiated NPK/NIK can be cached (and persisted to NVS) so that subsequent NDPs are secured without repeating the pairing handshake.
+
+    Pairing is configured per service through the ``pairing`` field of :cpp:type:`wifi_nan_publish_cfg_t`/:cpp:type:`wifi_nan_subscribe_cfg_t`, which points to a :cpp:type:`wifi_nan_pairing_cfg_t` (pairing setup/verification enablement, NPK/NIK caching, bootstrapping methods bitmap, comeback delay).
+
+    .. note::
+
+      NAN Pairing (``WIFI_NAN_CSID_NCS_PK_PASN_128``) requires :ref:`CONFIG_ESP_WIFI_NAN_PAIRING` and the **Wi-Fi Aware** external component (``espressif/wifi_aware``); it is **not** usable with stand-alone ESP-IDF. See :doc:`/api-guides/wifi-driver/wifi-modes` for how to add the component to your project.
+
+    Application Example
+    +++++++++++++++++++
+
+    - :example:`wifi/wifi_aware/nan_console` exposes NAN Security through the ``publish`` and ``subscribe`` console commands. Supplying ``-p``/``--passphrase`` or ``-k``/``--pmk`` makes that service secured; an open service needs no security arguments. See the example README for the full command reference.

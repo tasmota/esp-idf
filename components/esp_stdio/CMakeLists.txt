@@ -7,30 +7,53 @@ if(non_os_build)
     idf_component_register()
     return()
 endif()
-
 set(srcs)
 set(includes)
+set(priv_includes)
 
 if(${target} STREQUAL "linux")
     list(APPEND srcs "stdio_port.c"
                      "linux/esp_stdio_linux.c")
     list(APPEND includes "include"
                          "linux/include")
+
+    if(CONFIG_VFS_SUPPORT_IO)
+        list(APPEND srcs "stdio_vfs.c" "stdio_mux_api.c")
+        list(APPEND priv_includes "private_include")
+    endif()
 else()
     list(APPEND srcs "stdio_port.c"
-                     "stdio_vfs.c"
                      "stdio_simple.c"
                      "stdio_syscalls_simple.c")
     list(APPEND includes "include")
+
+    if(CONFIG_VFS_SUPPORT_IO)
+        list(APPEND srcs "stdio_vfs.c" "stdio_mux_api.c")
+        list(APPEND priv_includes "private_include")
+    endif()
 endif()
 
 idf_component_register(SRCS ${srcs}
-                       INCLUDE_DIRS ${includes})
+                       INCLUDE_DIRS ${includes}
+                       PRIV_INCLUDE_DIRS ${priv_includes})
 
 if(CONFIG_VFS_SUPPORT_IO)
+    # The public header esp_stdio.h includes VFS types when VFS is enabled.
+    # Make sure vfs include dirs are available on all targets.
     if(IDF_BUILD_V2)
+        # In build system v2 the configuration of a component is available
+        # even if the component is not in the build. CONFIG_VFS_SUPPORT_IO
+        # alone does not mean that vfs is in the build, so add it here.
+        # idf_component_optional_requires only links a component which is
+        # already in the build, in the DEFERRED mode that
+        # idf_project_default() sets.
         idf_component_include(vfs)
+    endif()
+    idf_component_optional_requires(PUBLIC vfs)
+endif()
 
+if(CONFIG_VFS_SUPPORT_IO AND NOT ${target} STREQUAL "linux")
+    if(IDF_BUILD_V2)
         if(CONFIG_ESP_CONSOLE_UART)
             idf_component_include(esp_driver_uart)
             target_link_libraries(${COMPONENT_TARGET} PRIVATE
@@ -64,5 +87,7 @@ if(CONFIG_VFS_SUPPORT_IO)
 
     target_link_libraries(${COMPONENT_LIB} PRIVATE idf::vfs)
     # Make sure esp_stdio_register gets called at startup stage
-    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_vfs_include_console_register")
+    if(NOT ${target} STREQUAL "linux")
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-u esp_vfs_include_console_register")
+    endif()
 endif()

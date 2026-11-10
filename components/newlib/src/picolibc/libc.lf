@@ -11,17 +11,17 @@ entries:
   if SPIRAM_CACHE_WORKAROUND = y:
     # The following libs are either used in a lot of places or in critical code. (such as panic or abort)
     # Thus, they shall always be placed in IRAM.
+    # GCC 15 Picolibc uses the assembler source names for Xtensa archive members.
     libc_stdlib_itoa (noflash)
     libc_string_memcmp (noflash)
-    libc_machine_xtensa_memcpy (noflash)
-    libc_machine_xtensa_memset (noflash)
+    memcpy.S (noflash)
+    memset.S (noflash)
     libc_string_strcat (noflash)
-    libc_machine_xtensa_strcmp (noflash)
-    libc_machine_xtensa_strlen (noflash)
+    strcmp.S (noflash)
+    strlen.S (noflash)
 
     if SPIRAM_CACHE_LIBJMP_IN_IRAM = y:
-        libc_machine_xtensa_longjmp (noflash)
-        libc_machine_xtensa_setjmp (noflash)
+        setjmp.S (noflash)
 
     if SPIRAM_CACHE_LIBMATH_IN_IRAM = y:
         libc_stdlib_abs (noflash)
@@ -106,7 +106,7 @@ entries:
         libc_string_strcasestr (noflash)
         libc_string_strchr (noflash)
         libc_string_strcoll (noflash)
-        libc_string_strcpy (noflash)
+        strcpy.S (noflash)
         libc_string_strcspn (noflash)
         libc_string_strdup (noflash)
         libc_string_strdup_r (noflash)
@@ -116,7 +116,7 @@ entries:
         libc_string_strncasecmp (noflash)
         libc_string_strncat (noflash)
         libc_string_strncmp (noflash)
-        libc_string_strncpy (noflash)
+        strncpy.S (noflash)
         libc_string_strndup (noflash)
         libc_string_strndup_r (noflash)
         libc_string_strnlen (noflash)

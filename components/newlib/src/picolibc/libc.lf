@@ -14,14 +14,14 @@ entries:
     # GCC 15 Picolibc uses the assembler source names for Xtensa archive members.
     libc_stdlib_itoa (noflash)
     libc_string_memcmp (noflash)
-    memcpy.S (noflash)
-    memset.S (noflash)
+    memcpy (noflash)
+    memset (noflash)
     libc_string_strcat (noflash)
-    strcmp.S (noflash)
-    strlen.S (noflash)
+    strcmp (noflash)
+    strlen (noflash)
 
     if SPIRAM_CACHE_LIBJMP_IN_IRAM = y:
-        setjmp.S (noflash)
+        setjmp (noflash)
 
     if SPIRAM_CACHE_LIBMATH_IN_IRAM = y:
         libc_stdlib_abs (noflash)
@@ -106,7 +106,7 @@ entries:
         libc_string_strcasestr (noflash)
         libc_string_strchr (noflash)
         libc_string_strcoll (noflash)
-        strcpy.S (noflash)
+        strcpy (noflash)
         libc_string_strcspn (noflash)
         libc_string_strdup (noflash)
         libc_string_strdup_r (noflash)
@@ -116,7 +116,7 @@ entries:
         libc_string_strncasecmp (noflash)
         libc_string_strncat (noflash)
         libc_string_strncmp (noflash)
-        strncpy.S (noflash)
+        strncpy (noflash)
         libc_string_strndup (noflash)
         libc_string_strndup_r (noflash)
         libc_string_strnlen (noflash)

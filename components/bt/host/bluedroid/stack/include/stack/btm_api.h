@@ -906,6 +906,14 @@ typedef struct {
     UINT16      pkt_types;
 } tBTM_SET_ACL_PKT_TYPES_RESULTS;
 
+/* Structure returned with set sniff allowed event (in tBTM_CMPL_CB callback function).
+*/
+typedef struct {
+    tBTM_STATUS status;
+    BD_ADDR     rem_bda;
+    BOOLEAN     allowed;
+} tBTM_SET_SNIFF_ALLOWED_RESULTS;
+
 /* Structure returned with set minimal encryption key size event (in tBTM_CMPL_CB callback function)
 ** in response to BTM_SetMinEncKeySize call.
 */
@@ -4510,6 +4518,10 @@ tBTM_STATUS BTM_BleSetChannels (BLE_CHANNELS channels);
 **
 *******************************************************************************/
 void BTM_PktStatNumsGet(UINT16 sync_conn_handle, tBTM_SCO_PKT_STAT_NUMS *pkt_nums);
+
+#if (BT_CLASSIC_BQB_INCLUDED == TRUE)
+void btm_bqb_keep_acl_on_key_missing_ctrl(BOOLEAN enable);
+#endif
 
 #ifdef __cplusplus
 }

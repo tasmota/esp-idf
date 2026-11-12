@@ -700,10 +700,6 @@ examples/peripherals/spi_slave_hd/segment_mode/seg_slave:
 examples/peripherals/temperature_sensor/temp_sensor:
   disable:
     - if: SOC_TEMP_SENSOR_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32h21" # TODO: IDF-16197
-      temporary: true
-      reason: cannot pass
   depends_components:
     - esp_hal_ana_conv
     - esp_driver_tsens
@@ -712,10 +708,6 @@ examples/peripherals/temperature_sensor/temp_sensor:
 examples/peripherals/temperature_sensor/temp_sensor_monitor:
   disable:
     - if: SOC_TEMPERATURE_SENSOR_INTR_SUPPORT != 1
-  disable_test:
-    - if: IDF_TARGET == "esp32h21" # TODO: IDF-16197
-      temporary: true
-      reason: cannot pass
   depends_components:
     - esp_hal_ana_conv
     - esp_driver_tsens
@@ -832,10 +824,6 @@ examples/peripherals/twai/usb_twai_adapter:
 examples/peripherals/uart/uart_dma_ota:
   disable:
     - if: SOC_UHCI_SUPPORTED != 1
-  disable_test:
-    - if: IDF_TARGET in ["esp32h4", "esp32h21"] # IDF-16462
-      temporary: true
-      reason: cannot pass
   depends_components:
     - esp_driver_uart
     - esp_driver_dma
@@ -871,10 +859,6 @@ examples/peripherals/usb/device/cherryusb_serial_device:
     - if: (IDF_TARGET in ["esp32h4", "esp32s31"]) or (SOC_USB_OTG_SUPPORTED != 1)
       temporary: true
       reason: CherryUSB does not support esp32h4 or esp32s31
-
-examples/peripherals/usb/device/tusb_cdc_acm_wakeup:
-  disable:
-    - if: SOC_USB_OTG_SUPPORTED != 1 or SOC_PM_SUPPORT_USB_WAKEUP != 1
 
 examples/peripherals/usb/device/tusb_msc:
   disable:

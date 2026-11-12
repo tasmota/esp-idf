@@ -65,8 +65,8 @@ extern "C" {
 #define RTC_CNTL_RC32K_DFREQ_DEFAULT 700
 
 #if CONFIG_ESP_ENABLE_PVT
-/*
-set pvt default param
+/**
+* @brief Set PVT default param
 */
 #define PVT_CHANNEL0_SEL        33
 #define PVT_CHANNEL1_SEL        37
@@ -87,11 +87,19 @@ set pvt default param
 #define PVT_DELAY_NUM_PUMP      134
 
 /**
+ * @brief Initialize PVT dig dbias
+ */
+void pvt_dig_dbias_init(void);
+
+/**
  * @brief Enable or disable auto dbias functions
  *
- * @param enable  true to enable, false to disable
+ * @param enable   true to enable, false to disable
+ * @param reconfig true: soft-reset + rewrite channel/cmd/threshold/timer config;
+ *                 false: only gate clocks/monitor/timer, keep existing config
+ *                 (e.g. after TOP retention restore). Ignored when enable is false.
  */
-void pvt_auto_dbias_enable(bool enable);
+void pvt_auto_dbias_enable(bool enable, bool reconfig);
 
 #endif //#if CONFIG_ESP_ENABLE_PVT
 
@@ -309,6 +317,18 @@ void rtc_clk_cpu_freq_get_config(rtc_cpu_freq_config_t *out_config);
  * Assumes that XTAL frequency has been determined — don't call in startup code.
  */
 void rtc_clk_cpu_freq_set_xtal(void);
+
+/**
+ * @brief Release root clock source locked by PMU
+ *
+ * In PMU modem state on ESP32-S31, PMU takes control of the HP root clock
+ * (sysclk_slp_sel = 1) and selects XTAL (40 MHz). When waking up to HP_ACTIVE
+ * via HP_MODEM, PMU does not automatically hand the root clock mux back to
+ * software (HP_SYS_CLKRST). Software must explicitly release this lock by
+ * setting PMU_UPDATE_DIG_SYS_CLK_SEL after restoring the CPU clock config,
+ * otherwise the HP root clock remains stuck at XTAL 40 MHz.
+ */
+void rtc_clk_modem_pll_lock_release(void);
 #endif
 
 /**

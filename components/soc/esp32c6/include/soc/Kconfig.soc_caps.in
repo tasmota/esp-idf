@@ -403,6 +403,10 @@ config SOC_CPU_HAS_CSR_PC
     bool
     default y
 
+config SOC_CPU_CCOUNT_STOPS_IN_WFI
+    bool
+    default y
+
 config SOC_CPU_BREAKPOINTS_NUM
     int
     default 4
@@ -920,10 +924,6 @@ config SOC_EFUSE_SOFT_DIS_JTAG
     default y
 
 config SOC_EFUSE_DIS_ICACHE
-    bool
-    default y
-
-config SOC_EFUSE_DIS_DOWNLOAD_MSPI
     bool
     default y
 

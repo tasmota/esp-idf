@@ -633,9 +633,10 @@ void usb_dwc_hal_chan_activate_buffer(usb_dwc_hal_context_t *hal, usb_dwc_hal_ch
     HAL_ASSERT(pkt_cnt <= hal->constant_config.max_size_packet_limit);      // OTG_PACKET_COUNT_WIDTH
 
     const bool set_doping = false;
-    const uint32_t hctsiz_pid = usb_dwc_ll_pid_to_reg(xfer->pid);
     usb_dwc_ll_hcdma_set_buff_addr(chan_obj->regs, xfer->buf);
-    usb_dwc_ll_hctsiz_set_buffer_xfer(chan_obj->regs, (uint32_t)xfer_len, (uint32_t)pkt_cnt, hctsiz_pid, set_doping);
+    // HCTSIZ.Pid is preserved by the LL setter: the core maintains the data toggle across transfers.
+    // Callers that need a specific starting PID set it beforehand via usb_dwc_hal_chan_set_pid().
+    usb_dwc_ll_hctsiz_set_buffer_xfer(chan_obj->regs, (uint32_t)xfer_len, (uint32_t)pkt_cnt, set_doping);
 
     chan_obj->buffer_dma.xfer_len = xfer_len;       // Save the transfer length to calculate buffer result's actual_len
     chan_obj->buffer_dma.xfer_addr = xfer_addr;     // Save the buffer address to rewind HCDMA to the start of the failed packet on a XactErr retry
@@ -643,8 +644,8 @@ void usb_dwc_hal_chan_activate_buffer(usb_dwc_hal_context_t *hal, usb_dwc_hal_ch
     usb_dwc_ll_hcchar_enable_chan(chan_obj->regs);  // Enable the channel
     chan_obj->flags.active = 1;
 
-    HAL_EARLY_LOGV(USB_HAL_TAG, "Channel %d activated (buffer DMA): len=%d xfersize=%d pkt=%d pid=%d buff=%p",
-                   chan_obj->flags.chan_idx, xfer->len, xfer_len, pkt_cnt, xfer->pid, xfer->buf);
+    HAL_EARLY_LOGV(USB_HAL_TAG, "Channel %d activated (buffer DMA): len=%d xfersize=%d pkt=%d buff=%p",
+                   chan_obj->flags.chan_idx, xfer->len, xfer_len, pkt_cnt, xfer->buf);
 }
 
 void usb_dwc_hal_chan_get_buffer_result(usb_dwc_hal_chan_t *chan_obj, int *actual_len)
@@ -694,10 +695,9 @@ void usb_dwc_hal_chan_retry_buffer(usb_dwc_hal_context_t *hal, usb_dwc_hal_chan_
     HAL_ASSERT(done_bytes <= (uint32_t)chan_obj->buffer_dma.xfer_len);
     const uint32_t rem_bytes = (uint32_t)chan_obj->buffer_dma.xfer_len - done_bytes;
 
-    // Re-initialize the channel: reprogram HCTSIZ (remaining size, count) preserving the core's next-expected PID,
-    // arm PING for HS OUT, rewind HCDMA to the failed packet, then re-enable.
-    const uint32_t pid_reg = usb_dwc_ll_hctsiz_get_pid_reg(chan_obj->regs);              // Preserve the next expected PID across re-init
-    usb_dwc_ll_hctsiz_set_buffer_xfer(chan_obj->regs, rem_bytes, rem_pkt_cnt, pid_reg, false);
+    // Re-initialize the channel: reprogram HCTSIZ (remaining size, count; the LL setter preserves the core's
+    // next-expected PID), arm PING for HS OUT, rewind HCDMA to the failed packet, then re-enable.
+    usb_dwc_ll_hctsiz_set_buffer_xfer(chan_obj->regs, rem_bytes, rem_pkt_cnt, false);
 
     // PING only for High-Speed OUT after XactErr; §5.1.2.3. On HS-capable targets the LL setter also gates to OUT;
     // on FS-only targets the setter is a no-op stub (PING does not exist there).
@@ -728,14 +728,31 @@ bool usb_dwc_hal_chan_request_halt(usb_dwc_hal_chan_t *chan_obj)
     if (chan_obj->flags.active) {
         /*
         Request a halt so long as the channel's active flag is set.
+        ChEna and ChDis (R/W1S): Their combination determines how the core interprets a write to HCCHARn (DWC_otg Programming Guide, section 3.5 "Halting a Channel"):
+        ChEna | ChDis | Meaning
+        ------+-------+------------------------------------------------------------------
+          1   |   0   | Normal - channel running
+          1   |   1   | Halt request: flush posted requests, finish the in-flight USB transaction, raise ChHltd, core clears both bits
+          0   |   1   | Request queue flush, NOT a halt. The core processes a disable on the channel's turn during arbitration, so a channel that is not enabled never gets it processed: no ChHltd
+          0   |   0   | Channel idle/disabled
+
         - If the underlying hardware channel is already halted but the channel is pending interrupt handling,
-        disabling the channel will have no effect (i.e., no channel interrupt is generated).
+        disabling the channel will have no effect (i.e., no channel interrupt is generated). Moreover, CHDIS must
+        NOT be written in this case:
+            - The documented halt sequence is ChDis and ChEna written together; writing ChDis alone to a channel
+            whose ChEna is already 0 is a request queue flush, not a halt (DWC_otg Programming Guide, section 3.5
+            "Halting a Channel").
+            - The core processes a disable request on the channel's turn during arbitration, so a channel that is
+            already halted never gets its disable processed: no ChHltd interrupt is generated and CHDIS is never
+            cleared (DWC_otg Programming Guide section 3.5, DWC_otg Databook, section 5.4.37 HCCHARn).
         - If the underlying channel is currently active, disabling the channel will trigger a channel interrupt.
 
         Regardless, setting the "halt_requested" should cause "usb_dwc_hal_chan_decode_intr()" to report the
         USB_DWC_HAL_CHAN_EVENT_HALT_REQ event when channel interrupt is handled (pending or triggered).
         */
-        usb_dwc_ll_hcchar_disable_chan(chan_obj->regs);
+        if (usb_dwc_ll_hcchar_chan_is_enabled(chan_obj->regs)) {
+            usb_dwc_ll_hcchar_disable_chan(chan_obj->regs);
+        }
         chan_obj->flags.halt_requested = 1;
         return false;
     } else {

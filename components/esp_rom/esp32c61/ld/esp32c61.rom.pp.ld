@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2024-2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -118,10 +118,10 @@ pm_on_beacon_rx = 0x40000ce8;
 pm_on_data_rx = 0x40000cec;
 pm_on_data_tx = 0x40000cf0;
 pm_on_tbtt = 0x40000cf4;
-pm_on_isr_sleep = 0x40000cf8;
+//pm_on_isr_sleep = 0x40000cf8;
 pm_on_isr = 0x40000cfc;
-pm_on_isr_set_twt_target = 0x40000d00;
-pm_on_isr_twt_wake = 0x40000d04;
+//pm_on_isr_set_twt_target = 0x40000d00;
+//pm_on_isr_twt_wake = 0x40000d04;
 pm_on_tsf_timer = 0x40000d08;
 pm_on_twt_force_tx = 0x40000d0c;
 //pm_parse_beacon = 0x40000d10;
@@ -167,7 +167,7 @@ ppHEAMPDU2Normal = 0x40000dac;
 ppAssembleAMPDU = 0x40000db0;
 ppCalFrameTimes = 0x40000db4;
 ppCalSubFrameLength = 0x40000db8;
-ppCalTxAMPDULength = 0x40000dbc;
+//ppCalTxAMPDULength = 0x40000dbc;
 ppCheckTxAMPDUlength = 0x40000dc0;
 ppDequeueRxq_Locked = 0x40000dc4;
 ppDequeueTxQ = 0x40000dc8;
@@ -182,7 +182,7 @@ ppProcessRxPktHdr = 0x40000de4;
 ppRecordBarRRC = 0x40000dec;
 ppRecycleAmpdu = 0x40000df0;
 ppRecycleRxPkt = 0x40000df4;
-ppResortTxAMPDU = 0x40000df8;
+//ppResortTxAMPDU = 0x40000df8;
 ppResumeTxAMPDU = 0x40000dfc;
 /*ppRxFragmentProc = 0x40000e00;*/
 /*ppRxPkt = 0x40000e04;*/
@@ -260,7 +260,7 @@ wDevCheckBlockError = 0x40000f20;
 wDev_AppendRxBlocks = 0x40000f24;
 wDev_DiscardFrame = 0x40000f28;
 wDev_GetNoiseFloor = 0x40000f2c;
-wDev_IndicateAmpdu = 0x40000f30;
+//wDev_IndicateAmpdu = 0x40000f30;
 //wDev_IndicateFrame = 0x40000f34;
 wdev_mac_reg_load = 0x40000f38;
 wdev_mac_reg_store = 0x40000f3c;
@@ -324,7 +324,7 @@ wifi_he_get_hetb_tid_bawin = 0x40001028;
 ht_get_min_subframe_len = 0x4000102c;
 he_get_min_subframe_len = 0x40001030;
 he_get_min_subframe_len_dcm = 0x40001034;
-is_ndpa_to_dut = 0x40001038;
+//is_ndpa_to_dut = 0x40001038;
 is_use_muedca = 0x4000103c;
 pwr_hal_clear_mac_modem_state_wakeup_protect_signal = 0x40001040;
 get_estimated_batime = 0x40001044;

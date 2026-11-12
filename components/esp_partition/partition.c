@@ -187,16 +187,18 @@ static esp_err_t load_partitions(void)
         item->info.readonly = entry.flags & PART_FLAG_READONLY;
         item->user_registered = false;
 
+        // entry.label is uint8_t[16] from flash and may lack a NUL; item->info.label is
+        // zeroed by calloc, so strncpy keeps the API string null-terminated.
+        strncpy(item->info.label, (const char *) entry.label, sizeof(item->info.label) - 1);
+
 #if CONFIG_NVS_COMPATIBLE_PRE_V4_3_ENCRYPTION_FLAG
         if (entry.type == ESP_PARTITION_TYPE_DATA &&
                 entry.subtype == ESP_PARTITION_SUBTYPE_DATA_NVS &&
                 (entry.flags & PART_FLAG_ENCRYPTED)) {
-            ESP_LOGI(TAG, "Ignoring encrypted flag for \"%s\" partition", entry.label);
+            ESP_LOGI(TAG, "Ignoring encrypted flag for \"%s\" partition", item->info.label);
             item->info.encrypted = false;
         }
 #endif
-        // item->info.label is initialized by calloc, so resulting string will be null terminated
-        strncpy(item->info.label, (const char *) entry.label, sizeof(item->info.label) - 1);
 
         // add it to the list
         if (last == NULL) {
@@ -745,6 +747,9 @@ static const esp_blockdev_ops_t s_bdl_ops = {
 
 esp_err_t esp_partition_ptr_get_blockdev(const esp_partition_t* partition, esp_blockdev_handle_t *out_bdl_handle_ptr)
 {
+    assert(partition != NULL);
+    assert(out_bdl_handle_ptr != NULL);
+
     esp_blockdev_t *out = calloc(1, sizeof(esp_blockdev_t));
     if (out == NULL) {
         return ESP_ERR_NO_MEM;

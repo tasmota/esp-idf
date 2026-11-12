@@ -123,7 +123,8 @@
 #define SOC_EMAC_USE_MULTI_IO_MUX                  (1)      /*!< Multiple GPIO pad options exist to connect EMAC signal via IO_MUX */
 #define SOC_EMAC_MII_USE_GPIO_MATRIX               (1)      /*!< EMAC MII signals are connected to GPIO pads via GPIO Matrix */
 #define SOC_EMAC_DEDICATED_GPIO_CTRL_SUPPORTED     (1)      /*!< EMAC has dedicated CNNT-domain pad control registers */
-// #define SOC_EMAC_SUPPORT_SLEEP_RETENTION           (1)   // TODO: [ESP32S31] IDF-14731 - implement sleep retention for EMAC
+#define SOC_EMAC_SUPPORT_SLEEP_RETENTION           (1)      /*!< EMAC supports register backup/restore in sleep mode */
+#define SOC_PM_SUPPORT_EMAC_WAKEUP                 (1)      /*!< EMAC PMT can wake the chip from Light-sleep */
 
 /*------------------------- Analog Comparator CAPS ---------------------------*/
 #define SOC_ANA_CMPR_SUPPORT_ETM        (1)
@@ -595,6 +596,8 @@
 #define SOC_PM_CACHE_RETENTION_BY_PAU       (1)
 #define SOC_EXT_MEM_CACHE_TAG_IN_CPU_DOMAIN (1)
 
+#define SOC_PM_CNNT_RETENTION_BY_REGDMA     (1)
+
 #define SOC_PM_PAU_LINK_NUM                 (5)
 #define SOC_PM_PAU_REGDMA_LINK_CONFIGURABLE (1)
 #define SOC_PM_PAU_REGDMA_COMMON_PHY_LINK_ENTRY (1)
@@ -607,8 +610,6 @@
 #define SOC_PM_SUPPORT_PMU_MODEM_STATE             (1)
 #define MAC_SUPPORT_PMU_MODEM_STATE                SOC_PM_SUPPORT_PMU_MODEM_STATE
 #define SOC_PM_REGDMA_MODEM_LINK_PROTECT           (1)
-/* Since SOC APB and MODEM APB on ESP32-S31 are decoupled, XTAL can be used as SOC clock in modem state */
-#define SOC_PM_MODEM_STATE_USE_XTAL                (1)
 
 /*
  * min_slp_val is derived from slow clock period (450us / slow_clk).

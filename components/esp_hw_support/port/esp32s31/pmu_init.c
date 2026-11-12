@@ -20,14 +20,21 @@
 #include "hal/pmu_hal.h"
 #include "pmu_param.h"
 #include "esp_private/esp_pmu.h"
-#include "esp_hw_log.h"
+#include "esp_log.h"
 #include "hal/regi2c_ctrl_ll.h"
 #include "soc/rtc.h"
 #include "soc/reset_reasons.h"
 #include "esp_rom_sys.h"
 #include "esp_private/ocode_init.h"
 
-ESP_HW_LOG_ATTR_TAG(TAG, "pmu_init");
+ESP_LOG_ATTR_TAG_DRAM(TAG, "pmu_init");
+
+/* Avoid assert strings in external rodata before PSRAM XIP is ready. */
+#ifdef NDEBUG
+#define PMU_EARLY_ASSERT(condition) ((void)0)
+#else
+#define PMU_EARLY_ASSERT(condition) do { if (!(condition)) { abort(); } } while (0)
+#endif
 
 typedef struct {
     const pmu_hp_system_power_param_t     *power;
@@ -77,7 +84,7 @@ void pmu_hp_system_init(pmu_context_t *ctx, pmu_hp_mode_t mode, pmu_hp_system_pa
     const pmu_hp_system_analog_param_t *anlg = param->analog;
     const pmu_hp_system_retention_param_t *ret = param->retent;
 
-    assert(ctx->hal);
+    PMU_EARLY_ASSERT(ctx->hal);
     /* Default configuration of hp-system power in active, modem and sleep modes */
     pmu_ll_hp_set_dig_power(ctx->hal->dev, mode, power->dig_power.val);
     if (mode == PMU_MODE_HP_ACTIVE) {
@@ -117,8 +124,10 @@ void pmu_hp_system_init(pmu_context_t *ctx, pmu_hp_mode_t mode, pmu_hp_system_pa
     if (mode == PMU_MODE_HP_ACTIVE) {
         pmu_ll_hp_set_regulator_lp_dbias_voltage(ctx->hal->dev, mode, anlg->regulator0.lp_dbias_vol);
         pmu_ll_hp_set_regulator_hp_dbias_voltage(ctx->hal->dev, mode, anlg->regulator0.hp_dbias_vol);
+#if !CONFIG_ESP_ENABLE_PVT
         pmu_ll_hp_set_regulator_dbias_select    (ctx->hal->dev, mode, anlg->regulator0.dbias_sel);
         pmu_ll_hp_set_regulator_dbias_init      (ctx->hal->dev, mode, anlg->regulator0.dig_dbias_init);
+#endif
     }
     pmu_ll_hp_set_regulator_sleep_memory_xpd    (ctx->hal->dev, mode, anlg->regulator0.slp_mem_xpd);
     pmu_ll_hp_set_regulator_sleep_memory_dbias  (ctx->hal->dev, mode, anlg->regulator0.slp_mem_dbias);
@@ -146,7 +155,7 @@ void pmu_lp_system_init(pmu_context_t *ctx, pmu_lp_mode_t mode, pmu_lp_system_pa
     const pmu_lp_system_power_param_t *power = param->power;
     const pmu_lp_system_analog_param_t *anlg = param->analog;
 
-    assert(ctx->hal);
+    PMU_EARLY_ASSERT(ctx->hal);
     /* Default configuration of lp-system power in active and sleep modes */
     pmu_ll_lp_set_dig_power(ctx->hal->dev, mode, power->dig_power.val);
     pmu_ll_lp_set_clk_power(ctx->hal->dev, mode, power->clk_power.val);
@@ -168,7 +177,7 @@ void pmu_lp_system_init(pmu_context_t *ctx, pmu_lp_mode_t mode, pmu_lp_system_pa
 
 static inline void pmu_power_domain_force_default(pmu_context_t *ctx)
 {
-    assert(ctx);
+    PMU_EARLY_ASSERT(ctx);
     // for bypass reserved power domain
     const pmu_hp_power_domain_t pmu_hp_domains[] = {
         PMU_HP_PD_TOP,
@@ -211,7 +220,7 @@ static inline void pmu_hp_system_param_default(pmu_hp_mode_t mode, pmu_hp_system
 
 static void pmu_hp_system_init_default(pmu_context_t *ctx)
 {
-    assert(ctx);
+    PMU_EARLY_ASSERT(ctx);
     pmu_hp_system_param_t param = { 0 };
     for (pmu_hp_mode_t mode = PMU_MODE_HP_ACTIVE; mode < PMU_MODE_HP_MAX; mode++) {
         pmu_hp_system_param_default(mode, &param);
@@ -227,7 +236,7 @@ static inline void pmu_lp_system_param_default(pmu_lp_mode_t mode, pmu_lp_system
 
 static void pmu_lp_system_init_default(pmu_context_t *ctx)
 {
-    assert(ctx);
+    PMU_EARLY_ASSERT(ctx);
     pmu_lp_system_param_t param;
     for (pmu_lp_mode_t mode = PMU_MODE_LP_ACTIVE; mode < PMU_MODE_LP_MAX; mode++) {
         pmu_lp_system_param_default(mode, &param);
@@ -251,14 +260,21 @@ void pmu_init(void)
 #endif
 
 #if CONFIG_ESP_ENABLE_PVT
-    /*setup pvt function*/
+    /* Setup pvt function */
     uint32_t blk_version = efuse_hal_blk_version();
+    soc_reset_reason_t rst_reason = esp_rom_get_reset_reason(0);
     if (blk_version >= 1) {
-        pvt_auto_dbias_enable(true);
+        if ((rst_reason == RESET_REASON_CHIP_POWER_ON) || (rst_reason == RESET_REASON_SYS_BROWN_OUT)   \
+            || (rst_reason == RESET_REASON_SYS_RWDT) || (rst_reason == RESET_REASON_SYS_SUPER_WDT)   \
+            || (rst_reason == RESET_REASON_CORE_PWR_GLITCH) || (rst_reason == RESET_REASON_CORE_DEEP_SLEEP)) {
+            /* INIT + hand over DBIAS_SEL together on power-on style reset and deep-sleep wake */
+            pvt_dig_dbias_init();
+        }
+        pvt_auto_dbias_enable(true, true);
         esp_rom_delay_us(1000);
     }
     else {
-        ESP_HW_LOGW(TAG, "blk_version is less than 1, pvt function not supported in efuse.");
+        ESP_DRAM_LOGW(TAG, "blk_version is less than 1, pvt function not supported in efuse.");
     }
 #endif
 }

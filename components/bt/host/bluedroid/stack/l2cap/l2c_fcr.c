@@ -37,6 +37,7 @@
 #include "stack/btu.h"
 #include "osi/allocator.h"
 
+
 #if (L2CAP_COC_INCLUDED == TRUE)
 
 /* Flag passed to retransmit_i_frames() when all packets should be retransmitted */
@@ -767,43 +768,52 @@ void l2c_fcr_proc_pdu (tL2C_CCB *p_ccb, BT_HDR *p_buf)
     if ( (!p_ccb->fcrb.local_busy) && (!p_ccb->fcrb.srej_sent) &&
          (!fixed_queue_is_empty(p_ccb->fcrb.srej_rcv_hold_q))) {
         fixed_queue_t *temp_q = p_ccb->fcrb.srej_rcv_hold_q;
-        p_ccb->fcrb.srej_rcv_hold_q = fixed_queue_new(QUEUE_SIZE_MAX);
+        fixed_queue_t *new_q = fixed_queue_new(QUEUE_SIZE_MAX);
 
-        while ((p_buf = (BT_HDR *)fixed_queue_dequeue(temp_q, 0)) != NULL) {
-            if (p_ccb->in_use && (p_ccb->chnl_state == CST_OPEN)) {
-                /* Get the control word */
-                p = ((UINT8 *)(p_buf + 1)) + p_buf->offset - L2CAP_FCR_OVERHEAD;
-
-                STREAM_TO_UINT16 (ctrl_word, p);
-
-                L2CAP_TRACE_DEBUG ("l2c_fcr_proc_pdu() CID: 0x%04x  Process Buffer from SREJ_Hold_Q   TxSeq: %u  Expected_Seq: %u",
-                                   p_ccb->local_cid, (ctrl_word & L2CAP_FCR_TX_SEQ_BITS) >> L2CAP_FCR_TX_SEQ_BITS_SHIFT,
-                                   p_ccb->fcrb.next_seq_expected);
-
-                /* Process the SREJ held I-frame, but do not send an RR for each individual frame */
-                process_i_frame (p_ccb, p_buf, ctrl_word, TRUE);
-            } else {
-                osi_free (p_buf);
-            }
-
-            /* If more frames were lost during SREJ, send a REJ */
-            if (p_ccb->fcrb.rej_after_srej) {
-                p_ccb->fcrb.rej_after_srej = FALSE;
-                p_ccb->fcrb.rej_sent       = TRUE;
-
-                l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_REJ, 0);
-            }
-        }
-        fixed_queue_free(temp_q, NULL);
-
-        /* Now, if needed, send one RR for the whole held queue */
-        if ( (!p_ccb->fcrb.local_busy) && (!p_ccb->fcrb.rej_sent) && (!p_ccb->fcrb.srej_sent)
-                &&  (p_ccb->fcrb.next_seq_expected != p_ccb->fcrb.last_ack_sent) ) {
-            l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_RR, 0);
+        /* Keep the existing queue if the replacement cannot be allocated.
+         * Installing NULL here makes the next SREJ peek crash. */
+        if (new_q == NULL) {
+            L2CAP_TRACE_ERROR("l2c_fcr_proc_pdu() CID: 0x%04x  no resources for SREJ hold queue",
+                              p_ccb->local_cid);
         } else {
-            L2CAP_TRACE_DEBUG ("l2c_fcr_proc_pdu() not sending RR CID: 0x%04x  local_busy:%d rej_sent:%d srej_sent:%d Expected_Seq:%u Last_Ack:%u",
-                               p_ccb->local_cid, p_ccb->fcrb.local_busy, p_ccb->fcrb.rej_sent, p_ccb->fcrb.srej_sent, p_ccb->fcrb.next_seq_expected,
-                               p_ccb->fcrb.last_ack_sent);
+            p_ccb->fcrb.srej_rcv_hold_q = new_q;
+
+            while ((p_buf = (BT_HDR *)fixed_queue_dequeue(temp_q, 0)) != NULL) {
+                if (p_ccb->in_use && (p_ccb->chnl_state == CST_OPEN)) {
+                    /* Get the control word */
+                    p = ((UINT8 *)(p_buf + 1)) + p_buf->offset - L2CAP_FCR_OVERHEAD;
+
+                    STREAM_TO_UINT16 (ctrl_word, p);
+
+                    L2CAP_TRACE_DEBUG ("l2c_fcr_proc_pdu() CID: 0x%04x  Process Buffer from SREJ_Hold_Q   TxSeq: %u  Expected_Seq: %u",
+                                       p_ccb->local_cid, (ctrl_word & L2CAP_FCR_TX_SEQ_BITS) >> L2CAP_FCR_TX_SEQ_BITS_SHIFT,
+                                       p_ccb->fcrb.next_seq_expected);
+
+                    /* Process the SREJ held I-frame, but do not send an RR for each individual frame */
+                    process_i_frame (p_ccb, p_buf, ctrl_word, TRUE);
+                } else {
+                    osi_free (p_buf);
+                }
+
+                /* If more frames were lost during SREJ, send a REJ */
+                if (p_ccb->fcrb.rej_after_srej) {
+                    p_ccb->fcrb.rej_after_srej = FALSE;
+                    p_ccb->fcrb.rej_sent       = TRUE;
+
+                    l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_REJ, 0);
+                }
+            }
+            fixed_queue_free(temp_q, NULL);
+
+            /* Now, if needed, send one RR for the whole held queue */
+            if ( (!p_ccb->fcrb.local_busy) && (!p_ccb->fcrb.rej_sent) && (!p_ccb->fcrb.srej_sent)
+                    &&  (p_ccb->fcrb.next_seq_expected != p_ccb->fcrb.last_ack_sent) ) {
+                l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_RR, 0);
+            } else {
+                L2CAP_TRACE_DEBUG ("l2c_fcr_proc_pdu() not sending RR CID: 0x%04x  local_busy:%d rej_sent:%d srej_sent:%d Expected_Seq:%u Last_Ack:%u",
+                                   p_ccb->local_cid, p_ccb->fcrb.local_busy, p_ccb->fcrb.rej_sent, p_ccb->fcrb.srej_sent, p_ccb->fcrb.next_seq_expected,
+                                   p_ccb->fcrb.last_ack_sent);
+            }
         }
     }
 
@@ -1112,8 +1122,16 @@ static void process_i_frame (tL2C_CCB *p_ccb, BT_HDR *p_buf, UINT16 ctrl_word, B
                                  p_ccb->local_cid, num_lost, tx_seq, p_fcrb->next_seq_expected, p_fcrb->rej_sent, p_fcrb->srej_sent);
 
             if (p_fcrb->srej_sent) {
-                /* If SREJ sent, save the frame for later processing as long as it is in sequence */
-                next_srej = (((BT_HDR *)fixed_queue_try_peek_last(p_fcrb->srej_rcv_hold_q))->layer_specific + 1) & L2CAP_FCR_SEQ_MODULO;
+                /* If SREJ sent, save the frame for later processing as long as it is in sequence.
+                 * try_peek_last is NULL when the hold queue is empty or was not allocated. */
+                BT_HDR *p_last = (BT_HDR *)fixed_queue_try_peek_last(p_fcrb->srej_rcv_hold_q);
+                if (p_last == NULL) {
+                    L2CAP_TRACE_WARNING("process_i_frame() CID: 0x%04x  SREJ sent but hold queue empty", p_ccb->local_cid);
+                    p_fcrb->srej_sent = FALSE;
+                    osi_free(p_buf);
+                    return;
+                }
+                next_srej = (p_last->layer_specific + 1) & L2CAP_FCR_SEQ_MODULO;
 
                 if ( (tx_seq == next_srej) && (fixed_queue_length(p_fcrb->srej_rcv_hold_q) < p_ccb->our_cfg.fcr.tx_win_sz) ) {
                     /* If user gave us a pool for held rx buffers, use that */
@@ -1138,7 +1156,9 @@ static void process_i_frame (tL2C_CCB *p_ccb, BT_HDR *p_buf, UINT16 ctrl_word, B
                                        num_lost, tx_seq, p_fcrb->next_seq_expected, p_fcrb->rej_sent);
 
                     p_buf->layer_specific = tx_seq;
-                    fixed_queue_enqueue(p_fcrb->srej_rcv_hold_q, p_buf, FIXED_QUEUE_MAX_TIMEOUT);
+                    if (!fixed_queue_enqueue(p_fcrb->srej_rcv_hold_q, p_buf, FIXED_QUEUE_MAX_TIMEOUT)) {
+                        osi_free(p_buf);
+                    }
                 } else {
                     L2CAP_TRACE_WARNING ("process_i_frame() CID: 0x%04x  frame dropped in Srej Sent next_srej:%u  hold_q.count:%u  win_sz:%u",
                                          p_ccb->local_cid, next_srej, fixed_queue_length(p_fcrb->srej_rcv_hold_q), p_ccb->our_cfg.fcr.tx_win_sz);
@@ -1167,9 +1187,12 @@ static void process_i_frame (tL2C_CCB *p_ccb, BT_HDR *p_buf, UINT16 ctrl_word, B
                                              p_ccb->local_cid, tx_seq, fixed_queue_length(p_fcrb->srej_rcv_hold_q));
                     }
                     p_buf->layer_specific = tx_seq;
-                    fixed_queue_enqueue(p_fcrb->srej_rcv_hold_q, p_buf, FIXED_QUEUE_MAX_TIMEOUT);
-                    p_fcrb->srej_sent = TRUE;
-                    l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_SREJ, 0);
+                    if (fixed_queue_enqueue(p_fcrb->srej_rcv_hold_q, p_buf, FIXED_QUEUE_MAX_TIMEOUT)) {
+                        p_fcrb->srej_sent = TRUE;
+                        l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_SREJ, 0);
+                    } else {
+                        osi_free(p_buf);
+                    }
                 }
                 btu_stop_quick_timer (&p_ccb->fcrb.ack_timer);
             }
@@ -1180,36 +1203,52 @@ static void process_i_frame (tL2C_CCB *p_ccb, BT_HDR *p_buf, UINT16 ctrl_word, B
     /* Seq number is the next expected. Clear possible reject exception in case it occurred */
     p_fcrb->rej_sent = p_fcrb->srej_sent = FALSE;
 
-    /* Adjust the next_seq, so that if the upper layer sends more data in the callback
-       context, the received frame is acked by an I-frame. */
+    /* PTS ERTM cases need this RR/RNR before SDP runs. Delayed acknowledgement
+     * is still allowed; normal ERTM channels keep it, including piggyback. */
     p_fcrb->next_seq_expected = (tx_seq + 1) & L2CAP_FCR_SEQ_MODULO;
 
-    /* If any SAR problem in eRTM mode, spec says disconnect. */
+#if BT_SDP_BQB_INCLUDED
+    if (l2cap_bqb_ertm_mode_included_get()) {
+        if (p_ccb->in_use && (p_ccb->chnl_state == CST_OPEN)) {
+            if (p_fcrb->local_busy) {
+                l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_RNR, 0);
+            } else {
+                l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_RR, 0);
+            }
+        }
+        if (!do_sar_reassembly (p_ccb, p_buf, ctrl_word)) {
+            L2CAP_TRACE_WARNING ("process_i_frame() CID: 0x%04x reassembly failed", p_ccb->local_cid);
+            l2cu_disconnect_chnl (p_ccb);
+            return;
+        }
+        return;
+    }
+#endif /* BT_SDP_BQB_INCLUDED */
+
+    /* Keep the old next_seq update before the upper-layer callback, so a
+     * locally sent I-frame can piggyback this acknowledgement. */
     if (!do_sar_reassembly (p_ccb, p_buf, ctrl_word)) {
-        L2CAP_TRACE_WARNING ("process_i_frame() CID: 0x%04x  reassembly failed", p_ccb->local_cid);
+        L2CAP_TRACE_WARNING ("process_i_frame() CID: 0x%04x reassembly failed", p_ccb->local_cid);
         l2cu_disconnect_chnl (p_ccb);
         return;
     }
 
-    /* RR optimization - if peer can still send us more, then start an ACK timer */
+    /* Hold an ACK only while the peer can still send. A locally flow-controlled
+     * receive side must immediately acknowledge with RNR, not after the ACK timer. */
     num_to_ack = (p_fcrb->next_seq_expected - p_fcrb->last_ack_sent) & L2CAP_FCR_SEQ_MODULO;
-
-    if ( (num_to_ack < p_ccb->fcrb.max_held_acks) && (!p_fcrb->local_busy) ) {
+    if ((num_to_ack < p_ccb->fcrb.max_held_acks) && !p_fcrb->local_busy) {
         delay_ack = TRUE;
     }
 
-    /* We should neve never ack frame if we are not in OPEN state */
     if ((num_to_ack != 0) && p_ccb->in_use && (p_ccb->chnl_state == CST_OPEN)) {
-        /* If no frames are awaiting transmission or are held, send an RR or RNR S-frame for ack */
         if (delay_ack) {
-            /* If it is the first I frame we did not ack, start ack timer */
             if (!p_ccb->fcrb.ack_timer.in_use) {
                 btu_start_quick_timer (&p_ccb->fcrb.ack_timer, BTU_TTYPE_L2CAP_FCR_ACK,
-                                       (L2CAP_FCR_ACK_TOUT * QUICK_TIMER_TICKS_PER_SEC) / 1000);
+                                       L2CAP_FCR_ACK_TOUT * QUICK_TIMER_TICKS_PER_SEC / 1000);
             }
-        } else if ((fixed_queue_is_empty(p_ccb->xmit_hold_q) ||
-                  l2c_fcr_is_flow_controlled(p_ccb))
-                 && fixed_queue_is_empty(p_ccb->fcrb.srej_rcv_hold_q)) {
+        } else if ((fixed_queue_is_empty(p_ccb->xmit_hold_q)
+                    || l2c_fcr_is_flow_controlled(p_ccb))
+                   && fixed_queue_is_empty(p_ccb->fcrb.srej_rcv_hold_q)) {
             if (p_fcrb->local_busy) {
                 l2c_fcr_send_S_frame (p_ccb, L2CAP_FCR_SUP_RNR, 0);
             } else {
@@ -2034,6 +2073,16 @@ UINT8 l2c_fcr_process_peer_cfg_req(tL2C_CCB *p_ccb, tL2CAP_CFG_INFO *p_cfg)
     UINT8  fcr_ok = L2CAP_PEER_CFG_OK;
 
     p_ccb->p_lcb->w4_info_rsp = FALSE;      /* Handles T61x SonyEricsson Bug in Info Request */
+
+#if BT_SDP_BQB_INCLUDED
+    /* A CCB allocated before the flag was set still has Basic as its
+     * preferred mode. L2CAP/ERM/BV-03-C then answers an ERTM request
+     * with result 0x0001 and an all-zero Basic option. */
+    if (l2cap_bqb_ertm_mode_included_get() && p_ccb->p_lcb->transport != BT_TRANSPORT_LE) {
+        p_ccb->ertm_info.preferred_mode = L2CAP_FCR_ERTM_MODE;
+        p_ccb->ertm_info.allowed_modes |= L2CAP_FCR_CHAN_OPT_ERTM;
+    }
+#endif /* BT_SDP_BQB_INCLUDED */
 
     L2CAP_TRACE_EVENT ("l2c_fcr_process_peer_cfg_req() CFG fcr_present:%d fcr.mode:%d CCB FCR mode:%d preferred: %u allowed:%u",
                        p_cfg->fcr_present, p_cfg->fcr.mode, p_ccb->our_cfg.fcr.mode, p_ccb->ertm_info.preferred_mode,

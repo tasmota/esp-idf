@@ -68,11 +68,25 @@ void rtc_clk_32k_disable_external(void)
 
 void rtc_clk_32k_bootstrap(uint32_t cycle)
 {
-    /* No special bootstrapping needed for ESP32-C5, 'cycle' argument is to keep the signature
-     * same as for the ESP32. Just enable the XTAL here.
-     */
-    (void)cycle;
-    rtc_clk_32k_enable(true);
+    clk_ll_xtal32k_enable(CLK_LL_XTAL32K_ENABLE_MODE_BOOTSTRAP);
+
+    if (cycle) {
+        /*
+         * 32K-N is the drive pin for the crystal oscillator circuit. Empirical testing shows that better results are achieved when the auxiliary signal is output from the 32K-P pin.
+         * By controlling the pull-up and pull-down resistors on the corresponding IO pins, a low-intensity 32.768kHz drive signal is output to assist the crystal oscillator in starting up.
+         * With the pull-down resistor always enabled, the drive amplitude is approximately 1/2*VCC, which is closer to the actual signal.
+        */
+        const uint32_t delay_us = (1000000 / SOC_CLK_XTAL32K_FREQ_APPROX / 2);
+        gpio_ll_pulldown_en(&GPIO, SOC_XTAL32K_P_GPIO_NUM);
+        while (cycle) {
+            esp_rom_delay_us(delay_us);
+            gpio_ll_pullup_en(&GPIO, SOC_XTAL32K_P_GPIO_NUM);
+            esp_rom_delay_us(delay_us);
+            gpio_ll_pullup_dis(&GPIO, SOC_XTAL32K_P_GPIO_NUM);
+            cycle--;
+        }
+        gpio_ll_pulldown_dis(&GPIO, SOC_XTAL32K_P_GPIO_NUM);
+    }
 }
 
 bool rtc_clk_32k_enabled(void)
@@ -197,10 +211,7 @@ static void rtc_clk_cpu_freq_to_rc_fast(void)
 static void rtc_clk_cpu_freq_to_pll_240_mhz(int cpu_freq_mhz)
 {
 #if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
-    pvt_auto_dbias_init();
-    charge_pump_init();
-    pvt_func_enable(true);
-    charge_pump_enable(true);
+    pvt_auto_dbias_enable(true, true);
 #endif
     // f_hp_root = 240MHz
     uint32_t cpu_divider = CLK_LL_PLL_240M_FREQ_MHZ / cpu_freq_mhz;
@@ -223,10 +234,7 @@ static void rtc_clk_cpu_freq_to_pll_240_mhz(int cpu_freq_mhz)
 static void rtc_clk_cpu_freq_to_pll_160_mhz(int cpu_freq_mhz)
 {
 #if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
-    pvt_auto_dbias_init();
-    charge_pump_init();
-    pvt_func_enable(true);
-    charge_pump_enable(true);
+    pvt_auto_dbias_enable(true, true);
 #endif
     // f_hp_root = 160MHz
     uint32_t cpu_divider = CLK_LL_PLL_160M_FREQ_MHZ / cpu_freq_mhz;
@@ -468,11 +476,10 @@ FORCE_IRAM_ATTR void rtc_clk_cpu_set_to_default_config(void)
 
 void rtc_clk_cpu_freq_set_xtal_for_sleep(void)
 {
-    rtc_clk_cpu_set_to_default_config();
 #if CONFIG_ESP_ENABLE_PVT && !defined(BOOTLOADER_BUILD)
-    charge_pump_enable(false);
-    pvt_func_enable(false);
+    pvt_auto_dbias_enable(false, false);
 #endif
+    rtc_clk_cpu_set_to_default_config();
 }
 
 #ifndef BOOTLOADER_BUILD

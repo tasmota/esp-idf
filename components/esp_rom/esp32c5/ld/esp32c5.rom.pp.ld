@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -121,10 +121,10 @@ pm_is_waked = 0x40000d74;
 pm_on_data_rx = 0x40000d80;
 pm_on_data_tx = 0x40000d84;
 pm_on_tbtt = 0x40000d88;
-pm_on_isr_sleep = 0x40000d8c;
+//pm_on_isr_sleep = 0x40000d8c;
 pm_on_isr = 0x40000d90;
-pm_on_isr_set_twt_target = 0x40000d94;
-pm_on_isr_twt_wake = 0x40000d98;
+//pm_on_isr_set_twt_target = 0x40000d94;
+//pm_on_isr_twt_wake = 0x40000d98;
 pm_on_tsf_timer = 0x40000d9c;
 pm_on_twt_force_tx = 0x40000da0;
 //pm_parse_beacon = 0x40000da4;
@@ -167,7 +167,7 @@ ppHEAMPDU2Normal = 0x40000e34;
 ppAssembleAMPDU = 0x40000e38;
 ppCalFrameTimes = 0x40000e3c;
 ppCalSubFrameLength = 0x40000e40;
-ppCalTxAMPDULength = 0x40000e44;
+//ppCalTxAMPDULength = 0x40000e44;
 ppCheckTxAMPDUlength = 0x40000e48;
 ppDequeueRxq_Locked = 0x40000e4c;
 ppDequeueTxQ = 0x40000e50;
@@ -182,7 +182,7 @@ ppProcessRxPktHdr = 0x40000e6c;
 ppRecordBarRRC = 0x40000e74;
 ppRecycleAmpdu = 0x40000e78;
 ppRecycleRxPkt = 0x40000e7c;
-ppResortTxAMPDU = 0x40000e80;
+//ppResortTxAMPDU = 0x40000e80;
 ppResumeTxAMPDU = 0x40000e84;
 /*ppRxFragmentProc = 0x40000e88;*/
 /* ppRxPkt = 0x40000e8c; */
@@ -261,7 +261,7 @@ wDevCheckBlockError = 0x40000fac;
 wDev_AppendRxBlocks = 0x40000fb0;
 wDev_DiscardFrame = 0x40000fb4;
 wDev_GetNoiseFloor = 0x40000fb8;
-wDev_IndicateAmpdu = 0x40000fbc;
+//wDev_IndicateAmpdu = 0x40000fbc;
 //wDev_IndicateFrame = 0x40000fc0;
 wdev_mac_reg_load = 0x40000fc4;
 wdev_mac_reg_store = 0x40000fc8;
@@ -326,7 +326,7 @@ ht_get_min_subframe_len = 0x400010b8;
 vht_get_min_subframe_len = 0x400010bc;
 he_get_min_subframe_len = 0x400010c0;
 he_get_min_subframe_len_dcm = 0x400010c4;
-is_ndpa_to_dut = 0x400010c8;
+//is_ndpa_to_dut = 0x400010c8;
 is_use_muedca = 0x400010cc;
 pwr_hal_clear_mac_modem_state_wakeup_protect_signal = 0x400010d0;
 get_estimated_batime = 0x400010d4;

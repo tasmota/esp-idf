@@ -890,6 +890,7 @@ static inline void spi_ll_set_dummy(spi_dev_t *hw, int dummy_n)
 {
     hw->user.usr_dummy = dummy_n ? 1 : 0;
     if (dummy_n > 0) {
+        hw->user.usr_dummy_idle = 0;
         HAL_FORCE_MODIFY_U32_REG_FIELD(hw->user1, usr_dummy_cyclelen, dummy_n - 1);
     }
 }
@@ -943,7 +944,9 @@ static inline void spi_ll_slave_set_seg_en(spi_dev_t *hw, bool en)
  */
 static inline void spi_ll_set_miso_bitlen(spi_dev_t *hw, size_t bitlen)
 {
-    hw->miso_dlen.usr_miso_dbitlen = bitlen - 1;
+    if (bitlen) {
+        hw->miso_dlen.usr_miso_dbitlen = bitlen - 1;
+    }
 }
 
 /**
@@ -954,7 +957,9 @@ static inline void spi_ll_set_miso_bitlen(spi_dev_t *hw, size_t bitlen)
  */
 static inline void spi_ll_set_mosi_bitlen(spi_dev_t *hw, size_t bitlen)
 {
-    hw->mosi_dlen.usr_mosi_dbitlen = bitlen - 1;
+    if (bitlen) {
+        hw->mosi_dlen.usr_mosi_dbitlen = bitlen - 1;
+    }
 }
 
 /**
@@ -1806,11 +1811,13 @@ static inline void spi_sct_ll_set_addr(spi_ll_sct_full_reg_t *sct_cfg, uint64_t 
  *
  * @param sct_cfg Beginning address of the SCT conf buffer.
  * @param dummy_n Dummy cycles used. 0 to disable the dummy phase.
+ * @param silent_dummy True to keep dummy clock idle, otherwise to output clock.
  */
-static inline void spi_sct_ll_set_dummy(spi_ll_sct_full_reg_t *sct_cfg, int dummy_n)
+static inline void spi_sct_ll_set_dummy(spi_ll_sct_full_reg_t *sct_cfg, int dummy_n, bool silent_dummy)
 {
     sct_cfg->user.usr_dummy = !!dummy_n;
     if (dummy_n > 0) {
+        sct_cfg->user.usr_dummy_idle = silent_dummy;
         HAL_FORCE_MODIFY_U32_REG_FIELD(sct_cfg->user1, usr_dummy_cyclelen, dummy_n - 1);
     }
 }

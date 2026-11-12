@@ -81,6 +81,10 @@ gas_build_req(u8 action, u8 dialog_token, size_t size)
 {
     struct wpabuf *buf;
 
+    /* IEEE 802.11 reserves Dialog Token value 0 for GAS Public Action frames. */
+    if (!dialog_token)
+        return NULL;
+
     buf = wpabuf_alloc(100 + size);
     if (buf == NULL)
         return NULL;
@@ -1461,7 +1465,10 @@ struct wpabuf * dpp_build_conf_req(struct dpp_authentication *auth,
 		return NULL;
 	}
 
-	dialog_token = os_random() & 0xff;
+	/* IEEE 802.11 requires the GAS Dialog Token to be nonzero; 0 is reserved. */
+	do {
+		dialog_token = os_random() & 0xff;
+	} while (!dialog_token);
 	auth->gas_dialog_token = dialog_token;
 
 	buf = gas_build_initial_req(dialog_token, 10 + 2 + wpabuf_len(conf_req));
@@ -4043,7 +4050,7 @@ static struct crypto_ec_key * dpp_parse_jwk(struct json_token *jwk,
 	const struct dpp_curve_params *curve;
 	struct wpabuf *x = NULL, *y = NULL;
 	unsigned char *a = NULL;
-	struct crypto_ec_group *group;
+	struct crypto_ec_group *group = NULL;
 	struct crypto_ec_key *pkey = NULL;
 	size_t len;
 
@@ -4106,14 +4113,15 @@ static struct crypto_ec_key * dpp_parse_jwk(struct json_token *jwk,
 
 	len = wpabuf_len(x) + wpabuf_len(y);
 	a = os_zalloc(len);
+	if (!a)
+		goto fail;
 	os_memcpy(a, wpabuf_head(x), wpabuf_len(x));
 	os_memcpy(a + wpabuf_len(x), wpabuf_head(y), wpabuf_len(y));
 	pkey = crypto_ec_key_set_pub(group, a, len);
-
-	crypto_ec_deinit((struct crypto_ec *)group);
 	*key_curve = curve;
 
 fail:
+	crypto_ec_deinit((struct crypto_ec *)group);
 	wpabuf_free(x);
 	wpabuf_free(y);
 	os_free(a);

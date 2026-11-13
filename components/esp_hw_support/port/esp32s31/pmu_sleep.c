@@ -18,6 +18,7 @@
 #include "esp_private/esp_clk_tree_common.h"
 #include "pmu_param.h"
 #include "hal/clk_gate_ll.h"
+#include "hal/modem_clock_ll.h"
 #include "hal/clk_tree_hal.h"
 #include "hal/clk_tree_ll.h"
 #include "hal/ldo_ll.h"
@@ -346,6 +347,11 @@ static void pmu_sleep_param_init(pmu_context_t *ctx, const pmu_sleep_param_confi
     pmu_ll_set_pll_stable_wait_cycle(ctx->hal->dev, param->hp_sys.pll_stable_wait_cycle);
 }
 
+bool pmu_sleep_pll_already_enabled(void)
+{
+    return (pmu_ll_get_sysclk_sleep_select_state(PMU_instance()->hal->dev) != 0);
+}
+
 void pmu_sleep_init(const pmu_sleep_config_t *config, bool dslp)
 {
     assert(PMU_instance());
@@ -450,8 +456,8 @@ bool pmu_sleep_finish(bool dslp)
         esp_psram_impl_exit_halfsleep_mode();
 #endif
 #endif
-        const bool modem_pll_clk_enabled = clk_gate_ll_modem_pll_clk_is_enabled();
-        assert(modem_pll_clk_enabled == clk_gate_ll_modem_clk_source_is_pll());
+        const bool modem_pll_clk_enabled = modem_clock_ll_pll_clk_is_enabled();
+        assert(modem_pll_clk_enabled == modem_clock_ll_source_is_pll());
         if (!modem_pll_clk_enabled) { // wake up from non-modem clock retention
             /* Workaround for issue WIFI-7620
              * The BA bitmap and start sequence number are updated in the read-only
@@ -460,8 +466,8 @@ bool pmu_sleep_finish(bool dslp)
             if (!ref_160_enabled) {
                 _clk_gate_ll_ref_160m_clk_en(true);
             }
-            _clk_gate_ll_modem_pll_source_cg_en(true);
-            _clk_gate_ll_modem_pll_source_cg_en(false);
+            _modem_clock_ll_enable_pll_clock_source(true);
+            _modem_clock_ll_enable_pll_clock_source(false);
             if (!ref_160_enabled) {
                 _clk_gate_ll_ref_160m_clk_en(false);
             }

@@ -1,16 +1,9 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <errno.h>
-
-/*
- * Picolibc exposes errno through __errno(), but this file defines the backing
- * thread-local variable itself. Remove the public accessor macro so the
- * variable declaration is not expanded into a function expression.
- */
-#undef errno
 
 /*
  * Picolibc does not initialize 'errno' and places it in the TBSS section.
@@ -19,11 +12,10 @@
  * 'errno' is defined in the TDATA section. The linker script ensures that
  * it is positioned at the beginning of the TDATA segment.
  */
+#undef errno
 __thread int errno __attribute__((section(".tdata.errno"))) = 0;
 
-#if CONFIG_LIBC_PICOLIBC_NEWLIB_COMPATIBILITY
 int *__errno(void)
 {
     return &errno;
 }
-#endif

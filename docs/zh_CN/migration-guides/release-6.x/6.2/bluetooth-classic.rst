@@ -99,7 +99,7 @@ Bluedroid
                * - ``esp_a2d_media_ctrl()``
                  - ``esp_a2d_media_ctrl_by_handle()``
 
-        - 与当前 A2DP 连接不匹配的句柄不会生效。媒体控制会以 ``ESP_A2D_MEDIA_CTRL_ACK_FAILURE`` 应答。断开请求会被忽略。
+        - 与已连接的 A2DP 对端不匹配的句柄不会生效。媒体控制会以 ``ESP_A2D_MEDIA_CTRL_ACK_FAILURE`` 应答。断开请求会被忽略。
 
         - ``esp_a2d_register_callback()`` 在 ``callback`` 为 NULL 时返回 ``ESP_ERR_INVALID_ARG``。原先返回 ``ESP_FAIL``。
 
@@ -111,7 +111,7 @@ Bluedroid
 
     - :component_file:`/bt/host/bluedroid/api/include/api/esp_avrc_api.h`
 
-        - 应用侧 AVRCP Controller 命令只能使用事务标签 ``0`` 到 ``ESP_USER_AVRC_TRANS_LABEL_MAX`` （13）。``14`` 和 ``15`` 保留给协议栈（A2DP Sink 切换活动设备时的 Play/Pause）。向发送类 API 传入 14 或 15 会返回 ``ESP_ERR_INVALID_ARG``。``ESP_AVRC_TRANS_LABEL_MAX`` 仍为 15（协议最大值）。
+        - ``*_by_handle`` AVRCP Controller 发送接口的事务标签为 ``0`` 到 ``ESP_USER_AVRC_TRANS_LABEL_MAX`` （13）。``14`` 和 ``15`` 保留给协议栈（A2DP Sink 切换活动设备时的 Play/Pause）。向这些接口传入 14 或 15 会返回 ``ESP_ERR_INVALID_ARG``。已废弃的发送接口仍接受 ``0`` 到 ``ESP_AVRC_TRANS_LABEL_MAX`` （15）。
 
     - :component_file:`/bt/host/bluedroid/api/include/api/esp_spp_api.h`
 
@@ -201,6 +201,14 @@ Bluedroid
         - ``esp_bt_dev_coex_status_config()`` 在 ``type`` 小于 ``ESP_BT_DEV_COEX_TYPE_BLE`` 或大于等于 ``ESP_BT_DEV_COEX_TYPE_MAX`` 时返回 ``ESP_ERR_INVALID_ARG``。这些取值原先会被下发。
 
         - ``esp_bt_config_file_path_get()`` 和 ``esp_bt_config_file_path_update()`` 在 ``file_path`` 为 NULL 时返回 ``ESP_ERR_INVALID_ARG``。原先返回 ``ESP_FAIL``。路径长度不小于 ``NVS_NS_NAME_MAX_SIZE`` 时，``esp_bt_config_file_path_update()`` 仍返回 ``ESP_FAIL``。
+
+    - :component_file:`/bt/host/bluedroid/api/include/api/esp_pan_api.h`
+
+        - ``ESP_PAN_OPENING_EVT`` 以及 ``esp_pan_cb_param_t`` 的 ``opening`` 成员已移除。``case ESP_PAN_OPENING_EVT:`` 不再能通过编译，请删除该分支。原先从 ``param->opening`` 读取的对端地址和连接句柄，改从 ``ESP_PAN_OPEN_EVT`` 的 ``param->open.remote_bda`` 和 ``param->open.handle`` 获取。
+
+        - 在 ESP-IDF v6.2 中，``ESP_PAN_OPENING_EVT`` 的值为 3，``ESP_PAN_OPEN_EVT`` 为 4。移除后 ``ESP_PAN_OPEN_EVT`` 变为 3，其后每个枚举值都减 1。按数值 3 做 ``switch`` 的代码现在会进入 ``ESP_PAN_OPEN_EVT``。请改用枚举名，不要依赖数值。``ESP_PAN_CLOSE_EVT`` 及其后的事件同样前移。
+
+        - 不再单独上报“连接正在建立”。连接未能建立时，只通过 ``status`` 为 ``ESP_PAN_FAILURE`` 的 ``ESP_PAN_OPEN_EVT`` 上报。连接建立完成时，仍通过 ``status`` 为 ``ESP_PAN_SUCCESS`` 的 ``ESP_PAN_OPEN_EVT`` 上报。
 
     函数签名未改。原先合法的参数在请求成功下发时仍返回 ``ESP_OK``。只判断返回值是否等于 ``ESP_OK`` 的代码无需修改。把空指针失败当成 ``ESP_FAIL`` 来比较的代码需要同时接受 ``ESP_ERR_INVALID_ARG``。
 

@@ -1,6 +1,6 @@
 {
   "name": "framework-espidf",
-  "version": "3.60100",
+  "version": "3.60101",
   "description": "Espressif IoT Development Framework for Tasmota",
   "keywords": [
     "framework",

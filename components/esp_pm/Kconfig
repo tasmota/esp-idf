@@ -15,6 +15,9 @@ menu "Power Management"
         bool "Support for power management"
         # SMP FreeRTOS currently does not support power management IDF-4997
         depends on (!FREERTOS_SMP && SOC_PM_SUPPORTED) || __DOXYGEN__
+        # Without FREERTOS_PORT_THREAD_SAFE_CLAIM, dual-core auto light sleep must use a safe stall that often
+        # rejects when the peer is in an ISR/critical section, which significantly increases power consumption..
+        select FREERTOS_PORT_THREAD_SAFE_CLAIM if !FREERTOS_UNICORE
         default n
         help
             If enabled, application is compiled with support for power management.
@@ -22,6 +25,10 @@ menu "Power Management"
             longer time to enter idle state), and it also reduces accuracy of
             RTOS ticks and timers used for timekeeping.
             Enable this option if application uses power management APIs.
+
+            On dual-core targets this also enables FREERTOS_PORT_THREAD_SAFE_CLAIM.
+            Without it, automatic light sleep frequently fails to stall the other CPU and
+            is rejected, which can keep idle power much higher than expected.
 
     config PM_DFS_INIT_AUTO
         bool "Enable dynamic frequency scaling (DFS) at startup"
@@ -84,10 +91,17 @@ menu "Power Management"
         help
             This feature is intended to disable all GPIO pins at automantic sleep to get a lower power mode.
             If enabled, chips will disable all GPIO pins at automantic sleep to reduce about 200~300 uA current.
-            If you want to specifically use some pins normally as chip wakes when chip sleeps,
-            you can call 'gpio_sleep_sel_dis' to disable this feature on those pins.
-            You can also keep this feature on and call 'gpio_sleep_set_direction' and 'gpio_sleep_set_pull_mode'
-            to have a different GPIO configuration at sleep.
+
+            If you want to specifically use some pins normally as chip wakes when chip sleeps, you can
+            call 'gpio_sleep_sel_dis' to disable this feature on those pins.
+
+            Please note, that disabling a GPIO as a wake-up source via `gpio_wakeup_disable` reverts
+            the effect of `gpio_sleep_sel_dis` for that pin.
+            When you disable a GPIO as wake-up source, but want to keep the GPIO powered or some custom
+            GPIO sleep state configurations during sleep, you must call `gpio_sleep_sel_dis` again.
+
+            Alternatively, You can also keep this feature on and call 'gpio_sleep_set_direction' and
+            'gpio_sleep_set_pull_mode' to have a different GPIO configuration at sleep.
 
     config PM_SLP_DEFAULT_PARAMS_OPT
         bool

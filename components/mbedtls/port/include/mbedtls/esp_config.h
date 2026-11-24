@@ -59,6 +59,11 @@
  */
 #define MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
 
+/* In ECB mode, reject an input/output overlap that cannot be honoured, rather than returning a wrong result. */
+#ifdef MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
+#define MBEDTLS_PSA_CHECK_ECB_BUFFER_OVERLAP
+#endif // MBEDTLS_PSA_ASSUME_EXCLUSIVE_BUFFERS
+
 /**
  * \name SECTION: System support
  *
@@ -204,6 +209,7 @@
     #if SOC_SHA_SUPPORT_SHA256
         #define MBEDTLS_PSA_ACCEL_ALG_SHA_256
         #undef MBEDTLS_PSA_BUILTIN_ALG_SHA_256
+        #undef MBEDTLS_SHA256_C
     #endif // SOC_SHA_SUPPORT_SHA256
     #if SOC_SHA_SUPPORT_SHA512
         #define MBEDTLS_PSA_ACCEL_ALG_SHA_512
@@ -2641,7 +2647,6 @@
  * This module is required for the SSL/TLS 1.2 PRF function.
  */
 #ifdef CONFIG_MBEDTLS_SHA256_C
-#define MBEDTLS_SHA256_C
 #define PSA_WANT_ALG_SHA_256 1
 #define PSA_WANT_ALG_SHA_224 1
 #else

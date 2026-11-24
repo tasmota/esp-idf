@@ -710,6 +710,12 @@ static esp_err_t s_i2c_transaction_start(i2c_master_dev_handle_t i2c_dev, int xf
 
     i2c_ll_txfifo_rst(hal->dev);
     i2c_ll_rxfifo_rst(hal->dev);
+    // contains_read is only set by s_i2c_read_command(), don't let it leak from a previous transaction
+    i2c_master->contains_read = false;
+    // Clear raw interrupt bits left over from the previous transaction (e.g. a TRANS_COMPLETE raised
+    // after an address NACK when the waiter had already returned), otherwise they would be taken as
+    // events of this transaction as soon as the interrupts are enabled.
+    i2c_ll_clear_intr_mask(hal->dev, I2C_LL_INTR_MASK);
     i2c_ll_enable_intr_mask(hal->dev, I2C_LL_MASTER_EVENT_INTR);
     portEXIT_CRITICAL(&i2c_master->base->spinlock);
 
@@ -805,13 +811,14 @@ static void i2c_master_isr_handler_default(void *arg)
         i2c_master->trans_done = true;
         i2c_master->event = I2C_EVENT_DONE;
     }
-    if (i2c_master->event != I2C_EVENT_ALIVE) {
-        xQueueSendFromISR(i2c_master->event_queue, (void *)&i2c_master->event, &HPTaskAwoken);
-    }
     if (i2c_master->contains_read == true) {
         if (int_mask & I2C_LL_INTR_MST_COMPLETE || int_mask & I2C_LL_INTR_END_DETECT) {
             i2c_isr_receive_handler(i2c_master);
         }
+    }
+    /* Wait for the ISR to finish copying RX FIFO before notifying the waiter so the caller's buffer is complete */
+    if (i2c_master->event != I2C_EVENT_ALIVE) {
+        xQueueSendFromISR(i2c_master->event_queue, (void *)&i2c_master->event, &HPTaskAwoken);
     }
 
     if (i2c_master->async_trans) {
@@ -879,7 +886,7 @@ static esp_err_t i2c_param_master_config(i2c_bus_handle_t handle, const i2c_mast
 {
     i2c_hal_context_t *hal = &handle->hal;
 
-    ESP_RETURN_ON_ERROR(i2c_common_set_pins(handle), TAG, "i2c master set pin failed");
+    ESP_RETURN_ON_ERROR(i2c_common_init_pins(handle), TAG, "i2c master init pin failed");
     soc_module_clk_t clk_source = i2c_conf->clk_source;
     ESP_RETURN_ON_ERROR(i2c_select_periph_clock(handle, clk_source), TAG, "i2c select clock failed");
     handle->clk_src = i2c_conf->clk_source;
@@ -1401,6 +1408,10 @@ esp_err_t i2c_master_probe(i2c_master_bus_handle_t bus_handle, uint16_t address,
     i2c_ll_txfifo_rst(hal->dev);
     i2c_ll_rxfifo_rst(hal->dev);
     i2c_ll_master_set_fractional_divider(hal->dev, 0, 0);
+    // Same as s_i2c_transaction_start(): probe has no read command, and stale raw interrupt bits
+    // from the previous transaction must not be taken as the result of this probe.
+    bus_handle->contains_read = false;
+    i2c_ll_clear_intr_mask(hal->dev, I2C_LL_INTR_MASK);
     i2c_ll_enable_intr_mask(hal->dev, I2C_LL_MASTER_EVENT_INTR);
     // 20ms is sufficient for stretch, since there is no device config on probe operation.
     i2c_hal_master_set_scl_timeout_val(hal, 20 * 1000, bus_handle->base->clk_src_freq_hz);
@@ -1474,6 +1485,8 @@ esp_err_t i2c_master_execute_defined_operations(i2c_master_dev_handle_t i2c_dev,
 #if CONFIG_I2C_ISR_IRAM_SAFE
             ESP_RETURN_ON_FALSE(esp_ptr_internal(i2c_operation[i].read.data), ESP_ERR_INVALID_ARG, TAG, "read buffer not in internal RAM");
 #endif
+            ESP_RETURN_ON_FALSE(i2c_operation[i].read.ack_value != I2C_NACK_VAL || i2c_operation[i].read.total_bytes == 1,
+                                ESP_ERR_INVALID_ARG, TAG, "NACK read must contain exactly one byte");
             i2c_ops[i].hw_cmd.op_code = I2C_LL_CMD_READ;
             i2c_ops[i].hw_cmd.ack_val = i2c_operation[i].read.ack_value;
             i2c_ops[i].data = i2c_operation[i].read.data;

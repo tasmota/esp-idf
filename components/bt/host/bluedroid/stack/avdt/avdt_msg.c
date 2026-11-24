@@ -738,7 +738,7 @@ static UINT8 avdt_msg_prs_cfg(tAVDT_CFG *p_cfg, UINT8 *p, UINT16 len, UINT8 *p_e
                 tmp = AVDT_CODEC_SIZE - 1;
             }
             p_cfg->num_codec++;
-            p_cfg->codec_info[0] = elem_len;
+            p_cfg->codec_info[0] = tmp;
             memcpy(&p_cfg->codec_info[1], p, tmp);
             p += elem_len;
             break;
@@ -1341,6 +1341,11 @@ BT_HDR *avdt_msg_asmbl(tAVDT_CCB *p_ccb, BT_HDR *p_buf)
             return NULL;
         }
         p_ccb->p_rx_msg = (BT_HDR *)osi_malloc(BT_DEFAULT_BUFFER_SIZE);
+        if (p_ccb->p_rx_msg == NULL) {
+            AVDT_TRACE_ERROR("Cannot alloc buffer for reassembly !!");
+            osi_free(p_buf);
+            return NULL;
+        }
         memcpy(p_ccb->p_rx_msg, p_buf,
                sizeof(BT_HDR) + p_buf->offset + p_buf->len);
 

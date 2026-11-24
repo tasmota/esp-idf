@@ -166,28 +166,47 @@ def _run_objdump(objdump, library):
     return output
 
 
+def _file_type(mode: str):  # type: ignore
+    """Open files for argparse arguments (argparse's own file factory is deprecated in Python 3.15)."""
+
+    def _open(path: str):  # type: ignore
+        if path == '-':
+            stream = sys.stdin if 'r' in mode else sys.stdout
+            return stream.buffer if 'b' in mode else stream
+        try:
+            return open(path, mode, encoding=None if 'b' in mode else 'utf-8')
+        except OSError as e:
+            raise argparse.ArgumentTypeError(f"can't open '{path}': {e}")
+
+    return _open
+
+
 def main():
     argparser = argparse.ArgumentParser(description='ESP-IDF linker script generator')
 
-    argparser.add_argument('--input', '-i', help='Linker template file', type=argparse.FileType('r'))
+    argparser.add_argument('--input', '-i', help='Linker template file', type=_file_type('r'))
 
     fragments_group = argparser.add_mutually_exclusive_group()
 
-    fragments_group.add_argument(
-        '--fragments', '-f', type=argparse.FileType('r'), help='Input fragment files', nargs='+'
-    )
+    fragments_group.add_argument('--fragments', '-f', type=_file_type('r'), help='Input fragment files', nargs='+')
 
     fragments_group.add_argument(
         '--fragments-list', help='Input fragment files as a semicolon-separated list', type=str
     )
 
+    fragments_group.add_argument(
+        '--fragments-list-file',
+        type=_file_type('r'),
+        help='File containing fragment file paths, one per line',
+    )
+
     argparser.add_argument(
-        '--libraries-file', type=argparse.FileType('r'), help='File that contains the list of libraries in the build'
+        '--libraries-file', type=_file_type('r'), help='File that contains the list of libraries in the build'
     )
 
     argparser.add_argument(
         '--mutable-libraries-file',
-        type=argparse.FileType('r'),
+        type=_file_type('r'),
         help='File that contains the list of mutable libraries in the build',
     )
 
@@ -201,9 +220,7 @@ def main():
         '--check-mapping', help='Perform a check if a mapping (archive, obj, symbol) exists', action='store_true'
     )
 
-    argparser.add_argument(
-        '--check-mapping-exceptions', help='Mappings exempted from check', type=argparse.FileType('r')
-    )
+    argparser.add_argument('--check-mapping-exceptions', help='Mappings exempted from check', type=_file_type('r'))
 
     argparser.add_argument(
         '--env',
@@ -216,7 +233,7 @@ def main():
 
     argparser.add_argument(
         '--env-file',
-        type=argparse.FileType('r'),
+        type=_file_type('r'),
         help='Optional file to load environment variables from. Contents '
         'should be a JSON object where each key/value pair is a variable.',
     )
@@ -238,6 +255,8 @@ def main():
     fragment_files = []
     if args.fragments_list:
         fragment_files = args.fragments_list.split(';')
+    elif args.fragments_list_file:
+        fragment_files = [line.strip() for line in args.fragments_list_file if line.strip()]
     elif args.fragments:
         fragment_files = args.fragments
 

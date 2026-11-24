@@ -163,6 +163,7 @@
 #define SOC_CPU_HAS_FLEXIBLE_INTC       1
 #define SOC_INT_PLIC_SUPPORTED          1       //riscv platform-level interrupt controller
 #define SOC_CPU_HAS_CSR_PC              1
+#define SOC_CPU_CCOUNT_STOPS_IN_WFI     1       // cycle counter does not advance while the CPU is in WFI
 
 #define SOC_CPU_BREAKPOINTS_NUM             4
 #define SOC_CPU_WATCHPOINTS_NUM             4
@@ -419,6 +420,7 @@
 #define SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE   (1)
 #define SOC_ECDSA_SUPPORT_HW_DETERMINISTIC_LOOP (1)
 #define SOC_ECDSA_P192_CURVE_DEFAULT_DISABLED   (1)
+// #define SOC_ECDSA_USES_MPI 1 // TODO: [ESP32H21] IDF-16142
 
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-H21 has 2 UARTs

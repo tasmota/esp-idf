@@ -30,6 +30,9 @@
 #include "l2c_int.h"
 #include "stack/dyn_mem.h"
 #include "stack/btu.h"
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+#include "stack/c2h_credit.h"
+#endif
 #include "btm_int.h"
 
 #if SDP_INCLUDED == TRUE
@@ -171,7 +174,7 @@ bool BTU_StartUp(void)
     btu_cb.trace_level = HCI_INITIAL_TRACE_LEVEL;
 
     btu_general_alarm_hash_map = hash_map_new(BTU_GENERAL_ALARM_HASH_MAP_SIZE,
-                                 hash_function_pointer, NULL, (data_free_fn)osi_alarm_free, NULL);
+                                 hash_function_pointer, NULL, osi_alarm_free_cb, NULL);
     if (btu_general_alarm_hash_map == NULL) {
         goto error_exit;
     }
@@ -179,7 +182,7 @@ bool BTU_StartUp(void)
     osi_mutex_new(&btu_general_alarm_lock);
 
     btu_oneshot_alarm_hash_map = hash_map_new(BTU_ONESHOT_ALARM_HASH_MAP_SIZE,
-                                 hash_function_pointer, NULL, (data_free_fn)osi_alarm_free, NULL);
+                                 hash_function_pointer, NULL, osi_alarm_free_cb, NULL);
     if (btu_oneshot_alarm_hash_map == NULL) {
         goto error_exit;
     }
@@ -187,7 +190,7 @@ bool BTU_StartUp(void)
     osi_mutex_new(&btu_oneshot_alarm_lock);
 
     btu_l2cap_alarm_hash_map = hash_map_new(BTU_L2CAP_ALARM_HASH_MAP_SIZE,
-                                            hash_function_pointer, NULL, (data_free_fn)osi_alarm_free, NULL);
+                                            hash_function_pointer, NULL, osi_alarm_free_cb, NULL);
     if (btu_l2cap_alarm_hash_map == NULL) {
         goto error_exit;
     }
@@ -209,6 +212,12 @@ bool BTU_StartUp(void)
     if (!btu_acl_queue_init()) {
         goto error_exit;
     }
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    if (!btu_c2h_credit_init()) {
+        goto error_exit;
+    }
+#endif
 
     if (btu_task_post(SIG_BTU_START_UP, NULL, OSI_THREAD_MAX_TIMEOUT) == false) {
         goto error_exit;
@@ -233,16 +242,24 @@ error_exit:;
 ******************************************************************************/
 void BTU_ShutDown(void)
 {
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    btu_c2h_credit_set_enabled(FALSE);
+    /* Host only; HCI credit is closed in hci_shut_down while HCI thread lives. */
+    btu_c2h_credit_close();
+#endif
     btu_acl_queue_close();
-
-    btu_task_shut_down();
 
     if (btu_thread) {
         osi_thread_free(btu_thread);
         btu_thread = NULL;
     }
+    btu_task_shut_down();
 
     btu_acl_queue_deinit();
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    btu_c2h_credit_deinit();
+#endif
+
 #if BTU_DYNAMIC_MEMORY
     FREE_AND_RESET(btu_cb_ptr);
 #endif

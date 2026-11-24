@@ -1677,6 +1677,10 @@ void btm_acl_role_changed (UINT8 hci_status, BD_ADDR bd_addr, UINT8 new_role)
         if (new_role == BTM_ROLE_MASTER) {
             BTM_SetLinkSuperTout (p->remote_addr, p->link_super_tout);
         }
+        /* Max slots go back to 1 after a role switch: re-apply the packet types,
+         * or the link stays on 1-slot packets */
+        btm_set_packet_types (p, p->pkt_types_mask ? p->pkt_types_mask
+                                                   : btm_cb.btm_acl_pkt_types_supported);
     } else {
         /* so the BTM_BL_ROLE_CHG_EVT uses the old role */
         new_role = p->link_role;
@@ -2879,6 +2883,41 @@ void btm_acl_free(void)
 #endif // #if (CLASSIC_BT_INCLUDED == TRUE)
 }
 
+#if (CLASSIC_BT_INCLUDED == TRUE)
+/*******************************************************************************
+**
+** Function         btm_acl_drop_failed_page
+**
+** Description      Drop a failed BR/EDR page (Connection Complete or Create
+**                  Connection status) to a device whose link is still up, as
+**                  when both sides page each other at once, and end the page.
+**
+** Returns          TRUE if the page was dropped, so the failure must not go
+**                  further
+**
+*******************************************************************************/
+BOOLEAN btm_acl_drop_failed_page(BD_ADDR bda, UINT8 status)
+{
+    tL2C_LCB *p_lcb;
+
+    if (status == HCI_SUCCESS) {
+        return FALSE;
+    }
+
+    /* A link being disconnected is up until its Disconnection Complete */
+    p_lcb = l2cu_find_lcb_by_bd_addr(bda, BT_TRANSPORT_BR_EDR);
+    if (p_lcb == NULL ||
+            (p_lcb->link_state != LST_CONNECTED && p_lcb->link_state != LST_DISCONNECTING)) {
+        return FALSE;
+    }
+
+    BTM_TRACE_WARNING("dropping failed page to " MACSTR " (0x%x), its link is up\n",
+                      MAC2STR(bda), status);
+    btm_acl_resubmit_page();
+    return TRUE;
+}
+#endif // #if (CLASSIC_BT_INCLUDED == TRUE)
+
 /*******************************************************************************
 **
 ** Function         btm_acl_connected
@@ -2893,6 +2932,11 @@ void btm_acl_connected(BD_ADDR bda, UINT16 handle, UINT8 link_type, UINT8 enc_mo
 #endif
 
     if (link_type == HCI_LINK_TYPE_ACL) {
+#if (CLASSIC_BT_INCLUDED == TRUE)
+        if (btm_acl_drop_failed_page(bda, status)) {
+            return;
+        }
+#endif // #if (CLASSIC_BT_INCLUDED == TRUE)
 #if SMP_INCLUDED == TRUE
         btm_sec_connected (bda, handle, status, enc_mode);
 #endif  /* SMP_INCLUDED == TRUE */

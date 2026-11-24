@@ -30,9 +30,13 @@
 #include "stack/btu.h"
 #include "osi/hash_map.h"
 #include "osi/pkt_queue.h"
+#include "osi/fixed_pkt_queue.h"
 #include "stack/hcimsgs.h"
 #include "l2c_int.h"
 #include "osi/osi.h"
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+#include "stack/c2h_credit.h"
+#endif
 #if (defined(SDP_INCLUDED) && SDP_INCLUDED == TRUE)
 #include "sdpint.h"
 #endif
@@ -137,15 +141,19 @@ static void btu_acl_pkt_linked_free(pkt_linked_item_t *linked_pkt)
         BT_HDR *packet = NULL;
         memcpy(&packet, linked_pkt->data, sizeof(packet));
         if (packet != NULL) {
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+            /* Need the 2-byte HCI handle; full 4-byte preamble is not required to return credit. */
+            if (packet->len >= 2) {
+                uint8_t *stream = packet->data + packet->offset;
+                uint16_t handle = (uint16_t)stream[0] | (((uint16_t)stream[1]) << 8);
+                btu_c2h_credit_post(handle & HCI_DATA_HANDLE_MASK, 1);
+            }
+#endif
             osi_free(packet);
         }
         osi_free(linked_pkt);
     } while (0);
 }
-
-#if (defined(BTA_INCLUDED) && BTA_INCLUDED == TRUE)
-static void btu_bta_alarm_process(void *param);
-#endif
 
 static void btu_hci_msg_process(void *param)
 {
@@ -161,7 +169,17 @@ static void btu_hci_msg_process(void *param)
       }
     case BT_EVT_TO_BTU_HCI_ACL:
         /* All Acl Data goes to L2CAP */
-        l2c_rcv_acl_data (p_msg);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        {
+            UINT16 credit_handle;
+            if (l2c_rcv_acl_data(p_msg, &credit_handle)) {
+                btu_c2h_credit_add(credit_handle, 1);
+            }
+            btu_c2h_credit_flush();
+        }
+#else
+        l2c_rcv_acl_data(p_msg, NULL);
+#endif
         break;
 
     case BT_EVT_TO_BTU_L2C_SEG_XMIT:
@@ -232,21 +250,46 @@ static bool btu_hci_acl_data_ready(uint32_t timeout)
     return status;
 }
 
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+static UINT8 btu_acl_credit_coalesce(UINT16 *handles, UINT16 *num_pkts, UINT8 n,
+                                     UINT8 cap, UINT16 handle)
+{
+    UINT8 i;
+
+    for (i = 0; i < n; i++) {
+        if (handles[i] == handle) {
+            UINT32 sum = (UINT32)num_pkts[i] + 1;
+            num_pkts[i] = (sum > 0xFFFF) ? 0xFFFF : (UINT16)sum;
+            return n;
+        }
+    }
+    if (n < cap) {
+        handles[n] = handle;
+        num_pkts[n] = 1;
+        return (UINT8)(n + 1);
+    }
+    btu_c2h_credit_add(handle, 1);
+    return n;
+}
+#endif
+
 static void btu_hci_acl_data_handler(void *param)
 {
     UNUSED(param);
-    struct pkt_queue *acl_pkt_queue = btu_cb.acl_pkt_queue;
+    fixed_pkt_queue_t *acl_pkt_queue = btu_cb.acl_pkt_queue;
+    size_t pending = 0;
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    UINT16 credit_handles[BTU_ACL_CREDIT_COALESCE_CAP];
+    UINT16 credit_num_pkts[BTU_ACL_CREDIT_COALESCE_CAP];
+    UINT8 credit_ents = 0;
+#endif
+
     if (acl_pkt_queue == NULL || btu_cb.acl_closing) {
         return;
     }
 
-    size_t pkts_to_process = pkt_queue_length(acl_pkt_queue);
-    if (pkts_to_process > BTU_ACL_QUEUE_BATCH_SIZE) {
-        pkts_to_process = BTU_ACL_QUEUE_BATCH_SIZE;
-    }
-
-    for (size_t i = 0; i < pkts_to_process; i++) {
-        pkt_linked_item_t *linked_pkt = pkt_queue_dequeue(acl_pkt_queue);
+    for (size_t i = 0; i < BTU_ACL_QUEUE_BATCH_SIZE; i++) {
+        pkt_linked_item_t *linked_pkt = fixed_pkt_queue_dequeue_and_len(acl_pkt_queue, 0, &pending);
         if (linked_pkt == NULL) {
             break;
         }
@@ -257,11 +300,31 @@ static void btu_hci_acl_data_handler(void *param)
             osi_free(linked_pkt);
             continue;
         }
-        l2c_rcv_acl_data(packet);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        {
+            UINT16 credit_handle;
+            if (l2c_rcv_acl_data(packet, &credit_handle)) {
+                credit_ents = btu_acl_credit_coalesce(credit_handles, credit_num_pkts, credit_ents,
+                                                      BTU_ACL_CREDIT_COALESCE_CAP, credit_handle);
+            }
+        }
+#else
+        l2c_rcv_acl_data(packet, NULL);
+#endif
         osi_free(linked_pkt);
     }
 
-    size_t pending = pkt_queue_length(acl_pkt_queue);
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    if (credit_ents > 0) {
+        btu_c2h_credit_add_n(credit_ents, credit_handles, credit_num_pkts);
+    }
+
+    if (pending <= BTU_ACL_QUEUE_LOW_WATER) {
+        btu_cb.acl_c2h_congested = FALSE;
+    }
+    /* Direct flush on BTU; no-op while still paused above low water. */
+    btu_c2h_credit_flush();
+#endif
     if (pending != 0) {
         // Re-post from BTU thread itself must stay non-blocking to avoid deadlock on a full queue.
         btu_hci_acl_data_ready(0);
@@ -269,7 +332,7 @@ static void btu_hci_acl_data_handler(void *param)
 }
 
 #if (defined(BTA_INCLUDED) && BTA_INCLUDED == TRUE)
-static void btu_bta_alarm_process(void *param)
+void btu_bta_alarm_process(void *param)
 {
     TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)param;
     // call timer callback
@@ -291,12 +354,20 @@ bool btu_task_post(uint32_t sig, void *param, uint32_t timeout)
 {
     bool status = false;
 
+    /* Worker gone: fail instead of asserting so callers release their
+     * param (e.g. bta_sys_sendmsg). */
+    if (btu_thread == NULL) {
+        return false;
+    }
+
     switch (sig) {
         case SIG_BTU_START_UP:
-            status = osi_thread_post(btu_thread, btu_task_start_up, param, 0, timeout);
+            status = osi_thread_post(btu_thread, btu_task_start_up, param, NULL, 0, timeout);
             break;
         case SIG_BTU_HCI_MSG:
-            status = osi_thread_post(btu_thread, btu_hci_msg_process, param, 0, timeout);
+            /* param is a heap BT_HDR; reclaim it if teardown drains the work. */
+            status = osi_thread_post(btu_thread, btu_hci_msg_process, param,
+                                     (osi_thread_free_cb_t)osi_free_func, 0, timeout);
             break;
         case SIG_BTU_HCI_ADV_RPT_MSG:
 #if BLE_INCLUDED == TRUE
@@ -314,19 +385,11 @@ bool btu_task_post(uint32_t sig, void *param, uint32_t timeout)
             break;
 #if (defined(BTA_INCLUDED) && BTA_INCLUDED == TRUE)
         case SIG_BTU_BTA_MSG:
-            status = osi_thread_post(btu_thread, bta_sys_event, param, 0, timeout);
-            break;
-        case SIG_BTU_BTA_ALARM:
-            status = osi_thread_post(btu_thread, btu_bta_alarm_process, param, 0, timeout);
+            /* param is a heap BT_HDR; same owner hand-off as SIG_BTU_HCI_MSG. */
+            status = osi_thread_post(btu_thread, bta_sys_event, param,
+                                     (osi_thread_free_cb_t)osi_free_func, 0, timeout);
             break;
 #endif
-        case SIG_BTU_GENERAL_ALARM:
-        case SIG_BTU_ONESHOT_ALARM:
-            status = osi_thread_post(btu_thread, btu_general_alarm_process, param, 0, timeout);
-            break;
-        case SIG_BTU_L2CAP_ALARM:
-            status = osi_thread_post(btu_thread, btu_l2cap_alarm_process, param, 0, timeout);
-            break;
         default:
             break;
     }
@@ -341,7 +404,7 @@ bool btu_acl_queue_init(void)
     btu_cb.acl_closing = FALSE;
 
     do {
-        btu_cb.acl_pkt_queue = pkt_queue_create();
+        btu_cb.acl_pkt_queue = fixed_pkt_queue_new(BTU_ACL_QUEUE_CAPACITY);
         if (btu_cb.acl_pkt_queue == NULL) {
             break;
         }
@@ -354,6 +417,9 @@ bool btu_acl_queue_init(void)
         if (!osi_event_bind(btu_cb.acl_data_ready, btu_thread, 0)) {
             break;
         }
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        btu_cb.acl_c2h_congested = FALSE;
+#endif
         status = true;
     } while (0);
 
@@ -364,7 +430,7 @@ bool btu_acl_queue_init(void)
         }
 
         if (btu_cb.acl_pkt_queue != NULL) {
-            pkt_queue_destroy(btu_cb.acl_pkt_queue, NULL);
+            fixed_pkt_queue_free(btu_cb.acl_pkt_queue, NULL);
             btu_cb.acl_pkt_queue = NULL;
         }
 
@@ -400,8 +466,12 @@ void btu_acl_queue_deinit(void)
 
     btu_cb.acl_closing = TRUE;
 
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+    btu_cb.acl_c2h_congested = FALSE;
+#endif
+
     if (btu_cb.acl_pkt_queue != NULL) {
-        pkt_queue_destroy(btu_cb.acl_pkt_queue, btu_acl_pkt_linked_free);
+        fixed_pkt_queue_free(btu_cb.acl_pkt_queue, btu_acl_pkt_linked_free);
         btu_cb.acl_pkt_queue = NULL;
     }
 }
@@ -415,12 +485,6 @@ bool btu_hci_acl_data_post(BT_HDR *packet)
             break;
         }
 
-        size_t acl_q_len = pkt_queue_length(btu_cb.acl_pkt_queue);
-        if (acl_q_len >= BTU_ACL_QUEUE_HIGH_WATERMARK) {
-            HCI_TRACE_WARNING("ACL queue high watermark (len=%u)", (unsigned)acl_q_len);
-            break;
-        }
-
         pkt_linked_item_t *linked_pkt = (pkt_linked_item_t *)osi_malloc(BT_PKT_LINKED_HDR_SIZE + sizeof(packet));
         if (linked_pkt == NULL) {
             HCI_TRACE_WARNING("ACL queue malloc pkt failed");
@@ -428,7 +492,19 @@ bool btu_hci_acl_data_post(BT_HDR *packet)
         }
 
         memcpy(linked_pkt->data, &packet, sizeof(packet));
-        pkt_queue_enqueue(btu_cb.acl_pkt_queue, linked_pkt);
+        size_t qlen = 0;
+        if (!fixed_pkt_queue_enqueue_and_len(btu_cb.acl_pkt_queue, linked_pkt,
+                                             BTU_ACL_QUEUE_ENQUEUE_TIMEOUT_MS, &qlen)) {
+            HCI_TRACE_WARNING("ACL queue enqueue timeout");
+            osi_free(linked_pkt);
+            break;
+        }
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+        if (qlen >= BTU_ACL_QUEUE_HIGH_WATER) {
+            btu_cb.acl_c2h_congested = TRUE;
+        }
+#endif
 
         btu_hci_acl_data_ready(OSI_THREAD_MAX_TIMEOUT);
         status = true;
@@ -436,6 +512,29 @@ bool btu_hci_acl_data_post(BT_HDR *packet)
 
     return status;
 }
+
+#if (C2H_FLOW_CONTROL_INCLUDED == TRUE)
+BOOLEAN btu_c2h_acl_is_congested(void)
+{
+#if (BTU_DYNAMIC_MEMORY == TRUE)
+    if (btu_cb_ptr == NULL) {
+        return FALSE;
+    }
+#endif
+    return btu_cb.acl_c2h_congested;
+}
+
+void btu_c2h_credit_pause_if_congested(void)
+{
+    if (btu_cb.acl_pkt_queue == NULL || btu_cb.acl_closing) {
+        return;
+    }
+
+    if (fixed_pkt_queue_length(btu_cb.acl_pkt_queue) >= BTU_ACL_QUEUE_HIGH_WATER) {
+        btu_cb.acl_c2h_congested = TRUE;
+    }
+}
+#endif
 
 void btu_task_start_up(void *param)
 {
@@ -493,13 +592,17 @@ static void btu_general_alarm_process(void *param)
 
     /* Skip stale alarms: btu_free_timer removes the entry before the owning
      * structure may be freed, and btu_stop_timer clears in_use, but neither can
-     * retract a SIG_BTU_GENERAL_ALARM that was already queued to the BTU task. */
+     * retract a callback already queued on the BTU task. */
     osi_mutex_lock(&btu_general_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
     bool active = hash_map_has_key(btu_general_alarm_hash_map, p_tle);
     osi_mutex_unlock(&btu_general_alarm_lock);
     if (!active) {
         osi_mutex_lock(&btu_oneshot_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
-        active = hash_map_has_key(btu_oneshot_alarm_hash_map, p_tle);
+        osi_alarm_t *alarm = hash_map_get(btu_oneshot_alarm_hash_map, p_tle);
+        /* This expiry is stale once a later start has armed the alarm again. */
+        if (alarm != NULL && p_tle->in_use != FALSE && !osi_alarm_is_active(alarm)) {
+            active = true;
+        }
         osi_mutex_unlock(&btu_oneshot_alarm_lock);
     }
     if (!active || p_tle->in_use == FALSE) {
@@ -634,9 +737,8 @@ static void btu_general_alarm_process(void *param)
 void btu_general_alarm_cb(void *data)
 {
     assert(data != NULL);
-    TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)data;
 
-    btu_task_post(SIG_BTU_GENERAL_ALARM, p_tle, OSI_THREAD_MAX_TIMEOUT);
+    btu_general_alarm_process(data);
 }
 
 void btu_start_timer(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_sec)
@@ -648,7 +750,7 @@ void btu_start_timer(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_sec)
     // Get the alarm for the timer list entry.
     osi_mutex_lock(&btu_general_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
     if (!hash_map_has_key(btu_general_alarm_hash_map, p_tle)) {
-        alarm = osi_alarm_new("btu_gen", btu_general_alarm_cb, (void *)p_tle, 0);
+        alarm = osi_alarm_new("btu_gen", btu_general_alarm_cb, (void *)p_tle, btu_get_current_thread());
         if (alarm == NULL) {
             HCI_TRACE_ERROR("%s Unable to create new alarm", __func__);
             osi_mutex_unlock(&btu_general_alarm_lock);
@@ -673,7 +775,9 @@ void btu_start_timer(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_sec)
     // NOTE: This value is in seconds but stored in a ticks field.
     p_tle->ticks = timeout_sec;
     p_tle->in_use = TRUE;
-    osi_alarm_set(alarm, (period_ms_t)((period_ms_t)timeout_sec * 1000));
+    if (osi_alarm_set(alarm, (period_ms_t)((period_ms_t)timeout_sec * 1000)) != OSI_ALARM_ERR_PASS) {
+        HCI_TRACE_ERROR("%s Unable to arm alarm", __func__);
+    }
     osi_mutex_unlock(&btu_general_alarm_lock);
 }
 
@@ -771,9 +875,8 @@ static void btu_l2cap_alarm_process(void *param)
 static void btu_l2cap_alarm_cb(void *data)
 {
     assert(data != NULL);
-    TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)data;
 
-    btu_task_post(SIG_BTU_L2CAP_ALARM, p_tle, OSI_THREAD_MAX_TIMEOUT);
+    btu_l2cap_alarm_process(data);
 }
 
 void btu_start_quick_timer(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_ticks)
@@ -785,7 +888,7 @@ void btu_start_quick_timer(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_ti
     // Get the alarm for the timer list entry.
     osi_mutex_lock(&btu_l2cap_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
     if (!hash_map_has_key(btu_l2cap_alarm_hash_map, p_tle)) {
-        alarm = osi_alarm_new("btu_l2cap", btu_l2cap_alarm_cb, (void *)p_tle, 0);
+        alarm = osi_alarm_new("btu_l2cap", btu_l2cap_alarm_cb, (void *)p_tle, btu_get_current_thread());
         if (alarm == NULL) {
             HCI_TRACE_ERROR("%s Unable to create alarm", __func__);
             osi_mutex_unlock(&btu_l2cap_alarm_lock);
@@ -869,9 +972,16 @@ void btu_oneshot_alarm_cb(void *data)
     assert(data != NULL);
     TIMER_LIST_ENT *p_tle = (TIMER_LIST_ENT *)data;
 
-    btu_stop_timer_oneshot(p_tle);
+    /* in_use must stay set across the dispatch. Clearing it here makes
+     * btu_general_alarm_process drop every one-shot timeout. */
+    btu_general_alarm_process(p_tle);
 
-    btu_task_post(SIG_BTU_ONESHOT_ALARM, p_tle, OSI_THREAD_MAX_TIMEOUT);
+    osi_mutex_lock(&btu_oneshot_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
+    osi_alarm_t *alarm = hash_map_get(btu_oneshot_alarm_hash_map, p_tle);
+    if (alarm != NULL && p_tle->in_use != FALSE && !osi_alarm_is_active(alarm)) {
+        p_tle->in_use = FALSE;
+    }
+    osi_mutex_unlock(&btu_oneshot_alarm_lock);
 }
 
 /*
@@ -886,7 +996,7 @@ void btu_start_timer_oneshot(TIMER_LIST_ENT *p_tle, UINT16 type, UINT32 timeout_
     // Get the alarm for the timer list entry.
     osi_mutex_lock(&btu_oneshot_alarm_lock, OSI_MUTEX_MAX_TIMEOUT);
     if (!hash_map_has_key(btu_oneshot_alarm_hash_map, p_tle)) {
-        alarm = osi_alarm_new("btu_oneshot", btu_oneshot_alarm_cb, (void *)p_tle, 0);
+        alarm = osi_alarm_new("btu_oneshot", btu_oneshot_alarm_cb, (void *)p_tle, btu_get_current_thread());
         if (alarm == NULL) {
             HCI_TRACE_ERROR("%s Unable to create new alarm", __func__);
             osi_mutex_unlock(&btu_oneshot_alarm_lock);

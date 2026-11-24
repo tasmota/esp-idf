@@ -97,6 +97,7 @@ extern "C" {
 #define SDMMC_LL_SDR50_SUPPORTED                      1
 
 #define SDMMC_LL_DEFAULT_DIV                          8
+#define SDMMC_LL_DMA_BURST_SIZE_DEFAULT               64
 
 /**
  * SDMMC delay phase
@@ -827,6 +828,20 @@ static inline void sdmmc_ll_init_dma(sdmmc_dev_t *hw)
 }
 
 /**
+ * @brief Set the burst size of the internal DMA
+ *
+ * @param hw          hardware instance address
+ * @param burst_size  burst size in bytes, 1 to disable the data burst,
+ *                    otherwise a power of two between 4 and 256
+ */
+static inline void sdmmc_ll_set_dma_burst_size(sdmmc_dev_t *hw, size_t burst_size)
+{
+    HAL_ASSERT(burst_size == 1 ||
+               (burst_size >= 4 && burst_size <= 256 && (burst_size & (burst_size - 1)) == 0));
+    hw->fifoth.dma_multiple_transaction_size = (burst_size == 1) ? 0 : (__builtin_ctz(burst_size) - 1);
+}
+
+/**
  * @brief Enable DMA
  *
  * @param hw    hardware instance address
@@ -851,6 +866,7 @@ static inline void sdmmc_ll_stop_dma(sdmmc_dev_t *hw)
     hw->ctrl.dma_reset = 1;     //here might be an issue as we don't wait the `dma_reset` to be self-cleared, check in next steps
     hw->bmod.bmod_fb = 0;
     hw->bmod.bmod_de = 0;
+    hw->bmod.bmod_swr = 1;        // reset is cleared by hardware on the next cycle
 }
 
 /*---------------------------------------------------------------

@@ -6,16 +6,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 
 #include "esp_partition.h"
 #include "esp_private/partition_linux.h"
 
 #include "wear_levelling.h"
 #include "WL_Flash.h"
+#include "Partition.h"
 #include "crc32.h"
 
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "sdkconfig.h"
 
@@ -44,10 +47,11 @@ TEST_CASE("write and read back data", "[wear_levelling]")
     uint32_t sector_size = wl_sector_size(wl_handle);
     REQUIRE(sector_size == CONFIG_WL_SECTOR_SIZE);
 
-    uint8_t* data = (uint8_t*) malloc(partition->size);
-    uint8_t* read = (uint8_t*) malloc(partition->size);
+    size_t size = wl_size(wl_handle);
+    uint8_t* data = (uint8_t*) malloc(size);
+    uint8_t* read = (uint8_t*) malloc(size);
 
-    uint32_t sectors = partition->size / sector_size;
+    uint32_t sectors = size / sector_size;
 
     // Generate data
     for(uint32_t sector = 0; sector < sectors; sector++)
@@ -56,20 +60,22 @@ TEST_CASE("write and read back data", "[wear_levelling]")
 
         for(uint32_t i = 0; i < sector_size / sizeof(i); i++)
         {
-            ((uint32_t*) data)[i] = sector_address + i;
+            ((uint32_t*) (data + sector_address))[i] = sector_address + i;
         }
     }
 
-    // Write data
-    result = wl_write(wl_handle, 0, data, partition->size);
+    // Write data (erase first, flash may hold data from previous tests)
+    result = wl_erase_range(wl_handle, 0, size);
+    REQUIRE(result == ESP_OK);
+    result = wl_write(wl_handle, 0, data, size);
     REQUIRE(result == ESP_OK);
 
     // Read data
-    result = wl_read(wl_handle, 0, read, partition->size);
+    result = wl_read(wl_handle, 0, read, size);
     REQUIRE(result == ESP_OK);
 
     // Verify that written and read data match
-    REQUIRE(memcmp(data, read, partition->size));
+    REQUIRE(memcmp(data, read, size) == 0);
 
     // Erase some ranges
     result = wl_erase_range(wl_handle, 0, sector_size);
@@ -85,11 +91,11 @@ TEST_CASE("write and read back data", "[wear_levelling]")
     memset(data + 28672, 0xFF, sector_size * 3);
 
     // Read again, with erased ranges
-    result = wl_read(wl_handle, 0, read, partition->size);
+    result = wl_read(wl_handle, 0, read, size);
     REQUIRE(result == ESP_OK);
 
     // Verify that written and read data match
-    REQUIRE(memcmp(data, read, partition->size));
+    REQUIRE(memcmp(data, read, size) == 0);
 
     // Unmount
     result = wl_unmount(wl_handle);
@@ -125,6 +131,201 @@ TEST_CASE("write and read with zero size are safe no-ops", "[wear_levelling]")
     // Unmount
     result = wl_unmount(wl_handle);
     REQUIRE(result == ESP_OK);
+}
+
+// Position record size, read from the wl_config_t that WL stores in the
+// last sector of the partition. Valid once the partition has been mounted.
+static size_t wl_pos_record_size(const esp_partition_t *partition)
+{
+    wl_config_t cfg;
+    REQUIRE(esp_partition_read(partition, partition->size - partition->erase_size, &cfg, sizeof(cfg)) == ESP_OK);
+    // WL_Flash::fillOkBuff() writes 4 x uint32_t into each record.
+    REQUIRE(cfg.wl_pos_update_record_size >= 4 * sizeof(uint32_t));
+    return cfg.wl_pos_update_record_size;
+}
+
+// Offset of the first WL state copy, mirroring WL_Flash::config() for
+// wl_partition_start_addr == 0 and a one-sector wl_config_t.
+static size_t wl_state1_addr(const esp_partition_t *partition)
+{
+    const size_t sector = partition->erase_size;
+    size_t state_size = sizeof(wl_state_t) + (partition->size / sector) * wl_pos_record_size(partition);
+    state_size = (state_size + sector - 1) / sector * sector;
+    return partition->size - 2 * state_size - sector;
+}
+
+// Read the dummy sector position and move count from flash. The position is
+// not kept in wl_state_t on flash; like WL_Flash::recoverPos(), count the
+// position records written after the state structure (erased record = end).
+static void wl_read_dummy_pos(const esp_partition_t *partition, uint32_t *pos, uint32_t *move_count)
+{
+    const size_t state1 = wl_state1_addr(partition);
+    const size_t record_size = wl_pos_record_size(partition);
+    wl_state_t state;
+    REQUIRE(esp_partition_read(partition, state1, &state, sizeof(state)) == ESP_OK);
+    *move_count = state.wl_dummy_sec_move_count;
+
+    // Only the first 4 x uint32_t of a record are written.
+    uint8_t record[4 * sizeof(uint32_t)];
+    uint8_t erased[sizeof(record)];
+    memset(erased, 0xFF, sizeof(erased));
+    *pos = 0;
+    while (true) {
+        REQUIRE(esp_partition_read(partition, state1 + sizeof(state) + *pos * record_size, record, sizeof(record)) == ESP_OK);
+        if (memcmp(record, erased, sizeof(record)) == 0) {
+            break;
+        }
+        (*pos)++;
+    }
+}
+
+// Move the dummy sector n positions. wl_unmount() calls WL_Flash::flush(),
+// which moves it exactly once.
+static void wl_move_dummy(const esp_partition_t *partition, wl_handle_t *handle, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        REQUIRE(wl_unmount(*handle) == ESP_OK);
+        REQUIRE(wl_mount(partition, handle) == ESP_OK);
+    }
+}
+
+// Regression test: unaligned wl_read()/wl_write() crossing a WL page boundary
+// used to hit the wrong physical page when the dummy sector sat in between.
+// Catch2 reruns the body, setup included, for each GENERATE() combination.
+TEST_CASE("unaligned read/write across WL page boundary", "[wear_levelling]")
+{
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
+    const size_t page = 4096;   // WL page size (flash sector)
+    const size_t region = 4 * page;
+    static uint8_t write_buf[region];
+    static uint8_t read_buf[region];
+    static uint8_t expected[region];
+    wl_handle_t handle;
+
+    auto [offset, size] = GENERATE_COPY(table<size_t, size_t>({
+        { 0,            page },             // aligned, exactly one page
+        { 1,            1 },                // unaligned, inside one page
+        { page - 1,     1 },                // last byte of a page
+        { page / 2,     page / 2 },         // unaligned, ends on page boundary
+        { page - 1,     2 },                // crosses boundary by one byte
+        { page - 1,     page + 2 },         // crosses two boundaries
+        { 1,            3 * page - 1 },     // unaligned start, ends on page boundary
+        { page + 3,     2 * page + 5 },     // starts in logical page 1
+    }));
+    // Dummy sector at physical page 1 sits under the unaligned head; at
+    // physical page 2 it sits under the page-aligned remainder.
+    const uint32_t dummy_pos = GENERATE(1, 2);
+    CAPTURE(offset, size, dummy_pos);
+
+    // Unique byte per position, so data landing at a wrong offset is detected.
+    for (size_t i = 0; i < region; i++) {
+        write_buf[i] = (uint8_t)(i * 7 + 1);
+    }
+
+    // Fresh WL state (dummy sector at physical page 0), then move the dummy
+    // sector to physical page dummy_pos.
+    REQUIRE(esp_partition_erase_range(partition, 0, partition->size) == ESP_OK);
+    REQUIRE(wl_mount(partition, &handle) == ESP_OK);
+    wl_move_dummy(partition, &handle, dummy_pos);
+    uint32_t pos;
+    uint32_t move_count;
+    wl_read_dummy_pos(partition, &pos, &move_count);
+    REQUIRE(pos == dummy_pos);
+    REQUIRE(move_count == 0);
+
+    // Aligned read of the whole region: only [offset, offset + size) may have
+    // changed, the rest stays erased. Unaligned read of the same range: the
+    // buffer holds exactly what was written and nothing past size.
+    auto check_readback = [&]() {
+        REQUIRE(wl_read(handle, 0, read_buf, region) == ESP_OK);
+        memset(expected, 0xFF, region);
+        memcpy(expected + offset, write_buf, size);
+        CHECK(memcmp(read_buf, expected, region) == 0);
+
+        memset(read_buf, 0, region);
+        REQUIRE(wl_read(handle, offset, read_buf, size) == ESP_OK);
+        memset(expected, 0, region);
+        memcpy(expected, write_buf, size);
+        CHECK(memcmp(read_buf, expected, region) == 0);
+    };
+
+    REQUIRE(wl_write(handle, offset, write_buf, size) == ESP_OK);
+    check_readback();
+
+    // Remounting moves the dummy sector once more, relocating a data page.
+    // The data must read back the same through the new mapping.
+    wl_move_dummy(partition, &handle, 1);
+    check_readback();
+
+    REQUIRE(wl_unmount(handle) == ESP_OK);
+    // Leave erased flash; other tests write without erasing first.
+    REQUIRE(esp_partition_erase_range(partition, 0, partition->size) == ESP_OK);
+}
+
+// Regression test: once the dummy sector has completed a full pass
+// (wl_dummy_sec_move_count >= 1), logical page 0 maps to the last data page,
+// so an unaligned write crossing into logical page 1 used to run past the
+// data area and overwrite the WL state, leaving the volume unusable.
+TEST_CASE("unaligned write after dummy sector wrap keeps WL state intact", "[wear_levelling]")
+{
+    const esp_partition_t *storage = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
+    // Small partition, so a full dummy sector pass needs few moves.
+    esp_partition_t partition = *storage;
+    partition.size = 8 * partition.erase_size;
+    const size_t page = 4096;   // WL page size (flash sector)
+    REQUIRE(partition.erase_size == page);
+    const size_t region = 2 * page;
+    const size_t offset = page / 2;
+    const size_t size = page;
+    static uint8_t write_buf[page];
+    static uint8_t read_buf[region];
+    static uint8_t expected[region];
+    wl_handle_t handle;
+
+    for (size_t i = 0; i < size; i++) {
+        write_buf[i] = (uint8_t)(i * 7 + 1);
+    }
+
+    REQUIRE(esp_partition_erase_range(&partition, 0, partition.size) == ESP_OK);
+    REQUIRE(wl_mount(&partition, &handle) == ESP_OK);
+
+    // WL metadata (both state copies and config) starts right after the
+    // dummy sector positions, so one move per page below it completes a pass.
+    const size_t meta_addr = wl_state1_addr(&partition);
+    const size_t meta_size = partition.size - meta_addr;
+    wl_move_dummy(&partition, &handle, meta_addr / page);
+    uint32_t pos;
+    uint32_t move_count;
+    wl_read_dummy_pos(&partition, &pos, &move_count);
+    REQUIRE(move_count == 1);
+    REQUIRE(pos == 0);
+
+    std::vector<uint8_t> meta_before(meta_size);
+    std::vector<uint8_t> meta_after(meta_size);
+    REQUIRE(esp_partition_read(&partition, meta_addr, meta_before.data(), meta_size) == ESP_OK);
+    REQUIRE(wl_write(handle, offset, write_buf, size) == ESP_OK);
+    REQUIRE(esp_partition_read(&partition, meta_addr, meta_after.data(), meta_size) == ESP_OK);
+    CHECK(meta_before == meta_after);
+
+    memset(expected, 0xFF, region);
+    memcpy(expected + offset, write_buf, size);
+    REQUIRE(wl_read(handle, 0, read_buf, region) == ESP_OK);
+    CHECK(memcmp(read_buf, expected, region) == 0);
+
+    // Unaligned read across the same boundary must not read from the WL state.
+    memset(read_buf, 0, size);
+    REQUIRE(wl_read(handle, offset, read_buf, size) == ESP_OK);
+    CHECK(memcmp(read_buf, write_buf, size) == 0);
+
+    // The volume must still mount, keep the data and accept erases.
+    REQUIRE(wl_unmount(handle) == ESP_OK);
+    REQUIRE(wl_mount(&partition, &handle) == ESP_OK);
+    REQUIRE(wl_read(handle, 0, read_buf, region) == ESP_OK);
+    CHECK(memcmp(read_buf, expected, region) == 0);
+    REQUIRE(wl_erase_range(handle, 0, wl_size(handle)) == ESP_OK);
+
+    REQUIRE(wl_unmount(handle) == ESP_OK);
+    REQUIRE(esp_partition_erase_range(storage, 0, storage->size) == ESP_OK);
 }
 
 TEST_CASE("power down test", "[wear_levelling]")
@@ -678,4 +879,103 @@ TEST_CASE("BDL release and reconnect", "[wear_levelling][bdl]")
 
     REQUIRE(wl_blockdev->ops->release(wl_blockdev) == ESP_OK);
     REQUIRE(part_blockdev->ops->release(part_blockdev) == ESP_OK);
+}
+
+// Exposes WL_Flash internals needed to lay out position records directly in flash
+class WL_Flash_Probe : public WL_Flash
+{
+public:
+    uint32_t dummy_sec_pos() { return state.wl_dummy_sec_pos; }
+    uint32_t part_max_sec_pos() { return state.wl_part_max_sec_pos; }
+
+    // Writes position record n to both state copies, as updateWL() does
+    void write_pos_record(uint32_t n, bool torn = false)
+    {
+        fillOkBuff(n);
+        if (torn) {
+            // Power loss while programming: only part of the record made it to flash
+            memset(temp_buff + cfg.wl_pos_update_record_size / 2, 0xFF, cfg.wl_pos_update_record_size / 2);
+        }
+        size_t offset = sizeof(wl_state_t) + n * cfg.wl_pos_update_record_size;
+        REQUIRE(partition->write(addr_state1 + offset, temp_buff, cfg.wl_pos_update_record_size) == ESP_OK);
+        REQUIRE(partition->write(addr_state2 + offset, temp_buff, cfg.wl_pos_update_record_size) == ESP_OK);
+    }
+};
+
+static void probe_init(WL_Flash_Probe &wl, Partition &part, const esp_partition_t *partition)
+{
+    // Same configuration as wl_mount()
+    wl_config_t cfg = {};
+    cfg.wl_partition_start_addr   = 0;
+    cfg.wl_partition_size         = partition->size;
+    cfg.wl_page_size              = partition->erase_size;
+    cfg.flash_sector_size         = partition->erase_size;
+    cfg.wl_update_rate            = 16;
+    cfg.wl_pos_update_record_size = 16;
+    cfg.version                   = 2;
+    cfg.wl_temp_buff_size         = 32;
+
+    REQUIRE(wl.config(&cfg, &part) == ESP_OK);
+    REQUIRE(wl.init() == ESP_OK);
+}
+
+// Mounts a fresh WL partition, writes valid records 0..valid_count-1 (and optionally a torn
+// record right after them), then mounts again and returns the recovered dummy sector position.
+static uint32_t recover_pos_after_records(const esp_partition_t *partition, uint32_t valid_count, bool torn_next)
+{
+    REQUIRE(esp_partition_erase_range(partition, 0, partition->size) == ESP_OK);
+
+    Partition part(partition);
+    {
+        WL_Flash_Probe wl;
+        probe_init(wl, part, partition);
+        REQUIRE(wl.dummy_sec_pos() == 0);
+        REQUIRE(valid_count <= wl.part_max_sec_pos());
+        for (uint32_t n = 0; n < valid_count; n++) {
+            wl.write_pos_record(n);
+        }
+        if (torn_next) {
+            REQUIRE(valid_count < wl.part_max_sec_pos());
+            wl.write_pos_record(valid_count, true);
+        }
+    }
+
+    WL_Flash_Probe wl;
+    esp_partition_clear_stats();
+    probe_init(wl, part, partition);
+
+    // init() reads both state headers, then recoverPos() must binary search the
+    // max + 1 possible positions instead of scanning the records one by one
+    uint32_t search_reads = 0;
+    while ((1u << search_reads) < wl.part_max_sec_pos() + 1) {
+        search_reads++;
+    }
+    CHECK(esp_partition_get_read_ops() <= 2 + search_reads);
+
+    return wl.dummy_sec_pos();
+}
+
+TEST_CASE("recoverPos finds dummy sector position", "[wear_levelling]")
+{
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
+    REQUIRE(partition != NULL);
+
+    uint32_t max;
+    {
+        REQUIRE(esp_partition_erase_range(partition, 0, partition->size) == ESP_OK);
+        Partition part(partition);
+        WL_Flash_Probe wl;
+        probe_init(wl, part, partition);
+        max = wl.part_max_sec_pos();
+    }
+    REQUIRE(max > 4);
+
+    for (uint32_t k : {0u, 1u, 2u, max / 2 - 1, max / 2, max / 2 + 1, max - 2, max - 1}) {
+        CAPTURE(k, max);
+        CHECK(recover_pos_after_records(partition, k, false) == k);
+        CHECK(recover_pos_after_records(partition, k, true) == k);
+    }
+
+    // All records valid: the position stays on the last sector
+    CHECK(recover_pos_after_records(partition, max, false) == max - 1);
 }

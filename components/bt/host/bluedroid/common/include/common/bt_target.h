@@ -106,6 +106,9 @@
 #define BTC_AV_CA_INCLUDED          TRUE
 #define AVRC_CA_INCLUDED            TRUE
 #endif /* UC_BT_AVRCP_CT_COVER_ART_ENABLED */
+#if (UC_BT_A2DP_AUDIO_STATS == TRUE)
+#define BTC_A2DP_AUDIO_STATS        TRUE
+#endif
 #endif /* UC_BT_A2DP_ENABLED */
 
 #if (UC_BT_SPP_ENABLED == TRUE)
@@ -607,6 +610,13 @@
 #define BLE_PRIVACY_SPT             FALSE
 #endif  /* UC_BT_SMP_ENABLE */
 
+/* CTKD: BR↔LE key derivation via SMP over BR (CID 7) and LE LK bit. */
+#if (UC_BT_SMP_CTKD_ENABLE && (CLASSIC_BT_INCLUDED == TRUE) && (BLE_INCLUDED == TRUE) && (SMP_INCLUDED == TRUE))
+#define SMP_CTKD_INCLUDED           TRUE
+#else
+#define SMP_CTKD_INCLUDED           FALSE
+#endif
+
 #if(UC_BT_SMP_SLAVE_CON_PARAMS_UPD_ENABLE)
 #define SMP_SLAVE_CON_PARAMS_UPD_ENABLE     TRUE
 #else
@@ -718,6 +728,10 @@
 
 #ifndef BTC_AV_INCLUDED
 #define BTC_AV_INCLUDED FALSE
+#endif
+
+#ifndef BTC_A2DP_AUDIO_STATS
+#define BTC_A2DP_AUDIO_STATS FALSE
 #endif
 
 #ifndef BTC_AV_CA_INCLUDED
@@ -1001,6 +1015,12 @@
 #ifndef BT_DEFAULT_BUFFER_SIZE
 #define BT_DEFAULT_BUFFER_SIZE          (4096 + 16)
 #endif
+
+/* Largest L2CAP information payload the HCI fragmenter will reassemble.
+ * LE CoC receive MPS must not be advertised above this: a larger K-frame is
+ * dropped before credit accounting. */
+#define L2CAP_MAX_RX_PAYLOAD \
+    (BT_DEFAULT_BUFFER_SIZE - L2CAP_PKT_OVERHEAD - HCI_ACL_PREAMBLE_SIZE - BT_HDR_SIZE)
 
 #ifndef BT_SMALL_BUFFER_SIZE
 #define BT_SMALL_BUFFER_SIZE            660
@@ -1484,12 +1504,16 @@
 #define BTM_OOB_INCLUDED                TRUE
 #endif
 
-/* TRUE to include Sniff Subrating */
-#if (BTA_DM_PM_INCLUDED == TRUE)
+/* TRUE to include Sniff Subrating. Only when HID Host or HID Device is built in. */
+#if (BTA_DM_PM_INCLUDED == TRUE) && ((HID_HOST_INCLUDED == TRUE) || (HID_DEV_INCLUDED == TRUE))
+#ifndef BTM_SSR_INCLUDED
+#define BTM_SSR_INCLUDED                TRUE
+#endif
+#else
 #ifndef BTM_SSR_INCLUDED
 #define BTM_SSR_INCLUDED                FALSE
 #endif
-#endif /* BTA_DM_PM_INCLUDED */
+#endif
 
 /*************************
 ** End of Lisbon Features
@@ -1692,7 +1716,7 @@
 
 /* If host flow control enabled, this is the number of buffers the controller can have unacknowledged. */
 #ifndef L2CAP_HOST_FC_ACL_BUFS
-#define L2CAP_HOST_FC_ACL_BUFS      20
+#define L2CAP_HOST_FC_ACL_BUFS      100
 #endif
 
 /* This is set to enable L2CAP to  take the ACL link out of park mode when ACL data is to be sent. */
@@ -2607,6 +2631,11 @@
 /* The maximum number of simultaneous GAP L2CAP connections. */
 #ifndef GAP_MAX_CONNECTIONS
 #define GAP_MAX_CONNECTIONS         10 // 30
+#endif
+
+/* Drop further GAP RX payload once this many bytes are queued on one connection. */
+#ifndef GAP_RX_QUEUE_HIGH_WATERMARK
+#define GAP_RX_QUEUE_HIGH_WATERMARK (L2CAP_MTU_SIZE * 10)
 #endif
 
 /* keep the raw data received from SDP server in database. */

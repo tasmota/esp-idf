@@ -1,3 +1,15 @@
+config BT_BTC_TASK_STACK_SIZE
+    int "Bluetooth event (callback to application) task stack size"
+    depends on BT_BLUEDROID_ENABLED || BT_NIMBLE_BLUFI_ENABLE || (BT_NIMBLE_ENABLED && BLE_MESH)
+    default 3072 if BT_BLUEDROID_ENABLED
+    default 4096 if BT_NIMBLE_ENABLED
+    help
+        Stack size of BTC_TASK, which delivers Bluetooth events and profile
+        callbacks to the application.
+
+        With Bluedroid this task is always created. With NimBLE it is created
+        when BluFi or ESP BLE Mesh is enabled.
+
 config BT_ALARM_MAX_NUM
     int "Maximum number of Bluetooth alarms"
     default 50
@@ -53,7 +65,7 @@ endmenu
 choice BT_SMP_CRYPTO_STACK
     prompt "SMP cryptographic stack"
     depends on (BT_BLE_SMP_ENABLE || BT_SMP_ENABLE || BT_NIMBLE_SECURITY_ENABLE || BT_LE_SECURITY_ENABLE || \
-        BT_CTRL_BREDR_ENABLE)
+        BT_CTRL_BREDR_ENABLE || BT_BLE_FEAT_ENC_ADV_DATA)
     default BT_SMP_CRYPTO_STACK_TINYCRYPT
     help
         Select the cryptographic library to use for SMP operations (AES, AES-CMAC, ECDH P-256).

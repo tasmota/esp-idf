@@ -13,7 +13,7 @@ API Guides
    :SOC_BLE_AUDIO_SUPPORTED: esp-ble-audio/ble-audio-index
    bootloader
    build-system
-   build-system-v2
+   build-system-v2/index
    :SOC_SUPPORT_COEXISTENCE: coexist
    c
    cplusplus
@@ -36,7 +36,7 @@ API Guides
    low-power-mode/index
    lwip
    memory-types
-   openthread
+   openthread/index
    partition-tables
    performance/index
    reproducible-builds

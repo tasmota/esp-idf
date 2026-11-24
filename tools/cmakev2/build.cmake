@@ -83,12 +83,7 @@ function(idf_build_get_property variable property)
     cmake_parse_arguments(ARG "${options}" "${one_value}" "${multi_value}" ${ARGN})
 
     if("${property}" STREQUAL BUILD_COMPONENTS)
-        # BUILD_COMPONENTS is populated by the Build system v1 compatibility
-        # shim; reject only when running as a native Build system v2 project.
-        idf_build_get_property(_v1_compat __V1_COMPAT_SHIM)
-        if(NOT _v1_compat)
-            idf_die("Build property 'BUILD_COMPONENTS' is not supported")
-        endif()
+        idf_die("Build property 'BUILD_COMPONENTS' is not supported")
     endif()
 
     set(genexpr)
@@ -293,7 +288,7 @@ function(__dump_library_properties libraries)
     endforeach()
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_library
 
     .. code-block:: cmake
@@ -566,7 +561,7 @@ function(idf_build_library library)
     __component_validation_run_checks(LIBRARY "${library}")
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_executable
 
     .. code-block:: cmake
@@ -766,7 +761,7 @@ function(__get_components_metadata)
     set(${ARG_OUTPUT} "${components_json}" PARENT_SCOPE)
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_generate_metadata
 
     .. code-block:: cmake
@@ -925,7 +920,7 @@ function(idf_build_generate_metadata)
     endif()
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_build_binary
 
     .. code-block:: cmake
@@ -1152,7 +1147,7 @@ function(idf_sign_binary binary)
     set_target_properties(${ARG_TARGET} PROPERTIES EXECUTABLE_TARGET ${executable})
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_flash_binary
 
     .. code-block:: cmake
@@ -1233,7 +1228,7 @@ function(idf_flash_binary binary)
     endif()
 endfunction()
 
-#[[
+#[[api
 .. cmakev2:function:: idf_check_binary_size
 
     .. code-block:: cmake

@@ -1284,7 +1284,7 @@ void btc_spp_cb_handler(btc_msg_t *msg)
                     memcpy(p_arg, p_data, sizeof(tBTA_JV));
                     slot->alarm_arg = (void *)p_arg;
                     if ((slot->close_alarm =
-                             osi_alarm_new("slot", close_timeout_handler, (void *)slot, VFS_CLOSE_TIMEOUT)) == NULL) {
+                             osi_alarm_new("slot", close_timeout_handler, (void *)slot, NULL)) == NULL) {
                         osi_free(p_arg);
                         slot->alarm_arg = NULL;
                         param.close.status = ESP_SPP_NO_RESOURCE;
@@ -1296,6 +1296,7 @@ void btc_spp_cb_handler(btc_msg_t *msg)
                         osi_free(p_arg);
                         slot->alarm_arg = NULL;
                         osi_alarm_free(slot->close_alarm);
+                        slot->close_alarm = NULL;
                         param.close.status = ESP_SPP_BUSY;
                         osi_mutex_unlock(&spp_local_param.spp_slot_mutex);
                         BTC_TRACE_ERROR("%s set slot close_alarm failed!", __func__);
@@ -1450,6 +1451,7 @@ int bta_co_rfc_data_incoming(void *user_data, BT_HDR *p_buf)
     uint32_t id = (uintptr_t)user_data;
     if (!is_spp_init()) {
         BTC_TRACE_ERROR("%s SPP have not been init\n", __func__);
+        osi_free(p_buf);
         return -1;
     }
     osi_mutex_lock(&spp_local_param.spp_slot_mutex, OSI_MUTEX_MAX_TIMEOUT);
@@ -1457,6 +1459,7 @@ int bta_co_rfc_data_incoming(void *user_data, BT_HDR *p_buf)
     if (!slot) {
         osi_mutex_unlock(&spp_local_param.spp_slot_mutex);
         BTC_TRACE_ERROR("%s unable to find RFCOMM slot!", __func__);
+        osi_free(p_buf);
         return -1;
     }
     p_data.data_ind.handle = slot->rfc_handle;

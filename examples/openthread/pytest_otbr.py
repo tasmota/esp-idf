@@ -1039,11 +1039,13 @@ def test_trel_connect(dut: tuple[IdfDut, IdfDut]) -> None:
     trel_list = [trel_c6]
     router_extaddr_list = ['7766554433221101']
 
-    trel_s3.expect('IPv4 address:', timeout=10)
-    trel_c6.expect('IPv4 address:', timeout=10)
     ocf.init_thread(trel_s3)
     for trel in trel_list:
         ocf.init_thread(trel)
+    trel_wifi_para = copy.copy(default_br_wifi_para)
+    ocf.joinWiFiNetwork(trel_s3, trel_wifi_para)
+    for trel in trel_list:
+        ocf.joinWiFiNetwork(trel, trel_wifi_para)
     trel_leader_para = copy.copy(default_br_ot_para)
     trel_leader_para.bbr = False
     ocf.SetThreadNetworkPara(trel_s3, trel_leader_para)
@@ -1168,9 +1170,9 @@ def test_ot_ssed_device(dut: tuple[IdfDut, IdfDut]) -> None:
         cli_rloc_addr = ':'.join(ocf.get_rloc_addr(leader).split(':')[:-1])
         ssed_address = f'{cli_rloc_addr}:{rloc16_decode_from_leader}'
 
-        ocf.ping_and_check(dut=leader, target=ssed_address, tx_total=10, timeout=6)
+        ocf.ping_and_check(dut=leader, target=ssed_address, tx_total=10, timeout=6, size_range=(10, 70))
         time.sleep(random.randint(5, 20))
-        ocf.ping_and_check(dut=leader, target=ssed_address, tx_total=10, timeout=6)
+        ocf.ping_and_check(dut=leader, target=ssed_address, tx_total=10, timeout=6, size_range=(100, 200))
     finally:
         ocf.execute_command(leader, 'factoryreset')
         ocf.hardreset_dut(ssed_device)

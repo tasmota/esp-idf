@@ -20,6 +20,8 @@
  * The number of BLE Log source code will directly determine the number of statistic manager
  * memory requirements, keep it as less as possible; it's recommended to use subcode for more
  * log data structure decoding */
+/* CRITICAL: this enum is a public ABI and must not be reordered or renamed.
+ * Its values are the base on-wire source IDs of protocol v8 frames. */
 typedef enum {
     /* Internal */
     BLE_LOG_SRC_INTERNAL = 0,
@@ -45,29 +47,56 @@ typedef enum {
 #define BLE_LOG_HCI_DOWNSTREAM  0
 #define BLE_LOG_HCI_UPSTREAM    1
 
-/* HCI Log Write Macro
- * Encodes direction in MSB of data[0] (HCI type byte) before writing.
- * Safe because ble_log_write_hex -> ble_log_lbm_write_trans does synchronous memcpy.
- * Parser reads MSB to determine direction; old firmware with MSB=0 defaults to "sent". */
-#define ble_log_write_hci(direction, data, len) do {    \
-    (data)[0] |= ((direction) << 7);                   \
-    ble_log_write_hex(BLE_LOG_SRC_HCI, (data), (len)); \
-    (data)[0] &= 0x7F;                                 \
+/* Encodes HCI direction in payload byte 0 bit 7 for the synchronous copy,
+ * then restores the complete original HCI type byte. The caller guarantees a
+ * non-NULL buffer with len > 0. */
+#define ble_log_write_hci(direction, data, len) do {                  \
+    uint8_t *const ble_log_hci_data__ = (data);                       \
+    const uint8_t ble_log_hci_type__ = ble_log_hci_data__[0];         \
+    ble_log_hci_data__[0] = (ble_log_hci_type__ & 0x7fU) |            \
+                            ((direction) ? 0x80U : 0U);               \
+    (void)ble_log_write_hex(BLE_LOG_SRC_HCI, ble_log_hci_data__,      \
+                            (len));                                   \
+    ble_log_hci_data__[0] = ble_log_hci_type__;                       \
 } while (0)
 
 /* INTERFACE */
+/* Success means logging is initialized; optional external sync may be unavailable.
+ * Sync initialization failures are reported on the console and do not stop logging. */
 bool ble_log_init(void);
 void ble_log_deinit(void);
+/* Controls public producers only. Disabling does not stop buffered-data flushing,
+ * periodic snapshots, task-binding broadcasts, or configured external sync output.
+ * Clock samples and diagnostic statistics remain available until deinit. */
 bool ble_log_enable(bool enable);
+/* Blocking; call only from a caller-owned task, not an ISR or system callback. */
 void ble_log_flush(void);
+/* Waits for a shared transport in ordinary yieldable tasks; in builds
+ * with a finite CONFIG_BLE_LOG_POOL_WAIT_TIMEOUT_MS the wait is bounded
+ * by that budget and its exhaustion fails (counted as a loss). The shared
+ * ESP Timer task, ISR and critical-section callers fail fast when none
+ * is available. */
 bool ble_log_write_hex(ble_log_src_t src_code, const uint8_t *addr, size_t len);
+/* Same backpressure as ble_log_write_hex(): wait_for_transport=true only
+ * requests waiting; the actual wait ceiling is set by the build's
+ * CONFIG_BLE_LOG_POOL_WAIT_TIMEOUT_MS (finite builds bound the wait and
+ * count its exhaustion as a loss; -1 builds wait indefinitely). false
+ * opts out. The shared ESP Timer task and non-yieldable contexts fail
+ * fast regardless of this flag. */
+uint8_t *ble_log_claim(ble_log_src_t src_code, size_t max_len,
+                       uint32_t *handle, bool wait_for_transport);
+void ble_log_commit(uint32_t handle, size_t actual_len);
 void ble_log_dump_to_console(void);
 #if CONFIG_BLE_LOG_LL_ENABLED
 void ble_log_write_hex_ll(uint32_t len, const uint8_t *addr,
                           uint32_t len_append, const uint8_t *addr_append, uint32_t flag);
 #endif /* CONFIG_BLE_LOG_LL_ENABLED */
-#if CONFIG_BLE_LOG_TS_ENABLED
+/* Task-context compatibility no-op; enable is ignored. Returns false when the
+ * runtime is not initialized. CONFIG_BLE_LOG_TS_SYNC_TOGGLE_IO_ENABLED alone
+ * controls sync output, active after successful sync initialization until deinit,
+ * independently of ble_log_enable(). */
+bool ble_log_ts_sync_io_toggle_enable(bool enable);
+/* Backward-compatible name for ble_log_ts_sync_io_toggle_enable(). */
 bool ble_log_sync_enable(bool enable);
-#endif /* CONFIG_BLE_LOG_TS_ENABLED */
 
 #endif /* __BLE_LOG_H__ */

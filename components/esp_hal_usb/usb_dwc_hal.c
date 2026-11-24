@@ -156,7 +156,7 @@ static void set_defaults(usb_dwc_hal_context_t *hal)
 #endif // SOC_IS(ESP32P4)
 }
 
-void usb_dwc_hal_init(usb_dwc_hal_context_t *hal, int port_id)
+void usb_dwc_hal_init_with_config(usb_dwc_hal_context_t *hal, int port_id, const usb_dwc_hal_config_t *config)
 {
     // Check if a peripheral is alive by reading the core ID registers
     HAL_ASSERT(port_id < SOC_USB_OTG_PERIPH_NUM);
@@ -180,6 +180,13 @@ void usb_dwc_hal_init(usb_dwc_hal_context_t *hal, int port_id)
     hal->constant_config.chan_num_total = usb_dwc_ll_ghwcfg_get_channel_num(dev);
     hal->constant_config.max_size_byte_limit = (1U << usb_dwc_ll_ghwcfg_get_xfer_size_width(dev)) - 1;
     hal->constant_config.max_size_packet_limit = (1U << usb_dwc_ll_ghwcfg_get_packet_size_width(dev)) - 1;
+
+    // Check passed configuration flags
+    if (config) {
+        if (config->flags & USB_DWC_HAL_CONFIG_FLAG_FSLS_ONLY) {
+            hal->constant_config.flags.fsls_only = 1;
+        }
+    }
 
     set_defaults(hal);
 }
@@ -306,6 +313,15 @@ static inline void debounce_lock_enable(usb_dwc_hal_context_t *hal)
     //Disable the hprt (connection) and disconnection interrupts to prevent repeated triggerings
     usb_dwc_ll_gintmsk_dis_intrs(hal->dev, USB_DWC_LL_INTR_CORE_PRTINT | USB_DWC_LL_INTR_CORE_DISCONNINT);
     hal->flags.dbnc_lock_enabled = 1;
+}
+
+void usb_dwc_hal_port_toggle_reset(usb_dwc_hal_context_t *hal, bool enable)
+{
+    // If the core is connected to HS PHY but configuration is FS/LS only
+    if (enable && hal->constant_config.hsphy_type && hal->constant_config.flags.fsls_only) {
+        usb_dwc_ll_hcfg_set_fsls_supp_only(hal->dev);
+    }
+    usb_dwc_ll_hprt_set_port_reset(hal->dev, enable);
 }
 
 void usb_dwc_hal_port_enable(usb_dwc_hal_context_t *hal)
@@ -464,14 +480,31 @@ bool usb_dwc_hal_chan_request_halt(usb_dwc_hal_chan_t *chan_obj)
     if (chan_obj->flags.active) {
         /*
         Request a halt so long as the channel's active flag is set.
+        ChEna and ChDis (R/W1S): Their combination determines how the core interprets a write to HCCHARn (DWC_otg Programming Guide, section 3.5 "Halting a Channel"):
+        ChEna | ChDis | Meaning
+        ------+-------+------------------------------------------------------------------
+          1   |   0   | Normal - channel running
+          1   |   1   | Halt request: flush posted requests, finish the in-flight USB transaction, raise ChHltd, core clears both bits
+          0   |   1   | Request queue flush, NOT a halt. The core processes a disable on the channel's turn during arbitration, so a channel that is not enabled never gets it processed: no ChHltd
+          0   |   0   | Channel idle/disabled
+
         - If the underlying hardware channel is already halted but the channel is pending interrupt handling,
-        disabling the channel will have no effect (i.e., no channel interrupt is generated).
+        disabling the channel will have no effect (i.e., no channel interrupt is generated). Moreover, CHDIS must
+        NOT be written in this case:
+            - The documented halt sequence is ChDis and ChEna written together; writing ChDis alone to a channel
+            whose ChEna is already 0 is a request queue flush, not a halt (DWC_otg Programming Guide, section 3.5
+            "Halting a Channel").
+            - The core processes a disable request on the channel's turn during arbitration, so a channel that is
+            already halted never gets its disable processed: no ChHltd interrupt is generated and CHDIS is never
+            cleared (DWC_otg Programming Guide section 3.5, DWC_otg Databook, section 5.4.37 HCCHARn).
         - If the underlying channel is currently active, disabling the channel will trigger a channel interrupt.
 
         Regardless, setting the "halt_requested" should cause "usb_dwc_hal_chan_decode_intr()" to report the
         USB_DWC_HAL_CHAN_EVENT_HALT_REQ event when channel interrupt is handled (pending or triggered).
         */
-        usb_dwc_ll_hcchar_disable_chan(chan_obj->regs);
+        if (usb_dwc_ll_hcchar_chan_is_enabled(chan_obj->regs)) {
+            usb_dwc_ll_hcchar_disable_chan(chan_obj->regs);
+        }
         chan_obj->flags.halt_requested = 1;
         return false;
     } else {

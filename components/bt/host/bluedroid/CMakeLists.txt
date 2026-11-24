@@ -238,6 +238,7 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_pm.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_sco.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_sec.c"
+    "${CMAKE_CURRENT_LIST_DIR}/stack/btu/c2h_credit.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/btu/btu_hcif.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/btu/btu_init.c"
     "${CMAKE_CURRENT_LIST_DIR}/stack/btu/btu_task.c"
@@ -305,6 +306,11 @@ list(APPEND bluedroid_host_srcs
     "${CMAKE_CURRENT_LIST_DIR}/../../common/btc/profile/esp/blufi/bluedroid_host/esp_blufi.c"
 )
 
+if(CONFIG_BT_A2DP_AUDIO_STATS)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/a2dp/btc_a2dp_audio_stats.c")
+endif()
+
 if(CONFIG_BT_BLE_FEAT_ISO_EN)
     list(APPEND bluedroid_host_srcs
         "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_ble_iso.c"
@@ -339,6 +345,12 @@ if(CONFIG_BT_BLE_FEAT_CTE_EN)
         "${CMAKE_CURRENT_LIST_DIR}/stack/btm/btm_ble_cte.c"
         "${CMAKE_CURRENT_LIST_DIR}/btc/profile/std/cte/btc_ble_cte.c"
         "${CMAKE_CURRENT_LIST_DIR}/api/esp_ble_cte_api.c"
+    )
+endif()
+
+if(CONFIG_BT_BLE_FEAT_ENC_ADV_DATA)
+    list(APPEND bluedroid_host_srcs
+        "${CMAKE_CURRENT_LIST_DIR}/api/esp_ble_ead.c"
     )
 endif()
 

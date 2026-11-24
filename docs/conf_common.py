@@ -30,6 +30,7 @@ BT_DOCS = [
     'api-reference/bluetooth/controller_vhci.rst',
     'api-reference/bluetooth/index.rst',
     'migration-guides/release-5.x/5.4/bt_common.rst',
+    'migration-guides/release-6.x/6.1/bt_common.rst',
 ]
 
 BLE_DOCS = [
@@ -47,6 +48,7 @@ BLE_DOCS = [
     'api-guides/low-power-mode/low-power-mode-ble.rst',
     'api-reference/bluetooth/bt_le.rst',
     'api-reference/bluetooth/esp_gap_ble.rst',
+    'api-reference/bluetooth/esp_ble_ead.rst',
     'api-reference/bluetooth/esp_gatt_defs.rst',
     'api-reference/bluetooth/esp_gatts.rst',
     'api-reference/bluetooth/esp_gattc.rst',
@@ -174,7 +176,7 @@ TEMP_SENSOR_DOCS = ['api-reference/peripherals/temp_sensor.rst']
 
 TOUCH_SENSOR_DOCS = ['api-reference/peripherals/cap_touch_sens.rst']
 
-SPIRAM_DOCS = ['api-guides/external-ram.rst']
+SPIRAM_DOCS = ['api-guides/external-ram.rst', 'migration-guides/release-6.x/6.1/system.rst']
 
 I80_LCD_DOCS = ['api-reference/peripherals/lcd/i80_lcd.rst']
 RGB_LCD_DOCS = ['api-reference/peripherals/lcd/rgb_lcd.rst']

@@ -58,16 +58,20 @@ void esp_system_reset_modules_on_exit(void)
     modem_lpcon_ll_reset_all(&MODEM_LPCON);
 #endif
 
+    // Stop the DMA masters before the MSPI AXI bus is reset below: a DMA can still be moving data from/to PSRAM.
+    SET_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
+    // The DMA inside SDIO slave needs to be reset to avoid memory corruption after restart.
+    SET_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
+
     // Set Peripheral clk rst
     SET_PERI_REG_MASK(PCR_MSPI_CLK_CONF_REG, PCR_MSPI_AXI_RST_EN); // Must reset mspi AXI before reset mspi core.
     SET_PERI_REG_MASK(PCR_MSPI_CONF_REG, PCR_MSPI_RST_EN);
     SET_PERI_REG_MASK(PCR_UART0_CONF_REG, PCR_UART0_RST_EN);
     SET_PERI_REG_MASK(PCR_UART1_CONF_REG, PCR_UART1_RST_EN);
     SET_PERI_REG_MASK(PCR_SYSTIMER_CONF_REG, PCR_SYSTIMER_RST_EN);
-    SET_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
     SET_PERI_REG_MASK(PCR_MODEM_CONF_REG, PCR_MODEM_RST_EN);
-    // The DMA inside SDIO slave needs to be reset to avoid memory corruption after restart.
-    SET_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
     //ETM may directly control the GPIO or other peripherals even after CPU reset. Reset to stop these control.
     SET_PERI_REG_MASK(PCR_ETM_CONF_REG, PCR_ETM_RST_EN);
     SET_PERI_REG_MASK(PCR_REGDMA_CONF_REG, PCR_REGDMA_RST_EN);
@@ -78,9 +82,7 @@ void esp_system_reset_modules_on_exit(void)
     CLEAR_PERI_REG_MASK(PCR_UART0_CONF_REG, PCR_UART0_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_UART1_CONF_REG, PCR_UART1_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SYSTIMER_CONF_REG, PCR_SYSTIMER_RST_EN);
-    CLEAR_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_MODEM_CONF_REG, PCR_MODEM_RST_EN);
-    CLEAR_PERI_REG_MASK(PCR_SDIO_SLAVE_CONF_REG, PCR_SDIO_SLAVE_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_ETM_CONF_REG, PCR_ETM_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_REGDMA_CONF_REG, PCR_REGDMA_RST_EN);
 
@@ -97,9 +99,9 @@ void esp_system_reset_modules_on_exit(void)
     SET_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_SHA_CONF_REG, PCR_SHA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_ECC_PD_CTRL_REG, PCR_ECC_MEM_FORCE_PD);
-#endif // !CONFIG_SECURE_ENABLE_TEE
     SET_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
     CLEAR_PERI_REG_MASK(PCR_ECDSA_CONF_REG, PCR_ECDSA_RST_EN);
+#endif // !CONFIG_SECURE_ENABLE_TEE
 
     // Reset crypto clk mux to XTAL (always-on); otherwise if the parent is gated off,
     // next-boot ROM encryption ops can hang.

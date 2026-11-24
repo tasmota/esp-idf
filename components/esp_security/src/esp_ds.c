@@ -259,31 +259,38 @@ static void ds_acquire_enable(void)
 {
     esp_crypto_ds_lock_acquire();
 
-    // We also enable SHA and HMAC here. SHA is used by HMAC, HMAC is used by DS.
+    /* DS first: its reset also resets AES, SHA and MPI, so anything enabled
+       before it would be reset again here. */
+    esp_crypto_ds_enable_periph_clk(true);
     esp_crypto_hmac_enable_periph_clk(true);
     esp_crypto_sha_enable_periph_clk(true);
     esp_crypto_mpi_enable_periph_clk(true);
-    esp_crypto_ds_enable_periph_clk(true);
 
 #if SOC_KEY_MANAGER_DS_KEY_DEPLOY
     /*  Key Manager holds the key usage selector register(efuse vs own key).
         Thus, we need to enable the Key Manager peripheral clock to ensure
         that the key usage selector register is properly set.
+        Taken after the DS lock (SHA/AES + MPI) so the order matches HMAC/ECDSA:
+        sha_aes < mpi < key_manager.
      */
-    esp_crypto_key_mgr_enable_periph_clk(true);
+    esp_crypto_key_manager_lock_acquire();
+    /* Clock only: a full KM reset would drop the XTS-AES flash encryption
+       key-usage selector, and spi_flash DMA does not take the KM lock. */
+    esp_crypto_key_mgr_enable_periph_clk_no_reset(true);
 #endif /* SOC_KEY_MANAGER_DS_KEY_DEPLOY */
 }
 
 static void ds_disable_release(void)
 {
 #if SOC_KEY_MANAGER_DS_KEY_DEPLOY
-    esp_crypto_key_mgr_enable_periph_clk(false);
+    esp_crypto_key_mgr_enable_periph_clk_no_reset(false);
+    esp_crypto_key_manager_lock_release();
 #endif /* SOC_KEY_MANAGER_DS_KEY_DEPLOY */
 
-    esp_crypto_ds_enable_periph_clk(false);
     esp_crypto_mpi_enable_periph_clk(false);
     esp_crypto_sha_enable_periph_clk(false);
     esp_crypto_hmac_enable_periph_clk(false);
+    esp_crypto_ds_enable_periph_clk(false);
 
     esp_crypto_ds_lock_release();
 }
@@ -348,8 +355,15 @@ esp_err_t esp_ds_start_sign(const void *message,
     ds_acquire_enable();
 
 #if SOC_KEY_MANAGER_DS_KEY_DEPLOY
+#if CONFIG_SECURE_ENABLE_TEE
+    /* NOTE: Key Manager is not supported with ESP-TEE yet - the TEE owns it */
+    const bool key_mgr_avail = false;
+#else
+    const bool key_mgr_avail = key_mgr_ll_is_supported();
+#endif
+
     if (key_id == HMAC_KEY_KM) {
-        if (!key_mgr_ll_is_supported()) {
+        if (!key_mgr_avail) {
             ESP_LOGE(TAG, "HMAC_KEY_KM requested but Key Manager peripheral is not supported on this chip");
             ds_disable_release();
             return ESP_ERR_NOT_SUPPORTED;
@@ -357,7 +371,7 @@ esp_err_t esp_ds_start_sign(const void *message,
         key_mgr_hal_set_key_usage(ESP_KEY_MGR_DS_KEY, ESP_KEY_MGR_USE_OWN_KEY);
         ds_hal_set_key_source(DS_KEY_SOURCE_KEY_MGR);
     } else {
-        if (key_mgr_ll_is_supported()) {
+        if (key_mgr_avail) {
             key_mgr_hal_set_key_usage(ESP_KEY_MGR_DS_KEY, ESP_KEY_MGR_USE_EFUSE_KEY);
         }
         ds_hal_set_key_source(DS_KEY_SOURCE_EFUSE);

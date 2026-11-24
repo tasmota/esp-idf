@@ -211,14 +211,14 @@ static void btu_ble_periodic_adv_sync_trans_recv(UINT8 *p);
 #if (BLE_FEAT_ISO_EN == TRUE)
 
 #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
-void btu_ble_create_big_cmd_status(UINT8 status);
+void btu_ble_create_big_cmd_status(UINT8 status, UINT8 big_handle);
 static void btu_ble_big_create_complete_evt(UINT8 *p, UINT8 evt_len);
-void btu_ble_big_terminate_cmd_status(UINT8 status);
+void btu_ble_big_terminate_cmd_status(UINT8 status, UINT8 big_handle);
 static void btu_ble_big_terminate_complete_evt(UINT8 *p);
 #endif // #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
 
 #if (BLE_FEAT_ISO_BIG_SYNCER_EN == TRUE)
-static void btu_ble_create_big_sync_cmd_status(UINT8 status);
+static void btu_ble_create_big_sync_cmd_status(UINT8 status, UINT8 big_handle);
 static void btu_ble_big_sync_establish_evt(UINT8 *p, UINT8 evt_len);
 static void btu_ble_big_sync_lost_evt(UINT8 *p);
 static void btu_ble_biginfo_adv_report_evt(UINT8 *p);
@@ -811,33 +811,6 @@ UINT8 btu_hcif_send_cmd_sync (UINT8 controller_id, BT_HDR *p_buf)
 }
 #endif // ((BLE_50_FEATURE_SUPPORT == TRUE) || (BLE_42_FEATURE_SUPPORT == TRUE))
 
-/*******************************************************************************
-**
-** Function         btu_hcif_send_host_rdy_for_data
-**
-** Description      This function is called to check if it can send commands
-**                  to the Host Controller. It may be passed the address of
-**                  a packet to send.
-**
-** Returns          void
-**
-*******************************************************************************/
-void btu_hcif_send_host_rdy_for_data(void)
-{
-    UINT16      num_pkts[MAX_L2CAP_LINKS + 4];      /* 3 SCO connections */
-    UINT16      handles[MAX_L2CAP_LINKS + 4];
-    UINT8       num_ents;
-
-    /* Get the L2CAP numbers */
-    num_ents = l2c_link_pkts_rcvd (num_pkts, handles);
-
-    /* Get the SCO numbers */
-    /* No SCO for now ?? */
-
-    if (num_ents) {
-        btsnd_hcic_host_num_xmitted_pkts (num_ents, handles, num_pkts);
-    }
-}
 #if (CLASSIC_BT_INCLUDED == TRUE)
 /*******************************************************************************
 **
@@ -1735,15 +1708,15 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
 #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
     case HCI_BLE_CREATE_BIG:
     case HCI_BLE_CREATE_BIG_TEST:
-        btu_ble_create_big_cmd_status(status);
+        btu_ble_create_big_cmd_status(status, p_cmd[1]);
         break;
     case HCI_BLE_TERMINATE_BIG:
-        btu_ble_big_terminate_cmd_status(status);
+        btu_ble_big_terminate_cmd_status(status, p_cmd[1]);
         break;
 #endif // #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
 #if (BLE_FEAT_ISO_BIG_SYNCER_EN == TRUE)
     case HCI_BLE_BIG_CREATE_SYNC:
-        btu_ble_create_big_sync_cmd_status(status);
+        btu_ble_create_big_sync_cmd_status(status, p_cmd[1]);
         break;
 #endif // #if (BLE_FEAT_ISO_BIG_SYNCER_EN == TRUE)
 #if (BLE_FEAT_ISO_CIG_CENTRAL_EN == TRUE)
@@ -1860,6 +1833,11 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
                 if (p_cmd != NULL) {
                     p_cmd++;
                     STREAM_TO_BDADDR (bd_addr, p_cmd);
+#if (CLASSIC_BT_INCLUDED == TRUE)
+                    if (btm_acl_drop_failed_page(bd_addr, status)) {
+                        break;
+                    }
+#endif // (CLASSIC_BT_INCLUDED == TRUE)
 #if (SMP_INCLUDED == TRUE)
                     btm_sec_connected (bd_addr, HCI_INVALID_HANDLE, status, 0);
 #endif  ///SMP_INCLUDED == TRUE
@@ -2129,6 +2107,12 @@ static void btu_hcif_mode_change_evt (UINT8 *p)
 *******************************************************************************/
 static void btu_hcif_ssr_evt (UINT8 *p, UINT16 evt_len)
 {
+    /* status(1) + handle(2) + max_tx(2) + max_rx(2) + min_remote(2) + min_local(2) */
+    if (evt_len < 11) {
+        HCI_TRACE_ERROR("%s: invalid len %d", __func__, evt_len);
+        return;
+    }
+
 #if (BTM_SSR_INCLUDED == TRUE)
     btm_pm_proc_ssr_evt(p, evt_len);
 #endif
@@ -3138,11 +3122,12 @@ static void btu_ble_cis_request_evt(UINT8 *p)
 #endif // #if (BLE_FEAT_ISO_CIG_PERIPHERAL_EN == TRUE)
 
 #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
-void btu_ble_create_big_cmd_status(UINT8 status)
+void btu_ble_create_big_cmd_status(UINT8 status, UINT8 big_handle)
 {
     if (status != HCI_SUCCESS) {
         tBTM_BLE_BIG_CREATE_CMPL big_cmpl = {0};
         big_cmpl.status = status;
+        big_cmpl.big_handle = big_handle;
         btm_ble_big_create_cmpl_evt(&big_cmpl);
     }
 }
@@ -3200,11 +3185,12 @@ static void btu_ble_big_create_complete_evt(UINT8 *p, UINT8 evt_len)
     btm_ble_big_create_cmpl_evt(&big_cmpl);
 }
 
-void btu_ble_big_terminate_cmd_status(UINT8 status)
+void btu_ble_big_terminate_cmd_status(UINT8 status, UINT8 big_handle)
 {
     if (status != HCI_SUCCESS) {
         tBTM_BLE_BIG_TERMINATE_CMPL big_term = {0};
         big_term.status = (status | BTM_HCI_ERROR);
+        big_term.big_handle = big_handle;
         btm_ble_big_terminate_cmpl_evt(&big_term);
     }
 }
@@ -3227,11 +3213,12 @@ static void btu_ble_big_terminate_complete_evt(UINT8 *p)
 #endif // #if (BLE_FEAT_ISO_BIG_BROADCASTER_EN == TRUE)
 
 #if (BLE_FEAT_ISO_BIG_SYNCER_EN == TRUE)
-void btu_ble_create_big_sync_cmd_status(UINT8 status)
+void btu_ble_create_big_sync_cmd_status(UINT8 status, UINT8 big_handle)
 {
     if (status != HCI_SUCCESS) {
         tBTM_BLE_BIG_SYNC_ESTAB_CMPL big_estb = {0};
         big_estb.status = status;
+        big_estb.big_handle = big_handle;
         btm_ble_big_sync_estab_evt(&big_estb);
     }
 }

@@ -214,6 +214,8 @@ uf2 二进制文件也可以通过 :ref:`idf.py uf2 <generate-uf2-binary>` 生�
 
 预计未来版本将支持 PowerShell 自动补全。
 
+PowerShell 会将以 ``-`` 开头且未加引号的参数在第一个 ``.`` 处拆分为两个参数（请见 `PowerShell issue #6291 <https://github.com/PowerShell/PowerShell/issues/6291>`__）。例如，``idf.py -DSDKCONFIG=build/sdkconfig.prod build`` 会向 ``idf.py`` 传递 ``-DSDKCONFIG=build/sdkconfig`` 和 ``.prod`` 两个参数。为避免此问题，可将该参数用引号括起来，写作 ``"-DSDKCONFIG=build/sdkconfig.prod"``，或在 ``-D`` 后加一个空格，如 ``-D SDKCONFIG=build/sdkconfig.prod``。
+
 高级命令
 =================
 
@@ -327,6 +329,10 @@ ESP-IDF 的 MCP（Model Context Protocol，模型上下文协议）服务器可�
 
     MCP 服务器需要通过 EIM 安装器来安装 ``mcp`` 功能。有关如何安装特定功能，请参见 `EIM 文档 ＞ CLI 配置 - 全局功能 <https://docs.espressif.com/projects/idf-im-ui/en/latest/cli_configuration.html#global-features-all-versions>`_。
 
+.. note::
+
+    ``mcp-server`` 使用 stdout 作为 MCP JSON-RPC 传输通道。使用该命令时， ``idf.py`` 不会打印通常的信息（例如 ``Executing action:``）。为避免其他输出写入 stdout，该命令不能与其他 ``idf.py`` 命令组合使用。
+
 可用工具与资源
 ^^^^^^^^^^^^^^
 
@@ -337,14 +343,24 @@ MCP 服务器提供以下工具：
 - ``flash project``：将已构建的项目烧录到已连接的设备，通过端口名称进行指定
 - ``clean project``：清理构建产物
 - ``create project``：基于示例模板创建新的 ESP-IDF 项目，可在尚无项目时使用
+- ``monitor device``：在已烧录的设备上运行一次脚本化的串口监视会话，并等待预期的输出。参见 :ref:`mcp-monitor-device`
 
-所有工具都接受可选的 ``project_dir`` 参数。当省略该参数时，工具将默认使用启动时配置的目录（该目录可通过 ``-C`` 参数或 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量指定）。你可以要求 AI 模型明确指定某个项目目录，例如当同时处理多个项目，或启动时未配置默认项目的情况下。
+项目工具接受可选的 ``project_dir`` 参数。当省略该参数时，工具将默认使用启动时配置的目录（该目录可通过 ``-C`` 参数或 ``IDF_MCP_WORKSPACE_FOLDER`` 环境变量指定）。在同时处理多个项目，或启动时未配置默认项目的情况下，你可以明确指示 AI 模型使用某个特定的项目目录。``create project`` 和 ``monitor device`` 工具是例外：前者使用新项目的上级 ``path``；后者与设备交互，而不是针对项目目录。
 
 同时提供以下资源：
 
 - ``project://config``：获取当前项目配置
 - ``project://status``：获取当前项目的构建状态和构建产物
 - ``project://devices``：获取已连接的设备列表
+
+.. _mcp-monitor-device:
+
+监视设备
+^^^^^^^^
+
+AI 助手可以通过 ``monitor device`` 工具观察已烧录设备的打印输出，只需用自然语言提问即可。例如“烧录并检查设备是否在 30 秒内打印 ``Minimum free heap size``”。AI 助手会等待该输出，然后告知你结果。
+
+完整的串口日志会保存在一个文件中。如果你需要了解详细信息，可以让 AI 助手搜索日志文件。
 
 将 ESP-IDF MCP 服务器添加至 IDE 和 AI 智能体
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

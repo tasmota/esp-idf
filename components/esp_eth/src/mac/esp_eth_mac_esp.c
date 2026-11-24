@@ -62,17 +62,15 @@ static const char *TAG = "esp.emac";
 #define ETH_EMAC_PHY_REF_CLK_SRC        (EMAC_UNDEFINED_PLL_CLK)
 #endif
 
-#if SOC_EMAC_SUPPORT_1000M
-#if CONFIG_ETH_EMAC_RGMII_TX_CLK_SRC_CPLL
-#define ETH_EMAC_RGMII_TX_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_CPLL)
-#elif CONFIG_ETH_EMAC_RGMII_TX_CLK_SRC_APLL
-#define ETH_EMAC_RGMII_TX_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_APLL)
-#elif CONFIG_ETH_EMAC_RGMII_TX_CLK_SRC_MPLL
-#define ETH_EMAC_RGMII_TX_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_MPLL)
+#if CONFIG_ETH_EMAC_INTERNAL_OUT_CLK_SRC_CPLL
+#define ETH_EMAC_INTERNAL_OUT_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_CPLL)
+#elif CONFIG_ETH_EMAC_INTERNAL_OUT_CLK_SRC_APLL
+#define ETH_EMAC_INTERNAL_OUT_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_APLL)
+#elif CONFIG_ETH_EMAC_INTERNAL_OUT_CLK_SRC_MPLL
+#define ETH_EMAC_INTERNAL_OUT_CLK_SRC       ((soc_module_clk_t)EMAC_CLK_OUT_SRC_MPLL)
 #else
-#define ETH_EMAC_RGMII_TX_CLK_SRC       (EMAC_UNDEFINED_PLL_CLK)
+#define ETH_EMAC_INTERNAL_OUT_CLK_SRC       (EMAC_UNDEFINED_PLL_CLK)
 #endif
-#endif // SOC_EMAC_SUPPORT_1000M
 
 #define EMAC_USED_PLL_DEFAULT_IDX            (0)
 #define EMAC_USED_PLL_PHY_REF_CLK_DERIVED_IDX    (1)
@@ -562,6 +560,7 @@ static esp_err_t emac_esp32_transmit_ctrl_vargs(esp_eth_mac_t *mac, void *ctrl, 
     uint32_t buf_num = argc / 2;
 
     emac_esp_dma_transmit_buff_t buff_array[buf_num];
+    esp_err_t ret = ESP_OK;
 
     uint32_t exp_len = 0;
     for (int i = 0; i < buf_num; i++) {
@@ -569,6 +568,7 @@ static esp_err_t emac_esp32_transmit_ctrl_vargs(esp_eth_mac_t *mac, void *ctrl, 
         buff_array[i].size = va_arg(args, uint32_t);
         exp_len += buff_array[i].size;
     }
+    ESP_GOTO_ON_FALSE(exp_len > 0, ESP_ERR_INVALID_ARG, err, TAG, "expected length is 0");
 
     eth_mac_time_t *ts = (eth_mac_time_t *)ctrl;
     uint32_t sent_len = emac_esp_dma_transmit_frame_ext(emac->emac_dma_hndl, buff_array, buf_num, ts);
@@ -577,7 +577,8 @@ static esp_err_t emac_esp32_transmit_ctrl_vargs(esp_eth_mac_t *mac, void *ctrl, 
         ESP_LOGD(TAG, "insufficient TX buffer size");
         return ESP_ERR_NO_MEM;
     }
-    return ESP_OK;
+err:
+    return ret;
 }
 
 static esp_err_t emac_esp32_receive(esp_eth_mac_t *mac, uint8_t *buf, uint32_t *length)
@@ -604,7 +605,7 @@ static void emac_esp32_rx_task(void *arg)
     while (1) {
         // block indefinitely until got notification from underlay event
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        do {
+        while (1) {
             /* set max expected frame len */
             uint32_t frame_len = ETH_MAX_PACKET_SIZE;
             buffer = emac_esp_dma_alloc_recv_buf(emac->emac_dma_hndl, &frame_len);
@@ -634,9 +635,21 @@ static void emac_esp32_rx_task(void *arg)
                 ESP_LOGE(TAG, "no mem for receive buffer");
                 /* ensures that interface to EMAC does not get stuck with unprocessed frames */
                 emac_esp_dma_flush_recv_frame(emac->emac_dma_hndl);
-            }
-            emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
+            } else {
+                /* no valid frame: either the ring is drained or an erroneous frame was flushed with frames still behind it */
+                emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
+                if (emac->frames_remain == 0) {
 #if CONFIG_ETH_SOFT_FLOW_CONTROL
+                    /* ring drained, release any standing pause before idling */
+                    emac_hal_send_pause_frame(&emac->hal, false);
+#endif
+                    break;
+                }
+                /* erroneous frame flushed; keep draining the frames behind it */
+                continue;
+            }
+#if CONFIG_ETH_SOFT_FLOW_CONTROL
+            emac_esp_dma_get_remain_frames(emac->emac_dma_hndl, &emac->frames_remain, &emac->free_rx_descriptor);
             // we need to do extra checking of remained frames in case there are no unhandled frames left, but pause frame is still undergoing
             if ((emac->free_rx_descriptor < emac->flow_control_low_water_mark) && emac->do_flow_ctrl && emac->frames_remain) {
                 emac_hal_send_pause_frame(&emac->hal, true);
@@ -644,7 +657,7 @@ static void emac_esp32_rx_task(void *arg)
                 emac_hal_send_pause_frame(&emac->hal, false);
             }
 #endif
-        } while (emac->frames_remain);
+        }
     }
 }
 
@@ -955,7 +968,7 @@ static esp_err_t emac_esp_config_data_interface(const eth_esp32_emac_config_t *e
                     emac_hal_enable_phy_ref_clock_output(&emac->hal);
                 }
             } else if (emac_clk_internal.clk_count > 0) { // target also supports EMAC internal clock for REF CLK
-                soc_module_clk_t ref_inter_src = EMAC_UNDEFINED_PLL_CLK;
+                soc_module_clk_t ref_inter_src = ETH_EMAC_INTERNAL_OUT_CLK_SRC;
                 ESP_GOTO_ON_ERROR(emac_config_pll_clock(emac, emac_clk_internal.clk_src, emac_clk_internal.clk_count, &ref_inter_src, &pll_freq),
                               err, TAG, "Configure PLL for RMII failed");
                 emac->pll_clk_used[EMAC_USED_PLL_DEFAULT_IDX] = ref_inter_src;
@@ -1007,7 +1020,7 @@ static esp_err_t emac_esp_config_data_interface(const eth_esp32_emac_config_t *e
 #endif // SOC_EMAC_USE_MULTI_IO_MUX
         ESP_GOTO_ON_ERROR(emac_esp_iomux_init_rgmii(rgmii_data_gpio), err, TAG, "invalid EMAC RGMII data plane GPIO");
         ESP_GOTO_ON_ERROR(emac_esp_iomux_rgmii_clk_input(esp32_emac_config->clock_config.rgmii.clock_rx_gpio), err, TAG, "invalid EMAC RGMII clock input GPIO");
-        soc_module_clk_t tx_clk_src = ETH_EMAC_RGMII_TX_CLK_SRC;
+        soc_module_clk_t tx_clk_src = ETH_EMAC_INTERNAL_OUT_CLK_SRC;
         ESP_GOTO_ON_ERROR(emac_config_pll_clock(emac, emac_clk_internal.clk_src, emac_clk_internal.clk_count,
                                                 &tx_clk_src, &pll_freq), err, TAG, "Configure PLL for RGMII failed");
         emac->pll_clk_used[EMAC_USED_PLL_DEFAULT_IDX] = tx_clk_src;
@@ -1186,8 +1199,8 @@ esp_eth_mac_t *esp_eth_mac_new_esp32(const eth_esp32_emac_config_t *esp32_config
         emac_ll_enable_bus_clock(0, true);
         emac_ll_reset_register(0);
     }
-    /* initialize hal layer driver */
-    emac_hal_init(&emac->hal);
+    /* set hal layer context */
+    emac->hal = emac_hal_get_context();
 
     /* alloc interrupt */
     int isr_flags = 0;

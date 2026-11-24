@@ -66,6 +66,87 @@ function(wrap_uart_log_tx_interface)
     endif()
 endfunction()
 
+# Inject the ESP-IDF build commit into the bt component as a private compile
+# definition (BLE_LOG_IDF_COMMIT), reported later in the BLE Log version info
+# frame. Does nothing when the commit cannot be determined.
+function(register_ble_log_idf_commit)
+    idf_build_get_property(idf_path IDF_PATH)
+    # "git rev-parse" walks up parent dirs; only trust it when the IDF tree
+    # itself is a repo/worktree. Release trees have no .git and must leave
+    # BLE_LOG_IDF_COMMIT undefined instead of picking up an enclosing repo.
+    if(NOT EXISTS "${idf_path}/.git")
+        return()
+    endif()
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+        WORKING_DIRECTORY "${idf_path}"
+        RESULT_VARIABLE ble_log_git_result
+        OUTPUT_VARIABLE ble_log_idf_commit
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    string(LENGTH "${ble_log_idf_commit}" ble_log_idf_commit_len)
+    # Take the first 12 chars of the full hash; --short=N may return a longer
+    # ambiguous abbreviation, so never rely on abbreviated output
+    if(ble_log_git_result EQUAL 0 AND ble_log_idf_commit_len EQUAL 40)
+        string(SUBSTRING "${ble_log_idf_commit}" 0 12 ble_log_idf_commit)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE
+            "BLE_LOG_IDF_COMMIT=\"${ble_log_idf_commit}\"")
+    endif()
+endfunction()
+
+# Wire BLE Log USB to TinyUSB CDC: optional-require esp_tinyusb and check
+# that its CDC FIFO sizes match the BLE Log menu values. Called with the
+# bt component's type so the optional requirement follows it.
+function(register_ble_log_usb_transport component_type)
+    if(NOT CONFIG_BLE_LOG_PRPH_USB)
+        return()
+    endif()
+
+    set(tinyusb_component "")
+    foreach(component IN LISTS BUILD_COMPONENTS)
+        if(component MATCHES "esp_tinyusb$")
+            set(tinyusb_component "${component}")
+            break()
+        endif()
+    endforeach()
+    if(NOT tinyusb_component)
+        message(FATAL_ERROR
+            "BLE_LOG_PRPH_USB is enabled but espressif/esp_tinyusb is not "
+            "in the build. Declare it in the project manifest:\n"
+            "  dependencies:\n"
+            "    espressif/esp_tinyusb: \"^2.0.0\"")
+    endif()
+    if(component_type STREQUAL "LIBRARY")
+        idf_component_optional_requires(PRIVATE ${tinyusb_component})
+    else()
+        idf_component_optional_requires(INTERFACE ${tinyusb_component})
+    endif()
+    if(NOT CONFIG_TINYUSB_CDC_ENABLED)
+        message(FATAL_ERROR
+            "BLE_LOG_PRPH_USB requires CONFIG_TINYUSB_CDC_ENABLED")
+    endif()
+    if(NOT CONFIG_TINYUSB_CDC_TX_BUFSIZE EQUAL CONFIG_BLE_LOG_USB_CDC_TX_BUFSIZE)
+        message(FATAL_ERROR
+            "CONFIG_TINYUSB_CDC_TX_BUFSIZE (${CONFIG_TINYUSB_CDC_TX_BUFSIZE}) "
+            "must equal CONFIG_BLE_LOG_USB_CDC_TX_BUFSIZE "
+            "(${CONFIG_BLE_LOG_USB_CDC_TX_BUFSIZE})")
+    endif()
+    if(NOT CONFIG_TINYUSB_CDC_EP_BUFSIZE EQUAL CONFIG_BLE_LOG_USB_CDC_EP_BUFSIZE)
+        message(FATAL_ERROR
+            "CONFIG_TINYUSB_CDC_EP_BUFSIZE (${CONFIG_TINYUSB_CDC_EP_BUFSIZE}) "
+            "must equal CONFIG_BLE_LOG_USB_CDC_EP_BUFSIZE "
+            "(${CONFIG_BLE_LOG_USB_CDC_EP_BUFSIZE})")
+    endif()
+    if(CONFIG_TINYUSB_CDC_RX_BUFSIZE LESS CONFIG_TINYUSB_CDC_EP_BUFSIZE)
+        message(FATAL_ERROR
+            "CONFIG_TINYUSB_CDC_RX_BUFSIZE (${CONFIG_TINYUSB_CDC_RX_BUFSIZE}) "
+            "must be >= CONFIG_TINYUSB_CDC_EP_BUFSIZE "
+            "(${CONFIG_TINYUSB_CDC_EP_BUFSIZE}); TinyUSB treats a smaller RX "
+            "FIFO as a #warning and IDF builds with -Werror")
+    endif()
+endfunction()
+
 set(bt_common_srcs "" PARENT_SCOPE)
 set(bt_common_include_dirs "" PARENT_SCOPE)
 set(bt_common_priv_include_dirs "" PARENT_SCOPE)
@@ -109,6 +190,7 @@ list(APPEND bt_common_srcs
     "${CMAKE_CURRENT_LIST_DIR}/osi/hash_functions.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/hash_map.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/list.c"
+    "${CMAKE_CURRENT_LIST_DIR}/osi/slist.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/mutex.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/thread.c"
     "${CMAKE_CURRENT_LIST_DIR}/osi/osi.c"
@@ -141,8 +223,11 @@ list(APPEND bt_common_priv_include_dirs
 if(CONFIG_BLE_LOG_ENABLED)
     list(APPEND bt_common_srcs
         "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log.c"
-        "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_lbm.c"
+        "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_lbm_v2.c"
+        "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_redir.c"
         "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_rt.c"
+        "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_sync.c"
+        "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_task_registry.c"
         "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_util.c"
     )
 
@@ -155,23 +240,30 @@ if(CONFIG_BLE_LOG_ENABLED)
         "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/internal_include/prph"
     )
 
-    # Timestamp synchronization extension
-    if(CONFIG_BLE_LOG_TS_ENABLED)
-        list(APPEND bt_common_srcs "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/ble_log_ts.c")
-    endif()
-
     # Peripheral interface implementation
     if(CONFIG_BLE_LOG_PRPH_DUMMY)
         list(APPEND bt_common_srcs
             "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_dummy.c"
         )
+    elseif(CONFIG_BLE_LOG_PRPH_TEST)
+        list(APPEND bt_common_srcs
+            "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_test.c"
+        )
     elseif(CONFIG_BLE_LOG_PRPH_SPI_MASTER_DMA)
         list(APPEND bt_common_srcs
             "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_spi_master_dma.c"
         )
+    elseif(CONFIG_BLE_LOG_PRPH_SPI_MASTER_HD)
+        list(APPEND bt_common_srcs
+            "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_spi_master_hd.c"
+        )
     elseif(CONFIG_BLE_LOG_PRPH_UART_DMA)
         list(APPEND bt_common_srcs
             "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_uart_dma.c"
+        )
+    elseif(CONFIG_BLE_LOG_PRPH_USB)
+        list(APPEND bt_common_srcs
+            "${CMAKE_CURRENT_LIST_DIR}/ble_log/src/prph/ble_log_prph_usb.c"
         )
     endif()
 endif()

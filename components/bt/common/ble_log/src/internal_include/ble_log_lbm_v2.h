@@ -236,13 +236,17 @@ bool ble_log_lbm_init(void);
 void ble_log_lbm_begin_deinit(void);
 void ble_log_lbm_deinit(void);
 bool ble_log_lbm_is_enabled(void);
+/* Task context, after closing admission. Lifecycle calls must be serialized.
+ * caller_refs excludes references held by this caller (flush holds one).
+ * False: a writer still owns resources; do not delete its task or the pool. */
+bool ble_log_lbm_wait_writers(uint32_t caller_refs);
 /* Best-effort system flush, gated by LBM lifetime rather than producers. */
 void ble_log_lbm_flush_open_trans(void);
 /* Deinit drain: seal every OPEN transport and dispatch it to the runtime
  * queue. Contract: called after ble_log_lbm_begin_deinit() (producer gate
  * closed, writers drained) and before ble_log_rt_deinit(); every transport
- * lock is then uncontended. The peripheral deinit wait completes the
- * delivery of the dispatched buffers. */
+ * lock is then uncontended. COPY_FIFO send_trans finishes delivery into
+ * the software ring. Residual ring bytes are dropped at prph deinit. */
 void ble_log_lbm_drain_open_trans(void);
 void ble_log_lbm_recycle_trans(ble_log_prph_trans_t *trans);
 /* Loss-warning window: per-source losses accumulated since the previous
